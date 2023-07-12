@@ -22,6 +22,10 @@ func (u *User) IsDeleted() bool {
 	return u.DeletedAt.Valid
 }
 
+func (u *User) IsVerified() bool {
+	return u.VerifiedAt.Valid
+}
+
 type UserDetail struct {
 	Id          string         `json:"-" db:"id"`
 	Nickname    string         `json:"nickname" db:"nickname"`
