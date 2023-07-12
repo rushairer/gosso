@@ -7,34 +7,75 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestUserRepository(t *testing.T) {
+func TestSaveUserNil(t *testing.T) {
+	databaseManager := helper.NewDatabaseManagerDefault()
+	userRepository := NewUserRepository(databaseManager.MustGetMysqlClient())
+
+	var user *User
+	err := userRepository.SaveUser(user)
+	assert.Equal(t, err, ErrInvalidUser)
+}
+
+func TestSaveUserWithoutName(t *testing.T) {
 	databaseManager := helper.NewDatabaseManagerDefault()
 	userRepository := NewUserRepository(databaseManager.MustGetMysqlClient())
 
 	user := &User{}
 	err := userRepository.SaveUser(user)
 	assert.Equal(t, err, ErrInvalidUserName)
+}
 
-	userName := "test_username"
+func TestSaveUser(t *testing.T) {
+	databaseManager := helper.NewDatabaseManagerDefault()
+	userRepository := NewUserRepository(databaseManager.MustGetMysqlClient())
 
-	user.Name = userName
-	err = userRepository.SaveUser(user)
+	user := &User{
+		Name: "test_username",
+	}
+
+	defer userRepository.DeleteUser(user, false)
+
+	err := userRepository.SaveUser(user)
+	assert.Nil(t, err)
+}
+
+func TestFindUserByName(t *testing.T) {
+	databaseManager := helper.NewDatabaseManagerDefault()
+	userRepository := NewUserRepository(databaseManager.MustGetMysqlClient())
+
+	user := &User{
+		Name: "test_username",
+	}
+
+	defer userRepository.DeleteUser(user, false)
+
+	err := userRepository.SaveUser(user)
 	assert.Nil(t, err)
 
-	defer func() {
-		if err := recover(); err != nil {
-			userRepository.DeleteUser(user, false)
-		}
-	}()
+	user, err = userRepository.FindUserByName(user.Name)
+	assert.Nil(t, err)
+	assert.False(t, user.IsDeleted())
+}
 
-	user, err = userRepository.FindUserByName(userName)
+func TestDeleteUser(t *testing.T) {
+	databaseManager := helper.NewDatabaseManagerDefault()
+	userRepository := NewUserRepository(databaseManager.MustGetMysqlClient())
+
+	user := &User{
+		Name: "test_username",
+	}
+
+	err := userRepository.SaveUser(user)
+	assert.Nil(t, err)
+
+	user, err = userRepository.FindUserByName(user.Name)
 	assert.Nil(t, err)
 	assert.False(t, user.IsDeleted())
 
 	err = userRepository.DeleteUser(user, true)
 	assert.Nil(t, err)
 
-	user, err = userRepository.FindUserByName(userName)
+	user, err = userRepository.FindUserByName(user.Name)
 	assert.Nil(t, err)
 	assert.True(t, user.IsDeleted())
 
