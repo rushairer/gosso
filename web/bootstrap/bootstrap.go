@@ -7,23 +7,23 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gosso/core/config"
 	"github.com/rushairer/gosso/core/databases"
-	"github.com/rushairer/gosso/core/databases/sshtunnel"
+	"github.com/rushairer/gosso/core/utilities/sshtunnel"
 	"golang.org/x/crypto/ssh"
 )
 
 func SetupServer(server *gin.Engine) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Println("init services error:", err)
+			log.Println("[bootstrap]", "init services error:", err)
 		}
 	}()
 
-	log.Println("connecting databases...")
+	log.Println("[bootstrap]", "connecting databases...")
 
 	var sshClient *ssh.Client
 
 	if config.IsDebug {
-		log.Println("using ssh client...")
+		log.Println("[bootstrap]", "starting ssh client...")
 		if newSSHClient, err := sshtunnel.NewSSHClient(
 			config.SSHTunnelHost,
 			config.SSHTunnelPort,
@@ -31,7 +31,7 @@ func SetupServer(server *gin.Engine) {
 			config.SSHTunnelPassword,
 			config.SSHTunnelPrivateKey,
 		); newSSHClient != nil && err == nil {
-			log.Println("ssh client is OK")
+			log.Println("[bootstrap]", "ssh client is ready")
 			sshClient = newSSHClient
 		}
 	}
@@ -42,11 +42,11 @@ func SetupServer(server *gin.Engine) {
 		sshClient,
 	)
 
-	if mysqlClient := databaseManager.GetMysqlClient(); mysqlClient != nil {
-		log.Println("mysql is OK")
+	if mysqlClient := databaseManager.MustGetMysqlClient(); mysqlClient != nil {
+		log.Println("[bootstrap]", "mysql is ready")
 	}
-	if cookieStore := databaseManager.GetCookieStore(); cookieStore != nil {
-		log.Println("session is OK")
+	if cookieStore := databaseManager.MustGetCookieStore(); cookieStore != nil {
+		log.Println("[bootstrap]", "session is ready")
 	}
 
 	testGroup := server.Group("/test")

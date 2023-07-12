@@ -2,12 +2,18 @@ package databases
 
 import (
 	"database/sql"
+	"errors"
 	"log"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
-	"github.com/rushairer/gosso/core/databases/sshtunnel"
+	"github.com/rushairer/gosso/core/utilities/sshtunnel"
 	"golang.org/x/crypto/ssh"
+)
+
+var (
+	ErrInvalidMysqlClient = errors.New("invalid mysql client")
+	ErrInvalidCookieStore = errors.New("invalid cookie store")
 )
 
 type DatabaseManager struct {
@@ -42,10 +48,16 @@ func NewDatabaseManager(
 	return manager
 }
 
-func (m *DatabaseManager) GetMysqlClient() *sql.DB {
+func (m *DatabaseManager) MustGetMysqlClient() *sql.DB {
+	if m.mysqlClient == nil {
+		log.Panicln(ErrInvalidMysqlClient)
+	}
 	return m.mysqlClient
 }
 
-func (m *DatabaseManager) GetCookieStore() *sessions.CookieStore {
+func (m *DatabaseManager) MustGetCookieStore() *sessions.CookieStore {
+	if m.cookieStore == nil {
+		log.Panicln(ErrInvalidCookieStore)
+	}
 	return m.cookieStore
 }
