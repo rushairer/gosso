@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS socialite_providers;
+drop table socialite_providers;

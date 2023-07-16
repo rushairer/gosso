@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS connected_accounts;
+drop table connected_accounts;

@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS oauth_clients;
+drop table oauth_clients;

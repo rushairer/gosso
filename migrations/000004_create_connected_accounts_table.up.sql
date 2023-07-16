@@ -1,23 +1,22 @@
-CREATE TABLE
-    IF NOT EXISTS connected_accounts (
-        id bigint (20) unsigned NOT NULL AUTO_INCREMENT,
-        user_id char(36) NOT NULL,
-        provider_id bigint (20) unsigned NOT NULL,
-        provider_user_id varchar(255) NOT NULL,
-        name varchar(255) NOT NULL,
-        email varchar(255) NOT NULL,
-        phone varchar(255) NOT NULL,
-        location varchar(255) NOT NULL,
-        nickname varchar(255) NOT NULL,
-        description varchar(255) NOT NULL,
-        avatar_url varchar(255) NOT NULL,
-        access_token text NOT NULL,
-        access_secret varchar(255) NOT NULL,
-        refresh_token varchar(255) NOT NULL,
-        raw_data text DEFAULT NULL,
-        expires_at timestamp NULL DEFAULT NULL,
-        created_at timestamp NULL DEFAULT NULL,
-        updated_at timestamp NULL DEFAULT NULL,
-        PRIMARY KEY (id),
-        UNIQUE KEY connected_accounts_unique (user_id, provider_id, provider_user_id)
-    ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+create table
+    connected_accounts (
+        id bigint unsigned auto_increment primary key,
+        user_id char(36) not null,
+        provider_id bigint unsigned not null,
+        provider_user_id varchar(255) not null,
+        name varchar(255) not null,
+        email varchar(255) not null,
+        phone varchar(255) not null,
+        location varchar(255) not null,
+        nickname varchar(255) not null,
+        description varchar(255) not null,
+        avatar_url varchar(255) not null,
+        access_token text not null,
+        access_secret varchar(255) not null,
+        refresh_token varchar(255) not null,
+        raw_data text null,
+        expires_at timestamp null,
+        created_at timestamp default current_timestamp() not null,
+        updated_at timestamp default current_timestamp() not null on update current_timestamp(),
+        constraint connected_accounts_unique unique (user_id, provider_id, provider_user_id)
+    );

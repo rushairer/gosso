@@ -1,10 +1,10 @@
-CREATE TABLE
-    IF NOT EXISTS socialite_providers (
-        id bigint (20) unsigned NOT NULL AUTO_INCREMENT,
-        name varchar(255) NOT NULL,
-        provider varchar(255) NOT NULL,
-        config text DEFAULT NULL,
-        created_at timestamp NULL DEFAULT NULL,
-        updated_at timestamp NULL DEFAULT NULL,
-        PRIMARY KEY (id)
-    ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+create table
+    socialite_providers (
+        id bigint unsigned auto_increment primary key,
+        name varchar(255) not null,
+        provider varchar(255) not null,
+        status tinyint default 0 not null,
+        config text null,
+        created_at timestamp default current_timestamp() not null,
+        updated_at timestamp default current_timestamp() not null on update current_timestamp()
+    );

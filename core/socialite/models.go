@@ -17,6 +17,13 @@ const (
 	SUPPORTED_SOCIALITE_PROVIDER_APPLE  SupportedSocialiteProvider = "apple"
 )
 
+type SocialiteProviderStatus int
+
+const (
+	SOCIALITE_PROVIDER_STATUS_HIDDEN SocialiteProviderStatus = 0
+	SOCIALITE_PROVIDER_STATUS_NORMAL SocialiteProviderStatus = 1
+)
+
 type SocialiteProviderGithubConfig struct {
 	ClientKey   string   `json:"client_key"`
 	Secret      string   `json:"secret"`
@@ -35,15 +42,15 @@ type SocialiteProvider struct {
 	Id        int64                      `json:"id" db:"id"`
 	Name      string                     `json:"name" db:"name"`
 	Provider  SupportedSocialiteProvider `json:"provider" db:"provider"`
+	Status    SocialiteProviderStatus    `json:"status" db:"status"`
 	Config    string                     `json:"config" db:"config"`
 	CreatedAt time.Time                  `json:"-" db:"created_at"`
 	UpdatedAt time.Time                  `json:"-" db:"updated_at"`
 }
 
-func (p *SocialiteProvider) GothProvider() goth.Provider {
-	var provider goth.Provider
-
-	if p.Provider == SUPPORTED_SOCIALITE_PROVIDER_GITHUB {
+func (p *SocialiteProvider) GothProvider() (provider goth.Provider) {
+	switch {
+	case p.Provider == SUPPORTED_SOCIALITE_PROVIDER_GITHUB:
 		config := &SocialiteProviderGithubConfig{}
 		if err := json.Unmarshal([]byte(p.Config), config); err == nil {
 			provider = github.New(
@@ -53,7 +60,7 @@ func (p *SocialiteProvider) GothProvider() goth.Provider {
 				config.Scopes...,
 			)
 		}
-	} else if p.Provider == SUPPORTED_SOCIALITE_PROVIDER_WECHAT {
+	case p.Provider == SUPPORTED_SOCIALITE_PROVIDER_WECHAT:
 		config := &SocialiteProviderWechatConfig{}
 		if err := json.Unmarshal([]byte(p.Config), config); err == nil {
 			provider = wechat.New(
