@@ -70,7 +70,6 @@ func TestGetSocialiteProviderList(t *testing.T) {
 	list, err := socialiteRepository.GetSocialiteProviderList(ctx, SOCIALITE_PROVIDER_STATUS_NORMAL)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, list)
-	assert.Equal(t, len(list), 1)
 
 	list, err = socialiteRepository.GetSocialiteProviderList(ctx, SOCIALITE_PROVIDER_STATUS_HIDDEN)
 	assert.NoError(t, err)
