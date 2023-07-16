@@ -1,6 +1,7 @@
 package socialite
 
 import (
+	"database/sql"
 	"encoding/json"
 	"time"
 
@@ -44,15 +45,16 @@ type SocialiteProvider struct {
 	Provider  SupportedSocialiteProvider `json:"provider" db:"provider"`
 	Status    SocialiteProviderStatus    `json:"status" db:"status"`
 	Config    string                     `json:"config" db:"config"`
+	DeletedAt sql.NullTime               `json:"-" db:"deleted_at,omitempty"`
 	CreatedAt time.Time                  `json:"-" db:"created_at"`
 	UpdatedAt time.Time                  `json:"-" db:"updated_at"`
 }
 
-func (p *SocialiteProvider) GothProvider() (provider goth.Provider) {
+func (p *SocialiteProvider) GothProvider() (provider goth.Provider, err error) {
 	switch {
 	case p.Provider == SUPPORTED_SOCIALITE_PROVIDER_GITHUB:
 		config := &SocialiteProviderGithubConfig{}
-		if err := json.Unmarshal([]byte(p.Config), config); err == nil {
+		if err = json.Unmarshal([]byte(p.Config), config); err == nil {
 			provider = github.New(
 				config.ClientKey,
 				config.Secret,
@@ -62,7 +64,7 @@ func (p *SocialiteProvider) GothProvider() (provider goth.Provider) {
 		}
 	case p.Provider == SUPPORTED_SOCIALITE_PROVIDER_WECHAT:
 		config := &SocialiteProviderWechatConfig{}
-		if err := json.Unmarshal([]byte(p.Config), config); err == nil {
+		if err = json.Unmarshal([]byte(p.Config), config); err == nil {
 			provider = wechat.New(
 				config.ClientId,
 				config.ClientSecret,
@@ -72,5 +74,5 @@ func (p *SocialiteProvider) GothProvider() (provider goth.Provider) {
 		}
 	}
 
-	return provider
+	return
 }
