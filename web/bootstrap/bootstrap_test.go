@@ -29,14 +29,14 @@ func TestSocialiteMiddleware(t *testing.T) {
 	SetupServer(server)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/socials/github", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/socials/github_1", nil)
 	server.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusTemporaryRedirect, w.Code)
 
 	name, err := gothic.GetProviderName(req)
 	assert.NilError(t, err)
-	assert.Equal(t, name, "github")
+	assert.Equal(t, name, "github_1")
 }
 
 func TestSocialsSignIn(t *testing.T) {
