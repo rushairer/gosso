@@ -11,3 +11,13 @@ var IsDebug bool = utilities.GetEnvBool(
 	"IS_DEBUG",
 	false,
 )
+
+var HomePagePath string = utilities.GetEnv(
+	"HOME_PAGE_PATH",
+	"/profile",
+)
+
+var SignInPagePath string = utilities.GetEnv(
+	"SIGN_IN_PATH",
+	"/",
+)

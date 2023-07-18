@@ -1,0 +1,17 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Web",
+            "command": "air -d -c .air/web.toml",
+            "type": "node-terminal",
+            "request": "launch"
+        },
+        {
+            "name": "Launch Crontab",
+            "command": "air -d -c .air/cron.toml",
+            "type": "node-terminal",
+            "request": "launch"
+        }
+    ]
+}

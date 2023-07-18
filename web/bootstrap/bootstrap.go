@@ -7,7 +7,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gosso/core/config"
 	"github.com/rushairer/gosso/core/databases"
+	"github.com/rushairer/gosso/core/socialite"
 	"github.com/rushairer/gosso/core/utilities/sshtunnel"
+	"github.com/rushairer/gosso/web/controllers"
+	"github.com/rushairer/gosso/web/middlewares"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -33,6 +36,8 @@ func SetupServer(server *gin.Engine) {
 		); newSSHClient != nil && err == nil {
 			log.Println("[bootstrap]", "ssh client is ready")
 			sshClient = newSSHClient
+		} else {
+			log.Println("[bootstrap]", err)
 		}
 	}
 
@@ -42,9 +47,11 @@ func SetupServer(server *gin.Engine) {
 		sshClient,
 	)
 
-	if mysqlClient := databaseManager.MustGetMysqlClient(); mysqlClient != nil {
+	mysqlClient := databaseManager.MustGetMysqlClient()
+	if mysqlClient != nil {
 		log.Println("[bootstrap]", "mysql is ready")
 	}
+
 	if cookieStore := databaseManager.MustGetCookieStore(); cookieStore != nil {
 		log.Println("[bootstrap]", "session is ready")
 	}
@@ -58,4 +65,27 @@ func SetupServer(server *gin.Engine) {
 			},
 		)
 	}
+
+	socialiteService := socialite.NewSocialiteService(mysqlClient)
+	socialiteMiddleware := middlewares.NewSocialiteMiddleware()
+	socialiteController := controllers.NewSocialsController(
+		config.HomePagePath,
+		config.SignInPagePath,
+		socialiteService,
+	)
+	socialsGroup := server.Group("/socials")
+	{
+		socialsGroup.GET(
+			"/:provider",
+			socialiteMiddleware.GetProviderName,
+			socialiteController.SignIn,
+		)
+
+		socialsGroup.GET(
+			"/:provider/callback",
+			socialiteMiddleware.GetProviderName,
+			socialiteController.Callback,
+		)
+	}
+
 }

@@ -61,6 +61,7 @@ func (p *SocialiteProvider) GothProvider() (provider goth.Provider, err error) {
 				config.CallbackURL,
 				config.Scopes...,
 			)
+			provider.SetName(p.Name)
 		}
 	case p.Provider == SUPPORTED_SOCIALITE_PROVIDER_WECHAT:
 		config := &SocialiteProviderWechatConfig{}
@@ -71,6 +72,7 @@ func (p *SocialiteProvider) GothProvider() (provider goth.Provider, err error) {
 				config.RedirectURL,
 				config.Lang,
 			)
+			provider.SetName(p.Name)
 		}
 	}
 

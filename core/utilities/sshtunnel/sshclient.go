@@ -19,7 +19,7 @@ func NewSSHClient(
 
 	key, err := os.ReadFile(privateKey)
 	if err != nil {
-		log.Fatalf("Unable to read private key: %v", err)
+		log.Fatalf("[sshtunnel] Unable to read private key: %v", err)
 	}
 	signer, err := ssh.ParsePrivateKey(key)
 	if signer != nil {
