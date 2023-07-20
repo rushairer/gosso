@@ -9,7 +9,6 @@ import (
 	"github.com/markbates/goth/gothic"
 	"github.com/rushairer/gosso/core/authorization"
 	"github.com/rushairer/gosso/core/socialite"
-	"github.com/rushairer/gosso/core/utilities"
 )
 
 type SocialiteController struct {
@@ -54,7 +53,7 @@ func (c SocialiteController) Callback(ctx *gin.Context) {
 		log.Println("[socialite]", "callback error:", err, gothUser)
 	}
 
-	if !utilities.IsEmpty(gothUser) {
+	if len(gothUser.Name) > 0 || len(gothUser.Email) > 0 || len(gothUser.RawData) > 0 {
 		c.saveUserAndRedirect(ctx, gothUser)
 	}
 }
