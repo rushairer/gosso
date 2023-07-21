@@ -14,7 +14,7 @@ var IsDebug bool = utilities.GetEnvBool(
 
 var HomePagePath string = utilities.GetEnv(
 	"HOME_PAGE_PATH",
-	"/profile",
+	"/authentication/profile",
 )
 
 var SignInPagePath string = utilities.GetEnv(

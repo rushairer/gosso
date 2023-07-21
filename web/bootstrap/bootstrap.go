@@ -90,4 +90,14 @@ func SetupServer(server *gin.Engine) {
 		)
 	}
 
+	authenticationController := controllers.NewAuthenticationController(
+		authenticationService,
+	)
+	authenticationGroup := server.Group("/authentication")
+	{
+		authenticationGroup.GET(
+			"/profile",
+			authenticationController.Profile,
+		)
+	}
 }
