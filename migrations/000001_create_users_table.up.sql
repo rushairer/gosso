@@ -1,7 +1,6 @@
 create table
     users (
         id char(36) default uuid () not null primary key,
-        connected_account_id bigint unsigned null,
         name varchar(255) not null,
         password varchar(255) null,
         email varchar(255) null,

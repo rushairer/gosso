@@ -7,6 +7,11 @@ var MysqlDSN string = utilities.GetEnv(
 	"root:123456@(127.0.0.1:30306)/sso?parseTime=true",
 )
 
+var SessionName string = utilities.GetEnv(
+	"SESSION_NAME",
+	"sso-session",
+)
+
 var SessionSecret string = utilities.GetEnv(
 	"SESSION_SECRET",
 	"sso-session-secret",

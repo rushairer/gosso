@@ -53,7 +53,7 @@ func (c SocialiteController) Callback(ctx *gin.Context) {
 		log.Println("[socialite]", "callback error:", err, gothUser)
 	}
 
-	if len(gothUser.Name) > 0 || len(gothUser.Email) > 0 || len(gothUser.RawData) > 0 {
+	if len(gothUser.UserID) > 0 {
 		c.saveUserAndRedirect(ctx, gothUser)
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"log"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/gorilla/sessions"
 	"github.com/rushairer/gosso/core/utilities/sshtunnel"
 	"golang.org/x/crypto/ssh"
 )
@@ -17,12 +16,13 @@ var (
 )
 
 type DatabaseManager struct {
-	mysqlClient *sql.DB
-	cookieStore *sessions.CookieStore
+	mysqlClient  *sql.DB
+	sessionStore *SessionStore
 }
 
 func NewDatabaseManager(
 	mysqlDsn string,
+	sessionName string,
 	sessionSecret string,
 	sshClient *ssh.Client,
 ) *DatabaseManager {
@@ -41,9 +41,7 @@ func NewDatabaseManager(
 		log.Panicln(err)
 	}
 
-	cookieStore := sessions.NewCookieStore([]byte(sessionSecret))
-	cookieStore.Options.HttpOnly = true
-	manager.cookieStore = cookieStore
+	manager.sessionStore = NewSessionStore(sessionName, sessionSecret)
 
 	return manager
 }
@@ -55,9 +53,6 @@ func (m *DatabaseManager) MustGetMysqlClient() *sql.DB {
 	return m.mysqlClient
 }
 
-func (m *DatabaseManager) MustGetCookieStore() *sessions.CookieStore {
-	if m.cookieStore == nil {
-		log.Panicln(ErrInvalidCookieStore)
-	}
-	return m.cookieStore
+func (m *DatabaseManager) MustGetSessionStore() *SessionStore {
+	return m.sessionStore
 }

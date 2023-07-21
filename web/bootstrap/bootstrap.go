@@ -44,6 +44,7 @@ func SetupServer(server *gin.Engine) {
 
 	databaseManager := databases.NewDatabaseManager(
 		config.MysqlDSN,
+		config.SessionName,
 		config.SessionSecret,
 		sshClient,
 	)
@@ -53,9 +54,7 @@ func SetupServer(server *gin.Engine) {
 		log.Println("[bootstrap]", "mysql is ready")
 	}
 
-	if cookieStore := databaseManager.MustGetCookieStore(); cookieStore != nil {
-		log.Println("[bootstrap]", "session is ready")
-	}
+	sessionStore := databaseManager.MustGetSessionStore()
 
 	testGroup := server.Group("/test")
 	{
@@ -67,7 +66,7 @@ func SetupServer(server *gin.Engine) {
 		)
 	}
 
-	authorizationService := authorization.NewAuthorizationService(mysqlClient)
+	authorizationService := authorization.NewAuthorizationService(mysqlClient, sessionStore)
 	socialiteService := socialite.NewSocialiteService(mysqlClient)
 	socialiteMiddleware := middlewares.NewSocialiteMiddleware()
 	socialiteController := controllers.NewSocialsController(
