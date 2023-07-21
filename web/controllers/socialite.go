@@ -7,28 +7,28 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
-	"github.com/rushairer/gosso/core/authorization"
+	"github.com/rushairer/gosso/core/authentication"
 	"github.com/rushairer/gosso/core/socialite"
 )
 
 type SocialiteController struct {
-	homePagePath         string
-	signInPagePath       string
-	socialiteService     *socialite.SocialiteService
-	authorizationService *authorization.AuthorizationService
+	homePagePath          string
+	signInPagePath        string
+	socialiteService      *socialite.SocialiteService
+	authenticationService *authentication.AuthenticationService
 }
 
 func NewSocialsController(
 	homePagePath string,
 	signInPagePath string,
 	socialiteService *socialite.SocialiteService,
-	authorizationService *authorization.AuthorizationService,
+	authenticationService *authentication.AuthenticationService,
 ) *SocialiteController {
 	return &SocialiteController{
-		homePagePath:         homePagePath,
-		signInPagePath:       signInPagePath,
-		socialiteService:     socialiteService,
-		authorizationService: authorizationService,
+		homePagePath:          homePagePath,
+		signInPagePath:        signInPagePath,
+		socialiteService:      socialiteService,
+		authenticationService: authenticationService,
 	}
 }
 
@@ -59,7 +59,7 @@ func (c SocialiteController) Callback(ctx *gin.Context) {
 }
 
 func (c *SocialiteController) saveUserAndRedirect(ctx *gin.Context, gothUser goth.User) {
-	if err := c.authorizationService.SaveUser(ctx, gothUser); err != nil {
+	if err := c.authenticationService.SaveUser(ctx, gothUser); err != nil {
 		log.Println("[socialite]", "save user error:", err)
 	}
 	ctx.Redirect(http.StatusSeeOther, c.homePagePath)

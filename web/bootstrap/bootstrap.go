@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rushairer/gosso/core/authorization"
+	"github.com/rushairer/gosso/core/authentication"
 	"github.com/rushairer/gosso/core/config"
 	"github.com/rushairer/gosso/core/databases"
 	"github.com/rushairer/gosso/core/socialite"
@@ -66,14 +66,14 @@ func SetupServer(server *gin.Engine) {
 		)
 	}
 
-	authorizationService := authorization.NewAuthorizationService(mysqlClient, sessionStore)
+	authenticationService := authentication.NewAuthenticationService(mysqlClient, sessionStore)
 	socialiteService := socialite.NewSocialiteService(mysqlClient)
 	socialiteMiddleware := middlewares.NewSocialiteMiddleware()
 	socialiteController := controllers.NewSocialsController(
 		config.HomePagePath,
 		config.SignInPagePath,
 		socialiteService,
-		authorizationService,
+		authenticationService,
 	)
 	socialsGroup := server.Group("/socials")
 	{
