@@ -28,6 +28,7 @@ func NewDatabaseManagerDefault() *databases.DatabaseManager {
 
 	return databases.NewDatabaseManager(
 		config.MysqlDSN,
+		config.SessionName,
 		config.SessionSecret,
 		sshClient,
 	)
