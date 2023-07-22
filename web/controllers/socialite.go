@@ -51,6 +51,7 @@ func (c SocialiteController) Callback(ctx *gin.Context) {
 		// 因为会出现 gothUser, err 同时有值的情况，比如 github 没有设置主邮箱
 		// 所以不会因为 err 终断跳转
 		log.Println("[socialite]", "callback error:", err, gothUser)
+		ctx.JSON(http.StatusInternalServerError, err)
 	}
 
 	if len(gothUser.UserID) > 0 {

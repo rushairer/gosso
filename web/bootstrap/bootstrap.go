@@ -100,4 +100,19 @@ func SetupServer(server *gin.Engine) {
 			authenticationController.Profile,
 		)
 	}
+
+	// Frontend
+	{
+		server.Static("/static", "./web/resources/public/static")
+
+		server.StaticFile("/profile", "./web/resources/public/index.html")
+		server.StaticFile("/", "./web/resources/public/index.html")
+
+		server.StaticFile("/asset-manifest.json", "./web/resources/public/asset-manifest.json")
+		server.StaticFile("/favicon.ico", "./web/resources/public/favicon.ico")
+		server.StaticFile("/logo192.png", "./web/resources/public/logo192.png")
+		server.StaticFile("/logo512.png", "./web/resources/public/logo512.png")
+		server.StaticFile("/manifest.json", "./web/resources/public/manifest.json")
+		server.StaticFile("/robots.txt", "./web/resources/public/robots.txt")
+	}
 }
