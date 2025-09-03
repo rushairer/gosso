@@ -1,0 +1,12 @@
+web_server:
+    address: 0.0.0.0
+    port: 8082
+    idle_timeout: 60s
+    read_timeout: 5s
+    read_header_timeout: 2s
+    write_timeout: 30s
+    request_timeout: 10s
+database:
+    driver: mysql
+    dsn: root:123456@tcp(127.0.0.1:3306)/gouno_test?charset=utf8mb4&parseTime=True&loc=Local
+    log_level: 3 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
