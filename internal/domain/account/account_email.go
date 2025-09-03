@@ -12,7 +12,3 @@ type AccountEmail struct {
 	CreatedAt time.Time  `gorm:"column:created_at;type:timestamp;default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt time.Time  `gorm:"column:updated_at;type:timestamp;default:CURRENT_TIMESTAMP" json:"updated_at"`
 }
-
-func (a AccountEmail) TableName() string {
-	return "account_email"
-}

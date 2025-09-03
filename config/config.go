@@ -32,7 +32,7 @@ type DatabaseConfig struct {
 	LogLevel int    `mapstructure:"log_level"`
 }
 
-func InitConfig(configPath string, env string, hookFunc func() error) (err error) {
+func InitConfig(configPath string, env string) (err error) {
 
 	viper.AddConfigPath(configPath)
 	viper.SetConfigName(env)
@@ -45,13 +45,6 @@ func InitConfig(configPath string, env string, hookFunc func() error) (err error
 	if err = viper.ReadInConfig(); err != nil {
 		log.Fatalf("read config failed, err: %v", err)
 		return
-	}
-
-	if hookFunc != nil {
-		if err = hookFunc(); err != nil {
-			log.Fatalf("hook func failed, err: %v", err)
-			return
-		}
 	}
 
 	if err = viper.Unmarshal(&GlobalConfig); err != nil {

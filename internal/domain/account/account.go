@@ -48,7 +48,3 @@ type Account struct {
 	DeletedAt     *time.Time `gorm:"column:deleted_at;type:timestamp" json:"deleted_at"`
 	IsSoftDeleted bool       `gorm:"column:is_soft_deleted;default:0" json:"is_soft_deleted"`
 }
-
-func (a Account) TableName() string {
-	return "account"
-}

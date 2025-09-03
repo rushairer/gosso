@@ -22,6 +22,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"gorm.io/gorm/schema"
 )
 
 var webCmd = &cobra.Command{
@@ -40,15 +41,17 @@ func init() {
 func startWebServer(cmd *cobra.Command, args []string) {
 	log.Printf("starting web server...")
 
-	env := cmd.Flag("env").Value.String()
+	viper.BindEnv("gouno_env")
+	viper.BindPFlag("gouno_env", cmd.Flags().Lookup("env"))
+	env := viper.Get("gouno_env").(string)
+
 	configPath := cmd.Flag("config_path").Value.String()
 
-	err := config.InitConfig(configPath, env, func() error {
-		viper.BindPFlag("web_server.address", cmd.Flags().Lookup("address"))
-		viper.BindPFlag("web_server.port", cmd.Flags().Lookup("port"))
-		viper.BindPFlag("web_server.debug", cmd.Flags().Lookup("debug"))
-		return nil
-	})
+	viper.BindPFlag("web_server.address", cmd.Flags().Lookup("address"))
+	viper.BindPFlag("web_server.port", cmd.Flags().Lookup("port"))
+	viper.BindPFlag("web_server.debug", cmd.Flags().Lookup("debug"))
+
+	err := config.InitConfig(configPath, env)
 	if err != nil {
 		log.Fatalf("init config failed, err: %v", err)
 	}
@@ -84,6 +87,9 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		}),
 		&gorm.Config{
 			Logger: dbLogger,
+			NamingStrategy: schema.NamingStrategy{
+				SingularTable: true,
+			},
 		})
 	if err != nil {
 		log.Fatalf("open database failed, err: %v", err)

@@ -15,6 +15,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"gorm.io/gorm/schema"
 )
 
 // getProjectRoot attempts to find the project root by looking for go.mod file.
@@ -40,7 +41,7 @@ func getProjectRoot() string {
 func NewTestDB() *gorm.DB {
 	projectRoot := getProjectRoot()
 	configPath := filepath.Join(projectRoot, "config")
-	err := config.InitConfig(configPath, "test", nil)
+	err := config.InitConfig(configPath, "test")
 	if err != nil {
 		log.Fatalf("init config failed, err: %v", err)
 	}
@@ -66,6 +67,9 @@ func NewTestDB() *gorm.DB {
 		}),
 		&gorm.Config{
 			Logger: dbLogger,
+			NamingStrategy: schema.NamingStrategy{
+				SingularTable: true,
+			},
 		})
 	if err != nil {
 		log.Fatalf("open database failed, err: %v", err)
