@@ -3,21 +3,23 @@ package router
 import (
 	"gosso/controller"
 	"gosso/internal/service"
+	"gosso/task"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	gopipeline "github.com/rushairer/go-pipeline"
 	"github.com/rushairer/gouno"
 	"gorm.io/gorm"
 )
 
-func RegisterWebRouter(server *gin.Engine, db *gorm.DB) {
-	registerWebTestRouter(server)
-	registerWebIndexRouter(server)
-	registerAccountRouter(server, db)
+func RegisterWebRouter(engine *gin.Engine, db *gorm.DB, taskPipeline *gopipeline.Pipeline[task.Task]) {
+	registerWebTestRouter(engine)
+	registerWebIndexRouter(engine)
+	registerAccountRouter(engine, db, taskPipeline)
 }
 
-func registerWebTestRouter(server *gin.Engine) {
-	testGroup := server.Group("/test")
+func registerWebTestRouter(engine *gin.Engine) {
+	testGroup := engine.Group("/test")
 	{
 		testGroup.GET(
 			"/alive",
@@ -28,17 +30,17 @@ func registerWebTestRouter(server *gin.Engine) {
 	}
 }
 
-func registerWebIndexRouter(server *gin.Engine) {
-	server.GET("/", func(ctx *gin.Context) {
+func registerWebIndexRouter(engine *gin.Engine) {
+	engine.GET("/", func(ctx *gin.Context) {
 		ctx.String(http.StatusOK, "Hello gouno!")
 	})
 }
 
-func registerAccountRouter(server *gin.Engine, db *gorm.DB) {
-	accountGroup := server.Group("/account")
+func registerAccountRouter(engine *gin.Engine, db *gorm.DB, taskPipeline *gopipeline.Pipeline[task.Task]) {
+	accountGroup := engine.Group("/account")
 	{
 		accountService := service.NewAccountService(db)
-		accountController := controller.NewAccountController(accountService)
+		accountController := controller.NewAccountController(accountService, taskPipeline)
 
 		accountGroup.POST("/email", accountController.EmailRegister)
 		accountGroup.POST("/phone", accountController.PhoneRegister)

@@ -11,8 +11,9 @@ import (
 var GlobalConfig GoUnoConfig
 
 type GoUnoConfig struct {
-	WebServerConfig WebServerConfig `mapstructure:"web_server"`
-	DatabaseConfig  DatabaseConfig  `mapstructure:"database"`
+	WebServerConfig    WebServerConfig    `mapstructure:"web_server"`
+	DatabaseConfig     DatabaseConfig     `mapstructure:"database"`
+	TaskPipelineConfig TaskPipelineConfig `mapstructure:"task_pipeline"`
 }
 
 type WebServerConfig struct {
@@ -30,6 +31,15 @@ type DatabaseConfig struct {
 	Driver   string `mapstructure:"driver"`
 	DSN      string `mapstructure:"dsn"`
 	LogLevel int    `mapstructure:"log_level"`
+}
+
+type TaskPipelineConfig struct {
+	// FlushSize 批处理数据的最大容量
+	FlushSize uint32 `mapstructure:"flush_size"`
+	// BufferSize 缓冲通道的容量
+	BufferSize uint32 `mapstructure:"buffer_size"`
+	// FlushInterval 定时刷新的时间间隔
+	FlushInterval time.Duration `mapstructure:"flush_interval"`
 }
 
 func InitConfig(configPath string, env string) (err error) {

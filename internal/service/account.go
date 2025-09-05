@@ -23,6 +23,7 @@ func NewAccountService(db *gorm.DB) *AccountService {
 func (c *AccountService) EmailRegister(ctx context.Context, email string) (err error) {
 	accountEmail, created, err := c.accountEmailRepository.FindOrCreate(ctx, email)
 	log.Println(accountEmail, created, err)
+
 	return
 }
 

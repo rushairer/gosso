@@ -1,10 +1,13 @@
 package utility
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"gosso/config"
 	"gosso/internal/domain"
 	"gosso/router"
+	"gosso/task"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	gopipeline "github.com/rushairer/go-pipeline"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -88,11 +92,30 @@ func NewTestDB() *gorm.DB {
 	return gormDB
 }
 
-func NewTestEngine() *gin.Engine {
+func NewTestEngine(ctx context.Context, withTask bool) *gin.Engine {
+	engine := gin.New()
+
 	gormDB := NewTestDB()
 
-	engine := gin.New()
-	router.RegisterWebRouter(engine, gormDB)
+	var taskPipeline *gopipeline.Pipeline[task.Task]
+	if withTask {
+		taskPipeline = task.NewTaskPipeline(
+			config.GlobalConfig.TaskPipelineConfig.BufferSize,
+			config.GlobalConfig.TaskPipelineConfig.FlushSize,
+			config.GlobalConfig.TaskPipelineConfig.FlushInterval,
+		)
+		go func() {
+			if err := taskPipeline.AsyncPerform(ctx); err != nil {
+				if errors.Is(err, gopipeline.ErrContextIsClosed) {
+					log.Printf("async perform task pipeline context is closed, exit: %v", err)
+					return
+				}
+				log.Fatalf("async perform task pipeline failed, err: %v", err)
+			}
+		}()
+	}
+
+	router.RegisterWebRouter(engine, gormDB, taskPipeline)
 
 	return engine
 }

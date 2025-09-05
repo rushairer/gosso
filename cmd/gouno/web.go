@@ -3,6 +3,7 @@ package gouno
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,8 +15,10 @@ import (
 	"gosso/config"
 	"gosso/middleware"
 	"gosso/router"
+	"gosso/task"
 
 	"github.com/gin-gonic/gin"
+	gopipeline "github.com/rushairer/go-pipeline"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -101,7 +104,24 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		middleware.RecoveryMiddleware(),
 		middleware.TimeoutMiddleware(config.GlobalConfig.WebServerConfig.RequestTimeout),
 	)
-	router.RegisterWebRouter(engine, gormDB)
+
+	taskPipeline := task.NewTaskPipeline(
+		config.GlobalConfig.TaskPipelineConfig.BufferSize,
+		config.GlobalConfig.TaskPipelineConfig.FlushSize,
+		config.GlobalConfig.TaskPipelineConfig.FlushInterval,
+	)
+
+	go func() {
+		if err := taskPipeline.AsyncPerform(ctx); err != nil {
+			if errors.Is(err, gopipeline.ErrContextIsClosed) {
+				log.Printf("async perform task pipeline context is closed, exit: %v", err)
+				return
+			}
+			log.Fatalf("async perform task pipeline failed, err: %v", err)
+		}
+	}()
+
+	router.RegisterWebRouter(engine, gormDB, taskPipeline)
 
 	httpServer := &http.Server{
 		Addr:              fmt.Sprintf("%s:%s", config.GlobalConfig.WebServerConfig.Address, config.GlobalConfig.WebServerConfig.Port),

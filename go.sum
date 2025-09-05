@@ -77,6 +77,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/rogpeppe/go-internal v1.9.0 h1:73kH8U+JUqXU8lRuOHeVHaa/SZPifC7BkcraZVejAe8=
 github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/fJaraNFVN+nFs=
+github.com/rushairer/go-pipeline v1.0.0 h1:RWR0kA0UFF5KEvO1UrtHfEJeaei0lAMA21ttfbLJmBk=
+github.com/rushairer/go-pipeline v1.0.0/go.mod h1:8c04QcyoYXOSK5CZ0HNqBGUC8HINuZbXshnzRJkxi6M=
 github.com/rushairer/gouno v0.2.1 h1:3NkO/qZxFhSgfyiMkxqqyg9qN/XFRUEB64P3Rh73M1w=
 github.com/rushairer/gouno v0.2.1/go.mod h1:3nMewUCyUQ6GOXlXT+GF3OF0EyOT7I1Eacok1dv1omw=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=

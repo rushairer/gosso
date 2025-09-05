@@ -10,3 +10,7 @@ database:
     driver: mysql
     dsn: root:123456@tcp(127.0.0.1:3306)/gouno_test?charset=utf8mb4&parseTime=True&loc=Local
     log_level: 3 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
+task_pipeline:
+    flush_size: 32
+    buffer_size: 64
+    flush_interval: 1s
