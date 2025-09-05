@@ -2,7 +2,8 @@ package controller
 
 import (
 	"gosso/internal/service"
-	"gosso/task"
+
+	"github.com/rushairer/gouno/task"
 
 	accountTask "gosso/internal/task"
 	"net/http"

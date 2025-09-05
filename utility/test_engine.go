@@ -7,12 +7,13 @@ import (
 	"gosso/config"
 	"gosso/internal/domain"
 	"gosso/router"
-	"gosso/task"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/rushairer/gouno/task"
 
 	"github.com/gin-gonic/gin"
 	gopipeline "github.com/rushairer/go-pipeline"

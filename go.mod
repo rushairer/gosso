@@ -8,7 +8,7 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/google/uuid v1.6.0
 	github.com/rushairer/go-pipeline v1.0.0
-	github.com/rushairer/gouno v0.2.1
+	github.com/rushairer/gouno v0.2.2
 	github.com/smartystreets/goconvey v1.8.1
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1

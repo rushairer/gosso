@@ -3,8 +3,9 @@ package router
 import (
 	"gosso/controller"
 	"gosso/internal/service"
-	"gosso/task"
 	"net/http"
+
+	"github.com/rushairer/gouno/task"
 
 	"github.com/gin-gonic/gin"
 	gopipeline "github.com/rushairer/go-pipeline"

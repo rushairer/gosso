@@ -14,6 +14,7 @@ dev:
 		go install github.com/air-verse/air@latest; \
 	fi
 	air -c .air.toml
+.PHONY: test
 test:
 	@if ! command -v goconvey &> /dev/null; then \
 		go install github.com/smartystreets/goconvey@latest; \

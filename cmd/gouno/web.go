@@ -15,7 +15,8 @@ import (
 	"gosso/config"
 	"gosso/middleware"
 	"gosso/router"
-	"gosso/task"
+
+	"github.com/rushairer/gouno/task"
 
 	"github.com/gin-gonic/gin"
 	gopipeline "github.com/rushairer/go-pipeline"
