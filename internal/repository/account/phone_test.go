@@ -13,30 +13,30 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestSpecAccountEmail(t *testing.T) {
-	Convey("创建一个邮箱帐号", t, func() {
-		emailString := "test@example.com"
-		target := gorm.G[account.AccountEmail](nil)
-		accountEmailRepository := accountRepository.NewAccountEmailMySQLRepository(nil)
+func TestSpecAccountPhone(t *testing.T) {
+	Convey("创建一个手机号帐号", t, func() {
+		number := "13800000000"
+		target := gorm.G[account.Phone](nil)
+		phoneRepository := accountRepository.NewPhoneMySQLRepository(nil)
 		Convey("当首次创建成功时", func() {
 			patches := gomonkey.ApplyMethodFunc(
 				target,
 				"Create",
 				func(
 					ctx context.Context,
-					r *account.AccountEmail,
+					r *account.Phone,
 				) error {
-					r.Email = emailString
+					r.Number = number
 					now := time.Now()
 					r.CreatedAt = now
 					r.UpdatedAt = now
 					return nil
 				})
 			defer patches.Reset()
-			accountEmail, created, err := accountEmailRepository.FindOrCreate(context.Background(), emailString)
+			phone, created, err := phoneRepository.FindOrCreate(context.Background(), number)
 			So(err, ShouldBeNil)
 			So(created, ShouldBeTrue)
-			So(accountEmail.Email, ShouldEqual, emailString)
+			So(phone.Number, ShouldEqual, number)
 		})
 		Convey("当创建失败时", func() {
 			patches := gomonkey.ApplyMethodFunc(
@@ -44,16 +44,16 @@ func TestSpecAccountEmail(t *testing.T) {
 				"Create",
 				func(
 					ctx context.Context,
-					r *account.AccountEmail,
+					r *account.Phone,
 				) error {
-					r.Email = emailString
+					r.Number = number
 					return errors.New("create failed")
 				})
 			defer patches.Reset()
-			accountEmail, created, err := accountEmailRepository.FindOrCreate(context.Background(), emailString)
+			phone, created, err := phoneRepository.FindOrCreate(context.Background(), number)
 			So(err, ShouldNotBeNil)
 			So(created, ShouldBeFalse)
-			So(accountEmail.Email, ShouldEqual, emailString)
+			So(phone.Number, ShouldEqual, number)
 		})
 		Convey("当邮箱已存在时", func() {
 			patches := gomonkey.ApplyMethodFunc(
@@ -61,19 +61,19 @@ func TestSpecAccountEmail(t *testing.T) {
 				"Create",
 				func(
 					ctx context.Context,
-					r *account.AccountEmail,
+					r *account.Phone,
 				) error {
-					r.Email = emailString
+					r.Number = number
 					now := time.Now()
 					r.CreatedAt = now
 					r.UpdatedAt = now.Add(time.Hour)
 					return nil
 				})
 			defer patches.Reset()
-			accountEmail, created, err := accountEmailRepository.FindOrCreate(context.Background(), emailString)
+			phone, created, err := phoneRepository.FindOrCreate(context.Background(), number)
 			So(err, ShouldBeNil)
 			So(created, ShouldBeFalse)
-			So(accountEmail.Email, ShouldEqual, emailString)
+			So(phone.Number, ShouldEqual, number)
 		})
 	})
 }

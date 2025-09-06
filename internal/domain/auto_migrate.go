@@ -9,15 +9,15 @@ import (
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&account.Account{},
-		&account.AccountEmail{},
-		&account.AccountPhone{},
+		&account.Email{},
+		&account.Phone{},
 	)
 }
 
 func CleanMigrate(db *gorm.DB) error {
 	return db.Migrator().DropTable(
 		&account.Account{},
-		&account.AccountEmail{},
-		&account.AccountPhone{},
+		&account.Email{},
+		&account.Phone{},
 	)
 }

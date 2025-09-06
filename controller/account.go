@@ -5,7 +5,7 @@ import (
 
 	"github.com/rushairer/gouno/task"
 
-	accountTask "gosso/internal/task"
+	accountTask "gosso/internal/task/account"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -34,10 +34,6 @@ func NewAccountController(accountService *service.AccountService, taskPipeline *
 	}
 }
 
-func (c *AccountController) Get(ctx *gin.Context) {
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("foo"))
-}
-
 func (c *AccountController) EmailRegister(ctx *gin.Context) {
 	var req EmailRegisterRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -50,7 +46,7 @@ func (c *AccountController) EmailRegister(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
 		return
 	}
-	c.taskPipeline.Add(ctx, accountTask.NewAccountSendEmailCodeTask(req.Email))
+	c.taskPipeline.Add(ctx, accountTask.NewSendEmailCodeTask(req.Email))
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(""))
 }
 
@@ -66,5 +62,6 @@ func (c *AccountController) PhoneRegister(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
 		return
 	}
+	c.taskPipeline.Add(ctx, accountTask.NewSendPhoneCodeTask(req.Phone))
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(""))
 }

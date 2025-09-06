@@ -9,26 +9,26 @@ import (
 )
 
 type AccountService struct {
-	accountEmailRepository account.AccountEmailRepository
-	accountPhoneRepository account.AccountPhoneRepository
+	emailRepository account.EmailRepository
+	phoneRepository account.PhoneRepository
 }
 
 func NewAccountService(db *gorm.DB) *AccountService {
 	return &AccountService{
-		accountEmailRepository: account.NewAccountEmailMySQLRepository(db),
-		accountPhoneRepository: account.NewAccountPhoneMySQLRepository(db),
+		emailRepository: account.NewEmailMySQLRepository(db),
+		phoneRepository: account.NewPhoneMySQLRepository(db),
 	}
 }
 
-func (c *AccountService) EmailRegister(ctx context.Context, email string) (err error) {
-	accountEmail, created, err := c.accountEmailRepository.FindOrCreate(ctx, email)
-	log.Println(accountEmail, created, err)
+func (c *AccountService) EmailRegister(ctx context.Context, address string) (err error) {
+	email, created, err := c.emailRepository.FindOrCreate(ctx, address)
+	log.Println(email, created, err)
 
 	return
 }
 
-func (c *AccountService) PhoneRegister(ctx context.Context, phone string) (err error) {
-	accountPhone, created, err := c.accountPhoneRepository.FindOrCreate(ctx, phone)
-	log.Println(accountPhone, created, err)
+func (c *AccountService) PhoneRegister(ctx context.Context, number string) (err error) {
+	phone, created, err := c.phoneRepository.FindOrCreate(ctx, number)
+	log.Println(phone, created, err)
 	return
 }
