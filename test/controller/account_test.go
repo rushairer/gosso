@@ -18,7 +18,7 @@ func TestAccountController_EmailRegister(t *testing.T) {
 	engine := utility.NewTestEngine(ctx, true)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/account/email", strings.NewReader(`{"email": "test@example.com"}`))
+	req, _ := http.NewRequest(http.MethodPost, "/account/email", strings.NewReader(`{"address": "test@example.com"}`))
 	req.Header.Set("Content-Type", "application/json")
 	engine.ServeHTTP(w, req)
 
@@ -33,7 +33,7 @@ func TestAccountController_PhoneRegister(t *testing.T) {
 	engine := utility.NewTestEngine(ctx, true)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/account/phone", strings.NewReader(`{"phone": "12345678901"}`))
+	req, _ := http.NewRequest(http.MethodPost, "/account/phone", strings.NewReader(`{"number": "12345678901"}`))
 	req.Header.Set("Content-Type", "application/json")
 	engine.ServeHTTP(w, req)
 

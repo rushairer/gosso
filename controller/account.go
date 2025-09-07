@@ -20,11 +20,11 @@ type AccountController struct {
 }
 
 type EmailRegisterRequest struct {
-	Email string `json:"email" binding:"required,email"`
+	Address string `json:"address" binding:"required,email"`
 }
 
 type PhoneRegisterRequest struct {
-	Phone string `json:"phone" binding:"required"`
+	Number string `json:"number" binding:"required"`
 }
 
 func NewAccountController(accountService *service.AccountService, taskPipeline *gopipeline.Pipeline[task.Task]) *AccountController {
@@ -41,12 +41,12 @@ func (c *AccountController) EmailRegister(ctx *gin.Context) {
 		return
 	}
 	// TODO: 校验
-	err := c.accountService.EmailRegister(ctx, req.Email)
+	err := c.accountService.EmailRegister(ctx, req.Address)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
 		return
 	}
-	c.taskPipeline.Add(ctx, accountTask.NewSendEmailCodeTask(req.Email))
+	c.taskPipeline.Add(ctx, accountTask.NewSendEmailCodeTask(req.Address))
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(""))
 }
 
@@ -57,11 +57,11 @@ func (c *AccountController) PhoneRegister(ctx *gin.Context) {
 		return
 	}
 	// TODO: 校验
-	err := c.accountService.PhoneRegister(ctx, req.Phone)
+	err := c.accountService.PhoneRegister(ctx, req.Number)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
 		return
 	}
-	c.taskPipeline.Add(ctx, accountTask.NewSendPhoneCodeTask(req.Phone))
+	c.taskPipeline.Add(ctx, accountTask.NewSendPhoneCodeTask(req.Number))
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(""))
 }
