@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gosso/config"
+	"gosso/internal/database"
 	"gosso/middleware"
 	"gosso/router"
 
@@ -23,7 +24,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
@@ -85,10 +85,13 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		},
 	)
 
+	var dialector gorm.Dialector
+
+	factory := database.NewDatabaseFactory()
+	dialector = factory.CreateDialector(sqlDB)
+
 	gormDB, err := gorm.Open(
-		mysql.New(mysql.Config{
-			Conn: sqlDB,
-		}),
+		dialector,
 		&gorm.Config{
 			Logger: dbLogger,
 			NamingStrategy: schema.NamingStrategy{
@@ -105,6 +108,8 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		middleware.RecoveryMiddleware(),
 		middleware.TimeoutMiddleware(config.GlobalConfig.WebServerConfig.RequestTimeout),
 	)
+
+	//domain.AutoMigrate(gormDB.Debug())
 
 	taskPipeline := task.NewTaskPipeline(
 		config.GlobalConfig.TaskPipelineConfig.BufferSize,

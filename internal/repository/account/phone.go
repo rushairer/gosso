@@ -42,6 +42,7 @@ func (r *PhoneMySQLRepository) FindOrCreate(
 	if err = gorm.G[account.Phone](
 		r.db,
 		clause.OnConflict{
+			Columns:   []clause.Column{{Name: "number"}}, // 指定冲突检测列
 			DoUpdates: clause.AssignmentColumns([]string{"updated_at"}),
 		},
 		clause.Returning{},

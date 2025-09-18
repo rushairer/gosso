@@ -44,6 +44,7 @@ func (r *EmailMySQLRepository) FindOrCreate(
 	if err = gorm.G[account.Email](
 		r.db,
 		clause.OnConflict{
+			Columns:   []clause.Column{{Name: "address"}}, // 指定冲突检测列
 			DoUpdates: clause.AssignmentColumns([]string{"updated_at"}),
 		},
 		clause.Returning{},

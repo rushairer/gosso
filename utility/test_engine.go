@@ -19,6 +19,7 @@ import (
 	"github.com/gin-gonic/gin"
 	gopipeline "github.com/rushairer/go-pipeline"
 	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
@@ -75,10 +76,23 @@ func NewTestDB() *gorm.DB {
 		},
 	)
 
-	gormDB, err := gorm.Open(
-		mysql.New(mysql.Config{
+	var dialector gorm.Dialector
+
+	switch config.GlobalConfig.DatabaseConfig.Driver {
+	case "mysql":
+		dialector = mysql.New(mysql.Config{
 			Conn: sqlDB,
-		}),
+		})
+	case "pgx":
+		dialector = postgres.New(postgres.Config{
+			Conn: sqlDB,
+		})
+	default:
+		log.Fatalf("unsupport driver: %s", config.GlobalConfig.DatabaseConfig.Driver)
+	}
+
+	gormDB, err := gorm.Open(
+		dialector,
 		&gorm.Config{
 			Logger: dbLogger,
 			NamingStrategy: schema.NamingStrategy{

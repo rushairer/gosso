@@ -8,7 +8,7 @@ tmp_dir = "tmp"
 [build]
   args_bin = ["web -d -e development"]
   bin = "./bin/gouno"
-  cmd = "go build -buildvcs=false -gcflags \"-N -l\" -o ./bin/gouno ./cmd"
+  cmd = "go build -tags postgres -buildvcs=false -gcflags \"-N -l\" -o ./bin/gouno ./cmd"
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "bin"]
   exclude_file = ["README.md"]

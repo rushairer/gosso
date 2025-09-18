@@ -3,7 +3,11 @@ OUTPUT:=./bin/gouno
 default: build
 
 build:
-	go build -buildvcs=false -gcflags "-N -l" -o $(OUTPUT) $(DEFAULT)
+	go build -tags postgres -buildvcs=false -gcflags "-N -l" -o $(OUTPUT) $(DEFAULT)
+	chmod +x $(OUTPUT)
+
+build-mysql:
+	go build -tags mysql -buildvcs=false -gcflags "-N -l" -o $(OUTPUT) $(DEFAULT)
 	chmod +x $(OUTPUT)
 
 run:
