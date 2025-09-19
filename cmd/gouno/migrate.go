@@ -44,11 +44,14 @@ func startMigrate(cmd *cobra.Command, args []string) {
 	if clean {
 		if err := domain.CleanMigrate(gormDB); err != nil {
 			log.Fatalf("clean tables failed, err: %v", err)
+		} else {
+			log.Println("clean tables success")
 		}
 	} else {
-
 		if err := domain.AutoMigrate(gormDB); err != nil {
 			log.Fatalf("auto migrate failed, err: %v", err)
+		} else {
+			log.Println("auto migrate success")
 		}
 	}
 }
