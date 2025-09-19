@@ -1,7 +1,6 @@
 package database
 
 import (
-	"gosso/config"
 	"log"
 	"os"
 	"time"
@@ -11,17 +10,21 @@ import (
 	"gorm.io/gorm/schema"
 )
 
-func NewGormDB(config config.DatabaseConfigDriver) *gorm.DB {
+func NewGormDB(
+	driver string,
+	dsn string,
+	logLevel int,
+) *gorm.DB {
 	var dialector gorm.Dialector
 	factory := NewDatabaseFactory()
-	dialector = factory.CreateDialector(config.Driver, config.DSN)
+	dialector = factory.CreateDialector(driver, dsn)
 
 	dbLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
 		logger.Config{
-			SlowThreshold:             time.Second,                      // 慢速 SQL 阈值
-			LogLevel:                  logger.LogLevel(config.LogLevel), // 日志级别
-			IgnoreRecordNotFoundError: true,                             // 忽略记录器的 ErrRecordNotFound 错误
+			SlowThreshold:             time.Second,               // 慢速 SQL 阈值
+			LogLevel:                  logger.LogLevel(logLevel), // 日志级别
+			IgnoreRecordNotFoundError: true,                      // 忽略记录器的 ErrRecordNotFound 错误
 		},
 	)
 

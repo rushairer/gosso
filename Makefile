@@ -12,11 +12,13 @@ build.%:
 run:
 	$(OUTPUT) web
 
-dev:
+dev: dev.postgres
+
+dev.%:
 	@if ! command -v air &> /dev/null; then \
 		go install github.com/air-verse/air@latest; \
 	fi
-	air -c .air.toml
+	DB=$* air -c .air.toml
 	
 test: test.sqlite
 
@@ -24,15 +26,24 @@ test.%:
 	GO111MODULE=on go test -tags=$* -v ./...
 
 clean:
-	rm -rf ./bin/gouno
+	rm -rf .$(OUTPUT)
 
 help:
 	@echo "Available commands:"
 	@echo "  build          - Build postgres version (default)"
+	@echo "  build.mysql    - Build mysql version"
+	@echo "  build.postgres - Build postgres version"
+	@echo "  build.sqlite   - Build sqlite version"
 	@echo "  run            - Run the application"
-	@echo "  dev            - Start development mode with air"
-	@echo "  test           - Run tests"
+	@echo "  dev            - Start development mode with air (postgres)"
+	@echo "  dev.mysql      - Start development mode with air (mysql)"
+	@echo "  dev.postgres   - Start development mode with air (postgres)"
+	@echo "  dev.sqlite     - Start development mode with air (sqlite)"
+	@echo "  test           - Run tests (sqlite)"
+	@echo "  test.mysql     - Run tests with mysql tags"
+	@echo "  test.postgres  - Run tests with postgres tags"
+	@echo "  test.sqlite    - Run tests with sqlite tags"
 	@echo "  clean          - Clean build artifacts"
 	@echo "  help           - Show this help message"
 
-.PHONY: build mysql postgres sqlite build-mysql build-postgres build-sqlite dev test run clean help
+.PHONY: default build  run dev test clean help

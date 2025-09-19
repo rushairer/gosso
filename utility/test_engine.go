@@ -55,7 +55,12 @@ func initTestConfig() {
 
 func NewTestDB() *gorm.DB {
 	initTestConfig()
-	gormDB := database.NewGormDB(*config.GlobalConfig.DatabaseConfig.GetDefaultDriver())
+
+	defaultDriver := config.GlobalConfig.DatabaseConfig.GetDefaultDriver()
+	if defaultDriver == nil {
+		log.Fatalf("default driver not found")
+	}
+	gormDB := database.NewGormDB(defaultDriver.Driver, defaultDriver.DSN, defaultDriver.LogLevel)
 
 	var err error
 	err = domain.CleanMigrate(gormDB)

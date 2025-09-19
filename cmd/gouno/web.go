@@ -65,7 +65,12 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	defer stop()
 
 	// init db
-	gormDB := database.NewGormDB(*config.GlobalConfig.DatabaseConfig.GetDefaultDriver())
+
+	defaultDriver := config.GlobalConfig.DatabaseConfig.GetDefaultDriver()
+	if defaultDriver == nil {
+		log.Fatalf("default driver not found")
+	}
+	gormDB := database.NewGormDB(defaultDriver.Driver, defaultDriver.DSN, defaultDriver.LogLevel)
 
 	// init gin
 	engine := gin.New()
