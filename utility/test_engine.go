@@ -2,9 +2,9 @@ package utility
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"gosso/config"
+	"gosso/internal/database"
 	"gosso/internal/domain"
 	"gosso/router"
 	"log"
@@ -12,17 +12,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-	"time"
 
 	"github.com/rushairer/gouno/task"
 
 	"github.com/gin-gonic/gin"
 	gopipeline "github.com/rushairer/go-pipeline"
-	"gorm.io/driver/mysql"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
-	"gorm.io/gorm/schema"
 )
 
 // projectRoot attempts to find the project root by looking for go.mod file.
@@ -60,49 +55,9 @@ func initTestConfig() {
 
 func NewTestDB() *gorm.DB {
 	initTestConfig()
+	gormDB := database.NewGormDB(*config.GlobalConfig.DatabaseConfig.GetDefaultDriver())
 
-	// init db
-	sqlDB, err := sql.Open(config.GlobalConfig.DatabaseConfig.Driver, config.GlobalConfig.DatabaseConfig.DSN)
-	if err != nil {
-		log.Fatalf("open database failed, err: %v", err)
-	}
-
-	dbLogger := logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
-		logger.Config{
-			SlowThreshold:             time.Second,                                                  // 慢速 SQL 阈值
-			LogLevel:                  logger.LogLevel(config.GlobalConfig.DatabaseConfig.LogLevel), // 日志级别
-			IgnoreRecordNotFoundError: true,                                                         // 忽略记录器的 ErrRecordNotFound 错误
-		},
-	)
-
-	var dialector gorm.Dialector
-
-	switch config.GlobalConfig.DatabaseConfig.Driver {
-	case "mysql":
-		dialector = mysql.New(mysql.Config{
-			Conn: sqlDB,
-		})
-	case "pgx":
-		dialector = postgres.New(postgres.Config{
-			Conn: sqlDB,
-		})
-	default:
-		log.Fatalf("unsupport driver: %s", config.GlobalConfig.DatabaseConfig.Driver)
-	}
-
-	gormDB, err := gorm.Open(
-		dialector,
-		&gorm.Config{
-			Logger: dbLogger,
-			NamingStrategy: schema.NamingStrategy{
-				SingularTable: true,
-			},
-		})
-	if err != nil {
-		log.Fatalf("open database failed, err: %v", err)
-	}
-
+	var err error
 	err = domain.CleanMigrate(gormDB)
 	if err != nil {
 		log.Fatalf("clean migrate failed, err: %v", err)

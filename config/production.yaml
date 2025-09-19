@@ -7,10 +7,23 @@ web_server:
     write_timeout: 30s
     request_timeout: 10s
 database:
-    driver: pgx
-    # dsn: root:123456@tcp(127.0.0.1:3306)/gouno?charset=utf8mb4&parseTime=True&loc=Local
-    dsn: host=127.0.0.1 user=postgres password=123456 dbname=gosso port=5432 sslmode=disable TimeZone=Asia/Shanghai search_path=production
-    log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
+    default: postgres
+    drivers:
+        sqlite:
+            name: sqlite
+            driver: sqlite3
+            dsn: ./data/gosso.db
+            log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
+        mysql:
+            name: mysql
+            driver: mysql
+            dsn: root:123456@tcp(127.0.0.1:3306)/gouno?charset=utf8mb4&parseTime=True&loc=Local
+            log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
+        postgres:
+            name: postgres
+            driver: pgx
+            dsn: host=127.0.0.1 user=postgres password=123456 dbname=gosso port=5432 sslmode=disable TimeZone=Asia/Shanghai search_path=production
+            log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
 task_pipeline:
     flush_size: 32
     buffer_size: 64

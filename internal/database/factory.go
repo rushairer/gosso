@@ -3,5 +3,6 @@ package database
 import "gorm.io/gorm"
 
 type DatabaseFactory interface {
-	CreateDialector(sqlDB gorm.ConnPool) gorm.Dialector
+	CreateDialector(driverName string, dataSourceName string) gorm.Dialector
+	CreateDialectorWithPoll(sqlDB gorm.ConnPool) gorm.Dialector
 }

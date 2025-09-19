@@ -1,14 +1,13 @@
 DEFAULT:=./cmd
 OUTPUT:=./bin/gouno
+
 default: build
 
-build:
-	go build -tags postgres -buildvcs=false -gcflags "-N -l" -o $(OUTPUT) $(DEFAULT)
-	chmod +x $(OUTPUT)
+build: build.postgres
 
-build-mysql:
-	go build -tags mysql -buildvcs=false -gcflags "-N -l" -o $(OUTPUT) $(DEFAULT)
-	chmod +x $(OUTPUT)
+build.%:
+	go build -tags $* -buildvcs=false -gcflags "-N -l" -o $(OUTPUT) $(DEFAULT)
+	@echo "Built $* version: $(OUTPUT)"
 
 run:
 	$(OUTPUT) web
@@ -18,9 +17,22 @@ dev:
 		go install github.com/air-verse/air@latest; \
 	fi
 	air -c .air.toml
-.PHONY: test
-test:
-	@if ! command -v goconvey &> /dev/null; then \
-		go install github.com/smartystreets/goconvey@latest; \
-	fi
-	GOFLAGS="-gcflags=all=-l" goconvey -port 9090 -excludedDirs="bin,cmd,config,doc,log,router" -cover
+	
+test: test.sqlite
+
+test.%:
+	GO111MODULE=on go test -tags=$* -v ./...
+
+clean:
+	rm -rf ./bin/gouno
+
+help:
+	@echo "Available commands:"
+	@echo "  build          - Build postgres version (default)"
+	@echo "  run            - Run the application"
+	@echo "  dev            - Start development mode with air"
+	@echo "  test           - Run tests"
+	@echo "  clean          - Clean build artifacts"
+	@echo "  help           - Show this help message"
+
+.PHONY: build mysql postgres sqlite build-mysql build-postgres build-sqlite dev test run clean help

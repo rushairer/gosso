@@ -27,10 +27,33 @@ type WebServerConfig struct {
 	RequestTimeout    time.Duration `mapstructure:"request_timeout"`
 }
 
+type DatabaseConfigDriverName string
+type DatabaseConfigDriver struct {
+	Name     DatabaseConfigDriverName `mapstructure:"name"`
+	Driver   string                   `mapstructure:"driver"`
+	DSN      string                   `mapstructure:"dsn"`
+	LogLevel int                      `mapstructure:"log_level"`
+}
+
 type DatabaseConfig struct {
-	Driver   string `mapstructure:"driver"`
-	DSN      string `mapstructure:"dsn"`
-	LogLevel int    `mapstructure:"log_level"`
+	Default DatabaseConfigDriverName                          `mapstructure:"default"`
+	Drivers map[DatabaseConfigDriverName]DatabaseConfigDriver `mapstructure:"drivers"`
+}
+
+func (c *DatabaseConfig) GetDriver(name DatabaseConfigDriverName) *DatabaseConfigDriver {
+	if driver, ok := c.Drivers[name]; ok {
+		return &driver
+	} else {
+		return nil
+	}
+}
+
+func (c *DatabaseConfig) GetDefaultDriver() *DatabaseConfigDriver {
+	if driver, ok := c.Drivers[c.Default]; ok {
+		return &driver
+	} else {
+		return nil
+	}
 }
 
 type TaskPipelineConfig struct {

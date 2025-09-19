@@ -2,12 +2,10 @@ package gouno
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -23,10 +21,6 @@ import (
 	gopipeline "github.com/rushairer/go-pipeline"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
-	"gorm.io/gorm/schema"
 )
 
 var webCmd = &cobra.Command{
@@ -71,36 +65,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	defer stop()
 
 	// init db
-	sqlDB, err := sql.Open(config.GlobalConfig.DatabaseConfig.Driver, config.GlobalConfig.DatabaseConfig.DSN)
-	if err != nil {
-		log.Fatalf("open database failed, err: %v", err)
-	}
-
-	dbLogger := logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
-		logger.Config{
-			SlowThreshold:             time.Second,                                                  // 慢速 SQL 阈值
-			LogLevel:                  logger.LogLevel(config.GlobalConfig.DatabaseConfig.LogLevel), // 日志级别
-			IgnoreRecordNotFoundError: true,                                                         // 忽略记录器的 ErrRecordNotFound 错误
-		},
-	)
-
-	var dialector gorm.Dialector
-
-	factory := database.NewDatabaseFactory()
-	dialector = factory.CreateDialector(sqlDB)
-
-	gormDB, err := gorm.Open(
-		dialector,
-		&gorm.Config{
-			Logger: dbLogger,
-			NamingStrategy: schema.NamingStrategy{
-				SingularTable: true,
-			},
-		})
-	if err != nil {
-		log.Fatalf("open database failed, err: %v", err)
-	}
+	gormDB := database.NewGormDB(*config.GlobalConfig.DatabaseConfig.GetDefaultDriver())
 
 	// init gin
 	engine := gin.New()
@@ -108,8 +73,6 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		middleware.RecoveryMiddleware(),
 		middleware.TimeoutMiddleware(config.GlobalConfig.WebServerConfig.RequestTimeout),
 	)
-
-	//domain.AutoMigrate(gormDB.Debug())
 
 	taskPipeline := task.NewTaskPipeline(
 		config.GlobalConfig.TaskPipelineConfig.BufferSize,

@@ -55,7 +55,7 @@ func TestSpecAccountPhone(t *testing.T) {
 			So(created, ShouldBeFalse)
 			So(phone.Number, ShouldEqual, number)
 		})
-		Convey("当邮箱已存在时", func() {
+		Convey("当手机号已存在时", func() {
 			patches := gomonkey.ApplyMethodFunc(
 				target,
 				"Create",
