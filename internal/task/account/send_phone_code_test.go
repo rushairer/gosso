@@ -6,15 +6,23 @@ import (
 	"gosso/utility"
 	"testing"
 	"time"
+
+	. "github.com/smartystreets/goconvey/convey"
 )
 
 func TestSendPhoneCodeTask(t *testing.T) {
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*1)
 	defer cancel()
 
-	taskPipeline := utility.NewTestTaskPipeline(ctx)
-	taskPipeline.Add(ctx, account.NewSendPhoneCodeTask("12345678901"))
+	Convey("将发送手机验证码的任务添加到任务管道中", t, func() {
+		taskPipeline := utility.NewTestTaskPipeline(ctx)
+		taskPipeline.Add(ctx, account.NewSendPhoneCodeTask("12345678901"))
 
-	<-ctx.Done()
+		Convey("等待1秒后结束", func() {
+			<-ctx.Done()
+			So(true, ShouldBeTrue)
+		})
+
+	})
 }

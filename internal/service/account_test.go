@@ -5,6 +5,8 @@ import (
 	"gosso/internal/service"
 	"gosso/utility"
 	"testing"
+
+	. "github.com/smartystreets/goconvey/convey"
 )
 
 func NewTestAccountService() *service.AccountService {
@@ -14,22 +16,22 @@ func NewTestAccountService() *service.AccountService {
 
 func TestAccountService_EmailRegister(t *testing.T) {
 	accountService := NewTestAccountService()
-
 	ctx := context.Background()
 
-	err := accountService.EmailRegister(ctx, "test@example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
+	Convey("注册邮箱帐号", t, func() {
+		err := accountService.EmailRegister(ctx, "test@example.com")
+
+		So(err, ShouldBeNil)
+	})
 }
 
 func TestAccountService_PhoneRegister(t *testing.T) {
 	accountService := NewTestAccountService()
-
 	ctx := context.Background()
 
-	err := accountService.PhoneRegister(ctx, "12345678901")
-	if err != nil {
-		t.Fatal(err)
-	}
+	Convey("注册手机号码", t, func() {
+		err := accountService.PhoneRegister(ctx, "12345678901")
+
+		So(err, ShouldBeNil)
+	})
 }

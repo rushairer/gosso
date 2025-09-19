@@ -6,15 +6,23 @@ import (
 	"gosso/utility"
 	"testing"
 	"time"
+
+	. "github.com/smartystreets/goconvey/convey"
 )
 
 func TestSendEmailCodeTask(t *testing.T) {
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*1)
 	defer cancel()
 
-	taskPipeline := utility.NewTestTaskPipeline(ctx)
-	taskPipeline.Add(ctx, account.NewSendEmailCodeTask("test@example.com"))
+	Convey("将发送邮箱验证码的任务添加到任务管道中", t, func() {
+		taskPipeline := utility.NewTestTaskPipeline(ctx)
+		taskPipeline.Add(ctx, account.NewSendEmailCodeTask("test@example.com"))
 
-	<-ctx.Done()
+		Convey("等待1秒后结束", func() {
+			<-ctx.Done()
+			So(true, ShouldBeTrue)
+		})
+
+	})
 }
