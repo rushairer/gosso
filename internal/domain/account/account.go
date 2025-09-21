@@ -39,12 +39,12 @@ func (a AccountStatus) Int() int8 {
 }
 
 type Account struct {
-	ID            uuid.UUID  `gorm:"primaryKey" json:"id"`
-	Nickname      string     `gorm:"column:nickname;type:varchar(64)" json:"nickname"`
-	Type          uint8      `gorm:"column:type;default:0" json:"type"`
-	Status        uint8      `gorm:"column:status;default:0" json:"status"`
-	CreatedAt     time.Time  `gorm:"column:created_at;type:timestamp;default:CURRENT_TIMESTAMP" json:"created_at"`
-	UpdatedAt     time.Time  `gorm:"column:updated_at;type:timestamp;default:CURRENT_TIMESTAMP" json:"updated_at"`
-	DeletedAt     *time.Time `gorm:"column:deleted_at;type:timestamp" json:"deleted_at"`
-	IsSoftDeleted bool       `gorm:"column:is_soft_deleted;default:0" json:"is_soft_deleted"`
+	ID            uuid.UUID     `gorm:"primaryKey" json:"id"`
+	Nickname      string        `gorm:"column:nickname;type:varchar(64)" json:"nickname"`
+	Type          AccountType   `gorm:"column:type;default:0" json:"type"`
+	Status        AccountStatus `gorm:"column:status;default:0" json:"status"`
+	CreatedAt     time.Time     `gorm:"column:created_at;type:timestamp;default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt     time.Time     `gorm:"column:updated_at;type:timestamp;default:CURRENT_TIMESTAMP" json:"updated_at"`
+	DeletedAt     *time.Time    `gorm:"column:deleted_at;type:timestamp"`
+	IsSoftDeleted bool          `gorm:"column:is_soft_deleted;default:0"`
 }

@@ -11,6 +11,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&account.Account{},
 		&account.Email{},
 		&account.Phone{},
+		&account.Profile{},
 	)
 }
 
@@ -19,5 +20,6 @@ func CleanMigrate(db *gorm.DB) error {
 		&account.Account{},
 		&account.Email{},
 		&account.Phone{},
+		&account.Profile{},
 	)
 }
