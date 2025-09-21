@@ -5,7 +5,6 @@ import (
 	"errors"
 	"gosso/config"
 	"gosso/internal/database"
-	"gosso/internal/domain"
 	"gosso/router"
 	"log"
 	"os"
@@ -63,12 +62,12 @@ func NewTestDB() *gorm.DB {
 	gormDB := database.NewGormDB(defaultDriver.Driver, defaultDriver.DSN, defaultDriver.LogLevel)
 
 	var err error
-	err = domain.CleanMigrate(gormDB)
+	err = database.CleanMigrate(gormDB)
 	if err != nil {
 		log.Fatalf("clean migrate failed, err: %v", err)
 	}
 
-	err = domain.AutoMigrate(gormDB)
+	err = database.AutoMigrate(gormDB)
 	if err != nil {
 		log.Fatalf("auto migrate failed, err: %v", err)
 	}

@@ -1,4 +1,4 @@
-package domain
+package database
 
 import (
 	"gosso/internal/domain/account"
