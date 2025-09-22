@@ -1,22 +1,26 @@
 package router
 
 import (
+	"gosso/config"
 	"gosso/controller"
 	"gosso/internal/service"
 	"net/http"
+	"time"
 
 	"github.com/rushairer/gouno/task"
 
 	"github.com/gin-gonic/gin"
 	gopipeline "github.com/rushairer/go-pipeline"
 	"github.com/rushairer/gouno"
+	gounoMiddleware "github.com/rushairer/gouno/middleware"
 	"gorm.io/gorm"
 )
 
-func RegisterWebRouter(engine *gin.Engine, db *gorm.DB, taskPipeline *gopipeline.Pipeline[task.Task]) {
+func RegisterWebRouter(config config.GoUnoConfig, engine *gin.Engine, db *gorm.DB, taskPipeline *gopipeline.Pipeline[task.Task]) {
 	registerWebTestRouter(engine)
 	registerWebIndexRouter(engine)
 	registerAccountRouter(engine, db, taskPipeline)
+	registerCaptchaRouter(config, engine)
 }
 
 func registerWebTestRouter(engine *gin.Engine) {
@@ -45,5 +49,14 @@ func registerAccountRouter(engine *gin.Engine, db *gorm.DB, taskPipeline *gopipe
 
 		accountGroup.POST("/email", accountController.EmailRegister)
 		accountGroup.POST("/phone", accountController.PhoneRegister)
+	}
+}
+
+func registerCaptchaRouter(config config.GoUnoConfig, engine *gin.Engine) {
+	captchaGroup := engine.Group("/captcha")
+	captchaGroup.Use(gounoMiddleware.RateLimitMiddleware(20, time.Minute*5))
+	{
+		captchaController := controller.NewCaptchaController(config.CaptchaType)
+		captchaGroup.GET("/generate", captchaController.Generate)
 	}
 }

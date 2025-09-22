@@ -106,7 +106,7 @@ func NewTestEngine(ctx context.Context, withTask bool) *gin.Engine {
 		taskPipeline = NewTestTaskPipeline(ctx)
 	}
 
-	router.RegisterWebRouter(engine, gormDB, taskPipeline)
+	router.RegisterWebRouter(config.GlobalConfig, engine, gormDB, taskPipeline)
 
 	return engine
 }

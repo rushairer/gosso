@@ -97,7 +97,8 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		}
 	}()
 
-	router.RegisterWebRouter(engine, gormDB, taskPipeline)
+	// config 的使用，限制在初始化阶段，后面通过注入的方式值传递
+	router.RegisterWebRouter(config.GlobalConfig, engine, gormDB, taskPipeline)
 
 	httpServer := &http.Server{
 		Addr:              fmt.Sprintf("%s:%s", config.GlobalConfig.WebServerConfig.Address, config.GlobalConfig.WebServerConfig.Port),

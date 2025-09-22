@@ -29,3 +29,4 @@ task_pipeline:
     flush_size: 32
     buffer_size: 64
     flush_interval: 1s
+captcha_type: math
