@@ -16,7 +16,6 @@ type CaptchaController struct {
 }
 
 func NewCaptchaController(captchaType string) *CaptchaController {
-	log.Println("captcha type:", captchaType)
 	return &CaptchaController{
 		store:       base64Captcha.DefaultMemStore,
 		captchaType: captchaType,

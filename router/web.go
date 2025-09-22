@@ -4,6 +4,7 @@ import (
 	"gosso/config"
 	"gosso/controller"
 	"gosso/internal/service"
+	"gosso/middleware"
 	"net/http"
 	"time"
 
@@ -30,6 +31,20 @@ func registerWebTestRouter(engine *gin.Engine) {
 			"/alive",
 			func(ctx *gin.Context) {
 				ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("pong"))
+			},
+		)
+
+		testGroup.POST(
+			"/verify_captcha",
+			middleware.RequireCaptchaMiddleware(),
+			func(ctx *gin.Context) {
+				var req interface{}
+
+				if err := ctx.ShouldBindJSON(&req); err == nil {
+					ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(req))
+				} else {
+					ctx.JSON(http.StatusOK, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+				}
 			},
 		)
 	}
