@@ -6,6 +6,7 @@ web_server:
     read_header_timeout: 2s
     write_timeout: 30s
     request_timeout: 10s
+    rate_limit_per_minute: 120
 database:
     default: postgres
     drivers:

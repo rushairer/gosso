@@ -19,6 +19,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	gopipeline "github.com/rushairer/go-pipeline"
+	gounoMiddleware "github.com/rushairer/gouno/middleware"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -77,6 +78,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	engine.Use(
 		middleware.RecoveryMiddleware(),
 		middleware.TimeoutMiddleware(config.GlobalConfig.WebServerConfig.RequestTimeout),
+		gounoMiddleware.RateLimitMiddleware(config.GlobalConfig.WebServerConfig.RateLimitPerMinute, time.Minute),
 	)
 
 	taskPipeline := task.NewTaskPipeline(
