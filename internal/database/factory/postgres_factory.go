@@ -1,7 +1,7 @@
 //go:build postgres
 // +build postgres
 
-package database
+package factory
 
 import (
 	"database/sql"

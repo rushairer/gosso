@@ -1,7 +1,7 @@
 //go:build !mysql && !postgres && !sqlite
 // +build !mysql,!postgres,!sqlite
 
-package database
+package factory
 
 import "log"
 

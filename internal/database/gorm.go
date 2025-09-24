@@ -1,6 +1,7 @@
 package database
 
 import (
+	"gosso/internal/database/factory"
 	"log"
 	"os"
 	"time"
@@ -16,8 +17,8 @@ func NewGormDB(
 	logLevel int,
 ) *gorm.DB {
 	var dialector gorm.Dialector
-	factory := NewDatabaseFactory()
-	dialector = factory.CreateDialector(driver, dsn)
+	dbFactory := factory.NewDatabaseFactory()
+	dialector = dbFactory.CreateDialector(driver, dsn)
 
 	dbLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer

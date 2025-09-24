@@ -1,7 +1,7 @@
 //go:build mysql
 // +build mysql
 
-package database
+package factory
 
 import (
 	"database/sql"

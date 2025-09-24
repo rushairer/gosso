@@ -1,7 +1,7 @@
 //go:build sqlite
 // +build sqlite
 
-package database
+package factory
 
 import (
 	"database/sql"
