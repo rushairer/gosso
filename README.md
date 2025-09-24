@@ -4,7 +4,7 @@
 [![Go Version](https://img.shields.io/badge/go-1.23.3+-blue.svg)](https://golang.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/rushairer/gosso/pulls)
-[![Contributors Welcome](https://img.shields.io/badge/contributors-welcome-orange.svg)](https://github.com/ru shai re r/gosso/issues)
+[![Contributors Welcome](https://img.shields.io/badge/contributors-welcome-orange.svg)](https://github.com/rushairer/gosso/issues)
 
 gosso 是一个基于 gouno 生成的 Go Web 项目。
 
