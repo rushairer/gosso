@@ -87,13 +87,12 @@ jobs:
       env:
         CGO_ENABLED: 1
       run: |
-        # 运行 SQLite 测试，包含所有包因为 SQLite 是默认支持的
+        # 运行 SQLite 测试，排除邮件服务测试（需要邮件服务器）
         go test -v -race -coverprofile=coverage.out -tags sqlite \
           ./internal/database/factory \
           ./internal/service/account \
           ./internal/service/auth \
           ./internal/service/captcha \
-          ./internal/service/email \
           ./internal/task/account \
           ./test/controller \
           ./internal/repository/account \
@@ -119,7 +118,9 @@ jobs:
           ./internal/service/auth \
           ./internal/service/captcha \
           ./internal/task/account \
-          ./test/controller
+          ./test/controller \
+          ./internal/repository/account \
+          ./utility
 
     - name: Run tests (PostgreSQL)
       if: matrix.database == 'postgres'
@@ -141,7 +142,9 @@ jobs:
           ./internal/service/auth \
           ./internal/service/captcha \
           ./internal/task/account \
-          ./test/controller
+          ./test/controller \
+          ./internal/repository/account \
+          ./utility
 
     - name: Upload coverage to Codecov
       if: matrix.go-version == '1.25.x' && matrix.database == 'sqlite'
