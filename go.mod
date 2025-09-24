@@ -1,6 +1,6 @@
 module gosso
 
-go 1.23
+go 1.25
 
 require (
 	github.com/agiledragon/gomonkey/v2 v2.13.0
