@@ -14,6 +14,7 @@ type GoUnoConfig struct {
 	WebServerConfig    WebServerConfig    `mapstructure:"web_server"`
 	DatabaseConfig     DatabaseConfig     `mapstructure:"database"`
 	TaskPipelineConfig TaskPipelineConfig `mapstructure:"task_pipeline"`
+	SMTPConfig         SMTPConfig         `mapstructure:"smtp"`
 	CaptchaType        string             `mapstructure:"captcha_type"`
 }
 
@@ -67,6 +68,14 @@ type TaskPipelineConfig struct {
 	FlushInterval time.Duration `mapstructure:"flush_interval"`
 }
 
+type SMTPConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+	From     string `mapstructure:"from"`
+}
+
 func InitConfig(configPath string, env string) (err error) {
 	// 设置所有默认值
 	setConfigDefaults()
@@ -118,4 +127,11 @@ func setConfigDefaults() {
 	viper.SetDefault("task_pipeline.flush_size", 32)
 	viper.SetDefault("task_pipeline.buffer_size", 64)
 	viper.SetDefault("task_pipeline.flush_interval", "1s")
+
+	// SMTP配置
+	viper.SetDefault("smtp.host", "localhost")
+	viper.SetDefault("smtp.port", 1025)
+	viper.SetDefault("smtp.username", "")
+	viper.SetDefault("smtp.password", "")
+	viper.SetDefault("smtp.from", "noreply@gosso.local")
 }

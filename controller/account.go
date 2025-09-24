@@ -1,12 +1,12 @@
 package controller
 
 import (
-	"gosso/internal/service"
+	"net/http"
 
 	"github.com/rushairer/gouno/task"
 
+	"gosso/internal/service/account"
 	accountTask "gosso/internal/task/account"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 	gopipeline "github.com/rushairer/go-pipeline"
@@ -14,7 +14,7 @@ import (
 )
 
 type AccountController struct {
-	accountService *service.AccountService
+	accountService *account.AccountService
 
 	taskPipeline *gopipeline.Pipeline[task.Task]
 }
@@ -27,7 +27,7 @@ type PhoneRegisterRequest struct {
 	Number string `json:"number" binding:"required"`
 }
 
-func NewAccountController(accountService *service.AccountService, taskPipeline *gopipeline.Pipeline[task.Task]) *AccountController {
+func NewAccountController(accountService *account.AccountService, taskPipeline *gopipeline.Pipeline[task.Task]) *AccountController {
 	return &AccountController{
 		accountService: accountService,
 		taskPipeline:   taskPipeline,

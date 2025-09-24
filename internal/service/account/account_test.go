@@ -1,17 +1,17 @@
-package service_test
+package account_test
 
 import (
 	"context"
-	"gosso/internal/service"
+	"gosso/internal/service/account"
 	"gosso/utility"
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func NewTestAccountService() *service.AccountService {
+func NewTestAccountService() *account.AccountService {
 	db := utility.NewTestDB()
-	return service.NewAccountService(db)
+	return account.NewAccountService(db)
 }
 
 func TestAccountService_EmailRegister(t *testing.T) {

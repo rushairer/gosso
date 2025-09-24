@@ -3,7 +3,7 @@ package router
 import (
 	"gosso/config"
 	"gosso/controller"
-	"gosso/internal/service"
+	"gosso/internal/service/account"
 	"gosso/middleware"
 	"net/http"
 	"time"
@@ -59,7 +59,7 @@ func registerWebIndexRouter(engine *gin.Engine) {
 func registerAccountRouter(engine *gin.Engine, db *gorm.DB, taskPipeline *gopipeline.Pipeline[task.Task]) {
 	accountGroup := engine.Group("/account")
 	{
-		accountService := service.NewAccountService(db)
+		accountService := account.NewAccountService(db)
 		accountController := controller.NewAccountController(accountService, taskPipeline)
 
 		accountGroup.POST("/email", accountController.EmailRegister)

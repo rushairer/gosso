@@ -2,12 +2,12 @@ package middleware
 
 import (
 	"gosso/internal/context"
-	"gosso/internal/service"
+	"gosso/internal/service/auth"
 
 	"github.com/gin-gonic/gin"
 )
 
-func AuthMiddleware(authService *service.AuthService) gin.HandlerFunc {
+func AuthMiddleware(authService *auth.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := c.GetHeader("Authorization")
 		if token == "" {
