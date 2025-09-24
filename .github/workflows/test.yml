@@ -112,13 +112,12 @@ jobs:
           echo "MySQL 连接失败，等待更长时间..."
           sleep 20
         }
-        # 运行测试，排除可能有驱动冲突的包
+        # 运行测试，排除邮件服务测试（需要邮件服务器）
         go test -v -race -coverprofile=coverage.out -tags mysql \
           ./internal/database/factory \
           ./internal/service/account \
           ./internal/service/auth \
           ./internal/service/captcha \
-          ./internal/service/email \
           ./internal/task/account \
           ./test/controller
 
@@ -135,13 +134,12 @@ jobs:
           echo "PostgreSQL 连接失败，等待更长时间..."
           sleep 20
         }
-        # 运行测试，排除可能有驱动冲突的包
+        # 运行测试，排除邮件服务测试（需要邮件服务器）
         go test -v -race -coverprofile=coverage.out -tags postgres \
           ./internal/database/factory \
           ./internal/service/account \
           ./internal/service/auth \
           ./internal/service/captcha \
-          ./internal/service/email \
           ./internal/task/account \
           ./test/controller
 

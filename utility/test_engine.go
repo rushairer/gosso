@@ -66,17 +66,9 @@ func NewTestDB() *gorm.DB {
 		driver = "pgx"
 		dsn = postgresDSN
 	} else {
-		// 回退到配置文件中的默认驱动
-		defaultDriver := config.GlobalConfig.DatabaseConfig.GetDefaultDriver()
-		if defaultDriver == nil {
-			// 如果配置文件也没有，使用内存 SQLite
-			driver = "sqlite3"
-			dsn = ":memory:"
-		} else {
-			driver = defaultDriver.Driver
-			dsn = defaultDriver.DSN
-			logLevel = defaultDriver.LogLevel
-		}
+		// 默认使用内存 SQLite，避免驱动依赖问题
+		driver = "sqlite3"
+		dsn = ":memory:"
 	}
 
 	gormDB := database.NewGormDB(driver, dsn, logLevel)
