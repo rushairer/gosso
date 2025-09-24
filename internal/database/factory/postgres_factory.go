@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"log"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )

@@ -93,8 +93,10 @@ jobs:
 
     - name: Run Nancy (dependency vulnerability scanner)
       run: |
-        go install github.com/sonatypecommunity/nancy@latest
-        go list -json -deps ./... | nancy sleuth
+        # Nancy 项目已停止维护，使用 govulncheck 替代
+        echo "使用 govulncheck 进行依赖漏洞扫描"
+        go install golang.org/x/vuln/cmd/govulncheck@latest
+        govulncheck ./...
 
     - name: Run govulncheck
       run: |
