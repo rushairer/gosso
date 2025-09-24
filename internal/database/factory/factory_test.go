@@ -132,7 +132,7 @@ func TestDatabaseFactoryInterface(t *testing.T) {
 				// 这个测试验证方法签名的正确性
 				SkipConvey("需要数据库驱动编译标签", func() {
 					dbFactory := factory.NewDatabaseFactory()
-					
+
 					// 测试方法调用不会 panic（参数类型正确）
 					So(func() {
 						dbFactory.CreateDialector("test", "test://connection")
@@ -143,7 +143,7 @@ func TestDatabaseFactoryInterface(t *testing.T) {
 			Convey("CreateDialectorWithPoll 方法应该接受正确的参数", func() {
 				SkipConvey("需要数据库驱动编译标签", func() {
 					dbFactory := factory.NewDatabaseFactory()
-					
+
 					// 测试方法调用不会 panic（参数类型正确）
 					So(func() {
 						dbFactory.CreateDialectorWithPoll(nil)
