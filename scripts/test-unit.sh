@@ -28,6 +28,7 @@ UNIT_TEST_PACKAGES=(
     "./middleware"                   # 中间件 - HTTP 处理逻辑
     "./config"                       # 配置处理 - 文件读取和解析
     "./internal/domain/account"      # 领域模型 - 数据结构定义
+    "./internal/repository/account"  # 数据仓库 - 使用 gomonkey mock，无真实数据库依赖
     "./cmd"                          # 命令行工具
     "./router"                       # 路由配置 - 不涉及实际请求
 )
@@ -36,7 +37,6 @@ UNIT_TEST_PACKAGES=(
 INTEGRATION_TEST_PACKAGES=(
     "./internal/service/account"     # 账户服务 - 需要数据库
     "./internal/service/email"       # 邮件服务 - 需要 SMTP
-    "./internal/repository/account"  # 数据仓库 - 需要数据库
     "./internal/task/account"        # 异步任务 - 需要数据库和邮件
     "./internal/database/factory"    # 数据库工厂 - 需要数据库
     "./test/controller"              # 控制器测试 - 需要完整环境

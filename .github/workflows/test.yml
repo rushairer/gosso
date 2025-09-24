@@ -18,7 +18,7 @@ jobs:
     
     services:
       mysql:
-        image: mysql:8.0
+        image: mariadb:10.11-jammy
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: gosso_test
@@ -27,13 +27,13 @@ jobs:
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping"
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
           --health-interval=10s
           --health-timeout=5s
-          --health-retries=3
+          --health-retries=5
       
       postgres:
-        image: postgres:15
+        image: postgres:15-alpine
         env:
           POSTGRES_DB: gosso_test
           POSTGRES_USER: gosso
@@ -47,7 +47,7 @@ jobs:
           --health-retries 5
       
       mailhog:
-        image: mailhog/mailhog:latest
+        image: mailhog/mailhog:v1.0.1
         ports:
           - 1025:1025  # SMTP port
           - 8025:8025  # Web UI port
@@ -111,27 +111,33 @@ jobs:
         fi
 
     - name: Run tests
-      env:
-        CGO_ENABLED: 1
-        # 数据库连接配置
-        MYSQL_DSN: "gosso:gosso123@tcp(localhost:3306)/gosso_test?charset=utf8mb4&parseTime=True&loc=Local"
-        POSTGRES_DSN: "host=localhost user=gosso password=gosso123 dbname=gosso_test port=5432 sslmode=disable"
-        # 邮件服务配置 (MailHog)
-        SMTP_HOST: "localhost"
-        SMTP_PORT: "1025"
-        SMTP_USER: ""
-        SMTP_PASSWORD: ""
-        SMTP_FROM: "test@gosso.local"
       run: |
-        # 运行所有测试，不再需要手动排除任何包
+        # 设置通用环境变量
+        export CGO_ENABLED=1
+        export SMTP_HOST="localhost"
+        export SMTP_PORT="1025"
+        export SMTP_USER=""
+        export SMTP_PASSWORD=""
+        export SMTP_FROM="test@gosso.local"
+        
+        # 清理所有 DSN 环境变量，避免污染
+        unset MYSQL_DSN POSTGRES_DSN SQLITE_DSN
+        
+        # 根据数据库类型设置对应的 DSN 和运行测试
         case "${{ matrix.database }}" in
           sqlite)
+            echo "🗄️ 运行 SQLite 测试..."
+            export SQLITE_DSN=":memory:"
             go test -v -race -coverprofile=coverage.out -tags sqlite ./...
             ;;
           mysql)
+            echo "🗄️ 运行 MySQL 测试..."
+            export MYSQL_DSN="gosso:gosso123@tcp(localhost:3306)/gosso_test?charset=utf8mb4&parseTime=True&loc=Local"
             go test -v -race -coverprofile=coverage.out -tags mysql ./...
             ;;
           postgres)
+            echo "🗄️ 运行 PostgreSQL 测试..."
+            export POSTGRES_DSN="host=localhost user=gosso password=gosso123 dbname=gosso_test port=5432 sslmode=disable"
             go test -v -race -coverprofile=coverage.out -tags postgres ./...
             ;;
         esac

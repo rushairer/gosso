@@ -29,7 +29,7 @@ test-unit:
 
 test-integration:
 	@echo "运行集成测试..."
-	@./scripts/test.sh
+	@./scripts/test-integration.sh
 
 test-all: test-unit test-integration
 

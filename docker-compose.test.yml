@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
-  # 测试数据库 - MySQL
+  # 测试数据库 - MySQL (使用更轻量的 MariaDB Alpine)
   mysql-test:
-    image: mysql:8.0
+    image: mariadb:10.11-jammy
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: gosso_test
@@ -15,13 +13,13 @@ services:
       - /var/lib/mysql  # 使用内存存储，测试后自动清理
     command: --default-authentication-plugin=mysql_native_password
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       timeout: 5s
       retries: 10
 
-  # 测试数据库 - PostgreSQL
+  # 测试数据库 - PostgreSQL (Alpine 版本)
   postgres-test:
-    image: postgres:15
+    image: postgres:15-alpine
     environment:
       POSTGRES_DB: gosso_test
       POSTGRES_USER: gosso
@@ -35,9 +33,9 @@ services:
       timeout: 5s
       retries: 10
 
-  # 邮件测试服务 - MailHog
+  # 邮件测试服务 - MailHog (Alpine 版本)
   mailhog-test:
-    image: mailhog/mailhog:latest
+    image: mailhog/mailhog:v1.0.1
     ports:
       - "1025:1025"  # SMTP
       - "8025:8025"  # Web UI
@@ -46,7 +44,7 @@ services:
       timeout: 5s
       retries: 5
     
-  # Redis 测试服务（如果需要）
+  # Redis 测试服务 (Alpine 版本)
   redis-test:
     image: redis:7-alpine
     ports:
