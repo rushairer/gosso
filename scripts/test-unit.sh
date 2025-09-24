@@ -17,11 +17,62 @@ log_success() {
 
 log_info "🧪 运行单元测试..."
 
-# 运行单元测试（排除需要数据库的测试）
+# 运行单元测试（排除需要数据库和外部服务的测试）
 export CGO_ENABLED=1
 
-# 只运行快速的单元测试
-go test -v -race -short -coverprofile=coverage-unit.out ./internal/service/captcha ./utility
+# 单元测试包列表 - 不依赖数据库和外部服务的包
+UNIT_TEST_PACKAGES=(
+    "./internal/service/captcha"     # 验证码服务 - 纯逻辑，无外部依赖
+    "./internal/context"             # 上下文处理 - 纯逻辑
+    "./utility"                      # 工具函数 - 纯逻辑
+    "./middleware"                   # 中间件 - HTTP 处理逻辑
+    "./config"                       # 配置处理 - 文件读取和解析
+    "./internal/domain/account"      # 领域模型 - 数据结构定义
+    "./cmd"                          # 命令行工具
+    "./router"                       # 路由配置 - 不涉及实际请求
+)
+
+# 需要数据库的包（集成测试）
+INTEGRATION_TEST_PACKAGES=(
+    "./internal/service/account"     # 账户服务 - 需要数据库
+    "./internal/service/email"       # 邮件服务 - 需要 SMTP
+    "./internal/repository/account"  # 数据仓库 - 需要数据库
+    "./internal/task/account"        # 异步任务 - 需要数据库和邮件
+    "./internal/database/factory"    # 数据库工厂 - 需要数据库
+    "./test/controller"              # 控制器测试 - 需要完整环境
+)
+
+log_info "📋 单元测试包 (无外部依赖):"
+for pkg in "${UNIT_TEST_PACKAGES[@]}"; do
+    echo "  ✅ $pkg"
+done
+
+echo ""
+log_info "📋 集成测试包 (需要外部服务):"
+for pkg in "${INTEGRATION_TEST_PACKAGES[@]}"; do
+    echo "  🐳 $pkg"
+done
+
+echo ""
+log_info "🚀 开始运行单元测试..."
+
+# 检查包是否存在测试文件
+EXISTING_PACKAGES=()
+for pkg in "${UNIT_TEST_PACKAGES[@]}"; do
+    if ls ${pkg}/*_test.go 1> /dev/null 2>&1; then
+        EXISTING_PACKAGES+=("$pkg")
+    else
+        echo "  ⚠️  跳过 $pkg (无测试文件)"
+    fi
+done
+
+if [ ${#EXISTING_PACKAGES[@]} -eq 0 ]; then
+    log_info "⚠️  没有找到单元测试文件"
+    exit 0
+fi
+
+# 运行单元测试
+go test -v -race -short -coverprofile=coverage-unit.out "${EXISTING_PACKAGES[@]}"
 
 # 生成覆盖率报告
 if [ -f coverage-unit.out ]; then

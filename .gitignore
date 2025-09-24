@@ -41,8 +41,8 @@ Thumbs.db
 
 # Output of the go coverage tool
 *.out
-coverage.out
-coverage.html
+coverage*.out
+coverage*.html
 
 # Go build artifacts
 *.exe
