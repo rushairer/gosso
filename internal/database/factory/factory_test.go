@@ -12,12 +12,9 @@ func TestDatabaseFactory(t *testing.T) {
 
 		Convey("工厂创建测试", func() {
 			Convey("NewDatabaseFactory 应该返回非空工厂", func() {
-				// 注意：这个测试会根据编译标签返回不同的工厂实现
-				// 如果没有编译标签，会触发 log.Fatal
-				SkipConvey("需要数据库驱动编译标签", func() {
-					dbFactory := factory.NewDatabaseFactory()
-					So(dbFactory, ShouldNotBeNil)
-				})
+				// 这个测试会根据编译标签返回不同的工厂实现
+				dbFactory := factory.NewDatabaseFactory()
+				So(dbFactory, ShouldNotBeNil)
 			})
 		})
 
@@ -119,11 +116,9 @@ func TestDatabaseFactoryInterface(t *testing.T) {
 				So(dbFactory, ShouldBeNil) // 未初始化时应该为 nil
 
 				// 在有编译标签的情况下，可以创建实际的工厂
-				SkipConvey("需要数据库驱动编译标签", func() {
-					actualFactory := factory.NewDatabaseFactory()
-					So(actualFactory, ShouldNotBeNil)
-					So(actualFactory, ShouldImplement, (*factory.DatabaseFactory)(nil))
-				})
+				actualFactory := factory.NewDatabaseFactory()
+				So(actualFactory, ShouldNotBeNil)
+				So(actualFactory, ShouldImplement, (*factory.DatabaseFactory)(nil))
 			})
 		})
 

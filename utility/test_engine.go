@@ -55,11 +55,31 @@ func initTestConfig() {
 func NewTestDB() *gorm.DB {
 	initTestConfig()
 
-	defaultDriver := config.GlobalConfig.DatabaseConfig.GetDefaultDriver()
-	if defaultDriver == nil {
-		log.Fatalf("default driver not found")
+	// 根据环境变量选择数据库类型，优先使用 CI 环境配置
+	var driver, dsn string
+	var logLevel int = 1 // 默认日志级别
+
+	if mysqlDSN := os.Getenv("MYSQL_DSN"); mysqlDSN != "" {
+		driver = "mysql"
+		dsn = mysqlDSN
+	} else if postgresDSN := os.Getenv("POSTGRES_DSN"); postgresDSN != "" {
+		driver = "postgres"
+		dsn = postgresDSN
+	} else {
+		// 回退到配置文件中的默认驱动
+		defaultDriver := config.GlobalConfig.DatabaseConfig.GetDefaultDriver()
+		if defaultDriver == nil {
+			// 如果配置文件也没有，使用内存 SQLite
+			driver = "sqlite3"
+			dsn = ":memory:"
+		} else {
+			driver = defaultDriver.Driver
+			dsn = defaultDriver.DSN
+			logLevel = defaultDriver.LogLevel
+		}
 	}
-	gormDB := database.NewGormDB(defaultDriver.Driver, defaultDriver.DSN, defaultDriver.LogLevel)
+
+	gormDB := database.NewGormDB(driver, dsn, logLevel)
 
 	var err error
 	err = database.CleanMigrate(gormDB)

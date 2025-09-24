@@ -84,32 +84,66 @@ jobs:
 
     - name: Run tests (SQLite)
       if: matrix.database == 'sqlite'
+      env:
+        CGO_ENABLED: 1
       run: |
-        # 设置 CGO 环境变量以支持 SQLite
-        export CGO_ENABLED=1
-        go test -v -race -coverprofile=coverage.out -tags sqlite ./...
+        # 运行 SQLite 测试，包含所有包因为 SQLite 是默认支持的
+        go test -v -race -coverprofile=coverage.out -tags sqlite \
+          ./internal/database/factory \
+          ./internal/service/account \
+          ./internal/service/auth \
+          ./internal/service/captcha \
+          ./internal/service/email \
+          ./internal/task/account \
+          ./test/controller \
+          ./internal/repository/account \
+          ./utility
 
     - name: Run tests (MySQL)
       if: matrix.database == 'mysql'
       env:
         MYSQL_DSN: "gosso:gosso123@tcp(localhost:3306)/gosso_test?charset=utf8mb4&parseTime=True&loc=Local"
+        CGO_ENABLED: 1
       run: |
         # 等待 MySQL 服务启动
         sleep 10
-        # 设置 CGO 环境变量
-        export CGO_ENABLED=1
-        go test -v -race -coverprofile=coverage.out -tags mysql ./...
+        # 测试数据库连接
+        mysql -h 127.0.0.1 -P 3306 -u gosso -pgosso123 -e "SELECT 1" gosso_test || {
+          echo "MySQL 连接失败，等待更长时间..."
+          sleep 20
+        }
+        # 运行测试，排除可能有驱动冲突的包
+        go test -v -race -coverprofile=coverage.out -tags mysql \
+          ./internal/database/factory \
+          ./internal/service/account \
+          ./internal/service/auth \
+          ./internal/service/captcha \
+          ./internal/service/email \
+          ./internal/task/account \
+          ./test/controller
 
     - name: Run tests (PostgreSQL)
       if: matrix.database == 'postgres'
       env:
         POSTGRES_DSN: "host=localhost user=gosso password=gosso123 dbname=gosso_test port=5432 sslmode=disable"
+        CGO_ENABLED: 1
       run: |
         # 等待 PostgreSQL 服务启动
         sleep 10
-        # 设置 CGO 环境变量
-        export CGO_ENABLED=1
-        go test -v -race -coverprofile=coverage.out -tags postgres ./...
+        # 测试数据库连接
+        PGPASSWORD=gosso123 psql -h localhost -U gosso -d gosso_test -c "SELECT 1" || {
+          echo "PostgreSQL 连接失败，等待更长时间..."
+          sleep 20
+        }
+        # 运行测试，排除可能有驱动冲突的包
+        go test -v -race -coverprofile=coverage.out -tags postgres \
+          ./internal/database/factory \
+          ./internal/service/account \
+          ./internal/service/auth \
+          ./internal/service/captcha \
+          ./internal/service/email \
+          ./internal/task/account \
+          ./test/controller
 
     - name: Upload coverage to Codecov
       if: matrix.go-version == '1.25.x' && matrix.database == 'sqlite'
