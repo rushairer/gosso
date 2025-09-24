@@ -33,7 +33,7 @@ gosso 是一个基于 gouno 生成的 Go Web 项目。
 ### 克隆项目
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/rushairer/gosso
 cd gosso
 ```
 
