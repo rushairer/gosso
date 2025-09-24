@@ -34,3 +34,19 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
+
+# Go 相关文件
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.out
+coverage.html
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
