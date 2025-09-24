@@ -77,6 +77,7 @@ func TestCaptchaService_NewCaptchaService(t *testing.T) {
 	service := NewCaptchaService()
 	if service == nil {
 		t.Error("NewCaptchaService() returned nil")
+		return
 	}
 
 	if service.store == nil {

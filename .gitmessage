@@ -1,0 +1,44 @@
+# <type>[optional scope]: <description>
+# 
+# [optional body]
+# 
+# [optional footer(s)]
+
+# 类型说明 (Type):
+# feat:     新功能 (A new feature)
+# fix:      Bug 修复 (A bug fix)
+# docs:     文档更新 (Documentation only changes)
+# style:    代码格式化 (Changes that do not affect the meaning of the code)
+# refactor: 代码重构 (A code change that neither fixes a bug nor adds a feature)
+# test:     测试相关 (Adding missing tests or correcting existing tests)
+# chore:    构建/工具变更 (Changes to the build process or auxiliary tools)
+# perf:     性能优化 (A code change that improves performance)
+# ci:       CI/CD 相关 (Changes to our CI configuration files and scripts)
+# build:    构建系统 (Changes that affect the build system or external dependencies)
+# revert:   回滚提交 (Reverts a previous commit)
+
+# 作用域示例 (Scope):
+# auth, user, database, api, config, docker, docs, test
+# gin, gorm, redis, mysql, postgres, sqlite
+
+# 描述规范:
+# - 使用清晰易懂的语言描述变更内容
+# - 动词开头，如"添加/add"、"修复/fix"、"更新/update"
+# - 简洁明了，控制在 50 字符以内
+# - 使用现在时态
+# - 保持项目内语言风格一致
+
+# 示例:
+# feat(auth): 添加 JWT 认证功能
+# feat(auth): add JWT authentication feature
+# fix(user): 修复用户密码加密问题
+# fix(user): fix user password encryption issue
+# docs(api): 更新接口文档
+# docs(api): update API documentation
+# refactor(database): 重构数据库连接逻辑
+# test(service): 添加用户服务单元测试
+
+# 页脚示例:
+# Closes #123
+# Fixes #456
+# BREAKING CHANGE: API 接口发生变更

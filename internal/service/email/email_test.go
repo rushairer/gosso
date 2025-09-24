@@ -33,6 +33,7 @@ func TestEmailService_NewEmailService(t *testing.T) {
 
 	if emailService == nil {
 		t.Error("NewEmailService returned nil")
+		return
 	}
 
 	if emailService.host != "smtp.example.com" {

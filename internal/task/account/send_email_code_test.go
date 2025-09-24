@@ -17,7 +17,8 @@ func TestSendEmailCodeTask(t *testing.T) {
 
 	Convey("将发送邮箱验证码的任务添加到任务管道中", t, func() {
 		taskPipeline := utility.NewTestTaskPipeline(ctx)
-		taskPipeline.Add(ctx, account.NewSendEmailCodeTask("test@example.com"))
+		err := taskPipeline.Add(ctx, account.NewSendEmailCodeTask("test@example.com"))
+		So(err, ShouldBeNil)
 
 		Convey("等待2秒后结束", func() {
 			<-ctx.Done()

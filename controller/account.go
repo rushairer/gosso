@@ -46,7 +46,10 @@ func (c *AccountController) EmailRegister(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
 		return
 	}
-	c.taskPipeline.Add(ctx, accountTask.NewSendEmailCodeTask(req.Address))
+	if err := c.taskPipeline.Add(ctx, accountTask.NewSendEmailCodeTask(req.Address)); err != nil {
+		ctx.JSON(http.StatusOK, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to add email task: "+err.Error()))
+		return
+	}
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(""))
 }
 
@@ -62,6 +65,9 @@ func (c *AccountController) PhoneRegister(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
 		return
 	}
-	c.taskPipeline.Add(ctx, accountTask.NewSendPhoneCodeTask(req.Number))
+	if err := c.taskPipeline.Add(ctx, accountTask.NewSendPhoneCodeTask(req.Number)); err != nil {
+		ctx.JSON(http.StatusOK, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to add phone task: "+err.Error()))
+		return
+	}
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(""))
 }

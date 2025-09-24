@@ -1,0 +1,174 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        go-version: [1.21.x, 1.22.x, 1.23.x]
+        database: [mysql, postgres, sqlite]
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: gosso_test
+          MYSQL_USER: gosso
+          MYSQL_PASSWORD: gosso123
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+      
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: gosso_test
+          POSTGRES_USER: gosso
+          POSTGRES_PASSWORD: gosso123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ matrix.go-version }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-${{ matrix.go-version }}-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Verify dependencies
+      run: go mod verify
+
+    - name: Run go vet
+      run: go vet ./...
+
+    - name: Run go fmt check
+      run: |
+        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+          echo "以下文件需要格式化:"
+          gofmt -s -l .
+          exit 1
+        fi
+
+    - name: Run tests (SQLite)
+      if: matrix.database == 'sqlite'
+      run: |
+        go test -v -race -coverprofile=coverage.out -tags sqlite ./...
+
+    - name: Run tests (MySQL)
+      if: matrix.database == 'mysql'
+      env:
+        MYSQL_DSN: "gosso:gosso123@tcp(localhost:3306)/gosso_test?charset=utf8mb4&parseTime=True&loc=Local"
+      run: |
+        # 等待 MySQL 服务启动
+        sleep 10
+        go test -v -race -coverprofile=coverage.out -tags mysql ./...
+
+    - name: Run tests (PostgreSQL)
+      if: matrix.database == 'postgres'
+      env:
+        POSTGRES_DSN: "host=localhost user=gosso password=gosso123 dbname=gosso_test port=5432 sslmode=disable"
+      run: |
+        # 等待 PostgreSQL 服务启动
+        sleep 10
+        go test -v -race -coverprofile=coverage.out -tags postgres ./...
+
+    - name: Upload coverage to Codecov
+      if: matrix.go-version == '1.23.x' && matrix.database == 'sqlite'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.23.x
+
+    - name: Build application
+      run: |
+        make build
+
+    - name: Test build artifacts
+      run: |
+        ./bin/gouno --help
+        ./bin/gouno version || echo "版本命令可能未实现"
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.23.x
+
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: latest
+        args: --timeout=5m
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.23.x
+
+    - name: Run Gosec Security Scanner
+      uses: securecodewarrior/github-action-gosec@master
+      with:
+        args: './...'

@@ -40,15 +40,25 @@ func init() {
 func startWebServer(cmd *cobra.Command, args []string) {
 	log.Printf("starting web server...")
 
-	viper.BindEnv("gouno_env")
-	viper.BindPFlag("gouno_env", cmd.Flags().Lookup("env"))
+	if err := viper.BindEnv("gouno_env"); err != nil {
+		log.Fatalf("bind env failed, err: %v", err)
+	}
+	if err := viper.BindPFlag("gouno_env", cmd.Flags().Lookup("env")); err != nil {
+		log.Fatalf("bind flag failed, err: %v", err)
+	}
 	env := viper.Get("gouno_env").(string)
 
 	configPath := cmd.Flag("config_path").Value.String()
 
-	viper.BindPFlag("web_server.address", cmd.Flags().Lookup("address"))
-	viper.BindPFlag("web_server.port", cmd.Flags().Lookup("port"))
-	viper.BindPFlag("web_server.debug", cmd.Flags().Lookup("debug"))
+	if err := viper.BindPFlag("web_server.address", cmd.Flags().Lookup("address")); err != nil {
+		log.Fatalf("bind address flag failed, err: %v", err)
+	}
+	if err := viper.BindPFlag("web_server.port", cmd.Flags().Lookup("port")); err != nil {
+		log.Fatalf("bind port flag failed, err: %v", err)
+	}
+	if err := viper.BindPFlag("web_server.debug", cmd.Flags().Lookup("debug")); err != nil {
+		log.Fatalf("bind debug flag failed, err: %v", err)
+	}
 
 	err := config.InitConfig(configPath, env)
 	if err != nil {

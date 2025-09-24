@@ -1,8 +1,12 @@
 # gosso
 
 [![Development Status](https://img.shields.io/badge/status-in%20development-yellow.svg)](https://github.com/rushairer/gosso)
+[![Tests](https://github.com/rushairer/gosso/workflows/Tests/badge.svg)](https://github.com/rushairer/gosso/actions/workflows/test.yml)
+[![Code Quality](https://github.com/rushairer/gosso/workflows/Code%20Quality/badge.svg)](https://github.com/rushairer/gosso/actions/workflows/quality.yml)
 [![Go Version](https://img.shields.io/badge/go-1.23.3+-blue.svg)](https://golang.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![codecov](https://codecov.io/gh/rushairer/gosso/branch/main/graph/badge.svg)](https://codecov.io/gh/rushairer/gosso)
+[![Go Report Card](https://goreportcard.com/badge/github.com/rushairer/gosso)](https://goreportcard.com/report/github.com/rushairer/gosso)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/rushairer/gosso/pulls)
 [![Contributors Welcome](https://img.shields.io/badge/contributors-welcome-orange.svg)](https://github.com/rushairer/gosso/issues)
 
@@ -51,6 +55,38 @@ make build
 
 ```bash
 make dev
+```
+
+### 🐳 Docker 部署
+
+#### 使用 Docker Compose (推荐)
+
+```bash
+# 启动所有服务 (包括数据库)
+docker-compose up -d
+
+# 仅启动应用和必要服务
+docker-compose up -d gosso mysql redis
+
+# 查看日志
+docker-compose logs -f gosso
+
+# 停止服务
+docker-compose down
+```
+
+#### 使用 Docker
+
+```bash
+# 构建镜像
+docker build -t gosso:latest .
+
+# 运行容器
+docker run -d \
+  --name gosso \
+  -p 8080:8080 \
+  -v $(pwd)/config:/app/config:ro \
+  gosso:latest
 ```
 
 ## 🏗️ 项目结构
@@ -148,6 +184,8 @@ web_server:
 
 ## 🧪 测试
 
+### 本地测试
+
 ```bash
 # 运行所有测试
 go test ./...
@@ -157,7 +195,24 @@ go test ./internal/service/account -v
 
 # 运行数据库工厂测试 (需要编译标签)
 go test ./internal/database/factory -v -tags mysql
+
+# 运行测试并生成覆盖率报告
+go test -v -race -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out -o coverage.html
 ```
+
+### CI/CD 自动化测试
+
+项目使用 GitHub Actions 进行自动化测试：
+
+- **🔄 持续集成**: 每次 push 和 PR 都会触发测试
+- **🗄️ 多数据库测试**: 自动测试 MySQL、PostgreSQL、SQLite
+- **🔧 多版本测试**: 测试 Go 1.21.x、1.22.x、1.23.x
+- **📊 代码覆盖率**: 自动上传到 Codecov
+- **🔍 代码质量**: golangci-lint 静态分析
+- **🛡️ 安全扫描**: gosec 安全检查
+
+查看测试状态：[GitHub Actions](https://github.com/rushairer/gosso/actions)
 
 ## 🔧 Makefile 命令
 
@@ -196,9 +251,37 @@ curl http://localhost:8080/test/alive
 ### 开发指南
 
 - 📖 查看 [文档维护指南](doc/README_GUIDE.md) 了解项目规范
+- 📝 查看 [Git 提交规范](doc/GIT_COMMIT_GUIDE.md) 了解提交信息格式
 - 🧪 运行 `go test ./...` 确保测试通过
 - 📝 为新功能添加相应的测试和文档
 - 🎯 遵循项目的代码风格和架构设计
+
+#### Git 提交规范
+
+本项目采用 [Conventional Commits](https://www.conventionalcommits.org/) 规范：
+
+```bash
+# 新功能
+git commit -m "feat(auth): 添加 JWT 认证功能"
+
+# Bug 修复
+git commit -m "fix(user): 修复用户密码加密问题"
+
+# 文档更新
+git commit -m "docs(api): 更新接口文档"
+
+# 代码重构
+git commit -m "refactor(database): 重构数据库连接逻辑"
+```
+
+**使用 commitizen 工具**：
+```bash
+# 安装工具
+npm install
+
+# 交互式提交
+npm run commit
+```
 
 ### 需要帮助的领域
 
