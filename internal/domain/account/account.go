@@ -39,7 +39,7 @@ func (a AccountStatus) Int() int8 {
 }
 
 type Account struct {
-	ID            uuid.UUID     `gorm:"primaryKey" json:"id"`
+	ID            uuid.UUID     `gorm:"primaryKey;type:char(36)" json:"id"`
 	Nickname      string        `gorm:"column:nickname;type:varchar(64)" json:"nickname"`
 	Type          AccountType   `gorm:"column:type;default:0" json:"type"`
 	Status        AccountStatus `gorm:"column:status;default:0" json:"status"`

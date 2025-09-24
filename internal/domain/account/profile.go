@@ -15,7 +15,7 @@ const (
 )
 
 type Profile struct {
-	AccountID uuid.UUID     `gorm:"primaryKey;column:account_id;type:uuid"`
+	AccountID uuid.UUID     `gorm:"primaryKey;column:account_id;type:char(36)"`
 	Avatar    string        `gorm:"column:avatar;type:varchar(255)" json:"avatar"`
 	Gender    ProfileGender `gorm:"column:gender;default:0" json:"gender"`
 	Age       int           `gorm:"column:age" json:"age"`

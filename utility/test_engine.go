@@ -63,7 +63,7 @@ func NewTestDB() *gorm.DB {
 		driver = "mysql"
 		dsn = mysqlDSN
 	} else if postgresDSN := os.Getenv("POSTGRES_DSN"); postgresDSN != "" {
-		driver = "postgres"
+		driver = "pgx"
 		dsn = postgresDSN
 	} else {
 		// 回退到配置文件中的默认驱动
