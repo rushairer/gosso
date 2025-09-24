@@ -3,7 +3,7 @@
 [![Development Status](https://img.shields.io/badge/status-in%20development-yellow.svg)](https://github.com/rushairer/gosso)
 [![Tests](https://github.com/rushairer/gosso/workflows/Tests/badge.svg)](https://github.com/rushairer/gosso/actions/workflows/test.yml)
 [![Code Quality](https://github.com/rushairer/gosso/workflows/Code%20Quality/badge.svg)](https://github.com/rushairer/gosso/actions/workflows/quality.yml)
-[![Go Version](https://img.shields.io/badge/go-1.23.3+-blue.svg)](https://golang.org/)
+[![Go Version](https://img.shields.io/badge/go-1.25+-blue.svg)](https://golang.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![codecov](https://codecov.io/gh/rushairer/gosso/branch/main/graph/badge.svg)](https://codecov.io/gh/rushairer/gosso)
 [![Go Report Card](https://goreportcard.com/badge/github.com/rushairer/gosso)](https://goreportcard.com/report/github.com/rushairer/gosso)
@@ -28,7 +28,7 @@ gosso 是一个基于 gouno 生成的 Go Web 项目。
 
 ### 前提条件
 
-- Go 1.23.3+ 环境
+- Go 1.25+ 环境
 
 ### 克隆项目
 
@@ -184,41 +184,132 @@ web_server:
 
 ## 🧪 测试
 
-### 本地测试
+### 现代化测试基础设施
+
+项目拥有业界标准的测试基础设施，支持多层次测试策略：
+
+#### **快速单元测试**
+```bash
+# 运行单元测试 (快速反馈，无外部依赖)
+make test
+# 或
+make test-unit
+./scripts/test-unit.sh
+
+# 单元测试包括:
+# - 验证码服务 (93.3% 覆盖率)
+# - 账户仓库 gomonkey mock (100% 覆盖率)  
+# - 工具函数、中间件、配置等
+# 总体覆盖率: 96.6%
+```
+
+#### **完整集成测试**
+```bash
+# 运行集成测试 (Docker 环境，多数据库)
+make test-integration
+./scripts/test-integration.sh
+
+# 自动测试三种数据库:
+# - MySQL (MariaDB): 72.2% 覆盖率
+# - PostgreSQL: 69.6% 覆盖率  
+# - SQLite: 72.2% 覆盖率
+```
+
+#### **完整测试套件**
+```bash
+# 运行所有测试 (单元 + 集成)
+make test-all
+
+# 清理测试环境
+make test-clean
+./scripts/test-clean.sh
+```
+
+#### **特定数据库测试**
+```bash
+# 使用编译标签测试特定数据库
+go test -v -race -tags mysql ./...
+go test -v -race -tags postgres ./...
+go test -v -race -tags sqlite ./...
+```
+
+### Docker 化测试环境
+
+测试环境完全容器化，使用优化的 Alpine 镜像：
 
 ```bash
-# 运行所有测试
-go test ./...
+# 启动测试服务 (自动在集成测试中调用)
+docker-compose -f docker-compose.test.yml up -d
 
-# 运行特定模块测试
-go test ./internal/service/account -v
-
-# 运行数据库工厂测试 (需要编译标签)
-go test ./internal/database/factory -v -tags mysql
-
-# 运行测试并生成覆盖率报告
-go test -v -race -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out -o coverage.html
+# 服务包括:
+# - MariaDB (MySQL 兼容)
+# - PostgreSQL Alpine  
+# - MailHog (邮件测试)
+# - Redis Alpine
 ```
 
 ### CI/CD 自动化测试
 
-项目使用 GitHub Actions 进行自动化测试：
+项目使用 GitHub Actions 进行自动化测试，解决了 DSN 环境变量污染问题：
 
 - **🔄 持续集成**: 每次 push 和 PR 都会触发测试
-- **🗄️ 多数据库测试**: 自动测试 MySQL、PostgreSQL、SQLite
-- **🔧 多版本测试**: 测试 Go 1.21.x、1.22.x、1.23.x
+- **🗄️ 多数据库测试**: 自动测试 MySQL、PostgreSQL、SQLite (完全隔离)
+- **🔧 Go 版本支持**: 测试 Go 1.25.x (项目最低支持版本)
 - **📊 代码覆盖率**: 自动上传到 Codecov
 - **🔍 代码质量**: golangci-lint 静态分析
 - **🛡️ 安全扫描**: gosec 安全检查
+- **🐳 Alpine 镜像**: 使用轻量级镜像提升 CI 性能
+
+#### **测试矩阵策略**
+```yaml
+strategy:
+  matrix:
+    go-version: [1.25.x]
+    database: [mysql, postgres, sqlite]
+```
+
+每个数据库测试完全隔离，避免环境变量污染：
+```bash
+# 清理环境变量
+unset MYSQL_DSN POSTGRES_DSN SQLITE_DSN
+
+# 只设置对应数据库的 DSN
+case "$database" in
+  mysql) export MYSQL_DSN="..." ;;
+  postgres) export POSTGRES_DSN="..." ;;
+  sqlite) export SQLITE_DSN=":memory:" ;;
+esac
+```
 
 查看测试状态：[GitHub Actions](https://github.com/rushairer/gosso/actions)
 
+### 测试覆盖率报告
+
+- **单元测试**: 96.6% 覆盖率 (`coverage-unit.html`)
+- **集成测试**: 
+  - MySQL: 72.2% (`coverage-integration-mysql.html`)
+  - PostgreSQL: 69.6% (`coverage-integration-postgres.html`)
+  - SQLite: 72.2% (`coverage-integration-sqlite.html`)
+
 ## 🔧 Makefile 命令
 
+### 构建和运行
 - `make build`: 构建项目
-- `make run`: 运行开发服务器
+- `make run`: 运行开发服务器  
 - `make dev`: 运行开发模式
+
+### 测试命令
+- `make test`: 运行单元测试 (默认，快速反馈)
+- `make test-unit`: 运行单元测试 (明确指定)
+- `make test-integration`: 运行集成测试 (Docker 环境)
+- `make test-all`: 运行所有测试 (单元 + 集成)
+- `make test-clean`: 清理测试环境
+- `make test-coverage`: 生成覆盖率报告
+
+### 开发工具
+- `make fmt`: 代码格式化
+- `make lint`: 代码静态分析
+- `make vet`: Go 代码检查
 
 ## 🌐 API 示例
 
