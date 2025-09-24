@@ -45,6 +45,12 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      
+      mailhog:
+        image: mailhog/mailhog:latest
+        ports:
+          - 1025:1025  # SMTP port
+          - 8025:8025  # Web UI port
 
     steps:
     - name: Checkout code
@@ -82,69 +88,53 @@ jobs:
           exit 1
         fi
 
-    - name: Run tests (SQLite)
-      if: matrix.database == 'sqlite'
+    - name: Set up test environment
+      run: |
+        # 等待服务启动
+        echo "等待数据库和邮件服务启动..."
+        sleep 15
+
+    - name: Test database connections
+      run: |
+        if [ "${{ matrix.database }}" = "mysql" ]; then
+          mysql -h 127.0.0.1 -P 3306 -u gosso -pgosso123 -e "SELECT 1" gosso_test || {
+            echo "MySQL 连接失败，等待更长时间..."
+            sleep 20
+            mysql -h 127.0.0.1 -P 3306 -u gosso -pgosso123 -e "SELECT 1" gosso_test
+          }
+        elif [ "${{ matrix.database }}" = "postgres" ]; then
+          PGPASSWORD=gosso123 psql -h localhost -U gosso -d gosso_test -c "SELECT 1" || {
+            echo "PostgreSQL 连接失败，等待更长时间..."
+            sleep 20
+            PGPASSWORD=gosso123 psql -h localhost -U gosso -d gosso_test -c "SELECT 1"
+          }
+        fi
+
+    - name: Run tests
       env:
         CGO_ENABLED: 1
-      run: |
-        # 运行 SQLite 测试，排除邮件服务测试（需要邮件服务器）
-        go test -v -race -coverprofile=coverage.out -tags sqlite \
-          ./internal/database/factory \
-          ./internal/service/account \
-          ./internal/service/auth \
-          ./internal/service/captcha \
-          ./internal/task/account \
-          ./test/controller \
-          ./internal/repository/account \
-          ./utility
-
-    - name: Run tests (MySQL)
-      if: matrix.database == 'mysql'
-      env:
+        # 数据库连接配置
         MYSQL_DSN: "gosso:gosso123@tcp(localhost:3306)/gosso_test?charset=utf8mb4&parseTime=True&loc=Local"
-        CGO_ENABLED: 1
-      run: |
-        # 等待 MySQL 服务启动
-        sleep 10
-        # 测试数据库连接
-        mysql -h 127.0.0.1 -P 3306 -u gosso -pgosso123 -e "SELECT 1" gosso_test || {
-          echo "MySQL 连接失败，等待更长时间..."
-          sleep 20
-        }
-        # 运行测试，排除邮件服务测试（需要邮件服务器）
-        go test -v -race -coverprofile=coverage.out -tags mysql \
-          ./internal/database/factory \
-          ./internal/service/account \
-          ./internal/service/auth \
-          ./internal/service/captcha \
-          ./internal/task/account \
-          ./test/controller \
-          ./internal/repository/account \
-          ./utility
-
-    - name: Run tests (PostgreSQL)
-      if: matrix.database == 'postgres'
-      env:
         POSTGRES_DSN: "host=localhost user=gosso password=gosso123 dbname=gosso_test port=5432 sslmode=disable"
-        CGO_ENABLED: 1
+        # 邮件服务配置 (MailHog)
+        SMTP_HOST: "localhost"
+        SMTP_PORT: "1025"
+        SMTP_USER: ""
+        SMTP_PASSWORD: ""
+        SMTP_FROM: "test@gosso.local"
       run: |
-        # 等待 PostgreSQL 服务启动
-        sleep 10
-        # 测试数据库连接
-        PGPASSWORD=gosso123 psql -h localhost -U gosso -d gosso_test -c "SELECT 1" || {
-          echo "PostgreSQL 连接失败，等待更长时间..."
-          sleep 20
-        }
-        # 运行测试，排除邮件服务测试（需要邮件服务器）
-        go test -v -race -coverprofile=coverage.out -tags postgres \
-          ./internal/database/factory \
-          ./internal/service/account \
-          ./internal/service/auth \
-          ./internal/service/captcha \
-          ./internal/task/account \
-          ./test/controller \
-          ./internal/repository/account \
-          ./utility
+        # 运行所有测试，不再需要手动排除任何包
+        case "${{ matrix.database }}" in
+          sqlite)
+            go test -v -race -coverprofile=coverage.out -tags sqlite ./...
+            ;;
+          mysql)
+            go test -v -race -coverprofile=coverage.out -tags mysql ./...
+            ;;
+          postgres)
+            go test -v -race -coverprofile=coverage.out -tags postgres ./...
+            ;;
+        esac
 
     - name: Upload coverage to Codecov
       if: matrix.go-version == '1.25.x' && matrix.database == 'sqlite'

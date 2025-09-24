@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # 测试数据库 - MySQL
+  mysql-test:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: gosso_test
+      MYSQL_USER: gosso
+      MYSQL_PASSWORD: gosso123
+    ports:
+      - "3307:3306"  # 避免与开发环境冲突
+    tmpfs:
+      - /var/lib/mysql  # 使用内存存储，测试后自动清理
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 5s
+      retries: 10
+
+  # 测试数据库 - PostgreSQL
+  postgres-test:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: gosso_test
+      POSTGRES_USER: gosso
+      POSTGRES_PASSWORD: gosso123
+    ports:
+      - "5433:5432"  # 避免与开发环境冲突
+    tmpfs:
+      - /var/lib/postgresql/data  # 使用内存存储
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gosso"]
+      timeout: 5s
+      retries: 10
+
+  # 邮件测试服务 - MailHog
+  mailhog-test:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8025"]
+      timeout: 5s
+      retries: 5
+    
+  # Redis 测试服务（如果需要）
+  redis-test:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"  # 避免与开发环境冲突
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      timeout: 5s
+      retries: 5
+
+networks:
+  default:
+    name: gosso-test-network
