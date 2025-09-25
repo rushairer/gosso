@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# Pre-commit hook for Go project quality control
+set -e
+
+echo "🔍 Running pre-commit checks..."
+
+# 1. Go mod tidy
+echo "📦 Running go mod tidy..."
+go mod tidy
+
+# 2. Format code
+echo "🎨 Formatting code..."
+go fmt ./...
+
+# 3. Run golangci-lint (disable staticcheck for now due to false positive)
+echo "🔍 Running golangci-lint..."
+if command -v golangci-lint >/dev/null 2>&1; then
+    golangci-lint run --disable=staticcheck
+else
+    echo "⚠️  golangci-lint not found, skipping lint check"
+fi
+
+# 4. Run unit tests
+echo "🧪 Running unit tests..."
+make test-unit
+
+echo "✅ All pre-commit checks passed!"

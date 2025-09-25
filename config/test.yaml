@@ -31,7 +31,7 @@ task_pipeline:
     flush_interval: 1s
 smtp:
     host: localhost
-    port: 1027
+    port: 1025
     username: ""
     password: ""
     from: "noreply@gosso.local"
