@@ -57,7 +57,8 @@ jobs:
     - name: Run staticcheck
       run: |
         go install honnef.co/go/tools/cmd/staticcheck@latest
-        staticcheck ./...
+        # 使用 mysql 标签运行 staticcheck 以避免编译错误
+        staticcheck -tags mysql ./...
 
     - name: Run ineffassign
       run: |
