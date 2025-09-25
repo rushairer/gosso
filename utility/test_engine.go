@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"gosso/config"
-	"gosso/internal/database"
 	"gosso/router"
 	"log"
 	"os"
@@ -16,7 +15,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	gopipeline "github.com/rushairer/go-pipeline"
-	"gorm.io/gorm"
 )
 
 // projectRoot attempts to find the project root by looking for go.mod file.
@@ -52,40 +50,10 @@ func initTestConfig() {
 	})
 }
 
-func NewTestDB() *gorm.DB {
-	initTestConfig()
-
-	// 根据环境变量选择数据库类型，优先使用 CI 环境配置
-	var driver, dsn string
-	var logLevel int = 1 // 默认日志级别
-
-	if mysqlDSN := os.Getenv("MYSQL_DSN"); mysqlDSN != "" {
-		driver = "mysql"
-		dsn = mysqlDSN
-	} else if postgresDSN := os.Getenv("POSTGRES_DSN"); postgresDSN != "" {
-		driver = "pgx"
-		dsn = postgresDSN
-	} else {
-		// 默认使用内存 SQLite，避免驱动依赖问题
-		driver = "sqlite3"
-		dsn = ":memory:"
-	}
-
-	gormDB := database.NewGormDB(driver, dsn, logLevel)
-
-	var err error
-	err = database.CleanMigrate(gormDB)
-	if err != nil {
-		log.Fatalf("clean migrate failed, err: %v", err)
-	}
-
-	err = database.AutoMigrate(gormDB)
-	if err != nil {
-		log.Fatalf("auto migrate failed, err: %v", err)
-	}
-
-	return gormDB
-}
+// NewTestDB 函数现在由编译标签特定的文件提供：
+// - test_engine_mysql.go (需要 -tags mysql)
+// - test_engine_postgres.go (需要 -tags postgres)
+// - test_engine_sqlite.go (需要 -tags sqlite)
 
 func NewTestTaskPipeline(ctx context.Context) *gopipeline.Pipeline[task.Task] {
 	initTestConfig()
