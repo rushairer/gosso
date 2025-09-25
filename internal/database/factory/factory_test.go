@@ -8,7 +8,7 @@ import (
 )
 
 func TestDatabaseFactory(t *testing.T) {
-	Convey("数据库工厂测试", t, func() {
+	Convey("数据库工厂通用测试", t, func() {
 
 		Convey("工厂创建测试", func() {
 			Convey("NewDatabaseFactory 应该返回非空工厂", func() {
@@ -18,85 +18,11 @@ func TestDatabaseFactory(t *testing.T) {
 			})
 		})
 
-		Convey("MySQL 工厂测试", func() {
-			Convey("创建 MySQL Dialector", func() {
-				// 注意：这个测试需要 mysql build tag
-				SkipConvey("需要 MySQL 驱动编译标签 (-tags mysql)", func() {
-					dbFactory := factory.NewDatabaseFactory()
-					So(dbFactory, ShouldNotBeNil)
-
-					dialector := dbFactory.CreateDialector("mysql", "test:test@tcp(localhost:3306)/test?charset=utf8mb4&parseTime=True&loc=Local")
-					So(dialector, ShouldNotBeNil)
-					So(dialector.Name(), ShouldEqual, "mysql")
-				})
-			})
-
-			Convey("使用连接池创建 MySQL Dialector", func() {
-				SkipConvey("需要 MySQL 驱动编译标签 (-tags mysql)", func() {
-					dbFactory := factory.NewDatabaseFactory()
-					So(dbFactory, ShouldNotBeNil)
-
-					// 这个测试需要真实的数据库连接，在单元测试中跳过
-					// 实际使用时需要传入 *sql.DB 实例
-				})
-			})
-		})
-
-		Convey("PostgreSQL 工厂测试", func() {
-			Convey("创建 PostgreSQL Dialector", func() {
-				SkipConvey("需要 PostgreSQL 驱动编译标签 (-tags postgres)", func() {
-					dbFactory := factory.NewDatabaseFactory()
-					So(dbFactory, ShouldNotBeNil)
-
-					dialector := dbFactory.CreateDialector("postgres", "host=localhost user=test password=test dbname=test port=5432 sslmode=disable")
-					So(dialector, ShouldNotBeNil)
-					So(dialector.Name(), ShouldEqual, "postgres")
-				})
-			})
-
-			Convey("使用连接池创建 PostgreSQL Dialector", func() {
-				SkipConvey("需要 PostgreSQL 驱动编译标签 (-tags postgres)", func() {
-					dbFactory := factory.NewDatabaseFactory()
-					So(dbFactory, ShouldNotBeNil)
-
-					// 这个测试需要真实的数据库连接，在单元测试中跳过
-				})
-			})
-		})
-
-		Convey("SQLite 工厂测试", func() {
-			Convey("创建 SQLite Dialector", func() {
-				SkipConvey("需要 SQLite 驱动编译标签 (-tags sqlite)", func() {
-					dbFactory := factory.NewDatabaseFactory()
-					So(dbFactory, ShouldNotBeNil)
-
-					dialector := dbFactory.CreateDialector("sqlite3", ":memory:")
-					So(dialector, ShouldNotBeNil)
-					So(dialector.Name(), ShouldEqual, "sqlite")
-				})
-			})
-
-			Convey("使用连接池创建 SQLite Dialector", func() {
-				SkipConvey("需要 SQLite 驱动编译标签 (-tags sqlite)", func() {
-					dbFactory := factory.NewDatabaseFactory()
-					So(dbFactory, ShouldNotBeNil)
-
-					// 这个测试需要真实的数据库连接，在单元测试中跳过
-				})
-			})
-		})
-
-		Convey("默认工厂测试", func() {
-			Convey("无驱动编译时应该触发 log.Fatal", func() {
-				// 这个测试只在没有任何数据库驱动编译标签时才会运行
-				// 在实际项目中，通常会有至少一个驱动被编译
-				SkipConvey("默认情况下会有驱动被编译", func() {
-					// 注意：这个测试会导致程序退出，因为 log.Fatal 会调用 os.Exit(1)
-					// 在实际测试中应该避免这种情况
-					So(func() {
-						factory.NewDatabaseFactory()
-					}, ShouldPanic)
-				})
+		Convey("工厂接口测试", func() {
+			Convey("工厂应该实现 DatabaseFactory 接口", func() {
+				dbFactory := factory.NewDatabaseFactory()
+				So(dbFactory, ShouldNotBeNil)
+				So(dbFactory, ShouldImplement, (*factory.DatabaseFactory)(nil))
 			})
 		})
 	})
@@ -149,30 +75,18 @@ func TestDatabaseFactoryInterface(t *testing.T) {
 	})
 }
 
-// TestFactoryBuildTags 测试不同编译标签的行为
+// TestFactoryBuildTags 测试编译标签说明
 func TestFactoryBuildTags(t *testing.T) {
-	Convey("编译标签测试", t, func() {
+	Convey("编译标签说明", t, func() {
 
-		Convey("编译标签说明", func() {
-			Convey("MySQL 编译标签", func() {
-				// 使用 go test -tags mysql 运行测试
-				SkipConvey("使用 'go test -tags mysql' 运行 MySQL 相关测试", func() {
-					// MySQL 相关的测试逻辑
-				})
-			})
+		Convey("数据库特定测试", func() {
+			Convey("测试文件分离说明", func() {
+				// 不同数据库的测试已分离到不同文件：
+				// - factory_mysql_test.go (需要 -tags mysql)
+				// - factory_postgres_test.go (需要 -tags postgres)
+				// - factory_sqlite_test.go (需要 -tags sqlite)
 
-			Convey("PostgreSQL 编译标签", func() {
-				// 使用 go test -tags postgres 运行测试
-				SkipConvey("使用 'go test -tags postgres' 运行 PostgreSQL 相关测试", func() {
-					// PostgreSQL 相关的测试逻辑
-				})
-			})
-
-			Convey("SQLite 编译标签", func() {
-				// 使用 go test -tags sqlite 运行测试
-				SkipConvey("使用 'go test -tags sqlite' 运行 SQLite 相关测试", func() {
-					// SQLite 相关的测试逻辑
-				})
+				So("测试文件已按编译标签分离", ShouldEqual, "测试文件已按编译标签分离")
 			})
 		})
 	})

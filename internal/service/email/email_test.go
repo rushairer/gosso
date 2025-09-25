@@ -8,7 +8,7 @@ func TestEmailService_SendVerificationCode(t *testing.T) {
 	// 测试邮件服务的验证码发送功能
 	emailService := NewEmailService(
 		"localhost",           // host
-		1025,                  // port
+		1026,                  // port
 		"",                    // username (Mailpit 不需要认证)
 		"",                    // password (Mailpit 不需要认证)
 		"noreply@gosso.local", // from

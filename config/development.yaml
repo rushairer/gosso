@@ -18,12 +18,12 @@ database:
         mysql:
             name: mysql
             driver: mysql
-            dsn: root:123456@tcp(127.0.0.1:3306)/gouno?charset=utf8mb4&parseTime=True&loc=Local
+            dsn: gosso:gosso123@tcp(127.0.0.1:3307)/gosso_dev?charset=utf8mb4&parseTime=True&loc=Local
             log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
         postgres:
             name: postgres
             driver: pgx
-            dsn: host=127.0.0.1 user=postgres password=123456 dbname=gosso port=5432 sslmode=disable TimeZone=Asia/Shanghai search_path=development
+            dsn: host=127.0.0.1 user=gosso password=gosso123 dbname=gosso_dev port=5433 sslmode=disable TimeZone=Asia/Shanghai search_path=development
             log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
 task_pipeline:
     flush_size: 32
@@ -31,7 +31,7 @@ task_pipeline:
     flush_interval: 1s
 smtp:
     host: localhost
-    port: 1025
+    port: 1026
     username: ""
     password: ""
     from: "noreply@gosso.local"

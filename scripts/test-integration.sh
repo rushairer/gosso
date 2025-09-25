@@ -29,7 +29,7 @@ log_error() {
 cleanup() {
     log_info "清理测试环境..."
     docker-compose -f docker-compose.test.yml down -v --remove-orphans 2>/dev/null || true
-    rm -f coverage-integration.out coverage-integration.html 2>/dev/null || true
+    rm -f coverage-integration-*.out coverage-integration-*.html 2>/dev/null || true
 }
 
 # 捕获退出信号，确保清理
@@ -83,11 +83,8 @@ fi
 # 额外等待确保服务完全就绪
 sleep 5
 
-# 设置通用环境变量
+# 设置测试环境变量
 export CGO_ENABLED=1
-export SMTP_HOST="localhost"
-export SMTP_PORT="1025"
-export SMTP_FROM="test@gosso.local"
 
 log_info "🚀 开始运行集成测试..."
 
@@ -106,17 +103,16 @@ if [ ${#EXISTING_PACKAGES[@]} -eq 0 ]; then
     exit 0
 fi
 
-# 数据库测试配置
+# 数据库测试配置 - 使用编译标签分别测试
 DATABASES=(
-    "mysql:gosso:gosso123@tcp(localhost:3307)/gosso_test?charset=utf8mb4&parseTime=True&loc=Local"
-    "postgres:host=localhost user=gosso password=gosso123 dbname=gosso_test port=5433 sslmode=disable"
-    "sqlite::memory:"
+    "mysql"
+    "postgres"
+    "sqlite"
 )
 
 # 运行多数据库集成测试
 OVERALL_SUCCESS=true
-for db_config in "${DATABASES[@]}"; do
-    IFS=':' read -r db_type dsn <<< "$db_config"
+for db_type in "${DATABASES[@]}"; do
     
     # 转换为大写显示名称
     case $db_type in
@@ -128,28 +124,10 @@ for db_config in "${DATABASES[@]}"; do
     
     log_info "🗄️  测试 $db_display 数据库..."
     
-    # 清理所有数据库 DSN 环境变量，避免污染
-    unset MYSQL_DSN POSTGRES_DSN SQLITE_DSN
-    
-    # 设置当前数据库的 DSN
-    case $db_type in
-        "mysql")
-            export MYSQL_DSN="$dsn"
-            build_tag="mysql"
-            ;;
-        "postgres")
-            export POSTGRES_DSN="$dsn"
-            build_tag="postgres"
-            ;;
-        "sqlite")
-            export SQLITE_DSN="$dsn"
-            build_tag="sqlite"
-            ;;
-    esac
-    
-    # 运行当前数据库的集成测试
+    # 运行当前数据库的集成测试 - 使用 test.yaml 配置和编译标签
     coverage_file="coverage-integration-${db_type}.out"
-    if go test -v -race -tags "$build_tag" -coverprofile="$coverage_file" "${EXISTING_PACKAGES[@]}"; then
+    if go test -v -race -tags "$db_type" -coverprofile="$coverage_file" \
+        --config_path ./config --env test "${EXISTING_PACKAGES[@]}"; then
         log_success "$db_display 集成测试通过"
         
         # 生成当前数据库的覆盖率报告
@@ -167,9 +145,6 @@ for db_config in "${DATABASES[@]}"; do
     echo ""
 done
 
-# 清理环境变量
-unset MYSQL_DSN POSTGRES_DSN SQLITE_DSN
-
 # 检查总体测试结果
 if [ "$OVERALL_SUCCESS" = true ]; then
     log_success "🎉 所有数据库集成测试通过！"
@@ -179,6 +154,6 @@ else
 fi
 
 # 显示 Mailpit Web UI 地址
-log_info "📧 Mailpit Web UI: http://localhost:8025"
+log_info "📧 Mailpit Web UI: http://localhost:8027"
 
 log_success "集成测试完成！"

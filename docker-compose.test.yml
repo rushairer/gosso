@@ -8,7 +8,7 @@ services:
       MYSQL_USER: gosso
       MYSQL_PASSWORD: gosso123
     ports:
-      - "3307:3306"  # 避免与开发环境冲突
+      - "3308:3306"  # Test 环境端口 (默认端口+2)
     tmpfs:
       - /var/lib/mysql  # 使用内存存储，测试后自动清理
     command: --default-authentication-plugin=mysql_native_password
@@ -25,7 +25,7 @@ services:
       POSTGRES_USER: gosso
       POSTGRES_PASSWORD: gosso123
     ports:
-      - "5433:5432"  # 避免与开发环境冲突
+      - "5434:5432"  # Test 环境端口 (默认端口+2)
     tmpfs:
       - /var/lib/postgresql/data  # 使用内存存储
     healthcheck:
@@ -37,8 +37,8 @@ services:
   mailpit-test:
     image: axllent/mailpit:latest
     ports:
-      - "1025:1025"  # SMTP
-      - "8025:8025"  # Web UI
+      - "1027:1025"  # SMTP Test 环境端口 (默认端口+2)
+      - "8027:8025"  # Web UI Test 环境端口 (默认端口+2)
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8025"]
       timeout: 5s
@@ -48,7 +48,7 @@ services:
   redis-test:
     image: redis:7-alpine
     ports:
-      - "6380:6379"  # 避免与开发环境冲突
+      - "6381:6379"  # Test 环境端口 (默认端口+2)
     tmpfs:
       - /data
     healthcheck:
