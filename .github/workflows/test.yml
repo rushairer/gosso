@@ -25,7 +25,7 @@ jobs:
           MYSQL_USER: gosso
           MYSQL_PASSWORD: gosso123
         ports:
-          - 3306:3306
+          - 3308:3306  # 测试环境外部端口 3308 -> 内部端口 3306
         options: >-
           --health-cmd="healthcheck.sh --connect --innodb_initialized"
           --health-interval=10s
@@ -39,7 +39,7 @@ jobs:
           POSTGRES_USER: gosso
           POSTGRES_PASSWORD: gosso123
         ports:
-          - 5432:5432
+          - 5434:5432  # 测试环境外部端口 5434 -> 内部端口 5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -97,16 +97,16 @@ jobs:
     - name: Test database connections
       run: |
         if [ "${{ matrix.database }}" = "mysql" ]; then
-          mysql -h 127.0.0.1 -P 3306 -u gosso -pgosso123 -e "SELECT 1" gosso_test || {
+          mysql -h 127.0.0.1 -P 3308 -u gosso -pgosso123 -e "SELECT 1" gosso_test || {
             echo "MySQL 连接失败，等待更长时间..."
             sleep 20
-            mysql -h 127.0.0.1 -P 3306 -u gosso -pgosso123 -e "SELECT 1" gosso_test
+            mysql -h 127.0.0.1 -P 3308 -u gosso -pgosso123 -e "SELECT 1" gosso_test
           }
         elif [ "${{ matrix.database }}" = "postgres" ]; then
-          PGPASSWORD=gosso123 psql -h localhost -U gosso -d gosso_test -c "SELECT 1" || {
+          PGPASSWORD=gosso123 psql -h localhost -p 5434 -U gosso -d gosso_test -c "SELECT 1" || {
             echo "PostgreSQL 连接失败，等待更长时间..."
             sleep 20
-            PGPASSWORD=gosso123 psql -h localhost -U gosso -d gosso_test -c "SELECT 1"
+            PGPASSWORD=gosso123 psql -h localhost -p 5434 -U gosso -d gosso_test -c "SELECT 1"
           }
         fi
 
@@ -132,12 +132,12 @@ jobs:
             ;;
           mysql)
             echo "🗄️ 运行 MySQL 测试..."
-            export MYSQL_DSN="gosso:gosso123@tcp(localhost:3306)/gosso_test?charset=utf8mb4&parseTime=True&loc=Local"
+            export MYSQL_DSN="gosso:gosso123@tcp(localhost:3308)/gosso_test?charset=utf8mb4&parseTime=True&loc=Local"
             go test -v -race -coverprofile=coverage.out -tags mysql ./...
             ;;
           postgres)
             echo "🗄️ 运行 PostgreSQL 测试..."
-            export POSTGRES_DSN="host=localhost user=gosso password=gosso123 dbname=gosso_test port=5432 sslmode=disable"
+            export POSTGRES_DSN="host=localhost user=gosso password=gosso123 dbname=gosso_test port=5434 sslmode=disable"
             go test -v -race -coverprofile=coverage.out -tags postgres ./...
             ;;
         esac
