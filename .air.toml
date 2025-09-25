@@ -7,9 +7,9 @@ tmp_dir = "tmp"
   DB = "postgres"
 
 [build]
-  args_bin = ["web -d -e development"]
+  args_bin = ["web", "--config", "./config/development.yaml", "--address", "0.0.0.0", "--port", "${APP_PORT:-8081}"]
   bin = "${OUTPUT:-./bin/gouno}"
-  cmd = "go build -tags ${DB:-postgres} -buildvcs=false -gcflags \"-N -l\" -o ${OUTPUT:-./bin/gouno} ./cmd"
+  cmd = "go build -tags ${DB:-postgres} -buildvcs=false -gcflags \"-N -l\" -o ${OUTPUT:-./bin/gouno} ./cmd/gouno"
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "bin"]
   exclude_file = ["README.md"]

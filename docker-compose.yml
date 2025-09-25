@@ -5,14 +5,16 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${VERSION:-dev}
+        VERSION: ${VERSION:-latest}
     ports:
-      - "8080:8080"
+      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
     environment:
       - GIN_MODE=release
+      - GOSSO_ENV=production
     volumes:
       - ./config:/app/config:ro
       - ./log:/app/log
+      - ./data:/app/data
     depends_on:
       mysql:
         condition: service_healthy
@@ -21,30 +23,39 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - gosso-network
+      - gosso-prod-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/test/alive"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${APP_PORT:-8080}/test/alive"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
 
   # MySQL 数据库
   mysql:
-    image: mysql:8.0
+    image: mariadb:10.11-jammy
     environment:
-      MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: gosso
-      MYSQL_USER: gosso
-      MYSQL_PASSWORD: gosso123
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-gosso}
+      MYSQL_USER: ${MYSQL_USER:-gosso}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-gosso123}
     ports:
-      - "3306:3306"
+      - "${MYSQL_EXTERNAL_PORT:-3306}:3306"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - mysql_prod_data:/var/lib/mysql
       - ./scripts/mysql:/docker-entrypoint-initdb.d:ro
+      - ./config/mysql.cnf:/etc/mysql/conf.d/custom.cnf:ro
     networks:
-      - gosso-network
+      - gosso-prod-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
@@ -56,39 +67,59 @@ services:
       --default-authentication-plugin=mysql_native_password
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci
+      --innodb-buffer-pool-size=512M
+      --max-connections=200
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
   # PostgreSQL 数据库
   postgres:
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: gosso
-      POSTGRES_USER: gosso
-      POSTGRES_PASSWORD: gosso123
+      POSTGRES_DB: ${POSTGRES_DB:-gosso}
+      POSTGRES_USER: ${POSTGRES_USER:-gosso}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gosso123}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_EXTERNAL_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_prod_data:/var/lib/postgresql/data
       - ./scripts/postgres:/docker-entrypoint-initdb.d:ro
+      - ./config/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     networks:
-      - gosso-network
+      - gosso-prod-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gosso -d gosso"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gosso} -d ${POSTGRES_DB:-gosso}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
   # Redis 缓存
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_EXTERNAL_PORT:-6379}:6379"
     volumes:
-      - redis_data:/data
+      - redis_prod_data:/data
       - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
     networks:
-      - gosso-network
+      - gosso-prod-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -97,37 +128,58 @@ services:
       retries: 3
       start_period: 10s
     command: redis-server /usr/local/etc/redis/redis.conf
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
 
-  # Nginx 反向代理 (可选)
+  # Nginx 反向代理
   nginx:
     image: nginx:alpine
     ports:
-      - "80:80"
-      - "443:443"
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
     volumes:
       - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./ssl:/etc/nginx/ssl:ro
+      - ./static:/var/www/static:ro
     depends_on:
       - gosso
     networks:
-      - gosso-network
+      - gosso-prod-network
     restart: unless-stopped
-    profiles:
-      - production
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
 
 # 网络配置
 networks:
-  gosso-network:
+  gosso-prod-network:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 172.22.0.0/16
 
 # 数据卷
 volumes:
-  mysql_data:
+  mysql_prod_data:
     driver: local
-  postgres_data:
+  postgres_prod_data:
     driver: local
-  redis_data:
+  redis_prod_data:
     driver: local

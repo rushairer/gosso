@@ -1,20 +1,18 @@
 services:
-  # 应用服务
+  # 应用服务 (开发模式 - 代码挂载 + 热重载)
   gosso:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        VERSION: ${VERSION:-dev}
+    image: golang:alpine
+    working_dir: /app
     ports:
       - "${APP_PORT:-8081}:${APP_PORT:-8081}"
     environment:
       - GIN_MODE=debug
       - GOSSO_ENV=development
+      - APP_PORT=${APP_PORT:-8081}
+      - CGO_ENABLED=0
     volumes:
-      - ./config:/app/config:ro
-      - ./log:/app/log
-      - ./data:/app/data
+      - .:/app
+      - go-mod-cache:/go/pkg/mod
     depends_on:
       mysql:
         condition: service_healthy
@@ -27,6 +25,14 @@ services:
     networks:
       - gosso-dev-network
     restart: unless-stopped
+    command: >
+      sh -c "
+        apk add --no-cache git ca-certificates tzdata &&
+        if ! command -v air &> /dev/null; then
+          go install github.com/air-verse/air@latest;
+        fi &&
+        air -c .air.toml
+      "
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${APP_PORT:-8081}/test/alive"]
       interval: 30s
@@ -36,7 +42,7 @@ services:
 
   # MySQL 数据库
   mysql:
-    image: mysql:8.0
+    image: mariadb:10.11-jammy
     environment:
       MYSQL_ROOT_PASSWORD: root123
       MYSQL_DATABASE: ${MYSQL_DATABASE:-gosso_dev}
@@ -57,9 +63,9 @@ services:
       retries: 5
       start_period: 30s
     command: >
-      --default-authentication-plugin=mysql_native_password
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci
+      --innodb-buffer-pool-size=128M
 
   # PostgreSQL 数据库
   postgres:
@@ -129,4 +135,6 @@ volumes:
   postgres_dev_data:
     driver: local
   redis_dev_data:
+    driver: local
+  go-mod-cache:
     driver: local

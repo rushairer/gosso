@@ -1,6 +1,6 @@
 # 多阶段构建 Dockerfile
 # 第一阶段：构建阶段
-FROM golang:1.23.3-alpine AS builder
+FROM golang:alpine AS builder
 
 # 设置工作目录
 WORKDIR /app
@@ -42,18 +42,23 @@ COPY --from=builder /app/gosso /app/gosso
 # 复制配置文件
 COPY --from=builder /app/config /app/config
 
-# 创建日志目录
-RUN mkdir -p /app/log && chown -R gosso:gosso /app
+# 创建日志目录并设置权限
+RUN mkdir -p /app/log && \
+    chmod +x /app/gosso && \
+    chown -R gosso:gosso /app
 
 # 切换到非 root 用户
 USER gosso
 
-# 暴露端口
-EXPOSE 8080
+# 设置默认端口环境变量
+ENV APP_PORT=8080
 
-# 健康检查
+# 暴露端口 (使用环境变量)
+EXPOSE $APP_PORT
+
+# 健康检查 (使用环境变量)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/test/alive || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${APP_PORT}/test/alive || exit 1
 
-# 启动命令
-CMD ["./gosso", "web", "--config", "./config/config.yaml", "--address", "0.0.0.0", "--port", "8080"]
+# 启动命令 (使用环境变量)
+CMD sh -c "./gosso web --config ./config/config.yaml --address 0.0.0.0 --port ${APP_PORT}"
