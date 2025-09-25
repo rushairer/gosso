@@ -186,7 +186,7 @@ web_server:
 
 ### 现代化测试基础设施
 
-项目拥有业界标准的测试基础设施，支持多层次测试策略：
+项目拥有业界标准的测试基础设施，支持多层次测试策略和**统一配置管理**：
 
 #### **快速单元测试**
 ```bash
@@ -209,6 +209,8 @@ make test-unit
 make test-integration
 ./scripts/test-integration.sh
 
+# 统一配置管理 - 所有配置来源于 config/test.yaml
+# 自动解析配置: go run scripts/parse-test-config.go
 # 自动测试三种数据库:
 # - MySQL (MariaDB): 72.2% 覆盖率
 # - PostgreSQL: 69.6% 覆盖率  
@@ -235,18 +237,27 @@ go test -v -race -tags sqlite ./...
 
 ### Docker 化测试环境
 
-测试环境完全容器化，使用优化的 Alpine 镜像：
+测试环境完全容器化，使用优化的 Alpine 镜像，**采用统一配置管理**：
 
 ```bash
-# 启动测试服务 (自动在集成测试中调用)
+# 解析配置并启动测试服务
+eval "$(go run scripts/parse-test-config.go)"
 docker-compose -f docker-compose.test.yml up -d
 
-# 服务包括:
-# - MariaDB (MySQL 兼容)
-# - PostgreSQL Alpine  
-# - Mailpit (邮件测试)
-# - Redis Alpine
+# 统一配置源: config/test.yaml
+# 动态端口配置，避免冲突:
+# - MySQL: 外部端口 3308 -> 内部端口 3306
+# - PostgreSQL: 外部端口 5434 -> 内部端口 5432  
+# - Mailpit SMTP: 外部端口 1027 -> 内部端口 1025
+# - Mailpit Web: 外部端口 8027 -> 内部端口 8025
+# - Redis: 外部端口 6381 -> 内部端口 6379
 ```
+
+**配置优势**:
+- 🔧 **单一配置源**: 只需修改 `config/test.yaml`
+- 🤖 **自动解析**: Go 脚本自动解析配置并设置环境变量
+- 🔄 **动态端口**: 避免与开发环境端口冲突
+- 📏 **标准化**: 统一的端口分配规范
 
 ### CI/CD 自动化测试
 

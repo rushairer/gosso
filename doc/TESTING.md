@@ -120,23 +120,30 @@ go test -v -race -tags sqlite ./internal/database/factory
 services:
   mysql-test:
     image: mariadb:10.11-jammy  # MySQL 兼容，更轻量
-    ports: ["3307:3306"]        # 避免与开发环境冲突
+    ports: ["${MYSQL_EXTERNAL_PORT}:3306"]  # 动态端口配置
     tmpfs: ["/var/lib/mysql"]   # 内存存储，测试后自动清理
     
   postgres-test:
     image: postgres:15-alpine   # Alpine 版本，镜像更小
-    ports: ["5433:5432"]        # 避免与开发环境冲突
+    ports: ["${POSTGRES_EXTERNAL_PORT}:5432"]  # 动态端口配置
     tmpfs: ["/var/lib/postgresql/data"]
     
   mailpit-test:
     image: axllent/mailpit:latest  # 现代化邮件测试工具
-    ports: ["1025:1025", "8025:8025"]
+    ports: ["${SMTP_EXTERNAL_PORT}:1025", "${MAILPIT_WEB_EXTERNAL_PORT}:8025"]
+    
+  redis-test:
+    image: redis:7-alpine       # Redis 缓存服务
+    ports: ["${REDIS_EXTERNAL_PORT}:6379"]
 ```
+
+**统一配置管理**: 所有端口配置通过 `config/test.yaml` 统一管理，避免配置重复和不一致问题。
 
 ### 手动管理测试环境
 
 ```bash
-# 启动测试服务
+# 解析配置并启动测试服务
+eval "$(go run scripts/parse-test-config.go)"
 docker-compose -f docker-compose.test.yml up -d
 
 # 查看服务状态
@@ -148,6 +155,8 @@ docker-compose -f docker-compose.test.yml logs -f
 # 清理环境
 docker-compose -f docker-compose.test.yml down -v
 ```
+
+**配置解析**: 使用 `scripts/parse-test-config.go` 从 `config/test.yaml` 解析配置并设置环境变量。
 
 ## 🔧 测试脚本详解
 
@@ -183,6 +192,8 @@ UNIT_TEST_PACKAGES=(
 **特点**:
 - 需要 Docker 环境
 - 测试三种数据库
+- 统一配置管理 (`config/test.yaml`)
+- 自动解析配置脚本 (`scripts/parse-test-config.go`)
 - 生成独立覆盖率报告
 - 完整的服务依赖测试
 

@@ -4,6 +4,7 @@ package factory_test
 
 import (
 	"gosso/internal/database/factory"
+	"gosso/utility"
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -13,10 +14,23 @@ func TestMySQLDatabaseFactory(t *testing.T) {
 	Convey("MySQL 数据库工厂测试", t, func() {
 
 		Convey("创建 MySQL Dialector", func() {
+			// 使用 utility 辅助方法获取 MySQL 配置
+			driver, dsn, _ := utility.GetTestMySQLConfig()
+			So(driver, ShouldNotBeEmpty)
+			So(dsn, ShouldNotBeEmpty)
+
 			dbFactory := factory.NewDatabaseFactory()
 			So(dbFactory, ShouldNotBeNil)
 
-			dialector := dbFactory.CreateDialector("mysql", "test:test@tcp(localhost:3306)/test?charset=utf8mb4&parseTime=True&loc=Local")
+			// 使用配置文件中的 MySQL 连接字符串
+			dialector := dbFactory.CreateDialector(driver, dsn)
+			So(dialector, ShouldNotBeNil)
+			So(dialector.Name(), ShouldEqual, "mysql")
+		})
+
+		Convey("使用 utility 辅助方法创建 MySQL Dialector", func() {
+			// 直接使用 utility 提供的 Dialector
+			dialector := utility.GetTestMySQLDialector()
 			So(dialector, ShouldNotBeNil)
 			So(dialector.Name(), ShouldEqual, "mysql")
 		})

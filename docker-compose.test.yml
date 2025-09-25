@@ -4,11 +4,11 @@ services:
     image: mariadb:10.11-jammy
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: gosso_test
-      MYSQL_USER: gosso
-      MYSQL_PASSWORD: gosso123
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-gosso_test}
+      MYSQL_USER: ${MYSQL_USER:-gosso}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-gosso123}
     ports:
-      - "3308:3306"  # Test 环境端口 (默认端口+2)
+      - "${MYSQL_EXTERNAL_PORT:-3308}:3306"
     tmpfs:
       - /var/lib/mysql  # 使用内存存储，测试后自动清理
     command: --default-authentication-plugin=mysql_native_password
@@ -21,15 +21,15 @@ services:
   postgres-test:
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: gosso_test
-      POSTGRES_USER: gosso
-      POSTGRES_PASSWORD: gosso123
+      POSTGRES_DB: ${POSTGRES_DB:-gosso_test}
+      POSTGRES_USER: ${POSTGRES_USER:-gosso}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gosso123}
     ports:
-      - "5434:5432"  # Test 环境端口 (默认端口+2)
+      - "${POSTGRES_EXTERNAL_PORT:-5434}:5432"
     tmpfs:
       - /var/lib/postgresql/data  # 使用内存存储
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gosso"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gosso}"]
       timeout: 5s
       retries: 10
 
@@ -37,8 +37,8 @@ services:
   mailpit-test:
     image: axllent/mailpit:latest
     ports:
-      - "1027:1025"  # SMTP Test 环境端口 (默认端口+2)
-      - "8027:8025"  # Web UI Test 环境端口 (默认端口+2)
+      - "${SMTP_EXTERNAL_PORT:-1027}:1025"  # SMTP 端口
+      - "${MAILPIT_WEB_EXTERNAL_PORT:-8027}:8025"  # Web UI 端口
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8025"]
       timeout: 5s
@@ -48,7 +48,7 @@ services:
   redis-test:
     image: redis:7-alpine
     ports:
-      - "6381:6379"  # Test 环境端口 (默认端口+2)
+      - "${REDIS_EXTERNAL_PORT:-6381}:6379"
     tmpfs:
       - /data
     healthcheck:

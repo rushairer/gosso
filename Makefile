@@ -20,6 +20,38 @@ dev.%:
 	fi
 	DB=$* air -c .air.toml
 	
+# Docker 环境管理
+docker-dev-up:
+	@echo "🚀 启动开发环境..."
+	@eval $$(go run scripts/parse-config.go development) && docker-compose -f docker-compose.development.yml up -d
+	@echo "✅ 开发环境已启动"
+	@echo "🌐 应用地址: http://localhost:$${APP_PORT:-8081}"
+	@echo "📧 Mailpit Web UI: http://localhost:$${MAILPIT_WEB_EXTERNAL_PORT:-8026}"
+
+docker-dev-down:
+	@echo "🛑 停止开发环境..."
+	@eval $$(go run scripts/parse-config.go development) && docker-compose -f docker-compose.development.yml down
+	@echo "✅ 开发环境已停止"
+
+docker-dev-logs:
+	@echo "📋 查看开发环境日志..."
+	@eval $$(go run scripts/parse-config.go development) && docker-compose -f docker-compose.development.yml logs -f
+
+docker-prod-up:
+	@echo "🚀 启动生产环境..."
+	@eval $$(go run scripts/parse-config.go production) && docker-compose -f docker-compose.production.yml up -d
+	@echo "✅ 生产环境已启动"
+	@echo "🌐 应用地址: http://localhost:$${APP_PORT:-8080}"
+
+docker-prod-down:
+	@echo "🛑 停止生产环境..."
+	@eval $$(go run scripts/parse-config.go production) && docker-compose -f docker-compose.production.yml down
+	@echo "✅ 生产环境已停止"
+
+docker-prod-logs:
+	@echo "📋 查看生产环境日志..."
+	@eval $$(go run scripts/parse-config.go production) && docker-compose -f docker-compose.production.yml logs -f
+
 # 测试命令 (使用 Docker 环境)
 test: test-unit
 
@@ -53,15 +85,29 @@ clean:
 
 help:
 	@echo "Available commands:"
+	@echo ""
+	@echo "📦 Build Commands:"
 	@echo "  build                - Build postgres version (default)"
 	@echo "  build.mysql          - Build mysql version"
 	@echo "  build.postgres       - Build postgres version"
 	@echo "  build.sqlite         - Build sqlite version"
-	@echo "  run                  - Run the application"
+	@echo ""
+	@echo "🚀 Development Commands:"
+	@echo "  run                  - Run the application locally"
 	@echo "  dev                  - Start development mode with air (postgres)"
 	@echo "  dev.mysql            - Start development mode with air (mysql)"
 	@echo "  dev.postgres         - Start development mode with air (postgres)"
 	@echo "  dev.sqlite           - Start development mode with air (sqlite)"
+	@echo ""
+	@echo "🐳 Docker Environment Commands:"
+	@echo "  docker-dev-up        - Start development environment with Docker"
+	@echo "  docker-dev-down      - Stop development environment"
+	@echo "  docker-dev-logs      - View development environment logs"
+	@echo "  docker-prod-up       - Start production environment with Docker"
+	@echo "  docker-prod-down     - Stop production environment"
+	@echo "  docker-prod-logs     - View production environment logs"
+	@echo ""
+	@echo "🧪 Testing Commands:"
 	@echo "  test                 - Run unit tests (default)"
 	@echo "  test-unit            - Run unit tests only"
 	@echo "  test-integration     - Run integration tests with Docker"
@@ -71,7 +117,9 @@ help:
 	@echo "  test-legacy.mysql    - Legacy: Run tests with mysql tags"
 	@echo "  test-legacy.postgres - Legacy: Run tests with postgres tags"
 	@echo "  test-legacy.sqlite   - Legacy: Run tests with sqlite tags"
+	@echo ""
+	@echo "🧹 Utility Commands:"
 	@echo "  clean                - Clean build artifacts"
 	@echo "  help                 - Show this help message"
 
-.PHONY: default build run dev test test-unit test-integration test-all test-coverage test-clean clean help
+.PHONY: default build run dev docker-dev-up docker-dev-down docker-dev-logs docker-prod-up docker-prod-down docker-prod-logs test test-unit test-integration test-all test-coverage test-clean clean help

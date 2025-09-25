@@ -11,9 +11,9 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno/task"
 
-	"github.com/gin-gonic/gin"
 	gopipeline "github.com/rushairer/go-pipeline"
 )
 
@@ -55,6 +55,14 @@ func initTestConfig() {
 // - test_engine_postgres.go (需要 -tags postgres)
 // - test_engine_sqlite.go (需要 -tags sqlite)
 
+// GetTestSMTPConfig 获取 SMTP 测试配置
+func GetTestSMTPConfig() (host string, port int, username, password, from string) {
+	initTestConfig()
+
+	smtpConfig := config.GlobalConfig.SMTPConfig
+	return smtpConfig.Host, smtpConfig.Port, smtpConfig.Username, smtpConfig.Password, smtpConfig.From
+}
+
 func NewTestTaskPipeline(ctx context.Context) *gopipeline.Pipeline[task.Task] {
 	initTestConfig()
 
@@ -76,6 +84,11 @@ func NewTestTaskPipeline(ctx context.Context) *gopipeline.Pipeline[task.Task] {
 	return taskPipeline
 }
 
+// NewTestEngine 创建测试引擎 - 默认实现
+// NewTestDB 函数由编译标签特定的文件提供：
+// - test_engine_mysql.go (需要 -tags mysql)
+// - test_engine_postgres.go (需要 -tags postgres)
+// - test_engine_sqlite.go (需要 -tags sqlite)
 func NewTestEngine(ctx context.Context, withTask bool) *gin.Engine {
 	engine := gin.New()
 
