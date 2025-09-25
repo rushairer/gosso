@@ -244,7 +244,7 @@ docker-compose -f docker-compose.test.yml up -d
 # 服务包括:
 # - MariaDB (MySQL 兼容)
 # - PostgreSQL Alpine  
-# - MailHog (邮件测试)
+# - Mailpit (邮件测试)
 # - Redis Alpine
 ```
 

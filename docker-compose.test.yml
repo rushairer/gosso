@@ -33,9 +33,9 @@ services:
       timeout: 5s
       retries: 10
 
-  # 邮件测试服务 - MailHog (Alpine 版本)
-  mailhog-test:
-    image: mailhog/mailhog:v1.0.1
+  # 邮件测试服务 - Mailpit (Alpine 版本)
+  mailpit-test:
+    image: axllent/mailpit:latest
     ports:
       - "1025:1025"  # SMTP
       - "8025:8025"  # Web UI

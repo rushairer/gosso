@@ -128,8 +128,8 @@ services:
     ports: ["5433:5432"]        # 避免与开发环境冲突
     tmpfs: ["/var/lib/postgresql/data"]
     
-  mailhog-test:
-    image: mailhog/mailhog:v1.0.1  # 稳定版本
+  mailpit-test:
+    image: axllent/mailpit:latest  # 现代化邮件测试工具
     ports: ["1025:1025", "8025:8025"]
 ```
 

@@ -9,8 +9,8 @@ func TestEmailService_SendVerificationCode(t *testing.T) {
 	emailService := NewEmailService(
 		"localhost",           // host
 		1025,                  // port
-		"",                    // username (MailHog 不需要认证)
-		"",                    // password (MailHog 不需要认证)
+		"",                    // username (Mailpit 不需要认证)
+		"",                    // password (Mailpit 不需要认证)
 		"noreply@gosso.local", // from
 	)
 

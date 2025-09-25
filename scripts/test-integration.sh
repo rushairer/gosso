@@ -178,7 +178,7 @@ else
     exit 1
 fi
 
-# 显示 MailHog Web UI 地址
-log_info "📧 MailHog Web UI: http://localhost:8025"
+# 显示 Mailpit Web UI 地址
+log_info "📧 Mailpit Web UI: http://localhost:8025"
 
 log_success "集成测试完成！"

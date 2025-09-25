@@ -2,7 +2,7 @@
 
 ## 概述
 
-GoSSO 项目已经集成了完整的邮件发送功能，支持发送测试邮件和验证码邮件。默认配置为使用本地 MailHog 进行邮件测试。
+GoSSO 项目已经集成了完整的邮件发送功能，支持发送测试邮件和验证码邮件。默认配置为使用本地 Mailpit 进行邮件测试。
 
 ## 功能特性
 
@@ -10,7 +10,7 @@ GoSSO 项目已经集成了完整的邮件发送功能，支持发送测试邮�
 - ✅ 美观的 HTML 邮件模板
 - ✅ 验证码邮件发送
 
-- ✅ MailHog 本地测试支持
+- ✅ Mailpit 本地测试支持
 - ✅ 可配置的 SMTP 设置
 
 ## 配置说明
@@ -23,24 +23,27 @@ GoSSO 项目已经集成了完整的邮件发送功能，支持发送测试邮�
 smtp:
     host: localhost        # SMTP 服务器地址
     port: 1025            # SMTP 端口
-    username: ""          # SMTP 用户名（MailHog 不需要）
-    password: ""          # SMTP 密码（MailHog 不需要）
+    username: ""          # SMTP 用户名（Mailpit 不需要）
+    password: ""          # SMTP 密码（Mailpit 不需要）
     from: "noreply@gosso.local"  # 发件人邮箱
 ```
 
-### MailHog 设置
+### Mailpit 设置
 
-MailHog 是一个用于测试的 SMTP 服务器，默认配置：
+Mailpit 是一个现代化的邮件测试工具，默认配置：
 - SMTP 端口: 1025
 - Web 界面: http://localhost:8025
 
 ## 使用方法
 
-### 1. 启动 MailHog
+### 1. 启动 Mailpit
 
 ```bash
-# 启动 MailHog（后台运行）
-mailhog &
+# 使用 Docker 启动 Mailpit（推荐）
+docker run -d --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit:latest
+
+# 或者使用 docker-compose
+docker-compose -f docker-compose.test.yml up -d mailpit-test
 ```
 
 ### 2. 构建项目
@@ -64,7 +67,7 @@ go build -o bin/gosso ./cmd
 
 ### 5. 查看邮件
 
-访问 MailHog Web 界面查看发送的邮件：
+访问 Mailpit Web 界面查看发送的邮件：
 ```
 http://localhost:8025
 ```
@@ -147,12 +150,12 @@ smtp:
 ### 常见问题
 
 1. **邮件发送失败**
-   - 检查 MailHog 是否正在运行
+   - 检查 Mailpit 是否正在运行
    - 确认 SMTP 配置是否正确
    - 查看应用日志获取详细错误信息
 
-2. **MailHog 无法访问**
-   - 确认 MailHog 已启动：`ps aux | grep mailhog`
+2. **Mailpit 无法访问**
+   - 确认 Mailpit 容器已启动：`docker ps | grep mailpit`
    - 检查端口是否被占用：`lsof -i :8025`
 
 3. **配置文件找不到**
@@ -178,7 +181,7 @@ smtp:
 ## 总结
 
 GoSSO 的邮件发送功能已经完全配置好，可以：
-1. 在开发环境中使用 MailHog 进行测试
+1. 在开发环境中使用 Mailpit 进行测试
 2. 通过命令行工具快速测试邮件发送
 3. 在应用中集成邮件发送功能
 4. 轻松切换到生产环境的 SMTP 服务器
