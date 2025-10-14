@@ -18,12 +18,12 @@ database:
         mysql:
             name: mysql
             driver: mysql
-            dsn: gosso:gosso123@tcp(127.0.0.1:3307)/gosso_dev?charset=utf8mb4&parseTime=True&loc=Local
+            dsn: gosso:gosso123@tcp(postgres:3306)/gosso_dev?charset=utf8mb4&parseTime=True&loc=Local
             log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
         postgres:
             name: postgres
             driver: pgx
-            dsn: host=127.0.0.1 user=gosso password=gosso123 dbname=gosso_dev port=5433 sslmode=disable TimeZone=Asia/Shanghai search_path=development
+            dsn: host=postgres user=gosso password=gosso123 dbname=gosso_dev port=5432 sslmode=disable TimeZone=Asia/Shanghai search_path=development
             log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
 task_pipeline:
     flush_size: 32

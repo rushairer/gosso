@@ -5,13 +5,14 @@ tmp_dir = "tmp"
   DEFAULT = "./cmd"
   OUTPUT = "./bin/gouno"
   DB = "postgres"
+  ENV = "development"
 
 [build]
-  args_bin = ["web", "--config", "./config/development.yaml", "--address", "0.0.0.0", "--port", "${APP_PORT:-8081}"]
+  args_bin = ["web", "--config_path", "./config", "--env", "${ENV:-development}", "--address", "0.0.0.0", "--port", "${APP_PORT:-8081}"]
   bin = "${OUTPUT:-./bin/gouno}"
-  cmd = "go build -tags ${DB:-postgres} -buildvcs=false -gcflags \"-N -l\" -o ${OUTPUT:-./bin/gouno} ./cmd/gouno"
+  cmd = "go build -tags ${DB:-postgres} -buildvcs=false -gcflags \"-N -l\" -o ${OUTPUT:-./bin/gouno} ./cmd"
   delay = 1000
-  exclude_dir = ["assets", "tmp", "vendor", "testdata", "bin"]
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", "bin", "node_modules", "data", "log", "scripts", "test", "docs",".vscode",".husky",".github", ".githooks", ".codebuddy"]
   exclude_file = ["README.md"]
   exclude_regex = ["_test.go"]
   exclude_unchanged = false
