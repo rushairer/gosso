@@ -13,8 +13,8 @@ require (
 	github.com/mojocn/base64Captcha v1.3.8
 	github.com/onsi/ginkgo/v2 v2.25.3
 	github.com/onsi/gomega v1.38.2
-	github.com/rushairer/go-pipeline v1.0.0
-	github.com/rushairer/gouno v0.2.5
+	github.com/rushairer/go-pipeline/v2 v2.2.2
+	github.com/rushairer/gouno v0.3.0
 	github.com/smartystreets/goconvey v1.8.1
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1

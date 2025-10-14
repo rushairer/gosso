@@ -17,12 +17,16 @@ func TestSendEmailCodeTask(t *testing.T) {
 
 	Convey("将发送邮箱验证码的任务添加到任务管道中", t, func() {
 		taskPipeline := utility.NewTestTaskPipeline(ctx)
-		err := taskPipeline.Add(ctx, account.NewSendEmailCodeTask("test@example.com"))
-		So(err, ShouldBeNil)
+		dataChan := taskPipeline.DataChan()
+		dataChan <- account.NewSendEmailCodeTask("test@example.com")
 
-		Convey("等待2秒后结束", func() {
-			<-ctx.Done()
-			So(true, ShouldBeTrue)
+		Convey("等待结束", func() {
+			select {
+			case <-ctx.Done():
+				So(true, ShouldBeTrue)
+			case _, ok := <-taskPipeline.Done():
+				So(ok, ShouldBeFalse)
+			}
 		})
 
 	})

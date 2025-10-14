@@ -14,7 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno/task"
 
-	gopipeline "github.com/rushairer/go-pipeline"
+	gopipeline "github.com/rushairer/go-pipeline/v2"
 )
 
 // projectRoot attempts to find the project root by looking for go.mod file.
@@ -63,7 +63,7 @@ func GetTestSMTPConfig() (host string, port int, username, password, from string
 	return smtpConfig.Host, smtpConfig.Port, smtpConfig.Username, smtpConfig.Password, smtpConfig.From
 }
 
-func NewTestTaskPipeline(ctx context.Context) *gopipeline.Pipeline[task.Task] {
+func NewTestTaskPipeline(ctx context.Context) *gopipeline.StandardPipeline[task.Task] {
 	initTestConfig()
 
 	taskPipeline := task.NewTaskPipeline(
@@ -94,7 +94,7 @@ func NewTestEngine(ctx context.Context, withTask bool) *gin.Engine {
 
 	gormDB := NewTestDB()
 
-	var taskPipeline *gopipeline.Pipeline[task.Task]
+	var taskPipeline *gopipeline.StandardPipeline[task.Task]
 	if withTask {
 		taskPipeline = NewTestTaskPipeline(ctx)
 	}

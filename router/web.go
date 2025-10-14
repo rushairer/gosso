@@ -11,13 +11,13 @@ import (
 	"github.com/rushairer/gouno/task"
 
 	"github.com/gin-gonic/gin"
-	gopipeline "github.com/rushairer/go-pipeline"
+	gopipeline "github.com/rushairer/go-pipeline/v2"
 	"github.com/rushairer/gouno"
 	gounoMiddleware "github.com/rushairer/gouno/middleware"
 	"gorm.io/gorm"
 )
 
-func RegisterWebRouter(config config.GoUnoConfig, engine *gin.Engine, db *gorm.DB, taskPipeline *gopipeline.Pipeline[task.Task]) {
+func RegisterWebRouter(config config.GoUnoConfig, engine *gin.Engine, db *gorm.DB, taskPipeline *gopipeline.StandardPipeline[task.Task]) {
 	registerWebTestRouter(engine)
 	registerWebIndexRouter(engine)
 	registerAccountRouter(engine, db, taskPipeline)
@@ -56,7 +56,7 @@ func registerWebIndexRouter(engine *gin.Engine) {
 	})
 }
 
-func registerAccountRouter(engine *gin.Engine, db *gorm.DB, taskPipeline *gopipeline.Pipeline[task.Task]) {
+func registerAccountRouter(engine *gin.Engine, db *gorm.DB, taskPipeline *gopipeline.StandardPipeline[task.Task]) {
 	accountGroup := engine.Group("/account")
 	{
 		accountService := account.NewAccountService(db)

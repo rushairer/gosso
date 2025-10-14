@@ -18,7 +18,7 @@ import (
 	"github.com/rushairer/gouno/task"
 
 	"github.com/gin-gonic/gin"
-	gopipeline "github.com/rushairer/go-pipeline"
+	gopipeline "github.com/rushairer/go-pipeline/v2"
 	gounoMiddleware "github.com/rushairer/gouno/middleware"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"

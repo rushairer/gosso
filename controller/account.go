@@ -9,14 +9,14 @@ import (
 	accountTask "gosso/internal/task/account"
 
 	"github.com/gin-gonic/gin"
-	gopipeline "github.com/rushairer/go-pipeline"
+	gopipeline "github.com/rushairer/go-pipeline/v2"
 	"github.com/rushairer/gouno"
 )
 
 type AccountController struct {
 	accountService *account.AccountService
 
-	taskPipeline *gopipeline.Pipeline[task.Task]
+	taskPipeline *gopipeline.StandardPipeline[task.Task]
 }
 
 type EmailRegisterRequest struct {
@@ -27,7 +27,7 @@ type PhoneRegisterRequest struct {
 	Number string `json:"number" binding:"required"`
 }
 
-func NewAccountController(accountService *account.AccountService, taskPipeline *gopipeline.Pipeline[task.Task]) *AccountController {
+func NewAccountController(accountService *account.AccountService, taskPipeline *gopipeline.StandardPipeline[task.Task]) *AccountController {
 	return &AccountController{
 		accountService: accountService,
 		taskPipeline:   taskPipeline,
@@ -46,10 +46,8 @@ func (c *AccountController) EmailRegister(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
 		return
 	}
-	if err := c.taskPipeline.Add(ctx, accountTask.NewSendEmailCodeTask(req.Address)); err != nil {
-		ctx.JSON(http.StatusOK, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to add email task: "+err.Error()))
-		return
-	}
+	dataChan := c.taskPipeline.DataChan()
+	dataChan <- accountTask.NewSendEmailCodeTask(req.Address)
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(""))
 }
 
@@ -65,9 +63,7 @@ func (c *AccountController) PhoneRegister(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
 		return
 	}
-	if err := c.taskPipeline.Add(ctx, accountTask.NewSendPhoneCodeTask(req.Number)); err != nil {
-		ctx.JSON(http.StatusOK, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to add phone task: "+err.Error()))
-		return
-	}
+	dataChan := c.taskPipeline.DataChan()
+	dataChan <- accountTask.NewSendPhoneCodeTask(req.Number)
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(""))
 }
