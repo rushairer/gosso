@@ -13,7 +13,7 @@ tmp_dir = "tmp"
   cmd = "go build -tags ${DB:-postgres} -buildvcs=false -gcflags \"-N -l\" -o ${OUTPUT:-./bin/gouno} ./cmd"
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "bin", "node_modules", "data", "log", "scripts", "test", "docs",".vscode",".husky",".github", ".githooks", ".codebuddy"]
-  exclude_file = ["README.md"]
+  exclude_file = ["README.md", "coverage-unit.html", "coverage-unit.out"]
   exclude_regex = ["_test.go"]
   exclude_unchanged = false
   follow_symlink = false
