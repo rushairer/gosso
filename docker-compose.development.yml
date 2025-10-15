@@ -6,10 +6,9 @@ services:
     ports:
       - "${APP_PORT:-8081}:${APP_PORT:-8081}"
     environment:
-      - GIN_MODE=debug
-      - GOSSO_ENV=development
-      - APP_PORT=${APP_PORT:-8081}
-      - CGO_ENABLED=0
+      - ENV=development
+      - DB=postgres
+      - DEBUG=true
     volumes:
       - .:/app
       - go-mod-cache:/go/pkg/mod

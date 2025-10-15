@@ -1,14 +1,9 @@
 root = "."
 testdata_dir = "testdata"
 tmp_dir = "tmp"
-[env]
-  DEFAULT = "./cmd"
-  OUTPUT = "./bin/gouno"
-  DB = "postgres"
-  ENV = "development"
 
 [build]
-  args_bin = ["web", "--config_path", "./config", "--env", "${ENV:-development}", "--address", "0.0.0.0", "--port", "${APP_PORT:-8081}"]
+  args_bin = ["web", "--config_path", "./config", "--env", "${ENV:-development}", "--address", "0.0.0.0", "--port", "${APP_PORT:-8081}", "--debug", "${DEBUG:-true}"]
   bin = "${OUTPUT:-./bin/gouno}"
   cmd = "go build -tags ${DB:-postgres} -buildvcs=false -gcflags \"-N -l\" -o ${OUTPUT:-./bin/gouno} ./cmd"
   delay = 1000

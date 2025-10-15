@@ -86,6 +86,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	// init gin
 	engine := gin.New()
 	engine.Use(
+		gin.Logger(),
 		middleware.RecoveryMiddleware(),
 		middleware.TimeoutMiddleware(config.GlobalConfig.WebServerConfig.RequestTimeout),
 		gounoMiddleware.RateLimitMiddleware(config.GlobalConfig.WebServerConfig.RateLimitPerMinute, time.Minute),

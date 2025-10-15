@@ -18,7 +18,7 @@ database:
         mysql:
             name: mysql
             driver: mysql
-            dsn: gosso:gosso123@tcp(postgres:3306)/gosso_dev?charset=utf8mb4&parseTime=True&loc=Local
+            dsn: gosso:gosso123@tcp(mysql:3306)/gosso_dev?charset=utf8mb4&parseTime=True&loc=Local
             log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
         postgres:
             name: postgres
@@ -30,8 +30,8 @@ task_pipeline:
     buffer_size: 64
     flush_interval: 1s
 smtp:
-    host: localhost
-    port: 1026
+    host: mailpit
+    port: 1025
     username: ""
     password: ""
     from: "noreply@gosso.local"
