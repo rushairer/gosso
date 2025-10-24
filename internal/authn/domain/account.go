@@ -23,15 +23,15 @@ const (
 // - PrimaryCredentialID 用于快速定位主联系方式/主凭证（例如用于发送重置邮件或通知）。
 // - Metadata 用于存放可扩展的业务字段（在 Postgres 中建议为 jsonb）。
 type Account struct {
-	ID                  uuid.UUID              `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"` // 主键
-	TenantID            *uuid.UUID             `json:"tenant_id,omitempty" gorm:"type:uuid;index:idx_account_tenant"` // 多租户 ID，可选
+	ID                  uuid.UUID              `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`                        // 主键
+	TenantID            *uuid.UUID             `json:"tenant_id,omitempty" gorm:"type:uuid;index:idx_account_tenant"`                   // 多租户 ID，可选
 	PrimaryCredentialID *uuid.UUID             `json:"primary_credential_id,omitempty" gorm:"type:uuid;index:idx_account_primary_cred"` // 主凭证 FK（可为空）
-	Status              AccountStatus          `json:"status" gorm:"type:varchar(32);index:idx_account_status"` // 账号状态
-	CreatedAt           time.Time              `json:"created_at" gorm:"autoCreateTime"`                       // 创建时间
-	UpdatedAt           time.Time              `json:"updated_at" gorm:"autoUpdateTime"`                       // 更新时间
-	DeletedAt           *time.Time             `json:"deleted_at,omitempty" gorm:"index:idx_account_deleted"`  // 软删除时间（可为空）
-	LastLoginAt         *time.Time             `json:"last_login_at,omitempty" gorm:"index:idx_account_last_login"` // 最后登录时间
-	Metadata            map[string]interface{} `json:"metadata,omitempty" gorm:"type:jsonb"`                   // 可扩展元数据（jsonb）
+	Status              AccountStatus          `json:"status" gorm:"type:varchar(32);index:idx_account_status"`                         // 账号状态
+	CreatedAt           time.Time              `json:"created_at" gorm:"autoCreateTime"`                                                // 创建时间
+	UpdatedAt           time.Time              `json:"updated_at" gorm:"autoUpdateTime"`                                                // 更新时间
+	DeletedAt           *time.Time             `json:"deleted_at,omitempty" gorm:"index:idx_account_deleted"`                           // 软删除时间（可为空）
+	LastLoginAt         *time.Time             `json:"last_login_at,omitempty" gorm:"index:idx_account_last_login"`                     // 最后登录时间
+	Metadata            map[string]interface{} `json:"metadata,omitempty" gorm:"type:jsonb"`                                            // 可扩展元数据（jsonb）
 }
 
 // TableName 指定 GORM 使用的表名
