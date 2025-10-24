@@ -13,7 +13,7 @@ database:
         postgres:
             name: postgres
             driver: pgx
-            dsn: host=postgres user=gosso password=gosso123 dbname=gosso_dev port=5432 sslmode=disable TimeZone=Asia/Shanghai search_path=development
+            dsn: host=postgres user=gosso password=gosso123 dbname=gosso_dev port=5432 sslmode=disable TimeZone=Asia/Shanghai search_path=public
             log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
 task_pipeline:
     flush_size: 32

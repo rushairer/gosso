@@ -3,22 +3,18 @@ OUTPUT:=./bin/gouno
 
 default: build
 
-build: build.postgres
-
-build.%:
-	go build -tags $* -buildvcs=false -gcflags "-N -l" -o $(OUTPUT) $(DEFAULT)
+build:
+	go build -buildvcs=false -gcflags "-N -l" -o $(OUTPUT) $(DEFAULT)
 	@echo "Built $* version: $(OUTPUT)"
 
 run:
 	$(OUTPUT) web
 
-dev: dev.postgres
-
-dev.%:
+dev:
 	@if ! command -v air &> /dev/null; then \
 		go install github.com/air-verse/air@latest; \
 	fi
-	DB=$* air -c .air.toml
+	air -c .air.toml
 	
 # Docker 环境管理
 docker-dev-up:
