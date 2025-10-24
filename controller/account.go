@@ -5,8 +5,8 @@ import (
 
 	"github.com/rushairer/gouno/task"
 
-	"gosso/internal/service/account"
-	accountTask "gosso/internal/task/account"
+	"gosso/internal/common/service/account"
+	accountTask "gosso/internal/common/task/account"
 
 	"github.com/gin-gonic/gin"
 	gopipeline "github.com/rushairer/go-pipeline/v2"

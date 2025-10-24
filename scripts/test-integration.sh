@@ -118,9 +118,7 @@ echo ""
 
 # 数据库测试配置 (使用编译标签)
 DATABASES=(
-    "mysql"
     "postgres" 
-    "sqlite"
 )
 
 # 设置测试环境变量
@@ -136,9 +134,7 @@ for db_type in "${DATABASES[@]}"; do
     
     # 转换为显示名称
     case $db_type in
-        "mysql") db_display="MySQL" ;;
         "postgres") db_display="PostgreSQL" ;;
-        "sqlite") db_display="SQLite" ;;
         *) db_display="$db_type" ;;
     esac
     
@@ -186,14 +182,12 @@ if [ "$OVERALL_SUCCESS" = true ]; then
     echo ""
     log_info "📊 测试环境信息:"
     echo "  🐳 Docker Compose: docker-compose.test.yml (配置来源: config/test.yaml)"
-    echo "  🗄️  MySQL: 127.0.0.1:${MYSQL_EXTERNAL_PORT}"
     echo "  🐘 PostgreSQL: 127.0.0.1:${POSTGRES_EXTERNAL_PORT}"
     echo "  📧 Mailpit SMTP: 127.0.0.1:${SMTP_EXTERNAL_PORT}"
     echo "  📧 Mailpit Web UI: http://localhost:${MAILPIT_WEB_EXTERNAL_PORT}"
     echo "  🔴 Redis: 127.0.0.1:${REDIS_EXTERNAL_PORT}"
     echo ""
     log_info "💡 统一配置源: config/test.yaml"
-    log_info "🏗️  编译标签分离: mysql, postgres, sqlite"
     
 else
     log_error "❌ 部分集成测试失败"

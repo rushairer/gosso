@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -40,20 +39,6 @@ type Config struct {
 	WebServer WebServerConfig `yaml:"web_server"`
 	Database  DatabaseConfig  `yaml:"database"`
 	SMTP      SMTPConfig      `yaml:"smtp"`
-}
-
-func parseMySQLDSN(dsn string) (user, password, host string, port int, database string) {
-	// user:password@tcp(host:port)/database?params
-	re := regexp.MustCompile(`([^:]+):([^@]+)@tcp\(([^:]+):(\d+)\)/([^?]+)`)
-	matches := re.FindStringSubmatch(dsn)
-	if len(matches) == 6 {
-		user = matches[1]
-		password = matches[2]
-		host = matches[3]
-		port, _ = strconv.Atoi(matches[4])
-		database = matches[5]
-	}
-	return
 }
 
 func parsePostgresDSN(dsn string) (user, password, host string, port int, database string) {
@@ -104,18 +89,11 @@ func main() {
 		log.Fatalf("❌ 解析配置文件失败: %v", err)
 	}
 
-	// 解析 MySQL 配置
-	mysqlUser, mysqlPassword, _, mysqlPort, mysqlDatabase := parseMySQLDSN(config.Database.Drivers["mysql"].DSN)
-
 	// 解析 PostgreSQL 配置
 	pgUser, pgPassword, _, pgPort, pgDatabase := parsePostgresDSN(config.Database.Drivers["postgres"].DSN)
 
 	// 输出环境变量
 	fmt.Printf("export APP_PORT=%d\n", config.WebServer.Port)
-	fmt.Printf("export MYSQL_DATABASE=%s\n", mysqlDatabase)
-	fmt.Printf("export MYSQL_USER=%s\n", mysqlUser)
-	fmt.Printf("export MYSQL_PASSWORD=%s\n", mysqlPassword)
-	fmt.Printf("export MYSQL_EXTERNAL_PORT=%d\n", mysqlPort)
 
 	fmt.Printf("export POSTGRES_DB=%s\n", pgDatabase)
 	fmt.Printf("export POSTGRES_USER=%s\n", pgUser)
@@ -151,7 +129,6 @@ func main() {
 	// 输出配置信息到 stderr
 	fmt.Fprintf(os.Stderr, "✅ %s 环境配置解析完成:\n", strings.ToUpper(env))
 	fmt.Fprintf(os.Stderr, "  🌐 应用端口: %d\n", config.WebServer.Port)
-	fmt.Fprintf(os.Stderr, "  🗄️  MySQL: 外部端口 %d -> 内部端口 3306\n", mysqlPort)
 	fmt.Fprintf(os.Stderr, "  🐘 PostgreSQL: 外部端口 %d -> 内部端口 5432\n", pgPort)
 	fmt.Fprintf(os.Stderr, "  📧 SMTP: 外部端口 %d -> 内部端口 1025\n", config.SMTP.Port)
 	fmt.Fprintf(os.Stderr, "  🌐 Mailpit Web: 外部端口 %d -> 内部端口 8025\n", mailpitWebPort)

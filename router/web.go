@@ -3,7 +3,7 @@ package router
 import (
 	"gosso/config"
 	"gosso/controller"
-	"gosso/internal/service/account"
+	"gosso/internal/common/service/account"
 	"gosso/middleware"
 	"net/http"
 	"time"

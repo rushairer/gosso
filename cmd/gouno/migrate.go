@@ -2,7 +2,6 @@ package gouno
 
 import (
 	"gosso/config"
-	"gosso/internal/database"
 	"log"
 
 	"github.com/spf13/cobra"
@@ -41,20 +40,20 @@ func startMigrate(cmd *cobra.Command, args []string) {
 	if defaultDriver == nil {
 		log.Fatalf("default driver not found")
 	}
-	gormDB := database.NewGormDB(defaultDriver.Driver, defaultDriver.DSN, defaultDriver.LogLevel)
+	//gormDB := database.NewGormDB(defaultDriver.Driver, defaultDriver.DSN, defaultDriver.LogLevel)
 
 	clean := cmd.Flag("clean").Value.String() == "true"
 	if clean {
-		if err := database.CleanMigrate(gormDB); err != nil {
-			log.Fatalf("clean tables failed, err: %v", err)
-		} else {
-			log.Println("clean tables success")
-		}
+		// if err := database.CleanMigrate(gormDB); err != nil {
+		// 	log.Fatalf("clean tables failed, err: %v", err)
+		// } else {
+		// 	log.Println("clean tables success")
+		// }
 	} else {
-		if err := database.AutoMigrate(gormDB); err != nil {
-			log.Fatalf("auto migrate failed, err: %v", err)
-		} else {
-			log.Println("auto migrate success")
-		}
+		// if err := database.AutoMigrate(gormDB); err != nil {
+		// 	log.Fatalf("auto migrate failed, err: %v", err)
+		// } else {
+		// 	log.Println("auto migrate success")
+		// }
 	}
 }

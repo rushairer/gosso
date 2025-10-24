@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"gosso/config"
-	"gosso/internal/database"
+	"gosso/internal/infra/database"
 	"gosso/middleware"
 	"gosso/router"
 

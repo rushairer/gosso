@@ -1,8 +1,8 @@
 package middleware
 
 import (
-	"gosso/internal/context"
-	"gosso/internal/service/auth"
+	"gosso/internal/common/context"
+	"gosso/internal/common/service/auth"
 
 	"github.com/gin-gonic/gin"
 )

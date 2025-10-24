@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"gosso/internal/service/captcha"
+	"gosso/internal/common/service/captcha"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"

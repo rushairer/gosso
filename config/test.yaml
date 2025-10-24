@@ -8,22 +8,12 @@ web_server:
     request_timeout: 10s
     rate_limit_per_minute: 120
 database:
-    default: sqlite
+    default: postgres
     drivers:
-        sqlite:
-            name: sqlite
-            driver: sqlite3
-            dsn: ":memory:"
-            log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
-        mysql:
-            name: mysql
-            driver: mysql
-            dsn: gosso:gosso123@tcp(127.0.0.1:3308)/gosso_test?charset=utf8mb4&parseTime=True&loc=Local
-            log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
         postgres:
             name: postgres
             driver: pgx
-            dsn: host=127.0.0.1 user=gosso password=gosso123 dbname=gosso_test port=5434 sslmode=disable TimeZone=Asia/Shanghai
+            dsn: host=postgres user=gosso password=gosso123 dbname=gosso_dev port=5432 sslmode=disable TimeZone=Asia/Shanghai search_path=development
             log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
 task_pipeline:
     flush_size: 32

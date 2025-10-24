@@ -5,7 +5,7 @@ tmp_dir = "tmp"
 [build]
   args_bin = ["web", "--config_path", "./config", "--env", "${ENV:-development}", "--address", "0.0.0.0", "--port", "${APP_PORT:-8081}", "--debug", "${DEBUG:-true}"]
   bin = "${OUTPUT:-./bin/gouno}"
-  cmd = "go build -tags ${DB:-postgres} -buildvcs=false -gcflags \"-N -l\" -o ${OUTPUT:-./bin/gouno} ./cmd"
+  cmd = "go build -buildvcs=false -gcflags \"-N -l\" -o ${OUTPUT:-./bin/gouno} ./cmd"
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "bin", "node_modules", "data", "log", "scripts", "test", "docs",".vscode",".husky",".github", ".githooks", ".codebuddy"]
   exclude_file = ["README.md", "coverage-unit.html", "coverage-unit.out"]

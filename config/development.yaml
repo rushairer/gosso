@@ -10,16 +10,6 @@ web_server:
 database:
     default: postgres
     drivers:
-        sqlite:
-            name: sqlite
-            driver: sqlite3
-            dsn: ./data/gosso_development.db
-            log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
-        mysql:
-            name: mysql
-            driver: mysql
-            dsn: gosso:gosso123@tcp(mysql:3306)/gosso_dev?charset=utf8mb4&parseTime=True&loc=Local
-            log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
         postgres:
             name: postgres
             driver: pgx

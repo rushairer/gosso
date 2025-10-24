@@ -1,22 +1,4 @@
 services:
-  # 测试数据库 - MySQL (使用更轻量的 MariaDB Alpine)
-  mysql-test:
-    image: mariadb:10.11-jammy
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-gosso_test}
-      MYSQL_USER: ${MYSQL_USER:-gosso}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-gosso123}
-    ports:
-      - "${MYSQL_EXTERNAL_PORT:-3308}:3306"
-    tmpfs:
-      - /var/lib/mysql  # 使用内存存储，测试后自动清理
-    command: --default-authentication-plugin=mysql_native_password
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      timeout: 5s
-      retries: 10
-
   # 测试数据库 - PostgreSQL (Alpine 版本)
   postgres-test:
     image: postgres:15-alpine
