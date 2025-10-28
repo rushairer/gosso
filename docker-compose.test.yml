@@ -1,0 +1,43 @@
+services:
+  # 测试数据库 - PostgreSQL (Alpine 版本)
+  postgres-test:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gosso_test}
+      POSTGRES_USER: ${POSTGRES_USER:-gosso}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gosso123}
+    ports:
+      - "${POSTGRES_EXTERNAL_PORT:-5434}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data  # 使用内存存储
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gosso}"]
+      timeout: 5s
+      retries: 10
+
+  # 邮件测试服务 - Mailpit (Alpine 版本)
+  mailpit-test:
+    image: axllent/mailpit:latest
+    ports:
+      - "${SMTP_EXTERNAL_PORT:-1027}:1025"  # SMTP 端口
+      - "${MAILPIT_WEB_EXTERNAL_PORT:-8027}:8025"  # Web UI 端口
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8025"]
+      timeout: 5s
+      retries: 5
+    
+  # Redis 测试服务 (Alpine 版本)
+  redis-test:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_EXTERNAL_PORT:-6381}:6379"
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      timeout: 5s
+      retries: 5
+
+networks:
+  default:
+    name: gosso-test-network
