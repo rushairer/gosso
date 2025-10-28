@@ -36,6 +36,9 @@ docker-dev-logs:
 	@echo "📋 查看开发环境日志..."
 	@eval $$(go run scripts/parse-config.go development) && docker-compose -f docker-compose.development.yml logs -f
 
+docker-dev:
+	docker exec -it gosso-gosso-1 sh
+
 # 环境配置生成命令
 env-dev:
 	@./scripts/generate-env.sh development
@@ -64,6 +67,7 @@ help:
 	@echo ""
 	@echo "🐳 Docker Environment Commands:"
 	@echo "  docker-dev-up        - Start development environment with Docker"
+	@echo "  docker-dev           - Enter development environment with Docker"
 	@echo "  docker-dev-down      - Stop development environment"
 	@echo "  docker-dev-logs      - View development environment logs"
 	@echo ""
@@ -76,4 +80,4 @@ help:
 	@echo "🆘 Help Commands:"
 	@echo "  help                 - Show this help message"
 
-.PHONY: default build run dev test docker-dev-up docker-dev-down docker-dev-logs env-dev env-test env-prod env-all help
+.PHONY: default build run dev test docker-dev-up docker-dev docker-dev-down docker-dev-logs env-dev env-test env-prod env-all help
