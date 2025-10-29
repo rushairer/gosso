@@ -2,7 +2,7 @@
 
 ## 概述
 
-本项目实现了统一的环境配置管理系统，以 `config/config.go` 为核心，通过 `config/environments.yaml` 定义各环境的基础设施配置，确保 `scripts/parse-config.go` 和 Docker Compose 文件之间的配置一致性。
+本项目实现了统一的环境配置管理系统，以 `config/config.go` 为核心，通过 `config/environments.yaml` 定义各环境的基础设施配置，确保 `script/parse-config.go` 和 Docker Compose 文件之间的配置一致性。
 
 ## 文件结构
 
@@ -17,7 +17,7 @@ deploy/                    # 部署配置目录（新增）
 ├── config.go             # 部署配置结构定义
 └── environments.yaml     # 环境配置定义
 
-scripts/
+script/
 ├── parse-config.go       # 配置解析脚本（重构）
 └── generate-env.sh       # 环境变量生成脚本（新增）
 
@@ -67,27 +67,105 @@ docker-compose --env-file .env.development -f docker-compose.development.yml up 
 make docker-dev-up
 ```
 
-## 环境配置说明
+## 端口映射配置
 
-### Development 环境
-- **应用端口**: 8081 (外部) -> 8080 (内部)
-- **PostgreSQL**: 5433 (外部) -> 5432 (内部)
-- **Redis**: 6380 (外部) -> 6379 (内部)
-- **Mailpit Web**: 8026 (外部) -> 8025 (内部)
-- **SMTP**: 1026 (外部) -> 1025 (内部)
+### 端口命名规则
 
-### Test 环境
-- **应用端口**: 8082 (外部) -> 8080 (内部)
-- **PostgreSQL**: 5434 (外部) -> 5432 (内部)
-- **Redis**: 6381 (外部) -> 6379 (内部), DB: 1
-- **Mailpit Web**: 8027 (外部) -> 8025 (内部)
-- **SMTP**: 1027 (外部) -> 1025 (内部)
+- **容器内端口**: `SERVICE_PORT` (如 `APP_PORT`, `POSTGRES_PORT`)
+- **宿主机端口**: `SERVICE_EXTERNAL_PORT` (如 `APP_EXTERNAL_PORT`, `POSTGRES_EXTERNAL_PORT`)
 
-### Production 环境
-- **应用端口**: 8080 (外部) -> 8080 (内部)
-- **PostgreSQL**: 5432 (外部) -> 5432 (内部)
-- **Redis**: 6379 (外部) -> 6379 (内部)
-- **Nginx**: 80 (HTTP), 443 (HTTPS)
+### 默认端口定义
+
+| 服务 | 默认端口 | 说明 |
+|------|----------|------|
+| APP | 8080 | 应用服务端口 |
+| POSTGRES | 5432 | PostgreSQL 数据库端口 |
+| REDIS | 6379 | Redis 缓存端口 |
+| SMTP | 1025 | SMTP 邮件服务端口 |
+| MAILPIT_WEB | 8025 | Mailpit Web UI 端口 |
+| NGINX_HTTP | 80 | Nginx HTTP 端口 |
+| NGINX_HTTPS | 443 | Nginx HTTPS 端口 |
+
+### 环境端口分配
+
+#### Production 环境
+外部端口 = 默认端口 (偏移 +0)
+
+| 服务 | 容器内端口 | 宿主机端口 | 环境变量 |
+|------|------------|------------|----------|
+| APP | 8080 | 8080 | `APP_PORT=8080`, `APP_EXTERNAL_PORT=8080` |
+| POSTGRES | 5432 | 5432 | `POSTGRES_PORT=5432`, `POSTGRES_EXTERNAL_PORT=5432` |
+| REDIS | 6379 | 6379 | `REDIS_PORT=6379`, `REDIS_EXTERNAL_PORT=6379` |
+| NGINX | 80/443 | 80/443 | `NGINX_HTTP_PORT=80`, `NGINX_HTTPS_PORT=443` |
+
+#### Development 环境
+外部端口 = 默认端口 + 1 (偏移 +1)
+
+| 服务 | 容器内端口 | 宿主机端口 | 环境变量 |
+|------|------------|------------|----------|
+| APP | 8080 | 8081 | `APP_PORT=8080`, `APP_EXTERNAL_PORT=8081` |
+| POSTGRES | 5432 | 5433 | `POSTGRES_PORT=5432`, `POSTGRES_EXTERNAL_PORT=5433` |
+| REDIS | 6379 | 6380 | `REDIS_PORT=6379`, `REDIS_EXTERNAL_PORT=6380` |
+| SMTP | 1025 | 1026 | `SMTP_PORT=1025`, `SMTP_EXTERNAL_PORT=1026` |
+| MAILPIT_WEB | 8025 | 8026 | `MAILPIT_WEB_PORT=8025`, `MAILPIT_WEB_EXTERNAL_PORT=8026` |
+
+#### Test 环境
+外部端口 = 默认端口 + 2 (偏移 +2)
+
+| 服务 | 容器内端口 | 宿主机端口 | 环境变量 |
+|------|------------|------------|----------|
+| APP | 8080 | 8082 | `APP_PORT=8080`, `APP_EXTERNAL_PORT=8082` |
+| POSTGRES | 5432 | 5434 | `POSTGRES_PORT=5432`, `POSTGRES_EXTERNAL_PORT=5434` |
+| REDIS | 6379 | 6381 | `REDIS_PORT=6379`, `REDIS_EXTERNAL_PORT=6381` |
+| SMTP | 1025 | 1027 | `SMTP_PORT=1025`, `SMTP_EXTERNAL_PORT=1027` |
+| MAILPIT_WEB | 8025 | 8027 | `MAILPIT_WEB_PORT=8025`, `MAILPIT_WEB_EXTERNAL_PORT=8027` |
+
+### Docker Compose 端口映射示例
+
+```yaml
+services:
+  gosso:
+    ports:
+      - "${APP_EXTERNAL_PORT:-8081}:${APP_PORT:-8080}"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:${APP_PORT:-8080}/health"]
+  
+  postgres:
+    ports:
+      - "${POSTGRES_EXTERNAL_PORT:-5433}:${POSTGRES_PORT:-5432}"
+  
+  redis:
+    ports:
+      - "${REDIS_EXTERNAL_PORT:-6380}:${REDIS_PORT:-6379}"
+```
+
+### 环境变量使用
+
+#### 在应用代码中
+```go
+// 使用容器内端口
+port := os.Getenv("APP_PORT")        // 8080
+dbPort := os.Getenv("POSTGRES_PORT") // 5432
+```
+
+#### 在 Docker Compose 中
+```yaml
+# 使用外部端口进行端口映射
+ports:
+  - "${APP_EXTERNAL_PORT}:${APP_PORT}"
+  
+# 使用内部端口进行健康检查
+healthcheck:
+  test: ["CMD", "curl", "http://localhost:${APP_PORT}/health"]
+```
+
+### 端口配置优势
+
+1. **命名统一**: 所有服务都遵循相同的命名规则
+2. **端口规律**: 不同环境的端口分配有明确的规律
+3. **避免冲突**: 不同环境使用不同的外部端口
+4. **易于理解**: 内部端口使用标准端口，外部端口有规律偏移
+5. **配置简化**: 减少硬编码，提高可维护性
 
 ## 配置优先级
 

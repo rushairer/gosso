@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # 环境配置生成脚本
-# 用法: ./scripts/generate-env.sh <environment>
-# 示例: ./scripts/generate-env.sh development
+# 用法: ./script/generate-env.sh <environment>
+# 示例: ./script/generate-env.sh development
 
 set -e
 

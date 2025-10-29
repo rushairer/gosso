@@ -59,8 +59,8 @@ fmt.Printf("App port: %d\n", envConfig.App.ExternalPort)
 ### 生成环境变量
 
 ```bash
-# 使用 scripts/parse-config.go 生成环境变量
-go run scripts/parse-config.go development
+# 使用 script/parse-config.go 生成环境变量
+go run script/parse-config.go development
 
 # 或使用 Makefile
 make env-dev

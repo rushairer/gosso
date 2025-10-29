@@ -37,7 +37,7 @@ Thumbs.db
 
 # Go 相关文件
 # Test binary, built with `go test -c`
-*.test
+# *.test
 
 # Output of the go coverage tool
 *.out

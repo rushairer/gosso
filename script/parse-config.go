@@ -41,20 +41,20 @@ func parseRedisDSN(dsn string) (host string, port int, password string, database
 	// redis://:password@host:port/database
 	// host:port
 	// localhost:6379
-	
+
 	// 设置默认值
 	host = "localhost"
 	port = 6379
 	database = 0
-	
+
 	if dsn == "" {
 		return
 	}
-	
+
 	// 处理 redis:// 协议
 	if strings.HasPrefix(dsn, "redis://") {
 		dsn = strings.TrimPrefix(dsn, "redis://")
-		
+
 		// 检查是否有密码
 		if strings.Contains(dsn, "@") {
 			parts := strings.SplitN(dsn, "@", 2)
@@ -67,7 +67,7 @@ func parseRedisDSN(dsn string) (host string, port int, password string, database
 				dsn = parts[1]
 			}
 		}
-		
+
 		// 检查是否有数据库编号
 		if strings.Contains(dsn, "/") {
 			parts := strings.SplitN(dsn, "/", 2)
@@ -76,7 +76,7 @@ func parseRedisDSN(dsn string) (host string, port int, password string, database
 				dsn = parts[0]
 			}
 		}
-		
+
 		// 解析 host:port
 		if strings.Contains(dsn, ":") {
 			parts := strings.SplitN(dsn, ":", 2)
@@ -99,7 +99,7 @@ func parseRedisDSN(dsn string) (host string, port int, password string, database
 			host = dsn
 		}
 	}
-	
+
 	return
 }
 
@@ -128,8 +128,6 @@ func main() {
 	if !exists {
 		log.Fatalf("❌ 未找到环境配置: %s", env)
 	}
-	
-
 
 	// 解析 PostgreSQL 配置
 	pgDriver := cfg.DatabaseConfig.GetDriver("postgres")
@@ -137,14 +135,14 @@ func main() {
 		log.Fatalf("❌ 未找到 postgres 数据库配置")
 	}
 
-	pgUser, pgPassword, pgHost, pgInternalPort, pgDatabase := parsePostgresDSN(pgDriver.DSN)
+	pgUser, pgPassword, pgHost, _, pgDatabase := parsePostgresDSN(pgDriver.DSN)
 
 	// 解析 Redis 配置
-	redisHost, redisInternalPort, redisPassword, redisDatabase := parseRedisDSN(cfg.RedisConfig.DSN)
+	redisHost, _, redisPassword, redisDatabase := parseRedisDSN(cfg.RedisConfig.DSN)
 
 	// 输出应用配置
-	fmt.Printf("export APP_PORT=%d\n", envConfig.App.ExternalPort)
-	fmt.Printf("export APP_INTERNAL_PORT=%d\n", envConfig.App.InternalPort)
+	fmt.Printf("export APP_PORT=%d\n", envConfig.App.Port)
+	fmt.Printf("export APP_EXTERNAL_PORT=%d\n", envConfig.App.ExternalPort)
 	fmt.Printf("export GIN_MODE=%s\n", envConfig.App.GinMode)
 	fmt.Printf("export DEBUG=%t\n", envConfig.App.Debug)
 
@@ -154,26 +152,26 @@ func main() {
 	} else {
 		fmt.Printf("export POSTGRES_DB=%s\n", pgDatabase)
 	}
-	
+
 	if envConfig.Postgres.User != "" {
 		fmt.Printf("export POSTGRES_USER=%s\n", envConfig.Postgres.User)
 	} else {
 		fmt.Printf("export POSTGRES_USER=%s\n", pgUser)
 	}
-	
+
 	if envConfig.Postgres.Password != "" {
 		fmt.Printf("export POSTGRES_PASSWORD=%s\n", envConfig.Postgres.Password)
 	} else {
 		fmt.Printf("export POSTGRES_PASSWORD=%s\n", pgPassword)
 	}
-	
+
 	fmt.Printf("export POSTGRES_HOST=%s\n", pgHost)
-	fmt.Printf("export POSTGRES_PORT=%d\n", pgInternalPort)
+	fmt.Printf("export POSTGRES_PORT=%d\n", envConfig.Postgres.Port)
 	fmt.Printf("export POSTGRES_EXTERNAL_PORT=%d\n", envConfig.Postgres.ExternalPort)
 
 	// 输出 Redis 配置
 	fmt.Printf("export REDIS_HOST=%s\n", redisHost)
-	fmt.Printf("export REDIS_PORT=%d\n", redisInternalPort)
+	fmt.Printf("export REDIS_PORT=%d\n", envConfig.Redis.Port)
 	fmt.Printf("export REDIS_EXTERNAL_PORT=%d\n", envConfig.Redis.ExternalPort)
 	if redisPassword != "" {
 		fmt.Printf("export REDIS_PASSWORD=%s\n", redisPassword)
@@ -187,15 +185,15 @@ func main() {
 
 	// 输出 SMTP 配置
 	fmt.Printf("export SMTP_HOST=%s\n", envConfig.SMTP.Host)
-	fmt.Printf("export SMTP_PORT=%d\n", cfg.SMTPConfig.Port)
+	fmt.Printf("export SMTP_PORT=%d\n", envConfig.SMTP.Port)
 	fmt.Printf("export SMTP_EXTERNAL_PORT=%d\n", envConfig.SMTP.ExternalPort)
 	fmt.Printf("export SMTP_USERNAME=%s\n", cfg.SMTPConfig.Username)
 	fmt.Printf("export SMTP_PASSWORD=%s\n", cfg.SMTPConfig.Password)
 	fmt.Printf("export SMTP_FROM=%s\n", cfg.SMTPConfig.From)
 
 	// 输出 Mailpit 配置
+	fmt.Printf("export MAILPIT_WEB_PORT=%d\n", envConfig.Mailpit.WebPort)
 	fmt.Printf("export MAILPIT_WEB_EXTERNAL_PORT=%d\n", envConfig.Mailpit.WebExternalPort)
-	fmt.Printf("export MAILPIT_WEB_INTERNAL_PORT=%d\n", envConfig.Mailpit.WebInternalPort)
 
 	// 输出 Nginx 配置（仅生产环境）
 	if envConfig.Nginx.HTTPPort != 0 {
@@ -209,11 +207,11 @@ func main() {
 
 	// 输出配置信息到 stderr
 	fmt.Fprintf(os.Stderr, "✅ %s 环境配置解析完成:\n", strings.ToUpper(env))
-	fmt.Fprintf(os.Stderr, "  🌐 应用: %d -> %d (%s)\n", envConfig.App.ExternalPort, envConfig.App.InternalPort, envConfig.App.GinMode)
-	fmt.Fprintf(os.Stderr, "  🐘 PostgreSQL: %s:%d -> %d (DB: %s)\n", pgHost, envConfig.Postgres.ExternalPort, pgInternalPort, envConfig.Postgres.Database)
-	fmt.Fprintf(os.Stderr, "  🔴 Redis: %s:%d -> %d (DB: %d)\n", redisHost, envConfig.Redis.ExternalPort, redisInternalPort, envConfig.Redis.Database)
-	fmt.Fprintf(os.Stderr, "  📧 SMTP: %s:%d -> %d\n", envConfig.SMTP.Host, envConfig.SMTP.ExternalPort, envConfig.SMTP.InternalPort)
-	fmt.Fprintf(os.Stderr, "  🌐 Mailpit Web: %d -> %d\n", envConfig.Mailpit.WebExternalPort, envConfig.Mailpit.WebInternalPort)
+	fmt.Fprintf(os.Stderr, "  🌐 应用: %d -> %d (%s)\n", envConfig.App.ExternalPort, envConfig.App.Port, envConfig.App.GinMode)
+	fmt.Fprintf(os.Stderr, "  🐘 PostgreSQL: %s:%d -> %d (DB: %s)\n", pgHost, envConfig.Postgres.ExternalPort, envConfig.Postgres.Port, envConfig.Postgres.Database)
+	fmt.Fprintf(os.Stderr, "  🔴 Redis: %s:%d -> %d (DB: %d)\n", redisHost, envConfig.Redis.ExternalPort, envConfig.Redis.Port, envConfig.Redis.Database)
+	fmt.Fprintf(os.Stderr, "  📧 SMTP: %s:%d -> %d\n", envConfig.SMTP.Host, envConfig.SMTP.ExternalPort, envConfig.SMTP.Port)
+	fmt.Fprintf(os.Stderr, "  🌐 Mailpit Web: %d -> %d\n", envConfig.Mailpit.WebExternalPort, envConfig.Mailpit.WebPort)
 	if envConfig.Nginx.HTTPPort != 0 {
 		fmt.Fprintf(os.Stderr, "  🌐 Nginx: %d (HTTP), %d (HTTPS)\n", envConfig.Nginx.HTTPPort, envConfig.Nginx.HTTPSPort)
 	}

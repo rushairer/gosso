@@ -1,32 +1,32 @@
 # 环境配置定义文件
 # 定义各环境的基础设施端口映射和环境变量
-# 这个文件作为 docker-compose 和 scripts/parse-config.go 的统一配置源
+# 这个文件作为 docker-compose 和 script/parse-config.go 的统一配置源
 
 environments:
   development:
     description: "开发环境配置"
     app:
-      external_port: 8081
-      internal_port: 8080
+      port: 8080              # 容器内端口（默认）
+      external_port: 8081     # 宿主机端口（默认+1）
       debug: true
       gin_mode: debug
     postgres:
-      external_port: 5433
-      internal_port: 5432
+      port: 5432              # 容器内端口（默认）
+      external_port: 5433     # 宿主机端口（默认+1）
       database: gosso_dev
       user: gosso
       password: gosso123
     redis:
-      external_port: 6380
-      internal_port: 6379
+      port: 6379              # 容器内端口（默认）
+      external_port: 6380     # 宿主机端口（默认+1）
       database: 0
     smtp:
-      external_port: 1026
-      internal_port: 1025
+      port: 1025              # 容器内端口（默认）
+      external_port: 1026     # 宿主机端口（默认+1）
       host: mailpit
     mailpit:
-      web_external_port: 8026
-      web_internal_port: 8025
+      web_port: 8025          # 容器内端口（默认）
+      web_external_port: 8026 # 宿主机端口（默认+1）
     network:
       name: gosso-dev-network
       subnet: 172.21.0.0/16
@@ -34,27 +34,27 @@ environments:
   test:
     description: "测试环境配置"
     app:
-      external_port: 8082
-      internal_port: 8080
+      port: 8080              # 容器内端口（默认）
+      external_port: 8082     # 宿主机端口（默认+2）
       debug: true
       gin_mode: test
     postgres:
-      external_port: 5434
-      internal_port: 5432
+      port: 5432              # 容器内端口（默认）
+      external_port: 5434     # 宿主机端口（默认+2）
       database: gosso_test
       user: gosso
       password: gosso123
     redis:
-      external_port: 6381
-      internal_port: 6379
+      port: 6379              # 容器内端口（默认）
+      external_port: 6381     # 宿主机端口（默认+2）
       database: 1
     smtp:
-      external_port: 1027
-      internal_port: 1025
+      port: 1025              # 容器内端口（默认）
+      external_port: 1027     # 宿主机端口（默认+2）
       host: mailpit-test
     mailpit:
-      web_external_port: 8027
-      web_internal_port: 8025
+      web_port: 8025          # 容器内端口（默认）
+      web_external_port: 8027 # 宿主机端口（默认+2）
     network:
       name: gosso-test-network
       subnet: 172.23.0.0/16
@@ -62,23 +62,23 @@ environments:
   production:
     description: "生产环境配置"
     app:
-      external_port: 8080
-      internal_port: 8080
+      port: 8080              # 容器内端口（默认）
+      external_port: 8080     # 宿主机端口（默认+0）
       debug: false
       gin_mode: release
     postgres:
-      external_port: 5432
-      internal_port: 5432
+      port: 5432              # 容器内端口（默认）
+      external_port: 5432     # 宿主机端口（默认+0）
       database: gosso
       user: gosso
       password: gosso123
     redis:
-      external_port: 6379
-      internal_port: 6379
+      port: 6379              # 容器内端口（默认）
+      external_port: 6379     # 宿主机端口（默认+0）
       database: 0
     nginx:
-      http_port: 80
-      https_port: 443
+      http_port: 80           # HTTP 端口
+      https_port: 443         # HTTPS 端口
     network:
       name: gosso-prod-network
       subnet: 172.22.0.0/16

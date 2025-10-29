@@ -26,35 +26,35 @@ type Environment struct {
 }
 
 type AppEnvConfig struct {
+	Port         int    `mapstructure:"port"`
 	ExternalPort int    `mapstructure:"external_port"`
-	InternalPort int    `mapstructure:"internal_port"`
 	Debug        bool   `mapstructure:"debug"`
 	GinMode      string `mapstructure:"gin_mode"`
 }
 
 type DBEnvConfig struct {
+	Port         int    `mapstructure:"port"`
 	ExternalPort int    `mapstructure:"external_port"`
-	InternalPort int    `mapstructure:"internal_port"`
 	Database     string `mapstructure:"database"`
 	User         string `mapstructure:"user"`
 	Password     string `mapstructure:"password"`
 }
 
 type RedisEnvConfig struct {
+	Port         int `mapstructure:"port"`
 	ExternalPort int `mapstructure:"external_port"`
-	InternalPort int `mapstructure:"internal_port"`
 	Database     int `mapstructure:"database"`
 }
 
 type SMTPEnvConfig struct {
+	Port         int    `mapstructure:"port"`
 	ExternalPort int    `mapstructure:"external_port"`
-	InternalPort int    `mapstructure:"internal_port"`
 	Host         string `mapstructure:"host"`
 }
 
 type MailpitEnvConfig struct {
+	WebPort         int `mapstructure:"web_port"`
 	WebExternalPort int `mapstructure:"web_external_port"`
-	WebInternalPort int `mapstructure:"web_internal_port"`
 }
 
 type NginxEnvConfig struct {
