@@ -1,0 +1,263 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/rushairer/gosso/internal/account/domain"
+)
+
+// CredentialRepository 凭证仓储接口
+type CredentialRepository interface {
+	// CreateCredentials 批量创建凭证（需要事务）
+	CreateCredentials(ctx context.Context, tx *sql.Tx, credentials []*domain.Credential) error
+
+	// FindByAccountAndType 根据账号 ID 和类型查找凭证
+	FindByAccountAndType(ctx context.Context, accountID string, credType domain.CredentialType) ([]*domain.Credential, error)
+
+	// FindByTypeAndIdentifier 根据类型和标识符查找凭证（如通过邮箱查找）
+	FindByTypeAndIdentifier(ctx context.Context, credType domain.CredentialType, identifier string) (*domain.Credential, error)
+
+	// FindPasswordCredential 查找账号的密码凭证
+	FindPasswordCredential(ctx context.Context, accountID string) (*domain.Credential, error)
+
+	// UpdateCredential 更新凭证（需要事务）
+	UpdateCredential(ctx context.Context, tx *sql.Tx, credential *domain.Credential) error
+
+	// SoftDeleteCredentialsByAccount 软删除账号的所有凭证（需要事务）
+	SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+
+	// SoftDeleteCredential 软删除单个凭证（需要事务）
+	SoftDeleteCredential(ctx context.Context, tx *sql.Tx, credentialID string, deletedAt time.Time) error
+}
+
+type credentialRepositoryImpl struct {
+	db *sql.DB
+}
+
+// NewCredentialRepository 创建凭证仓储
+func NewCredentialRepository(db *sql.DB) CredentialRepository {
+	return &credentialRepositoryImpl{db: db}
+}
+
+// CreateCredentials 批量创建凭证
+func (r *credentialRepositoryImpl) CreateCredentials(ctx context.Context, tx *sql.Tx, credentials []*domain.Credential) error {
+	query := `
+		INSERT INTO account_credentials 
+		(id, account_id, credential_type, identifier, credential_value, verified, primary_credential, metadata, created_at, verified_at, last_used_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`
+
+	for _, cred := range credentials {
+		metadataJSON, err := json.Marshal(cred.Metadata)
+		if err != nil {
+			return fmt.Errorf("marshal metadata: %w", err)
+		}
+
+		_, err = tx.ExecContext(ctx, query,
+			cred.ID,
+			cred.AccountID,
+			cred.Type,
+			cred.Identifier,
+			cred.Value,
+			cred.Verified,
+			cred.PrimaryCredential,
+			metadataJSON,
+			cred.CreatedAt,
+			cred.VerifiedAt,
+			cred.LastUsedAt,
+		)
+		if err != nil {
+			return fmt.Errorf("insert credential %s: %w", cred.Type, err)
+		}
+	}
+
+	return nil
+}
+
+// FindByAccountAndType 根据账号 ID 和类型查找凭证
+func (r *credentialRepositoryImpl) FindByAccountAndType(ctx context.Context, accountID string, credType domain.CredentialType) ([]*domain.Credential, error) {
+	query := `
+		SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential, 
+		       metadata, created_at, verified_at, last_used_at, deleted_at
+		FROM account_credentials
+		WHERE account_id = $1 AND credential_type = $2 AND deleted_at IS NULL
+		ORDER BY primary_credential DESC, created_at ASC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, accountID, credType)
+	if err != nil {
+		return nil, fmt.Errorf("query credentials: %w", err)
+	}
+	defer rows.Close()
+
+	var credentials []*domain.Credential
+	for rows.Next() {
+		cred := &domain.Credential{}
+		var metadataJSON []byte
+
+		err := rows.Scan(
+			&cred.ID,
+			&cred.AccountID,
+			&cred.Type,
+			&cred.Identifier,
+			&cred.Value,
+			&cred.Verified,
+			&cred.PrimaryCredential,
+			&metadataJSON,
+			&cred.CreatedAt,
+			&cred.VerifiedAt,
+			&cred.LastUsedAt,
+			&cred.DeletedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan credential: %w", err)
+		}
+
+		if err := json.Unmarshal(metadataJSON, &cred.Metadata); err != nil {
+			return nil, fmt.Errorf("unmarshal metadata: %w", err)
+		}
+
+		credentials = append(credentials, cred)
+	}
+
+	return credentials, nil
+}
+
+// FindByTypeAndIdentifier 根据类型和标识符查找凭证
+func (r *credentialRepositoryImpl) FindByTypeAndIdentifier(ctx context.Context, credType domain.CredentialType, identifier string) (*domain.Credential, error) {
+	query := `
+		SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
+		       metadata, created_at, verified_at, last_used_at, deleted_at
+		FROM account_credentials
+		WHERE credential_type = $1 AND identifier = $2 AND deleted_at IS NULL
+		LIMIT 1
+	`
+
+	cred := &domain.Credential{}
+	var metadataJSON []byte
+
+	err := r.db.QueryRowContext(ctx, query, credType, identifier).Scan(
+		&cred.ID,
+		&cred.AccountID,
+		&cred.Type,
+		&cred.Identifier,
+		&cred.Value,
+		&cred.Verified,
+		&cred.PrimaryCredential,
+		&metadataJSON,
+		&cred.CreatedAt,
+		&cred.VerifiedAt,
+		&cred.LastUsedAt,
+		&cred.DeletedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("credential not found: %s=%s", credType, identifier)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query credential: %w", err)
+	}
+
+	if err := json.Unmarshal(metadataJSON, &cred.Metadata); err != nil {
+		return nil, fmt.Errorf("unmarshal metadata: %w", err)
+	}
+
+	return cred, nil
+}
+
+// FindPasswordCredential 查找账号的密码凭证
+func (r *credentialRepositoryImpl) FindPasswordCredential(ctx context.Context, accountID string) (*domain.Credential, error) {
+	credentials, err := r.FindByAccountAndType(ctx, accountID, domain.CredentialTypePassword)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(credentials) == 0 {
+		return nil, fmt.Errorf("password credential not found for account: %s", accountID)
+	}
+
+	return credentials[0], nil
+}
+
+// UpdateCredential 更新凭证
+func (r *credentialRepositoryImpl) UpdateCredential(ctx context.Context, tx *sql.Tx, credential *domain.Credential) error {
+	query := `
+		UPDATE account_credentials
+		SET identifier = $1, credential_value = $2, verified = $3, primary_credential = $4,
+		    metadata = $5, verified_at = $6, last_used_at = $7
+		WHERE id = $8 AND deleted_at IS NULL
+	`
+
+	metadataJSON, err := json.Marshal(credential.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	result, err := tx.ExecContext(ctx, query,
+		credential.Identifier,
+		credential.Value,
+		credential.Verified,
+		credential.PrimaryCredential,
+		metadataJSON,
+		credential.VerifiedAt,
+		credential.LastUsedAt,
+		credential.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("update credential: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("credential not found or already deleted: %s", credential.ID)
+	}
+
+	return nil
+}
+
+// SoftDeleteCredentialsByAccount 软删除账号的所有凭证
+func (r *credentialRepositoryImpl) SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
+	query := `
+		UPDATE account_credentials
+		SET deleted_at = $1
+		WHERE account_id = $2 AND deleted_at IS NULL
+	`
+
+	_, err := tx.ExecContext(ctx, query, deletedAt, accountID)
+	if err != nil {
+		return fmt.Errorf("soft delete credentials: %w", err)
+	}
+
+	return nil
+}
+
+// SoftDeleteCredential 软删除单个凭证
+func (r *credentialRepositoryImpl) SoftDeleteCredential(ctx context.Context, tx *sql.Tx, credentialID string, deletedAt time.Time) error {
+	query := `
+		UPDATE account_credentials
+		SET deleted_at = $1
+		WHERE id = $2 AND deleted_at IS NULL
+	`
+
+	result, err := tx.ExecContext(ctx, query, deletedAt, credentialID)
+	if err != nil {
+		return fmt.Errorf("soft delete credential: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("credential not found or already deleted: %s", credentialID)
+	}
+
+	return nil
+}
