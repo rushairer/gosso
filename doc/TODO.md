@@ -244,95 +244,155 @@ flowchart TD
 4. **角色分配** - 批量添加/删除角色关联
 5. **第三方绑定** - 创建 account（如不存在）+ 创建 federated_identity
 
-**代码示例：**
+**代码示例（按正确分层架构）：**
 
 ```go
-// 示例 1：账号注册（事务完整实现）
-func (r *AccountRepository) CreateAccount(ctx context.Context, account *Account, credentials []*Credential) error {
-    // 开始事务，设置隔离级别
-    tx, err := r.db.BeginTx(ctx, &sql.TxOptions{
-        Isolation: sql.LevelReadCommitted,
-    })
-    if err != nil {
-        return fmt.Errorf("begin transaction: %w", err)
-    }
-    defer tx.Rollback() // 确保异常时回滚
-    
-    // 1. 插入账号
-    query := `INSERT INTO accounts (id, username, display_name, created_at, updated_at) 
-              VALUES ($1, $2, $3, NOW(), NOW())`
-    if _, err := tx.ExecContext(ctx, query, account.ID, account.Username, account.DisplayName); err != nil {
-        return fmt.Errorf("insert account: %w", err)
-    }
-    
-    // 2. 插入凭证（email/password）
-    credQuery := `INSERT INTO account_credentials 
-                  (id, account_id, credential_type, identifier, credential_value, verified, created_at) 
-                  VALUES ($1, $2, $3, $4, $5, $6, NOW())`
-    for _, cred := range credentials {
-        cred.ID = uuid.New().String()
-        cred.AccountID = account.ID
-        if _, err := tx.ExecContext(ctx, credQuery, 
-            cred.ID, cred.AccountID, cred.Type, cred.Identifier, cred.Value, cred.Verified); err != nil {
-            return fmt.Errorf("insert credential %s: %w", cred.Type, err)
-        }
-    }
-    
-    // 提交事务
-    if err := tx.Commit(); err != nil {
-        return fmt.Errorf("commit transaction: %w", err)
-    }
-    
-    return nil
-}
+// ========== 示例 1：账号注册（完整的三层架构） ==========
 
-// 示例 2：账号软删除（正确的分层架构）
-
-// ========== Repository 层（internal/account/repository/account_repository.go） ==========
+// --- Repository 层（internal/account/repository/account_repository.go） ---
 type AccountRepository interface {
-    // 软删除账号（带事务）
-    SoftDeleteAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
-    // 软删除账号的所有凭证
-    SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
-    // 软删除账号的角色关联
-    SoftDeleteRolesByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
-    // 软删除账号的第三方身份
-    SoftDeleteFederatedIdentitiesByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+    // Repository 方法接收事务对象，不负责事务管理
+    CreateAccount(ctx context.Context, tx *sql.Tx, account *Account) error
+    CreateCredentials(ctx context.Context, tx *sql.Tx, credentials []*Credential) error
 }
 
 type accountRepositoryImpl struct {
     db *sql.DB
 }
 
+func (r *accountRepositoryImpl) CreateAccount(ctx context.Context, tx *sql.Tx, account *Account) error {
+    query := `INSERT INTO accounts (id, username, display_name, created_at, updated_at) 
+              VALUES ($1, $2, $3, NOW(), NOW())`
+    _, err := tx.ExecContext(ctx, query, account.ID, account.Username, account.DisplayName)
+    if err != nil {
+        return fmt.Errorf("insert account: %w", err)
+    }
+    return nil
+}
+
+func (r *accountRepositoryImpl) CreateCredentials(ctx context.Context, tx *sql.Tx, credentials []*Credential) error {
+    query := `INSERT INTO account_credentials 
+              (id, account_id, credential_type, identifier, credential_value, verified, created_at) 
+              VALUES ($1, $2, $3, $4, $5, $6, NOW())`
+    
+    for _, cred := range credentials {
+        if cred.ID == "" {
+            cred.ID = uuid.New().String()
+        }
+        _, err := tx.ExecContext(ctx, query, 
+            cred.ID, cred.AccountID, cred.Type, cred.Identifier, cred.Value, cred.Verified)
+        if err != nil {
+            return fmt.Errorf("insert credential %s: %w", cred.Type, err)
+        }
+    }
+    return nil
+}
+
+// --- Service 层（internal/account/service/account_service.go） ---
+type AccountService struct {
+    accountRepo AccountRepository
+    db          *sql.DB
+}
+
+// Service 层负责：事务管理、业务逻辑编排、业务验证
+func (s *AccountService) RegisterAccount(ctx context.Context, account *Account, credentials []*Credential) error {
+    // 1. 业务前置验证
+    if err := s.validateRegistration(account, credentials); err != nil {
+        return fmt.Errorf("验证失败: %w", err)
+    }
+    
+    // 2. 开始事务（Service 层负责）
+    tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
+        Isolation: sql.LevelReadCommitted, // 读已提交，避免脏读
+    })
+    if err != nil {
+        return fmt.Errorf("开始事务失败: %w", err)
+    }
+    defer tx.Rollback() // 确保异常时回滚
+    
+    // 3. 协调 Repository 操作
+    account.ID = uuid.New().String()
+    if err := s.accountRepo.CreateAccount(ctx, tx, account); err != nil {
+        return fmt.Errorf("创建账号失败: %w", err)
+    }
+    
+    // 设置凭证的 account_id
+    for i := range credentials {
+        credentials[i].AccountID = account.ID
+    }
+    
+    if err := s.accountRepo.CreateCredentials(ctx, tx, credentials); err != nil {
+        return fmt.Errorf("创建凭证失败: %w", err)
+    }
+    
+    // 4. 提交事务
+    if err := tx.Commit(); err != nil {
+        return fmt.Errorf("提交事务失败: %w", err)
+    }
+    
+    // 5. 业务后置处理（事务外，失败不影响注册结果）
+    s.sendVerificationEmail(ctx, account, credentials)
+    
+    return nil
+}
+
+func (s *AccountService) validateRegistration(account *Account, credentials []*Credential) error {
+    // 验证逻辑：密码强度、邮箱格式、重复检查等
+    return nil
+}
+
+// ========== 示例 2：账号软删除（完整的分层架构） ==========
+
+// --- Repository 层（internal/account/repository/account_repository.go） ---
+type AccountRepository interface {
+    // 所有修改操作都接收事务对象
+    SoftDeleteAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+    SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+    SoftDeleteRolesByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+    SoftDeleteFederatedIdentitiesByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+}
+
 func (r *accountRepositoryImpl) SoftDeleteAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
     query := `UPDATE accounts SET deleted_at = $1, updated_at = $1 
               WHERE id = $2 AND deleted_at IS NULL`
     _, err := tx.ExecContext(ctx, query, deletedAt, accountID)
-    return err
+    if err != nil {
+        return fmt.Errorf("soft delete account: %w", err)
+    }
+    return nil
 }
 
 func (r *accountRepositoryImpl) SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
     query := `UPDATE account_credentials SET deleted_at = $1 
               WHERE account_id = $2 AND deleted_at IS NULL`
     _, err := tx.ExecContext(ctx, query, deletedAt, accountID)
-    return err
+    if err != nil {
+        return fmt.Errorf("soft delete credentials: %w", err)
+    }
+    return nil
 }
 
 func (r *accountRepositoryImpl) SoftDeleteRolesByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
     query := `UPDATE account_roles SET deleted_at = $1 
               WHERE account_id = $2 AND deleted_at IS NULL`
     _, err := tx.ExecContext(ctx, query, deletedAt, accountID)
-    return err
+    if err != nil {
+        return fmt.Errorf("soft delete roles: %w", err)
+    }
+    return nil
 }
 
 func (r *accountRepositoryImpl) SoftDeleteFederatedIdentitiesByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
     query := `UPDATE federated_identities SET deleted_at = $1 
               WHERE account_id = $2 AND deleted_at IS NULL`
     _, err := tx.ExecContext(ctx, query, deletedAt, accountID)
-    return err
+    if err != nil {
+        return fmt.Errorf("soft delete federated identities: %w", err)
+    }
+    return nil
 }
 
-// ========== Token Repository 层 ==========
+// --- Token Repository 层（internal/token/repository/token_repository.go） ---
 type TokenRepository interface {
     RevokeTokensByAccount(ctx context.Context, tx *sql.Tx, accountID string, revokedAt time.Time, reason string) error
 }
@@ -342,10 +402,13 @@ func (r *tokenRepositoryImpl) RevokeTokensByAccount(ctx context.Context, tx *sql
               SET revoked_at = $1, revoke_reason = $2 
               WHERE account_id = $3 AND revoked_at IS NULL`
     _, err := tx.ExecContext(ctx, query, revokedAt, reason, accountID)
-    return err
+    if err != nil {
+        return fmt.Errorf("revoke tokens: %w", err)
+    }
+    return nil
 }
 
-// ========== Service 层（internal/account/service/account_service.go） ==========
+// --- Service 层（internal/account/service/account_service.go） ---
 type AccountService struct {
     accountRepo AccountRepository
     tokenRepo   TokenRepository
@@ -354,10 +417,12 @@ type AccountService struct {
 
 // Service 层职责：业务逻辑编排、事务管理、业务验证
 func (s *AccountService) SoftDeleteAccount(ctx context.Context, accountID string) error {
-    // 1. 业务前置验证（可选）
-    // - 检查账号是否存在
-    // - 检查是否有权限删除
-    // - 记录审计日志
+    // 1. 业务前置验证
+    if accountID == "" {
+        return errors.New("账号 ID 不能为空")
+    }
+    
+    // 可选：检查是否有权限删除、是否是系统账号等
     
     // 2. 开始事务，协调多个 Repository 操作
     tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
@@ -370,25 +435,26 @@ func (s *AccountService) SoftDeleteAccount(ctx context.Context, accountID string
     
     now := time.Now()
     
-    // 3. 调用 Repository 方法，而不是直接执行 SQL
-    if err := s.accountRepo.SoftDeleteAccount(ctx, tx, accountID, now); err != nil {
-        return fmt.Errorf("软删除账号失败: %w", err)
-    }
-    
+    // 3. 调用 Repository 方法（按依赖关系顺序）
     if err := s.accountRepo.SoftDeleteCredentialsByAccount(ctx, tx, accountID, now); err != nil {
-        return fmt.Errorf("软删除凭证失败: %w", err)
+        return err // 已包含错误上下文
     }
     
     if err := s.accountRepo.SoftDeleteRolesByAccount(ctx, tx, accountID, now); err != nil {
-        return fmt.Errorf("软删除角色关联失败: %w", err)
+        return err
     }
     
     if err := s.accountRepo.SoftDeleteFederatedIdentitiesByAccount(ctx, tx, accountID, now); err != nil {
-        return fmt.Errorf("软删除第三方身份失败: %w", err)
+        return err
     }
     
     if err := s.tokenRepo.RevokeTokensByAccount(ctx, tx, accountID, now, "account_deleted"); err != nil {
-        return fmt.Errorf("撤销 Token 失败: %w", err)
+        return err
+    }
+    
+    // 最后删除主账号
+    if err := s.accountRepo.SoftDeleteAccount(ctx, tx, accountID, now); err != nil {
+        return err
     }
     
     // 4. 提交事务
@@ -396,10 +462,15 @@ func (s *AccountService) SoftDeleteAccount(ctx context.Context, accountID string
         return fmt.Errorf("提交事务失败: %w", err)
     }
     
-    // 5. 业务后置处理（事务外操作）
-    // - 清除 Redis 缓存
-    // - 发送通知（邮件/Webhook）
-    // - 记录审计日志
+    // 5. 业务后置处理（事务外，允许失败）
+    go func() {
+        // 清除 Redis 缓存
+        s.clearAccountCache(accountID)
+        // 发送通知
+        s.sendAccountDeletionNotification(accountID)
+        // 记录审计日志
+        s.auditLogger.Log("account_deleted", accountID)
+    }()
     
     return nil
 }
@@ -670,7 +741,7 @@ stateDiagram-v2
     [*] --> Generating: 生成新密钥
     Generating --> Active: 设为活跃
     Active --> Active: 签发 Token
-    Active --> Rotating: 定期轮换（如 90 天）
+    Active --> Rotating: "定期轮换（如 90 天）"
     Rotating --> Retired: 标记为退役
     Retired --> Retired: 仅用于验证旧 Token
     Retired --> Deleted: Token 全部过期后删除
@@ -2256,7 +2327,7 @@ WHERE ip_address IS NOT NULL;
 
 ---
 
-### 🔲 34. 集成测试
+### 🔲 35. 集成测试
 **知识点**: E2E Testing、Testcontainers、HTTP Test
 
 - [ ] 使用 Testcontainers 启动测试环境
@@ -2277,7 +2348,7 @@ WHERE ip_address IS NOT NULL;
 
 ---
 
-### 🔲 35. 性能测试与基准测试
+### 🔲 36. 性能测试与基准测试
 **知识点**: Benchmark、压力测试、性能分析、pprof
 
 #### 🎯 性能指标目标
@@ -2332,7 +2403,7 @@ WHERE ip_address IS NOT NULL;
 
 ---
 
-### 🔲 36. API 文档
+### 🔲 37. API 文档
 **知识点**: OpenAPI 3.0、Swagger、Redoc
 
 - [ ] 使用 Swagger 注解生成 OpenAPI 文档
@@ -2351,7 +2422,7 @@ WHERE ip_address IS NOT NULL;
 
 ---
 
-### 🔲 36. 开发者文档
+### 🔲 38. 开发者文档
 **知识点**: Markdown、架构设计、部署指南
 
 - [ ] 编写系统架构文档（doc/architecture.md）
@@ -2372,7 +2443,7 @@ WHERE ip_address IS NOT NULL;
 
 ## 阶段十：部署与优化 (第 15 周)
 
-### 🔲 38. Docker 化
+### 🔲 39. Docker 化
 **知识点**: Dockerfile、Multi-Stage Build、容器优化
 
 - [ ] 编写 Dockerfile
@@ -2390,7 +2461,7 @@ WHERE ip_address IS NOT NULL;
 
 ---
 
-### 🔲 38. Kubernetes 部署
+### 🔲 40. Kubernetes 部署
 **知识点**: Kubernetes、Helm、ConfigMap、Secret、Ingress
 
 #### ☸️ Kubernetes 部署架构
@@ -2511,7 +2582,7 @@ graph TB
 
 ---
 
-### 🔲 40. 性能优化
+### 🔲 41. 性能优化
 **知识点**: Profiling、缓存策略、数据库优化
 
 - [ ] 使用 pprof 分析性能瓶颈
@@ -2535,7 +2606,7 @@ graph TB
 
 ---
 
-### 🔲 41. 安全加固与审计
+### 🔲 42. 安全加固与审计
 **知识点**: Security Hardening、Penetration Testing、OWASP
 
 - [ ] 安全配置检查
