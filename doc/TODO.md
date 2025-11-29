@@ -15,21 +15,21 @@ graph TB
     end
     
     subgraph "SSO 服务层"
-        AUTHN["认证模块<br/>Login/Register/MFA"]
-        OAUTH["OAuth 2.1/OIDC<br/>Authorization Server"]
-        AUTHZ["授权模块<br/>RBAC/Policy"]
-        ADMIN["管理后台<br/>User/Client 管理"]
+        AUTHN["认证模块 Login Register MFA"]
+        OAUTH["OAuth 2.1 OIDC Authorization Server"]
+        AUTHZ["授权模块 RBAC Policy"]
+        ADMIN["管理后台 User Client 管理"]
     end
     
     subgraph "核心服务"
-        SESSION["会话管理<br/>Redis"]
-        TOKEN["Token 管理<br/>JWT/JWKS"]
-        CRYPTO["密钥管理<br/>Rotation"]
+        SESSION["会话管理 Redis"]
+        TOKEN["Token 管理 JWT JWKS"]
+        CRYPTO["密钥管理 Rotation"]
     end
     
     subgraph "数据层"
-        PG["PostgreSQL<br/>accounts/credentials"]
-        REDIS["Redis<br/>session/cache"]
+        PG["PostgreSQL accounts credentials"]
+        REDIS["Redis session cache"]
     end
     
     subgraph "外部集成"
@@ -81,9 +81,9 @@ graph TB
 | 阶段六：管理后台与 API | 4 | 第 10 周 | ⏳ 未开始 | 0% (0/4) |
 | 阶段七：可观测性与运维 | 3 | 第 11 周 | ⏳ 未开始 | 0% (0/3) |
 | 阶段八：高级功能 | 5 | 第 12-13 周 | ⏳ 未开始 | 0% (0/5) |
-| 阶段九：测试与文档 | 4 | 第 14 周 | ⏳ 未开始 | 0% (0/4) |
+| 阶段九：测试与文档 | 5 | 第 14 周 | ⏳ 未开始 | 0% (0/5) |
 | 阶段十：部署与优化 | 4 | 第 15 周 | ⏳ 未开始 | 0% (0/4) |
-| **总计** | **40** | **15 周** | - | **2.5% (1/40)** |
+| **总计** | **41** | **15 周** | - | **2.4% (1/41)** |
 
 ---
 
@@ -247,28 +247,114 @@ flowchart TD
 **代码示例：**
 
 ```go
+// 示例 1：账号注册（事务完整实现）
 func (r *AccountRepository) CreateAccount(ctx context.Context, account *Account, credentials []*Credential) error {
-    // 开始事务
-    tx, err := r.db.BeginTx(ctx, nil)
+    // 开始事务，设置隔离级别
+    tx, err := r.db.BeginTx(ctx, &sql.TxOptions{
+        Isolation: sql.LevelReadCommitted,
+    })
     if err != nil {
-        return err
+        return fmt.Errorf("begin transaction: %w", err)
     }
     defer tx.Rollback() // 确保异常时回滚
     
     // 1. 插入账号
-    if err := tx.CreateAccount(ctx, account); err != nil {
-        return err
+    query := `INSERT INTO accounts (id, username, display_name, created_at, updated_at) 
+              VALUES ($1, $2, $3, NOW(), NOW())`
+    if _, err := tx.ExecContext(ctx, query, account.ID, account.Username, account.DisplayName); err != nil {
+        return fmt.Errorf("insert account: %w", err)
     }
     
     // 2. 插入凭证（email/password）
+    credQuery := `INSERT INTO account_credentials 
+                  (id, account_id, credential_type, identifier, credential_value, verified, created_at) 
+                  VALUES ($1, $2, $3, $4, $5, $6, NOW())`
     for _, cred := range credentials {
+        cred.ID = uuid.New().String()
         cred.AccountID = account.ID
-        if err := tx.CreateCredential(ctx, cred); err != nil {
-            return err
+        if _, err := tx.ExecContext(ctx, credQuery, 
+            cred.ID, cred.AccountID, cred.Type, cred.Identifier, cred.Value, cred.Verified); err != nil {
+            return fmt.Errorf("insert credential %s: %w", cred.Type, err)
         }
     }
     
     // 提交事务
+    if err := tx.Commit(); err != nil {
+        return fmt.Errorf("commit transaction: %w", err)
+    }
+    
+    return nil
+}
+
+// 示例 2：账号软删除（级联删除关联数据）
+func (s *AccountService) SoftDeleteAccount(ctx context.Context, accountID string) error {
+    return s.db.WithTransaction(ctx, func(tx *sql.Tx) error {
+        now := time.Now()
+        
+        // 1. 软删除主账号
+        if _, err := tx.ExecContext(ctx, 
+            "UPDATE accounts SET deleted_at = $1 WHERE id = $2 AND deleted_at IS NULL",
+            now, accountID); err != nil {
+            return err
+        }
+        
+        // 2. 软删除所有凭证
+        if _, err := tx.ExecContext(ctx,
+            "UPDATE account_credentials SET deleted_at = $1 WHERE account_id = $2 AND deleted_at IS NULL",
+            now, accountID); err != nil {
+            return err
+        }
+        
+        // 3. 软删除角色关联
+        if _, err := tx.ExecContext(ctx,
+            "UPDATE account_roles SET deleted_at = $1 WHERE account_id = $2 AND deleted_at IS NULL",
+            now, accountID); err != nil {
+            return err
+        }
+        
+        // 4. 软删除第三方身份
+        if _, err := tx.ExecContext(ctx,
+            "UPDATE federated_identities SET deleted_at = $1 WHERE account_id = $2 AND deleted_at IS NULL",
+            now, accountID); err != nil {
+            return err
+        }
+        
+        // 5. 撤销所有活跃 Token
+        if _, err := tx.ExecContext(ctx,
+            "UPDATE oauth2_tokens SET revoked_at = $1, revoke_reason = 'account_deleted' WHERE account_id = $2 AND revoked_at IS NULL",
+            now, accountID); err != nil {
+            return err
+        }
+        
+        return nil
+    })
+}
+
+// 示例 3：事务辅助方法（可复用）
+type DB struct {
+    *sql.DB
+}
+
+func (db *DB) WithTransaction(ctx context.Context, fn func(*sql.Tx) error) error {
+    tx, err := db.BeginTx(ctx, &sql.TxOptions{
+        Isolation: sql.LevelReadCommitted,
+    })
+    if err != nil {
+        return err
+    }
+    
+    defer func() {
+        if p := recover(); p != nil {
+            tx.Rollback()
+            panic(p) // 重新抛出 panic
+        }
+    }()
+    
+    if err := fn(tx); err != nil {
+        tx.Rollback()
+        return err
+    }
+    
     return tx.Commit()
 }
 ```
@@ -334,6 +420,32 @@ erDiagram
 2. **唯一索引调整**：使用条件唯一索引 `WHERE deleted_at IS NULL`
 3. **定期清理**：软删除超过 1 年的数据可物理删除（满足数据保留政策）
 4. **管理接口**：提供"恢复已删除账号"功能
+
+#### 📋 关联表软删除策略
+
+**核心原则**: 所有表都使用软删除，包括关联表
+
+| 表类型 | 示例 | 软删除策略 | 说明 |
+|--------|------|-----------|------|
+| **主表** | accounts, oauth2_clients | ✅ 必须 | 核心业务实体 |
+| **凭证表** | account_credentials | ✅ 必须 | 与主表同步软删除 |
+| **关联表** | account_roles, account_groups | ✅ 推荐 | 保留历史关联关系 |
+| **元数据表** | oauth2_tokens, authorization_codes | ✅ 推荐 | 用于审计追溯 |
+| **日志表** | audit_logs | ❌ 不需要 | 日志本身已是历史记录 |
+
+**关联表唯一性约束处理：**
+
+```sql
+-- 方案 A：复合唯一索引 + deleted_at（推荐）
+-- 允许同一关联多次创建和删除
+CREATE UNIQUE INDEX idx_account_roles_unique 
+ON account_roles(account_id, role_id, COALESCE(deleted_at, '1970-01-01'));
+
+-- 方案 B：条件唯一索引（仅约束未删除数据）
+CREATE UNIQUE INDEX idx_account_roles_unique 
+ON account_roles(account_id, role_id) 
+WHERE deleted_at IS NULL;
+```
 
 ---
 
@@ -753,10 +865,10 @@ sequenceDiagram
     
     U->>C: 1. 请求启用 MFA
     C->>S: 2. POST /auth/mfa/totp/enable
-    S->>S: 3. 生成 TOTP secret<br/>Base32 编码
+    S->>S: 3. 生成 TOTP secret Base32 编码
     S->>S: 4. 生成 10 个备用码
-    S->>S: 5. 插入 account_credentials<br/>type=totp, verified=false
-    S-->>C: 6. 返回 QR Code URI<br/>+ 备用码列表
+    S->>S: 5. 插入 account_credentials type=totp, verified=false
+    S-->>C: 6. 返回 QR Code URI 和备用码列表
     C->>U: 7. 显示 QR Code
     U->>A: 8. 扫描 QR Code
     A-->>U: 9. 生成 6 位 TOTP 码
@@ -931,18 +1043,52 @@ sequenceDiagram
 ### 🔲 9. 客户端（Relying Party）管理
 **知识点**: OAuth 2.0 Client Types、Redirect URI 验证、Client Credentials
 
-- [ ] 设计客户端表（oauth2_clients）
-  - 字段：client_id, client_secret_hash, name, type(public/confidential), redirect_uris(jsonb), allowed_scopes(jsonb), pkce_required, grant_types(jsonb), token_endpoint_auth_method, created_at
-- [ ] 编写数据库迁移脚本（db/migrations/0006_oauth2_clients.up.sql）
-- [ ] 实现客户端管理 API（internal/oauth2/handler/client_handler.go）
+#### 📊 数据表设计
+
+**oauth2_clients - OAuth2 客户端表**
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | UUID | PRIMARY KEY | 唯一标识 |
+| client_id | VARCHAR(255) | UNIQUE | 客户端 ID（公开） |
+| client_secret_hash | TEXT | | 客户端密钥（bcrypt hash） |
+| name | VARCHAR(100) | NOT NULL | 客户端名称 |
+| description | TEXT | | 客户端描述 |
+| type | VARCHAR(20) | NOT NULL | 类型：public/confidential |
+| logo_url | TEXT | | Logo URL |
+| redirect_uris | JSONB | DEFAULT '[]' | 允许的回调地址列表 |
+| allowed_scopes | JSONB | DEFAULT '[]' | 允许的 Scopes |
+| grant_types | JSONB | DEFAULT '["authorization_code"]' | 允许的授权类型 |
+| token_endpoint_auth_method | VARCHAR(50) | DEFAULT 'client_secret_basic' | Token 端点认证方式 |
+| pkce_required | BOOLEAN | DEFAULT true | 是否强制 PKCE |
+| owner_id | UUID | | 客户端所有者账号 ID（应用层外键） |
+| metadata | JSONB | DEFAULT '{}' | 扩展元数据 |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 创建时间 |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新时间 |
+| deleted_at | TIMESTAMPTZ | NULL | **软删除时间** |
+
+- **type 枚举**: 
+  - `public` - 公开客户端（如前端 SPA、移动应用），无法安全存储密钥，必须使用 PKCE
+  - `confidential` - 机密客户端（如后端服务），可以安全存储密钥
+- **grant_types 可选值**: `["authorization_code", "refresh_token", "client_credentials"]`
+- **索引**:
+  - `client_id` (唯一索引，WHERE deleted_at IS NULL)
+  - `owner_id` (WHERE deleted_at IS NULL)
+- **软删除策略**: 删除客户端时保留历史记录，撤销所有关联 Token
+- **说明**: OAuth 2.1 推荐所有客户端使用 PKCE，包括机密客户端
+
+#### ✅ 实施任务清单
+
+- [ ] 编写数据库迁移脚本 `db/migrations/0006_oauth2_clients.up.sql`
+- [ ] 实现客户端管理 API `internal/oauth2/handler/client_handler.go`
   - POST /api/v1/oauth2/clients（创建客户端）
   - GET /api/v1/oauth2/clients/{client_id}（查询客户端）
   - PUT /api/v1/oauth2/clients/{client_id}（更新客户端）
-  - DELETE /api/v1/oauth2/clients/{client_id}（删除客户端）
-- [ ] 实现客户端认证服务（internal/oauth2/service/client_auth_service.go）
-  - client_secret_basic
-  - client_secret_post
-  - Redirect URI 验证
+  - DELETE /api/v1/oauth2/clients/{client_id}（软删除客户端）
+- [ ] 实现客户端认证服务 `internal/oauth2/service/client_auth_service.go`
+  - client_secret_basic（HTTP Basic 认证）
+  - client_secret_post（POST 参数认证）
+  - Redirect URI 验证（精确匹配，防劫持）
 
 **参考文档**:
 - OAuth 2.1 Draft
@@ -997,20 +1143,30 @@ sequenceDiagram
 
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
-| code | VARCHAR(255) | PRIMARY KEY | 授权码（唯一） |
-| client_id | VARCHAR(255) | NOT NULL | 客户端 ID |
-| account_id | UUID | FK -> accounts(id) | 授权的账号 |
-| redirect_uri | TEXT | NOT NULL | 回调地址 |
+| code | VARCHAR(255) | PRIMARY KEY | 授权码（唯一，32 字节随机数 Base64URL） |
+| client_id | VARCHAR(255) | NOT NULL | 客户端 ID（应用层外键） |
+| account_id | UUID | NOT NULL | 授权的账号（应用层外键） |
+| redirect_uri | TEXT | NOT NULL | 回调地址（必须与 Token 请求一致） |
 | scopes | JSONB | DEFAULT '[]' | 授权范围 |
-| code_challenge | VARCHAR(255) | | PKCE 挑战码 |
-| code_challenge_method | VARCHAR(10) | | S256/plain |
-| nonce | VARCHAR(255) | | OIDC nonce |
-| expires_at | TIMESTAMPTZ | NOT NULL | 过期时间（5 分钟） |
-| used_at | TIMESTAMPTZ | | 使用时间（防重复使用） |
+| code_challenge | VARCHAR(255) | | PKCE 挑战码（Base64URL 编码） |
+| code_challenge_method | VARCHAR(10) | | S256 或 plain（推荐 S256） |
+| nonce | VARCHAR(255) | | OIDC nonce（防重放） |
+| state | VARCHAR(255) | | 客户端状态参数 |
+| expires_at | TIMESTAMPTZ | NOT NULL | 过期时间（创建后 5 分钟） |
+| used_at | TIMESTAMPTZ | | 使用时间（标记已使用，防重复） |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 创建时间 |
 
-- **说明**: 授权码短期有效（5 分钟），一次性使用
+- **索引**:
+  - `code` (主键)
+  - `(client_id, account_id, used_at)` (复合索引，查询未使用的授权码)
+  - `expires_at` (便于清理过期记录)
+- **生命周期**: 5 分钟有效期，一次性使用
+- **安全措施**: 
+  - 授权码使用后立即标记 `used_at`
+  - 如果检测到重复使用，撤销该授权码关联的所有 Token（防盗用）
+  - 定期清理过期授权码（保留 24 小时用于审计）
+- **说明**: 不使用外键，避免高并发场景下的锁竞争
 
-#### ✅ 实施任务清单
 #### ✅ 实施任务清单
 
 - [ ] 编写数据库迁移脚本 `db/migrations/0007_authorization_codes.up.sql`
@@ -1048,12 +1204,45 @@ sequenceDiagram
 ### 🔲 11. JWT Access Token 签发与验证
 **知识点**: JWT、Claims、iss、sub、aud、exp、nbf、iat
 
-- [ ] 设计 Token 表（oauth2_tokens）
-  - 字段：jti, account_id, client_id, token_type(access/refresh), scopes(jsonb), expires_at, revoked_at, created_at
-  - 索引：jti（唯一），account_id, client_id
-  - 说明：记录签发的 Token 元数据，用于撤销和审计
-- [ ] 编写数据库迁移脚本（db/migrations/0008_oauth2_tokens.up.sql）
-- [ ] 实现 JWT 签发服务（internal/token/service/jwt_service.go）
+#### 📊 数据表设计
+
+**oauth2_tokens - Token 元数据表**
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | UUID | PRIMARY KEY | 唯一标识 |
+| jti | VARCHAR(255) | UNIQUE | JWT ID（Token 唯一标识符） |
+| account_id | UUID | NOT NULL | 关联账号（应用层外键） |
+| client_id | VARCHAR(255) | NOT NULL | 关联客户端（应用层外键） |
+| token_type | VARCHAR(20) | NOT NULL | 类型：access/refresh |
+| scopes | JSONB | DEFAULT '[]' | 授权范围 |
+| token_family_id | UUID | | Token 家族 ID（用于 Refresh Token 轮换检测） |
+| parent_jti | VARCHAR(255) | | 父 Token JTI（Refresh Token 轮换追踪） |
+| expires_at | TIMESTAMPTZ | NOT NULL | 过期时间 |
+| revoked_at | TIMESTAMPTZ | | 撤销时间 |
+| revoke_reason | VARCHAR(100) | | 撤销原因：user_request/admin/security/rotation |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 创建时间 |
+| last_used_at | TIMESTAMPTZ | | 最后使用时间（可选追踪） |
+| deleted_at | TIMESTAMPTZ | NULL | **软删除时间** |
+
+- **索引**:
+  - `jti` (唯一索引，WHERE deleted_at IS NULL)
+  - `(account_id, token_type)` (WHERE deleted_at IS NULL AND revoked_at IS NULL)
+  - `(client_id, token_type)` (WHERE deleted_at IS NULL)
+  - `(token_family_id, revoked_at)` (用于检测盗用)
+  - `expires_at` (便于清理过期 Token)
+- **生命周期**:
+  - Access Token: 1 小时（短期，无需存储也可通过 JWT 自包含验证）
+  - Refresh Token: 7-30 天（长期，必须存储）
+- **软删除策略**: Token 过期后保留 30 天用于审计，之后物理删除
+- **Token Family**: 用于 Refresh Token 轮换时检测盗用攻击
+  - 同一授权流程的所有 Refresh Token 共享 `token_family_id`
+  - 如果检测到已撤销的 Refresh Token 被使用，撤销整个家族
+
+#### ✅ 实施任务清单
+
+- [ ] 编写数据库迁移脚本 `db/migrations/0008_oauth2_tokens.up.sql`
+- [ ] 实现 JWT 签发服务 `internal/token/service/jwt_service.go`
   - 签名算法：RS256/ES256（从 crypto_keys 表加载私钥）
   - Claims 构建：
     - 标准 Claims：iss, sub（account_id）, aud（client_id）, exp, iat, nbf, jti
@@ -1178,13 +1367,51 @@ flowchart LR
 
 #### 📊 OIDC Scopes 映射表
 
-| Scope | 返回的 Claims | 数据来源 |
-|-------|---------------|----------|
-| `openid` | sub（必须） | accounts.id |
-| `profile` | name, family_name, given_name, picture, locale, timezone | accounts.display_name, locale, timezone |
-| `email` | email, email_verified | account_credentials (type='email') |
-| `phone` | phone_number, phone_number_verified | account_credentials (type='phone') |
-| `address` | address | accounts.metadata |
+| Scope | 返回的 Claims | 数据来源 | 查询逻辑 |
+|-------|---------------|----------|---------|
+| `openid` | sub（必须） | accounts.id | 直接返回 account_id |
+| `profile` | name, family_name, given_name, picture, locale, timezone | accounts.display_name, avatar_url, locale, timezone | 直接从 accounts 表读取 |
+| `email` | email, email_verified | account_credentials (type='email') | 查询 `primary_credential=true` 或最早的 email 凭证 |
+| `phone` | phone_number, phone_number_verified | account_credentials (type='phone') | 查询 `primary_credential=true` 或最早的 phone 凭证 |
+| `address` | address | accounts.metadata | JSON 路径：`metadata->>'address'` |
+
+#### 🔍 多凭证场景处理规则
+
+**问题**: 一个账号可能有多个 email/phone 凭证，应该返回哪一个？
+
+**解决方案**:
+
+```sql
+-- 优先级 1：主要凭证（primary_credential = true）
+SELECT identifier, verified 
+FROM account_credentials 
+WHERE account_id = ? 
+  AND credential_type = 'email' 
+  AND deleted_at IS NULL 
+  AND primary_credential = true
+LIMIT 1;
+
+-- 优先级 2：如果没有主要凭证，返回最早创建的已验证凭证
+SELECT identifier, verified 
+FROM account_credentials 
+WHERE account_id = ? 
+  AND credential_type = 'email' 
+  AND deleted_at IS NULL 
+  AND verified = true
+ORDER BY created_at ASC
+LIMIT 1;
+
+-- 优先级 3：如果都未验证，返回最早创建的凭证
+SELECT identifier, verified 
+FROM account_credentials 
+WHERE account_id = ? 
+  AND credential_type = 'email' 
+  AND deleted_at IS NULL 
+ORDER BY created_at ASC
+LIMIT 1;
+```
+
+**建议**: 在账号管理 API 中提供"设置主要邮箱/手机号"功能，更新 `primary_credential` 字段。
 
 #### 🎫 ID Token 结构示例
 
@@ -1482,19 +1709,61 @@ graph LR
 ---
 
 ### 🔲 23. 审计日志查询 API
-**知识点**: 日志聚合、时序数据查询
+**知识点**: 日志聚合、时序数据查询、复合索引优化
+
+#### 📊 推荐索引设计
+
+**audit_logs 表（已存在，需优化索引）**
+
+```sql
+-- 索引 1：按账号查询（最常用）
+CREATE INDEX idx_audit_logs_account_time 
+ON audit_logs(account_id, created_at DESC) 
+WHERE account_id IS NOT NULL;
+
+-- 索引 2：按操作类型查询
+CREATE INDEX idx_audit_logs_action_time 
+ON audit_logs(action, created_at DESC);
+
+-- 索引 3：复合查询（账号 + 操作 + 时间）
+CREATE INDEX idx_audit_logs_account_action_time 
+ON audit_logs(account_id, action, created_at DESC) 
+WHERE account_id IS NOT NULL;
+
+-- 索引 4：仅时间范围查询
+CREATE INDEX idx_audit_logs_created_at 
+ON audit_logs(created_at DESC);
+
+-- 索引 5：IP 地址查询（安全调查）
+CREATE INDEX idx_audit_logs_ip 
+ON audit_logs(ip_address, created_at DESC) 
+WHERE ip_address IS NOT NULL;
+```
+
+**索引使用场景说明:**
+
+| 查询场景 | 使用的索引 | 示例查询 |
+|---------|-----------|---------|
+| 查询某账号的所有日志 | idx_audit_logs_account_time | WHERE account_id = ? ORDER BY created_at DESC |
+| 查询所有登录操作 | idx_audit_logs_action_time | WHERE action = 'login' ORDER BY created_at DESC |
+| 查询某账号的登录记录 | idx_audit_logs_account_action_time | WHERE account_id = ? AND action = 'login' |
+| 查询时间范围内的日志 | idx_audit_logs_created_at | WHERE created_at BETWEEN ? AND ? |
+| 查询某 IP 的操作 | idx_audit_logs_ip | WHERE ip_address = ? |
+
+#### ✅ 实施任务清单
 
 - [ ] 实现审计日志查询 API
   - GET /api/v1/admin/audit/logs
-  - 过滤：account_id, action, created_after, created_before
-  - 分页与排序
-  - 优化查询性能（添加索引：account_id, action, created_at）
+  - 过滤：account_id, action, created_after, created_before, ip_address
+  - 分页与排序（默认按 created_at DESC）
+  - **性能优化**: 添加上述推荐索引
 - [ ] 实现审计日志详情 API
   - GET /api/v1/admin/audit/logs/{log_id}
   - 显示完整的日志信息（metadata、IP、User-Agent 等）
 - [ ] 实现审计日志导出（CSV/JSON）
   - GET /api/v1/admin/audit/logs/export?format=csv
   - 流式导出大量数据
+  - 限制导出数量（如最多 10 万条）
 
 ---
 
@@ -1595,14 +1864,42 @@ graph LR
 ### 🔲 28. 设备管理与可信设备
 **知识点**: Device Fingerprinting、User-Agent、Device Token
 
-- [ ] 设计设备表（account_devices）
-  - 字段：id, account_id, device_id, device_name, device_type, user_agent, fingerprint, trusted, last_used_at, created_at
-  - 索引：account_id, device_id（唯一）
-  - 说明：记录账号登录过的设备
-- [ ] 编写数据库迁移脚本（db/migrations/0011_account_devices.up.sql）
+#### 📊 数据表设计
+
+**account_devices - 设备管理表**
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | UUID | PRIMARY KEY | 唯一标识 |
+| account_id | UUID | NOT NULL | 关联账号（应用层外键） |
+| device_id | VARCHAR(255) | NOT NULL | 设备唯一标识（指纹 hash） |
+| device_name | VARCHAR(100) | | 设备名称（如 "Chrome on MacOS"） |
+| device_type | VARCHAR(20) | | 类型：desktop/mobile/tablet |
+| os | VARCHAR(50) | | 操作系统（如 "MacOS 14.0"） |
+| browser | VARCHAR(50) | | 浏览器（如 "Chrome 120"） |
+| user_agent | TEXT | | 完整 User-Agent 字符串 |
+| fingerprint | TEXT | | 设备指纹（IP + UA + 其他特征 hash） |
+| trusted | BOOLEAN | DEFAULT false | 是否为可信设备 |
+| ip_address | VARCHAR(45) | | 首次登录 IP |
+| location | VARCHAR(100) | | 地理位置（如 "Beijing, China"） |
+| last_used_at | TIMESTAMPTZ | | 最后使用时间 |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 首次登录时间 |
+| deleted_at | TIMESTAMPTZ | NULL | **软删除时间** |
+
+- **索引**:
+  - `(account_id, device_id)` (复合唯一索引，WHERE deleted_at IS NULL)
+  - `account_id` (WHERE deleted_at IS NULL)
+  - `last_used_at` (用于清理长时间未使用的设备)
+- **软删除策略**: 用户移除设备时软删除，保留历史记录
+- **可信设备**: 标记为 `trusted=true` 的设备可降低 MFA 验证频率
+- **自动清理**: 超过 180 天未使用的设备自动软删除
+
+#### ✅ 实施任务清单
+
+- [ ] 编写数据库迁移脚本 `db/migrations/0011_account_devices.up.sql`
 - [ ] 实现设备注册与识别
-  - 提取 User-Agent（解析浏览器、操作系统、设备类型）
-  - 生成设备指纹（IP + UA + 浏览器特征的 hash）
+  - 提取 User-Agent（使用 ua-parser-go 库解析浏览器、OS、设备类型）
+  - 生成设备指纹（IP + UA + Canvas/WebGL 特征的 SHA256 hash）
   - 新设备登录时插入 account_devices 记录
   - 新设备登录通知（邮件/短信）
 - [ ] 实现设备管理 API
@@ -1642,19 +1939,81 @@ graph LR
 ### 🔲 30. Webhook 与事件系统
 **知识点**: Event-Driven Architecture、Webhook、Kafka/NATS
 
-- [ ] 设计 Webhook 表（webhooks）
-  - 字段：id, client_id, url, events(jsonb), secret, enabled, created_at
-- [ ] 编写数据库迁移脚本（db/migrations/0012_webhooks.up.sql）
-- [ ] 实现事件发布服务（internal/event/service/publisher.go）
-  - 事件类型：user.login, user.logout, user.registered, token.issued, token.revoked
-  - 事件负载（JSON）
-- [ ] 实现 Webhook 推送服务（internal/webhook/service/webhook_service.go）
+#### 📊 数据表设计
+
+**webhooks - Webhook 订阅表**
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | UUID | PRIMARY KEY | 唯一标识 |
+| client_id | VARCHAR(255) | NOT NULL | 关联客户端（应用层外键） |
+| url | TEXT | NOT NULL | Webhook 回调 URL |
+| events | JSONB | DEFAULT '[]' | 订阅的事件列表 |
+| secret | VARCHAR(255) | NOT NULL | HMAC 签名密钥 |
+| enabled | BOOLEAN | DEFAULT true | 是否启用 |
+| failure_count | INTEGER | DEFAULT 0 | 连续失败次数 |
+| last_success_at | TIMESTAMPTZ | | 最后成功时间 |
+| last_failure_at | TIMESTAMPTZ | | 最后失败时间 |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 创建时间 |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新时间 |
+| deleted_at | TIMESTAMPTZ | NULL | **软删除时间** |
+
+- **events 可选值**:
+  - `account.created` - 账号创建
+  - `account.deleted` - 账号删除
+  - `account.updated` - 账号更新
+  - `account.login` - 账号登录
+  - `account.logout` - 账号登出
+  - `token.issued` - Token 签发
+  - `token.revoked` - Token 撤销
+  - `mfa.enabled` - MFA 启用
+  - `mfa.disabled` - MFA 禁用
+- **索引**:
+  - `client_id` (WHERE deleted_at IS NULL)
+  - `enabled` (WHERE deleted_at IS NULL)
+- **软删除策略**: 客户端删除 Webhook 时软删除
+- **失败策略**: 连续失败 5 次自动禁用，管理员可重新启用
+
+**webhook_deliveries - Webhook 投递记录表**
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | UUID | PRIMARY KEY | 唯一标识 |
+| webhook_id | UUID | NOT NULL | 关联 Webhook（应用层外键） |
+| event_type | VARCHAR(50) | NOT NULL | 事件类型 |
+| payload | JSONB | NOT NULL | 事件负载 |
+| status | VARCHAR(20) | NOT NULL | 状态：pending/success/failed |
+| http_status | INTEGER | | HTTP 响应状态码 |
+| response_body | TEXT | | 响应内容（最多 1KB） |
+| attempt_count | INTEGER | DEFAULT 0 | 尝试次数 |
+| next_retry_at | TIMESTAMPTZ | | 下次重试时间 |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 创建时间 |
+| delivered_at | TIMESTAMPTZ | | 投递成功时间 |
+
+- **索引**:
+  - `webhook_id`
+  - `(status, next_retry_at)` (查找待重试的投递)
+  - `created_at` (便于清理旧记录)
+- **重试策略**: 指数退避，最多重试 3 次（1min, 5min, 30min）
+- **清理策略**: 成功投递的记录保留 7 天，失败记录保留 30 天
+
+#### ✅ 实施任务清单
+
+- [ ] 编写数据库迁移脚本 `db/migrations/0012_webhooks.up.sql`
+- [ ] 实现事件发布服务 `internal/event/service/publisher.go`
+  - 事件类型定义
+  - 事件负载构建
+  - 异步发布到消息队列（可选 Redis Streams/Kafka）
+- [ ] 实现 Webhook 推送服务 `internal/webhook/service/webhook_service.go`
   - HTTP POST 到客户端 URL
-  - HMAC 签名验证
+  - HMAC-SHA256 签名（Header: X-Webhook-Signature）
+  - 超时控制（5 秒）
   - 重试机制（指数退避）
+  - 失败记录和自动禁用
 - [ ] 实现 Webhook 管理 API
   - POST /api/v1/oauth2/clients/{client_id}/webhooks
   - GET /api/v1/oauth2/clients/{client_id}/webhooks
+  - DELETE /api/v1/oauth2/clients/{client_id}/webhooks/{webhook_id}
   - DELETE /api/v1/oauth2/clients/{client_id}/webhooks/{webhook_id}
 
 **参考文档**:
@@ -1714,7 +2073,97 @@ graph LR
 
 ## 阶段九：测试与文档 (第 14 周)
 
-### 🔲 33. 单元测试
+### 🔲 33. 错误码与国际化设计
+**知识点**: Error Handling、i18n、OAuth 2.0 Error Codes
+
+#### 📊 错误码设计规范
+
+**OAuth 2.0 标准错误码（RFC 6749）**
+
+| 错误码 | HTTP 状态码 | 说明 | 返回场景 |
+|-------|------------|------|---------|
+| `invalid_request` | 400 | 请求缺少必需参数或参数无效 | 所有端点 |
+| `invalid_client` | 401 | 客户端认证失败 | /oauth2/token |
+| `invalid_grant` | 400 | 授权码/刷新令牌无效或过期 | /oauth2/token |
+| `unauthorized_client` | 400 | 客户端无权使用此授权类型 | /oauth2/authorize |
+| `unsupported_grant_type` | 400 | 不支持的授权类型 | /oauth2/token |
+| `invalid_scope` | 400 | 请求的 scope 无效或超出授权 | /oauth2/authorize |
+| `access_denied` | 403 | 用户拒绝授权 | /oauth2/authorize |
+| `server_error` | 500 | 服务器内部错误 | 所有端点 |
+| `temporarily_unavailable` | 503 | 服务暂时不可用 | 所有端点 |
+
+**OIDC 扩展错误码**
+
+| 错误码 | HTTP 状态码 | 说明 |
+|-------|------------|------|
+| `interaction_required` | 400 | 需要用户交互（如登录） |
+| `login_required` | 400 | 需要用户重新登录 |
+| `account_selection_required` | 400 | 需要用户选择账号 |
+| `consent_required` | 400 | 需要用户同意 |
+
+**自定义业务错误码（SSO 系统）**
+
+| 错误码 | HTTP 状态码 | 说明 | 场景 |
+|-------|------------|------|------|
+| `account_not_found` | 404 | 账号不存在 | 登录 |
+| `account_suspended` | 403 | 账号已被禁用 | 登录 |
+| `account_deleted` | 410 | 账号已删除 | 登录 |
+| `invalid_credentials` | 401 | 用户名或密码错误 | 登录 |
+| `mfa_required` | 403 | 需要多因素认证 | 登录 |
+| `mfa_invalid` | 401 | MFA 验证码错误 | MFA 验证 |
+| `email_not_verified` | 403 | 邮箱未验证 | 敏感操作 |
+| `rate_limit_exceeded` | 429 | 请求过于频繁 | 所有端点 |
+| `weak_password` | 400 | 密码强度不足 | 注册/修改密码 |
+| `duplicate_email` | 409 | 邮箱已被使用 | 注册 |
+| `token_expired` | 401 | Token 已过期 | API 调用 |
+| `token_revoked` | 401 | Token 已被撤销 | API 调用 |
+| `insufficient_permissions` | 403 | 权限不足 | 所有受保护端点 |
+
+#### 📋 错误响应格式
+
+```json
+{
+  "error": "invalid_grant",
+  "error_description": "Authorization code has expired",
+  "error_uri": "https://docs.sso.example.com/errors#invalid_grant",
+  "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+  "timestamp": "2024-12-31T10:30:00Z"
+}
+```
+
+#### 🌐 国际化支持（可选）
+
+```json
+{
+  "error": "invalid_credentials",
+  "error_description": "用户名或密码错误",
+  "error_description_en": "Invalid username or password",
+  "error_uri": "https://docs.sso.example.com/zh/errors#invalid_credentials"
+}
+```
+
+#### ✅ 实施任务清单
+
+- [ ] 定义错误码常量 `internal/errors/codes.go`
+  - OAuth 2.0 标准错误码
+  - OIDC 错误码
+  - 自定义业务错误码
+- [ ] 实现统一错误处理中间件 `middleware/error_handler.go`
+  - 捕获 panic 并转换为 500 错误
+  - 统一错误响应格式
+  - 记录错误日志（包含 trace_id）
+- [ ] 实现错误响应构造器 `internal/errors/response.go`
+  - NewOAuthError()
+  - NewBusinessError()
+  - 支持国际化（从 Accept-Language Header 读取语言）
+- [ ] 编写错误码文档 `doc/error-codes.md`
+  - 所有错误码列表
+  - 错误处理最佳实践
+  - 示例代码
+
+---
+
+### 🔲 34. 单元测试
 **知识点**: Go Testing、Testify、Mock、Table-Driven Tests
 
 - [ ] 编写核心服务单元测试
@@ -1754,7 +2203,62 @@ graph LR
 
 ---
 
-### 🔲 35. API 文档
+### 🔲 35. 性能测试与基准测试
+**知识点**: Benchmark、压力测试、性能分析、pprof
+
+#### 🎯 性能指标目标
+
+| 指标 | 目标值 | 测试场景 |
+|------|-------|---------|
+| 登录 API QPS | > 5000 | 并发登录 |
+| Token 签发延迟 | < 50ms | P99 延迟 |
+| Token 验证延迟 | < 10ms | P99 延迟 |
+| 数据库查询延迟 | < 20ms | 单条记录查询 |
+| Redis 操作延迟 | < 5ms | GET/SET 操作 |
+| API 可用性 | > 99.9% | 24/7 运行 |
+
+#### ✅ 实施任务清单
+
+- [ ] 编写性能基准测试 `tests/benchmark_test.go`
+  - JWT 签发/验证性能
+  - 密码哈希性能（bcrypt vs argon2）
+  - 数据库查询性能
+  - Redis 操作性能
+  - 使用 `go test -bench=. -benchmem` 运行
+- [ ] 实施压力测试
+  - 工具选择：wrk / k6 / Apache Bench
+  - 测试场景：
+    - 登录流程（POST /api/v1/auth/login）
+    - OAuth2 授权码流程
+    - Token 刷新流程
+    - UserInfo 端点（GET /oauth2/userinfo）
+  - 压测脚本示例：
+    ```bash
+    # 使用 wrk 测试登录 API
+    wrk -t12 -c400 -d30s --latency \
+      -s scripts/login.lua \
+      http://localhost:8080/api/v1/auth/login
+    ```
+- [ ] 性能分析与优化
+  - 使用 pprof 分析 CPU/内存瓶颈
+  - 火焰图生成（go tool pprof）
+  - 识别热点代码路径
+  - 数据库慢查询分析（EXPLAIN ANALYZE）
+  - Redis 慢日志分析
+- [ ] 编写性能测试报告 `doc/performance-report.md`
+  - 测试环境说明
+  - 性能指标结果
+  - 瓶颈分析
+  - 优化建议
+
+**参考文档**:
+- Go Benchmarking
+- wrk / k6 工具文档
+- pprof 使用指南
+
+---
+
+### 🔲 36. API 文档
 **知识点**: OpenAPI 3.0、Swagger、Redoc
 
 - [ ] 使用 Swagger 注解生成 OpenAPI 文档
@@ -1794,7 +2298,7 @@ graph LR
 
 ## 阶段十：部署与优化 (第 15 周)
 
-### 🔲 37. Docker 化
+### 🔲 38. Docker 化
 **知识点**: Dockerfile、Multi-Stage Build、容器优化
 
 - [ ] 编写 Dockerfile
@@ -1933,7 +2437,7 @@ graph TB
 
 ---
 
-### 🔲 39. 性能优化
+### 🔲 40. 性能优化
 **知识点**: Profiling、缓存策略、数据库优化
 
 - [ ] 使用 pprof 分析性能瓶颈
@@ -1957,7 +2461,7 @@ graph TB
 
 ---
 
-### 🔲 40. 安全加固与审计
+### 🔲 41. 安全加固与审计
 **知识点**: Security Hardening、Penetration Testing、OWASP
 
 - [ ] 安全配置检查
