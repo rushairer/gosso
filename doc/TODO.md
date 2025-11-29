@@ -1,7 +1,89 @@
 # SSO 系统开发工作清单
 
-## 项目概述
+## 📋 项目概述
+
 基于 Go + Gin 框架构建企业级 SSO (单点登录) 系统，支持 OAuth 2.1 / OIDC 协议，提供统一认证与授权服务。
+
+### 🏗️ 系统架构概览
+
+```mermaid
+graph TB
+    subgraph "客户端层"
+        WEB["Web 应用"]
+        MOBILE["移动应用"]
+        API["第三方 API"]
+    end
+    
+    subgraph "SSO 服务层"
+        AUTHN["认证模块<br/>Login/Register/MFA"]
+        OAUTH["OAuth 2.1/OIDC<br/>Authorization Server"]
+        AUTHZ["授权模块<br/>RBAC/Policy"]
+        ADMIN["管理后台<br/>User/Client 管理"]
+    end
+    
+    subgraph "核心服务"
+        SESSION["会话管理<br/>Redis"]
+        TOKEN["Token 管理<br/>JWT/JWKS"]
+        CRYPTO["密钥管理<br/>Rotation"]
+    end
+    
+    subgraph "数据层"
+        PG["PostgreSQL<br/>accounts/credentials"]
+        REDIS["Redis<br/>session/cache"]
+    end
+    
+    subgraph "外部集成"
+        LDAP["LDAP/AD"]
+        SOCIAL["Google/GitHub"]
+        SMTP["邮件服务"]
+        SMS["短信服务"]
+    end
+    
+    WEB --> AUTHN
+    MOBILE --> OAUTH
+    API --> OAUTH
+    
+    AUTHN --> SESSION
+    AUTHN --> LDAP
+    AUTHN --> SOCIAL
+    AUTHN --> SMTP
+    AUTHN --> SMS
+    
+    OAUTH --> TOKEN
+    OAUTH --> CRYPTO
+    OAUTH --> AUTHZ
+    
+    ADMIN --> AUTHZ
+    
+    SESSION --> REDIS
+    TOKEN --> PG
+    CRYPTO --> PG
+    AUTHN --> PG
+    OAUTH --> PG
+    AUTHZ --> PG
+    
+    style AUTHN fill:#e1f5ff
+    style OAUTH fill:#fff4e1
+    style AUTHZ fill:#f0ffe1
+```
+
+---
+
+## 📊 开发进度总览
+
+| 阶段 | 任务数 | 预计周期 | 状态 | 完成度 |
+|------|--------|----------|------|--------|
+| 阶段一：基础设施与核心框架 | 4 | 第 1-2 周 | 🔄 进行中 | 25% (1/4) |
+| 阶段二：认证模块 | 4 | 第 3-4 周 | ⏳ 未开始 | 0% (0/4) |
+| 阶段三：OAuth 2.1 / OIDC | 7 | 第 5-7 周 | ⏳ 未开始 | 0% (0/7) |
+| 阶段四：安全与防护 | 3 | 第 8 周 | ⏳ 未开始 | 0% (0/3) |
+| 阶段五：权限与策略引擎 | 2 | 第 9 周 | ⏳ 未开始 | 0% (0/2) |
+| 阶段六：管理后台与 API | 4 | 第 10 周 | ⏳ 未开始 | 0% (0/4) |
+| 阶段七：可观测性与运维 | 3 | 第 11 周 | ⏳ 未开始 | 0% (0/3) |
+| 阶段八：高级功能 | 5 | 第 12-13 周 | ⏳ 未开始 | 0% (0/5) |
+| 阶段九：测试与文档 | 4 | 第 14 周 | ⏳ 未开始 | 0% (0/4) |
+| 阶段十：部署与优化 | 4 | 第 15 周 | ⏳ 未开始 | 0% (0/4) |
+| **总计** | **40** | **15 周** | - | **2.5% (1/40)** |
 
 ---
 
@@ -17,45 +99,127 @@
 ### 🔲 2. 数据库设计与账号基础模块
 **知识点**: PostgreSQL、UUID、JSONB、数据库索引、密码哈希（bcrypt/argon2）、复合索引
 
-- [ ] 设计核心账号表（accounts）
-  - 字段：id (UUID), username (VARCHAR(50), UNIQUE), display_name (VARCHAR(100)), avatar_url (TEXT), status (VARCHAR(20)), locale (VARCHAR(10)), timezone (VARCHAR(50)), metadata (JSONB), created_at, updated_at
-  - 索引：username（条件索引，WHERE username IS NOT NULL）
-  - 说明：仅存储账号身份信息，不包含认证凭证
-- [ ] 设计认证凭证表（account_credentials）
-  - 字段：id (UUID), account_id (UUID FK), credential_type (VARCHAR(20)), identifier (VARCHAR(255)), credential_value (TEXT), verified (BOOLEAN), primary_credential (BOOLEAN), metadata (JSONB), created_at, verified_at, last_used_at
-  - credential_type 枚举：password, email, phone, totp, webauthn
-  - 复合唯一索引：(credential_type, identifier)
-  - 索引：account_id, (credential_type, verified)
-  - 说明：支持一个账号多个凭证，灵活扩展认证方式
-- [ ] 设计第三方身份关联表（federated_identities）
-  - 字段：id (UUID), account_id (UUID FK), provider (VARCHAR(50)), provider_user_id (VARCHAR(255)), profile (JSONB), created_at
-  - 唯一索引：(provider, provider_user_id)
-  - 说明：管理 Google、GitHub、微信等第三方登录
-- [ ] 设计群组表（groups）
-  - 字段：id (UUID), name (VARCHAR(100)), description (TEXT), parent_id (UUID), metadata (JSONB), created_at, updated_at
-  - 索引：parent_id（支持树形结构）
-- [ ] 设计角色表（roles）
-  - 字段：id (UUID), name (VARCHAR(50), UNIQUE), description (TEXT), permissions (JSONB), metadata (JSONB), created_at, updated_at
-- [ ] 设计账号角色关联表（account_roles）
-  - 多对多关系：account_id (UUID FK), role_id (UUID FK)
-  - 主键：(account_id, role_id)
-  - 索引：account_id, role_id
-- [ ] 设计账号群组关联表（account_groups）
-  - 多对多关系：account_id (UUID FK), group_id (UUID FK)
-  - 主键：(account_id, group_id)
-  - 索引：account_id, group_id
-- [ ] 编写数据库迁移脚本（db/migrations/0002_accounts.up.sql）
+#### 📊 数据库表结构
+
+**accounts - 核心账号表**
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | UUID | PRIMARY KEY | 账号唯一标识 |
+| username | VARCHAR(50) | UNIQUE | 用户名（可选） |
+| display_name | VARCHAR(100) | | 显示名称 |
+| avatar_url | TEXT | | 头像 URL |
+| status | VARCHAR(20) | DEFAULT 'active' | 状态：active/suspended/deleted |
+| locale | VARCHAR(10) | DEFAULT 'en' | 语言偏好 |
+| timezone | VARCHAR(50) | DEFAULT 'UTC' | 时区 |
+| metadata | JSONB | DEFAULT '{}' | 扩展元数据 |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 创建时间 |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新时间 |
+
+- **索引**: `username` (条件索引，WHERE username IS NOT NULL)
+- **说明**: 仅存储账号身份信息，不包含认证凭证
+
+---
+
+**account_credentials - 认证凭证表**
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | UUID | PRIMARY KEY | 凭证唯一标识 |
+| account_id | UUID | FK -> accounts(id) | 关联账号 |
+| credential_type | VARCHAR(20) | NOT NULL | 凭证类型 |
+| identifier | VARCHAR(255) | | 凭证标识符（邮箱/手机号等） |
+| credential_value | TEXT | | 凭证值（密码 hash/TOTP secret） |
+| verified | BOOLEAN | DEFAULT false | 是否已验证 |
+| primary_credential | BOOLEAN | DEFAULT false | 是否为主要凭证 |
+| metadata | JSONB | DEFAULT '{}' | 扩展信息 |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 创建时间 |
+| verified_at | TIMESTAMPTZ | | 验证时间 |
+| last_used_at | TIMESTAMPTZ | | 最后使用时间 |
+
+- **credential_type 枚举**: `password`, `email`, `phone`, `totp`, `webauthn`, `backup_code`
+- **复合唯一索引**: `(credential_type, identifier)`
+- **索引**: `account_id`, `(credential_type, verified)`
+- **说明**: 支持一个账号多个凭证，灵活扩展认证方式
+
+---
+
+**federated_identities - 第三方身份关联表**
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | UUID | PRIMARY KEY | 唯一标识 |
+| account_id | UUID | FK -> accounts(id) | 关联账号 |
+| provider | VARCHAR(50) | NOT NULL | 身份提供商 |
+| provider_user_id | VARCHAR(255) | NOT NULL | 提供商用户 ID |
+| profile | JSONB | DEFAULT '{}' | 用户资料 |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 创建时间 |
+
+- **唯一索引**: `(provider, provider_user_id)`
+- **说明**: 管理 Google、GitHub、微信等第三方登录
+
+---
+
+**其他关联表**
+
+| 表名 | 字段 | 说明 |
+|------|------|------|
+| groups | id, name, description, parent_id, metadata, created_at, updated_at | 群组表（支持树形结构） |
+| roles | id, name (UNIQUE), description, permissions (JSONB), metadata, created_at, updated_at | 角色表 |
+| account_roles | account_id (FK), role_id (FK) | 账号-角色关联（主键：account_id + role_id） |
+| account_groups | account_id (FK), group_id (FK) | 账号-群组关联（主键：account_id + group_id） |
+#### ✅ 实施任务清单
+
+- [ ] 编写数据库迁移脚本 `db/migrations/0002_accounts.up.sql`
   - 包含所有表定义、索引、外键约束
-  - 添加 ON DELETE CASCADE 级联删除
-- [ ] 创建账号领域模型（internal/account/domain/account.go）
+  - 添加 `ON DELETE CASCADE` 级联删除
+- [ ] 创建账号领域模型 `internal/account/domain/account.go`
   - Account 结构体
   - Credential 结构体
   - FederatedIdentity 结构体
-- [ ] 实现账号仓储接口（internal/account/repository/account_repository.go）
-  - FindByID, FindByUsername, FindByCredential
-  - CreateAccount, UpdateAccount, DeleteAccount
-  - AddCredential, VerifyCredential, RemoveCredential
-  - LinkFederatedIdentity, UnlinkFederatedIdentity
+- [ ] 实现账号仓储接口 `internal/account/repository/account_repository.go`
+  - `FindByID`, `FindByUsername`, `FindByCredential`
+  - `CreateAccount`, `UpdateAccount`, `DeleteAccount`
+  - `AddCredential`, `VerifyCredential`, `RemoveCredential`
+  - `LinkFederatedIdentity`, `UnlinkFederatedIdentity`
+
+#### 📊 ER 关系图
+
+```mermaid
+erDiagram
+    accounts ||--o{ account_credentials : "has"
+    accounts ||--o{ federated_identities : "has"
+    accounts ||--o{ account_roles : "belongs to"
+    accounts ||--o{ account_groups : "belongs to"
+    roles ||--o{ account_roles : "assigned to"
+    groups ||--o{ account_groups : "contains"
+    groups ||--o{ groups : "parent-child"
+    
+    accounts {
+        uuid id PK
+        varchar username UK
+        varchar display_name
+        varchar status
+        jsonb metadata
+    }
+    
+    account_credentials {
+        uuid id PK
+        uuid account_id FK
+        varchar credential_type
+        varchar identifier
+        text credential_value
+        boolean verified
+    }
+    
+    federated_identities {
+        uuid id PK
+        uuid account_id FK
+        varchar provider
+        varchar provider_user_id
+        jsonb profile
+    }
+```
 
 **参考文档**:
 - PostgreSQL 官方文档
@@ -66,6 +230,37 @@
 
 ### 🔲 3. Redis 缓存与会话存储
 **知识点**: Redis、Session 管理、TTL、键设计模式
+
+#### 🗂️ Redis 键设计规范
+
+| 用途 | Key 模式 | Value 类型 | TTL | 示例 |
+|------|----------|-----------|-----|------|
+| 会话存储 | `session:{id}` | Hash | 24h | `session:abc123` → {account_id, created_at} |
+| 验证码 | `captcha:{id}` | String | 5min | `captcha:xyz789` → "A3F8" |
+| 登录失败计数 | `login:fail:{ip}` | String | 15min | `login:fail:192.168.1.1` → "3" |
+| 权限缓存 | `perms:{account_id}` | Set | 5min | `perms:user-123` → ["accounts.read", "logs.read"] |
+| Token 黑名单 | `blacklist:token:{jti}` | String | token_exp | `blacklist:token:abc` → "revoked" |
+| OAuth2 State | `oauth2:state:{state}` | Hash | 10min | `oauth2:state:xyz` → {client_id, redirect_uri} |
+| TOTP 防重放 | `totp:used:{account_id}:{code}` | String | 90s | `totp:used:user-123:123456` → "1" |
+| 速率限制 | `ratelimit:{ip}:{endpoint}` | String | 1min | `ratelimit:1.2.3.4:login` → "5" |
+
+#### 📊 会话数据结构示例
+
+```json
+{
+  "session:550e8400-e29b-41d4-a716-446655440000": {
+    "account_id": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "zhangsan",
+    "ip": "192.168.1.100",
+    "user_agent": "Mozilla/5.0...",
+    "created_at": "2024-12-31T10:00:00Z",
+    "last_active": "2024-12-31T10:30:00Z",
+    "mfa_verified": true
+  }
+}
+```
+
+#### ✅ 实施任务清单
 
 - [ ] 配置 Redis 连接池（已有配置，需实现连接层）
 - [ ] 实现 Redis 客户端封装（internal/cache/redis_client.go）
@@ -86,19 +281,87 @@
 ### 🔲 4. 密钥管理与 JWKS
 **知识点**: RSA/ECDSA、JWT、JWKS、密钥轮换、PEM 格式
 
-- [ ] 设计密钥表（crypto_keys）
-  - 字段：id, kid, algorithm, public_key, private_key, status, created_at, rotated_at
-- [ ] 编写数据库迁移脚本（db/migrations/0003_crypto_keys.up.sql）
-- [ ] 实现密钥生成工具（internal/crypto/keygen.go）
+#### 🔑 密钥生命周期
+
+```mermaid
+stateDiagram-v2
+    [*] --> Generating: 生成新密钥
+    Generating --> Active: 设为活跃
+    Active --> Active: 签发 Token
+    Active --> Rotating: 定期轮换（如 90 天）
+    Rotating --> Retired: 标记为退役
+    Retired --> Retired: 仅用于验证旧 Token
+    Retired --> Deleted: Token 全部过期后删除
+    Deleted --> [*]
+    
+    note right of Active
+        主密钥
+        用于签发新 Token
+    end note
+    
+    note right of Retired
+        历史密钥
+        仅用于验证
+        保留 30 天
+    end note
+```
+
+#### 📊 数据表设计
+
+**crypto_keys - 密钥表**
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | UUID | PRIMARY KEY | 密钥唯一标识 |
+| kid | VARCHAR(50) | UNIQUE | Key ID（用于 JWKS） |
+| algorithm | VARCHAR(10) | NOT NULL | 算法：RS256/RS512/ES256 |
+| public_key | TEXT | NOT NULL | 公钥（PEM 格式） |
+| private_key | TEXT | NOT NULL | 私钥（加密存储，PEM 格式） |
+| status | VARCHAR(20) | DEFAULT 'active' | 状态：active/retired/deleted |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 创建时间 |
+| rotated_at | TIMESTAMPTZ | | 轮换时间 |
+
+#### 🌐 JWKS 端点响应示例
+
+```json
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "use": "sig",
+      "kid": "2024-12-key-1",
+      "alg": "RS256",
+      "n": "0vx7agoebGcQ...",
+      "e": "AQAB"
+    },
+    {
+      "kty": "RSA",
+      "use": "sig",
+      "kid": "2024-09-key-1",
+      "alg": "RS256",
+      "n": "xjlCRBqkl9X...",
+      "e": "AQAB"
+    }
+  ]
+}
+```
+
+#### ✅ 实施任务清单
+
+- [ ] 编写数据库迁移脚本 `db/migrations/0003_crypto_keys.up.sql`
+- [ ] 编写数据库迁移脚本 `db/migrations/0003_crypto_keys.up.sql`
+- [ ] 实现密钥生成工具 `internal/crypto/keygen.go`
   - RSA-2048/4096 密钥生成
   - ES256 密钥生成
-- [ ] 实现密钥管理服务（internal/crypto/service/key_service.go）
+- [ ] 实现密钥管理服务 `internal/crypto/service/key_service.go`
   - 密钥创建、存储、轮换
   - 密钥状态管理（active/retired）
-- [ ] 实现 JWKS 端点（router/oidc.go）
-  - GET /.well-known/jwks.json
-  - 返回公钥集合
-- [ ] 实现密钥轮换定时任务（internal/crypto/task/key_rotation.go）
+- [ ] 实现 JWKS 端点 `router/oidc.go`
+  - `GET /.well-known/jwks.json`
+  - 返回公钥集合（包含 active 和 retired 状态的密钥）
+- [ ] 实现密钥轮换定时任务 `internal/crypto/task/key_rotation.go`
+  - 每 90 天自动轮换
+  - 保留旧密钥 30 天用于验证
 
 **参考文档**:
 - RFC 7517 (JSON Web Key)
@@ -111,6 +374,63 @@
 
 ### 🔲 5. 账号注册与密码管理
 **知识点**: 密码强度验证、邮箱验证、手机验证、SMTP、bcrypt
+
+#### 📝 账号注册流程
+
+```mermaid
+flowchart TD
+    A["用户提交注册信息"] --> B["验证码校验"]
+    B -->|"失败"| C["返回错误"]
+    B -->|"成功"| D["密码强度校验<br/>8+ 字符，大小写+数字+特殊字符"]
+    
+    D -->|"弱密码"| C
+    D -->|"强密码"| E{"注册方式"}
+    
+    E -->|"邮箱注册"| F["检查邮箱是否已存在<br/>查询 account_credentials"]
+    E -->|"手机注册"| G["检查手机号是否已存在<br/>查询 account_credentials"]
+    
+    F -->|"已存在"| C
+    G -->|"已存在"| C
+    
+    F -->|"不存在"| H["开始事务"]
+    G -->|"不存在"| H
+    
+    H --> I["1. 创建 account 记录<br/>生成 UUID"]
+    I --> J["2. 添加 email/phone 凭证<br/>verified=false"]
+    J --> K["3. 添加 password 凭证<br/>bcrypt hash"]
+    K --> L["提交事务"]
+    
+    L --> M{"验证方式"}
+    M -->|"邮箱"| N["发送验证邮件<br/>包含验证链接"]
+    M -->|"手机"| O["发送短信验证码<br/>6 位数字"]
+    
+    N --> P["返回注册成功<br/>提示验证邮箱"]
+    O --> P
+    
+    style H fill:#e1f5ff
+    style L fill:#e1ffe1
+```
+
+#### 🔐 邮箱验证流程
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant E as 邮箱客户端
+    participant S as SSO 服务器
+    participant DB as 数据库
+    
+    Note over S: 注册时生成验证 Token
+    S->>S: 1. 生成 JWT Token<br/>包含 account_id + email
+    S->>E: 2. 发送验证邮件<br/>https://sso.com/verify?token=xxx
+    E->>U: 3. 显示邮件
+    U->>S: 4. 点击验证链接
+    S->>S: 5. 验证 JWT Token
+    S->>DB: 6. UPDATE account_credentials<br/>SET verified=true<br/>WHERE type='email'
+    S->>U: 7. 显示验证成功页面
+```
+
+#### ✅ 实施任务清单
 
 - [ ] 实现账号注册 API（internal/authn/handler/register_handler.go）
   - POST /api/v1/auth/register
@@ -148,6 +468,44 @@
 
 ### 🔲 6. 本地登录与会话管理
 **知识点**: Cookie、HttpOnly、SameSite、CSRF、会话固定攻击、凭证查询
+
+#### 🔐 登录认证流程
+
+```mermaid
+flowchart TD
+    A["用户提交登录"] --> B{"登录方式"}
+    B -->|"用户名+密码"| C["查询 accounts.username"]
+    B -->|"邮箱+密码"| D["JOIN account_credentials<br/>WHERE type='email'"]
+    B -->|"手机+密码"| E["JOIN account_credentials<br/>WHERE type='phone'"]
+    
+    C --> F["获取 account_id"]
+    D --> F
+    E --> F
+    
+    F --> G["查询 password 凭证<br/>WHERE type='password'"]
+    G --> H["bcrypt 验证密码"]
+    
+    H -->|"验证失败"| I["失败次数+1<br/>Redis 计数"]
+    I --> J{"失败次数 >= 3"}
+    J -->|"是"| K["显示验证码"]
+    J -->|"否"| L["返回错误"]
+    
+    H -->|"验证成功"| M{"启用 MFA?"}
+    M -->|"是"| N["要求 MFA 验证"]
+    M -->|"否"| O["创建会话"]
+    
+    N --> P["验证 TOTP/备用码"]
+    P -->|"成功"| O
+    P -->|"失败"| L
+    
+    O --> Q["生成 session_id"]
+    Q --> R["存储到 Redis"]
+    R --> S["设置 Cookie<br/>HttpOnly, Secure"]
+    S --> T["更新 last_used_at"]
+    T --> U["返回登录成功"]
+```
+
+#### ✅ 实施任务清单
 
 - [ ] 实现账号登录 API（internal/authn/handler/login_handler.go）
   - POST /api/v1/auth/login
@@ -188,12 +546,72 @@
 ### 🔲 7. 多因素认证（MFA）
 **知识点**: TOTP、HOTP、RFC 6238、QR Code、备用码
 
-- [ ] 设计 MFA 凭证（复用 account_credentials 表）
-  - credential_type = 'totp'：TOTP 密钥
-  - credential_type = 'backup_code'：备用码（多条记录）
-  - identifier：备用码值（用于查找）
-  - credential_value：TOTP secret（Base32 编码）或备用码 hash
-  - metadata：存储 QR Code URI、使用记录等
+#### 🔐 MFA 启用流程
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant C as 客户端
+    participant S as SSO 服务器
+    participant A as Authenticator App
+    
+    U->>C: 1. 请求启用 MFA
+    C->>S: 2. POST /auth/mfa/totp/enable
+    S->>S: 3. 生成 TOTP secret<br/>Base32 编码
+    S->>S: 4. 生成 10 个备用码
+    S->>S: 5. 插入 account_credentials<br/>type=totp, verified=false
+    S-->>C: 6. 返回 QR Code URI<br/>+ 备用码列表
+    C->>U: 7. 显示 QR Code
+    U->>A: 8. 扫描 QR Code
+    A-->>U: 9. 生成 6 位 TOTP 码
+    U->>C: 10. 输入 TOTP 码
+    C->>S: 11. POST /auth/mfa/totp/verify-enable
+    S->>S: 12. 验证 TOTP 码
+    S->>S: 13. 更新 verified=true
+    S-->>C: 14. 返回成功
+    C->>U: 15. MFA 已启用
+```
+
+#### 🔐 MFA 验证流程
+
+```mermaid
+flowchart TD
+    A["用户登录成功"] --> B{"检查是否启用 MFA"}
+    B -->|"否"| C["创建完整会话"]
+    B -->|"是"| D["创建临时会话<br/>标记需要 MFA"]
+    
+    D --> E["要求输入 TOTP 码<br/>或备用码"]
+    E --> F["用户输入验证码"]
+    F --> G["POST /auth/mfa/verify"]
+    
+    G --> H{"验证码类型"}
+    H -->|"TOTP"| I["验证 6 位数字<br/>允许 ±1 时间窗口"]
+    H -->|"备用码"| J["查找匹配的备用码<br/>检查是否已使用"]
+    
+    I -->|"成功"| K["Redis 记录已使用<br/>防重放"]
+    J -->|"成功"| L["标记备用码已使用<br/>metadata.used_at"]
+    
+    K --> M["升级为完整会话"]
+    L --> M
+    
+    I -->|"失败"| N["返回错误<br/>剩余尝试次数"]
+    J -->|"失败"| N
+    
+    M --> O["登录完成"]
+    
+    style K fill:#e1ffe1
+    style L fill:#e1ffe1
+    style N fill:#ffe0e0
+```
+
+#### 📊 凭证表设计（复用 account_credentials）
+
+| credential_type | identifier | credential_value | metadata | 说明 |
+|----------------|------------|------------------|----------|------|
+| `totp` | NULL | Base32 编码的 secret | `{"qr_uri": "otpauth://..."}` | TOTP 密钥 |
+| `backup_code` | 备用码明文 | bcrypt hash | `{"used_at": "2024-12-31T10:00:00Z"}` | 备用码（10 条记录） |
+
+#### ✅ 实施任务清单
 - [ ] 实现 TOTP 服务（internal/mfa/service/totp_service.go）
   - 生成 TOTP 密钥（32 字节随机数，Base32 编码）
   - 生成 QR Code URI（otpauth://totp/SSO:user@example.com?secret=...&issuer=SSO）
@@ -227,13 +645,56 @@
 ### 🔲 8. 第三方登录（Social Login）
 **知识点**: OAuth 2.0、OpenID Connect、授权码流程、Redirect URI
 
-- [ ] 设计外部身份提供商配置表（identity_providers）
-  - 字段：id, name, type(google/github/wechat), client_id, client_secret, config(jsonb), enabled, created_at
-  - 说明：管理员配置的第三方登录平台
-- [ ] 使用已有的 federated_identities 表（在任务 2 中已设计）
-  - 字段：id, account_id, provider, provider_user_id, profile(jsonb), created_at
-  - 唯一索引：(provider, provider_user_id)
-  - 说明：记录账号与第三方身份的绑定关系
+#### 🔄 第三方登录流程
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant C as SSO 客户端
+    participant S as SSO 服务器
+    participant G as Google/GitHub
+    
+    U->>C: 1. 点击第三方登录
+    C->>S: 2. GET /auth/oauth2/google/authorize
+    S->>S: 3. 生成 state（存 Redis）
+    S->>G: 4. 重定向到 Google 授权页
+    U->>G: 5. 用户同意授权
+    G->>S: 6. Callback + code + state
+    S->>S: 7. 验证 state
+    S->>G: 8. 用 code 交换 access_token
+    G-->>S: 9. 返回 access_token
+    S->>G: 10. 获取用户信息（email, name）
+    G-->>S: 11. 返回用户资料
+    
+    S->>S: 12. 通过 email 查找账号
+    
+    alt 账号已存在
+        S->>S: 13a. 关联 federated_identity
+    else 账号不存在
+        S->>S: 13b. 创建新账号<br/>+ email 凭证<br/>+ federated_identity
+    end
+    
+    S->>S: 14. 创建登录会话
+    S->>C: 15. 重定向 + Set-Cookie
+    C->>U: 16. 登录成功
+```
+
+#### 📊 数据表设计
+
+**identity_providers - 身份提供商配置表**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | UUID | 唯一标识 |
+| name | VARCHAR(100) | 提供商名称 |
+| type | VARCHAR(50) | 类型：google/github/wechat |
+| client_id | VARCHAR(255) | OAuth2 Client ID |
+| client_secret | TEXT | OAuth2 Client Secret（加密存储） |
+| config | JSONB | 额外配置（授权 URL、Token URL 等） |
+| enabled | BOOLEAN | 是否启用 |
+| created_at | TIMESTAMPTZ | 创建时间 |
+
+#### ✅ 实施任务清单
 - [ ] 实现 OAuth2 客户端封装（internal/federation/oauth2_client.go）
   - 授权 URL 生成（构建 state 参数，Redis 临时存储）
   - Token 交换（authorization_code -> access_token）
@@ -296,13 +757,69 @@
 ### 🔲 10. 授权码流程（Authorization Code + PKCE）
 **知识点**: PKCE、code_challenge、code_verifier、S256/plain
 
-- [ ] 设计授权码表（authorization_codes）
-  - 字段：code, client_id, account_id, redirect_uri, scopes(jsonb), code_challenge, code_challenge_method, nonce, expires_at, used_at
-  - 索引：code（唯一）
-  - 说明：授权码短期有效（5 分钟），一次性使用
-- [ ] 编写数据库迁移脚本（db/migrations/0007_authorization_codes.up.sql）
-- [ ] 实现授权端点（internal/oauth2/handler/authorize_handler.go）
-  - GET/POST /oauth2/authorize
+#### 🔐 OAuth 2.1 授权码流程（带 PKCE）
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant C as 客户端应用
+    participant S as SSO 服务器
+    
+    Note over C: 1. 生成 code_verifier（随机字符串）
+    Note over C: 2. 计算 code_challenge = SHA256(code_verifier)
+    
+    C->>S: 3. GET /oauth2/authorize<br/>?client_id=xxx<br/>&redirect_uri=xxx<br/>&response_type=code<br/>&scope=openid profile<br/>&state=random<br/>&code_challenge=xxx<br/>&code_challenge_method=S256
+    
+    S->>S: 4. 验证 client_id、redirect_uri
+    
+    alt 用户未登录
+        S->>U: 5a. 重定向到登录页
+        U->>S: 5b. 登录认证
+    end
+    
+    S->>U: 6. 显示授权同意页<br/>（显示 scopes）
+    U->>S: 7. 用户同意
+    
+    S->>S: 8. 生成 authorization_code<br/>存储 code_challenge
+    S->>C: 9. 重定向<br/>redirect_uri?code=xxx&state=xxx
+    
+    C->>S: 10. POST /oauth2/token<br/>grant_type=authorization_code<br/>code=xxx<br/>code_verifier=原始值<br/>client_id=xxx<br/>redirect_uri=xxx
+    
+    S->>S: 11. 验证 authorization_code
+    S->>S: 12. PKCE 验证<br/>SHA256(code_verifier) == code_challenge
+    S->>S: 13. 验证 redirect_uri 一致性
+    
+    S->>S: 14. 签发 Access Token + Refresh Token
+    S-->>C: 15. 返回<br/>{"access_token": "...",<br/> "token_type": "Bearer",<br/> "expires_in": 3600,<br/> "refresh_token": "..."}
+    
+    C->>C: 16. 存储 tokens
+```
+
+#### 📊 数据表设计
+
+**authorization_codes - 授权码表**
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| code | VARCHAR(255) | PRIMARY KEY | 授权码（唯一） |
+| client_id | VARCHAR(255) | NOT NULL | 客户端 ID |
+| account_id | UUID | FK -> accounts(id) | 授权的账号 |
+| redirect_uri | TEXT | NOT NULL | 回调地址 |
+| scopes | JSONB | DEFAULT '[]' | 授权范围 |
+| code_challenge | VARCHAR(255) | | PKCE 挑战码 |
+| code_challenge_method | VARCHAR(10) | | S256/plain |
+| nonce | VARCHAR(255) | | OIDC nonce |
+| expires_at | TIMESTAMPTZ | NOT NULL | 过期时间（5 分钟） |
+| used_at | TIMESTAMPTZ | | 使用时间（防重复使用） |
+
+- **说明**: 授权码短期有效（5 分钟），一次性使用
+
+#### ✅ 实施任务清单
+#### ✅ 实施任务清单
+
+- [ ] 编写数据库迁移脚本 `db/migrations/0007_authorization_codes.up.sql`
+- [ ] 实现授权端点 `internal/oauth2/handler/authorize_handler.go`
+  - `GET/POST /oauth2/authorize`
   - 参数验证：client_id, redirect_uri, response_type, scope, state, code_challenge, code_challenge_method, nonce
   - 检查账号登录状态（从 session 读取 account_id）
   - 未登录：跳转到登录页面（保存请求参数到 session）
@@ -315,12 +832,12 @@
   - 生成唯一授权码（32 字节随机数，Base64URL 编码）
   - 关联 PKCE 参数（code_challenge, code_challenge_method）
   - 存储到 authorization_codes 表（expires_at: 5 分钟后）
-  - 重定向到 redirect_uri?code=...&state=...
-- [ ] 实现 Token 端点（internal/oauth2/handler/token_handler.go）
-  - POST /oauth2/token
-  - grant_type=authorization_code
+  - 重定向到 `redirect_uri?code=...&state=...`
+- [ ] 实现 Token 端点 `internal/oauth2/handler/token_handler.go`
+  - `POST /oauth2/token`
+  - `grant_type=authorization_code`
   - 验证授权码（未过期、未使用）
-  - 验证 code_verifier（PKCE，计算 SHA256 并 Base64URL 编码后与 code_challenge 比对）
+  - **PKCE 验证**：计算 SHA256(code_verifier) 并 Base64URL 编码后与 code_challenge 比对
   - 验证 client_id、redirect_uri 一致性
   - 签发 Access Token 和 Refresh Token（调用任务 11 的 JWT 服务）
   - 标记授权码已使用（used_at）
@@ -368,6 +885,49 @@
 ### 🔲 12. Refresh Token 与令牌轮换
 **知识点**: Refresh Token、Token Rotation、Token Family
 
+#### 🔄 Refresh Token 轮换机制
+
+```mermaid
+flowchart TD
+    A["客户端持有 Refresh Token"] --> B["POST /oauth2/token<br/>grant_type=refresh_token"]
+    B --> C["验证 Refresh Token"]
+    
+    C -->|"有效"| D["签发新的 Access Token"]
+    C -->|"已撤销"| E["检查是否重复使用"]
+    C -->|"过期"| F["返回错误：token_expired"]
+    
+    D --> G["签发新的 Refresh Token<br/>Token Rotation"]
+    G --> H["撤销旧 Refresh Token<br/>更新 revoked_at"]
+    H --> I["记录 Token Family<br/>防盗用检测"]
+    I --> J["返回新的 tokens"]
+    
+    E -->|"是（盗用）"| K["撤销整个 Token Family<br/>所有相关 token 失效"]
+    K --> L["发送安全告警<br/>通知账号所有者"]
+    
+    style K fill:#ffe0e0
+    style L fill:#ffe0e0
+```
+
+#### 📊 Token Family 追踪示例
+
+```mermaid
+graph LR
+    A["Access Token 1"] -->|"refresh"| B["Access Token 2"]
+    B -->|"refresh"| C["Access Token 3"]
+    C -->|"refresh"| D["Access Token 4"]
+    
+    A -.->|"family_id"| F["Token Family<br/>abc123"]
+    B -.-> F
+    C -.-> F
+    D -.-> F
+    
+    style F fill:#e1f5ff
+    
+    Note["如果检测到 Token 2<br/>被再次使用<br/>撤销整个 Family"]
+```
+
+#### ✅ 实施任务清单
+
 - [ ] 实现 Refresh Token 签发
   - 长期有效（7-30 天）
   - 存储在数据库（可撤销）
@@ -405,6 +965,50 @@
 
 ### 🔲 14. OIDC 核心功能
 **知识点**: ID Token、UserInfo、Discovery、OIDC Scopes
+
+#### 🆔 OIDC 架构概览
+
+```mermaid
+flowchart LR
+    A["客户端应用"] -->|"1. 发现"| B["/.well-known/<br/>openid-configuration"]
+    A -->|"2. 授权"| C["/oauth2/authorize<br/>scope=openid"]
+    C -->|"3. 回调"| D["/oauth2/token<br/>返回 ID Token + Access Token"]
+    A -->|"4. 获取用户信息"| E["/oauth2/userinfo<br/>需要 Access Token"]
+    
+    style B fill:#e1f5ff
+    style D fill:#fff4e1
+    style E fill:#f0ffe1
+```
+
+#### 📊 OIDC Scopes 映射表
+
+| Scope | 返回的 Claims | 数据来源 |
+|-------|---------------|----------|
+| `openid` | sub（必须） | accounts.id |
+| `profile` | name, family_name, given_name, picture, locale, timezone | accounts.display_name, locale, timezone |
+| `email` | email, email_verified | account_credentials (type='email') |
+| `phone` | phone_number, phone_number_verified | account_credentials (type='phone') |
+| `address` | address | accounts.metadata |
+
+#### 🎫 ID Token 结构示例
+
+```json
+{
+  "iss": "https://sso.example.com",
+  "sub": "550e8400-e29b-41d4-a716-446655440000",
+  "aud": "client-app-123",
+  "exp": 1735689600,
+  "iat": 1735686000,
+  "auth_time": 1735686000,
+  "nonce": "random-nonce-value",
+  "name": "张三",
+  "email": "zhangsan@example.com",
+  "email_verified": true,
+  "picture": "https://cdn.example.com/avatar.jpg"
+}
+```
+
+#### ✅ 实施任务清单
 
 - [ ] 实现 OpenID Configuration 端点
   - GET /.well-known/openid-configuration
@@ -539,11 +1143,71 @@
 ### 🔲 19. RBAC 权限模型
 **知识点**: RBAC、ABAC、权限继承、资源权限
 
-- [ ] 设计权限表（permissions）
-  - 字段：id, resource, action, description
-  - 示例：(accounts, read), (accounts, write), (oauth2_clients, manage)
-  - 唯一索引：(resource, action)
-- [ ] 编写数据库迁移脚本（db/migrations/0010_permissions.up.sql）
+#### 🔐 RBAC 权限检查流程
+
+```mermaid
+flowchart TD
+    A["用户访问资源"] --> B["从 Context 获取 account_id"]
+    B --> C["查询权限缓存<br/>Redis key: perms:account_id"]
+    
+    C -->|"缓存命中"| D["返回权限列表"]
+    C -->|"缓存未命中"| E["数据库查询"]
+    
+    E --> F["JOIN account_roles<br/>ON account_id"]
+    F --> G["JOIN roles<br/>ON role_id"]
+    G --> H["提取 permissions (JSONB)"]
+    H --> I["合并所有角色的权限"]
+    I --> J["存入 Redis 缓存<br/>TTL 5 分钟"]
+    J --> D
+    
+    D --> K{"检查权限"}
+    K -->|"resource.action 存在"| L["允许访问<br/>200 OK"]
+    K -->|"权限不足"| M["拒绝访问<br/>403 Forbidden"]
+    M --> N["记录审计日志<br/>permission_denied"]
+    
+    style L fill:#e1ffe1
+    style M fill:#ffe0e0
+```
+
+#### 📊 权限数据表设计
+
+**permissions - 权限表**
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | UUID | PRIMARY KEY | 权限唯一标识 |
+| resource | VARCHAR(50) | NOT NULL | 资源名称 |
+| action | VARCHAR(50) | NOT NULL | 操作名称 |
+| description | TEXT | | 权限描述 |
+
+- **唯一索引**: `(resource, action)`
+- **示例权限**:
+  - `(accounts, read)` - 查看账号
+  - `(accounts, write)` - 创建/修改账号
+  - `(oauth2_clients, manage)` - 管理 OAuth2 客户端
+  - `(audit_logs, read)` - 查看审计日志
+
+#### 🔗 权限分配示例
+
+```mermaid
+graph LR
+    A["账号：张三"] -->|"account_roles"| B["角色：管理员"]
+    A -->|"account_roles"| C["角色：审计员"]
+    
+    B -->|"roles.permissions"| D["权限集合 1"]
+    C -->|"roles.permissions"| E["权限集合 2"]
+    
+    D --> F["accounts.*<br/>oauth2_clients.*<br/>audit_logs.*"]
+    E --> G["audit_logs.read"]
+    
+    F --> H["最终权限<br/>并集"]
+    G --> H
+    
+    style A fill:#e1f5ff
+    style H fill:#ffe1e1
+```
+
+#### ✅ 实施任务清单
 - [ ] 实现权限检查服务（internal/authz/service/permission_service.go）
   - 账号权限查询（基于角色，JOIN account_roles -> roles -> permissions）
   - 权限判断（account.can(resource, action)）
@@ -954,6 +1618,101 @@
 
 ### 🔲 38. Kubernetes 部署
 **知识点**: Kubernetes、Helm、ConfigMap、Secret、Ingress
+
+#### ☸️ Kubernetes 部署架构
+
+```mermaid
+graph TB
+    subgraph "外部访问"
+        USER["用户"]
+        LB["负载均衡器"]
+    end
+    
+    subgraph "Kubernetes 集群"
+        ING["Ingress Controller<br/>Nginx/Traefik"]
+        
+        subgraph "SSO Namespace"
+            SVC["Service<br/>sso-service"]
+            
+            subgraph "Pod 副本"
+                POD1["sso-pod-1<br/>容器：sso-server"]
+                POD2["sso-pod-2<br/>容器：sso-server"]
+                POD3["sso-pod-3<br/>容器：sso-server"]
+            end
+            
+            HPA["Horizontal Pod Autoscaler<br/>CPU > 70% 自动扩容"]
+            
+            CM["ConfigMap<br/>配置文件"]
+            SEC["Secret<br/>密钥/证书"]
+        end
+        
+        subgraph "数据层"
+            PG_SVC["PostgreSQL Service"]
+            PG_POD["PostgreSQL Pod"]
+            PG_PVC["PersistentVolumeClaim<br/>数据持久化"]
+            
+            REDIS_SVC["Redis Service"]
+            REDIS_POD["Redis Pod"]
+        end
+        
+        subgraph "监控层"
+            PROM["Prometheus"]
+            GRAF["Grafana"]
+        end
+    end
+    
+    USER --> LB
+    LB --> ING
+    ING -->|"sso.example.com"| SVC
+    SVC --> POD1
+    SVC --> POD2
+    SVC --> POD3
+    
+    HPA -.->|"监控"| POD1
+    HPA -.->|"监控"| POD2
+    HPA -.->|"监控"| POD3
+    
+    POD1 --> CM
+    POD1 --> SEC
+    POD2 --> CM
+    POD2 --> SEC
+    POD3 --> CM
+    POD3 --> SEC
+    
+    POD1 --> PG_SVC
+    POD2 --> PG_SVC
+    POD3 --> PG_SVC
+    PG_SVC --> PG_POD
+    PG_POD --> PG_PVC
+    
+    POD1 --> REDIS_SVC
+    POD2 --> REDIS_SVC
+    POD3 --> REDIS_SVC
+    REDIS_SVC --> REDIS_POD
+    
+    POD1 -.->|"metrics"| PROM
+    POD2 -.->|"metrics"| PROM
+    POD3 -.->|"metrics"| PROM
+    PROM --> GRAF
+    
+    style POD1 fill:#e1f5ff
+    style POD2 fill:#e1f5ff
+    style POD3 fill:#e1f5ff
+```
+
+#### 📋 Kubernetes 资源清单
+
+| 资源类型 | 名称 | 说明 |
+|----------|------|------|
+| Deployment | `sso-deployment` | SSO 服务部署（3 副本） |
+| Service | `sso-service` | ClusterIP 类型，端口 8080 |
+| Ingress | `sso-ingress` | 域名：sso.example.com，TLS 证书 |
+| ConfigMap | `sso-config` | 应用配置文件（config.yaml） |
+| Secret | `sso-secrets` | 敏感信息（DB 密码、密钥） |
+| HPA | `sso-hpa` | CPU 阈值 70%，副本 3-10 |
+| PVC | `postgres-pvc` | 存储大小 50Gi |
+
+#### ✅ 实施任务清单
 
 - [ ] 编写 Kubernetes Manifests
   - Deployment
