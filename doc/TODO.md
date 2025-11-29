@@ -101,6 +101,17 @@ graph TB
 
 #### 📊 数据库表结构
 
+> **🔧 数据库设计决策说明**
+> 
+> 本项目在数据库设计上采用了以下关键决策：
+> 
+> | 决策点 | 方案 | 理由 |
+> |--------|------|------|
+> | **软删除** | ✅ 采用 | SSO 系统需要完整的审计追踪，删除的账号/凭证需要保留历史记录用于合规审查 |
+> | **外键约束** | ❌ 不采用 | 高并发场景下外键会影响性能和扩展性，使用应用层保证数据一致性 |
+> | **事务管理** | ✅ 必须 | 所有关联数据的增删改操作必须在事务中执行，保证 ACID 特性 |
+> | **索引策略** | 部分索引 | 软删除字段使用条件索引 `WHERE deleted_at IS NULL`，避免索引膨胀 |
+
 **accounts - 核心账号表**
 
 | 字段 | 类型 | 约束 | 说明 |
@@ -115,8 +126,14 @@ graph TB
 | metadata | JSONB | DEFAULT '{}' | 扩展元数据 |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | 创建时间 |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新时间 |
+| deleted_at | TIMESTAMPTZ | NULL | **软删除时间**（NULL=未删除） |
 
-- **索引**: `username` (条件索引，WHERE username IS NOT NULL)
+- **索引**: 
+  - `username` (条件索引，WHERE username IS NOT NULL AND deleted_at IS NULL)
+  - `status` (WHERE deleted_at IS NULL)
+  - `deleted_at` (便于定期清理)
+- **软删除策略**: 使用 `deleted_at` 字段标记删除，保留数据用于审计和恢复
+- **外键策略**: 不使用数据库外键，通过应用层保证引用完整性（性能优先）
 - **说明**: 仅存储账号身份信息，不包含认证凭证
 
 ---
@@ -126,7 +143,7 @@ graph TB
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
 | id | UUID | PRIMARY KEY | 凭证唯一标识 |
-| account_id | UUID | FK -> accounts(id) | 关联账号 |
+| account_id | UUID | NOT NULL | 关联账号（应用层外键） |
 | credential_type | VARCHAR(20) | NOT NULL | 凭证类型 |
 | identifier | VARCHAR(255) | | 凭证标识符（邮箱/手机号等） |
 | credential_value | TEXT | | 凭证值（密码 hash/TOTP secret） |
@@ -136,10 +153,16 @@ graph TB
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | 创建时间 |
 | verified_at | TIMESTAMPTZ | | 验证时间 |
 | last_used_at | TIMESTAMPTZ | | 最后使用时间 |
+| deleted_at | TIMESTAMPTZ | NULL | **软删除时间** |
 
 - **credential_type 枚举**: `password`, `email`, `phone`, `totp`, `webauthn`, `backup_code`
-- **复合唯一索引**: `(credential_type, identifier)`
-- **索引**: `account_id`, `(credential_type, verified)`
+- **复合唯一索引**: `(credential_type, identifier)` WHERE deleted_at IS NULL
+- **索引**: 
+  - `account_id` WHERE deleted_at IS NULL
+  - `(credential_type, verified)` WHERE deleted_at IS NULL
+  - `deleted_at` (便于清理)
+- **软删除策略**: 删除凭证时保留历史记录，便于安全审计
+- **级联删除**: 账号软删除时，应用层软删除所有关联凭证
 - **说明**: 支持一个账号多个凭证，灵活扩展认证方式
 
 ---
@@ -149,39 +172,106 @@ graph TB
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
 | id | UUID | PRIMARY KEY | 唯一标识 |
-| account_id | UUID | FK -> accounts(id) | 关联账号 |
+| account_id | UUID | NOT NULL | 关联账号（应用层外键） |
 | provider | VARCHAR(50) | NOT NULL | 身份提供商 |
 | provider_user_id | VARCHAR(255) | NOT NULL | 提供商用户 ID |
 | profile | JSONB | DEFAULT '{}' | 用户资料 |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | 创建时间 |
+| deleted_at | TIMESTAMPTZ | NULL | **软删除时间** |
 
-- **唯一索引**: `(provider, provider_user_id)`
+- **唯一索引**: `(provider, provider_user_id)` WHERE deleted_at IS NULL
+- **索引**: `account_id` WHERE deleted_at IS NULL
+- **软删除策略**: 解绑第三方账号时软删除，保留绑定历史
 - **说明**: 管理 Google、GitHub、微信等第三方登录
 
 ---
 
 **其他关联表**
 
-| 表名 | 字段 | 说明 |
-|------|------|------|
-| groups | id, name, description, parent_id, metadata, created_at, updated_at | 群组表（支持树形结构） |
-| roles | id, name (UNIQUE), description, permissions (JSONB), metadata, created_at, updated_at | 角色表 |
-| account_roles | account_id (FK), role_id (FK) | 账号-角色关联（主键：account_id + role_id） |
-| account_groups | account_id (FK), group_id (FK) | 账号-群组关联（主键：account_id + group_id） |
+| 表名 | 字段 | 软删除 | 说明 |
+|------|------|--------|------|
+| groups | id, name, description, parent_id, metadata, created_at, updated_at, **deleted_at** | ✅ | 群组表（支持树形结构） |
+| roles | id, name (UNIQUE), description, permissions (JSONB), metadata, created_at, updated_at, **deleted_at** | ✅ | 角色表 |
+| account_roles | account_id, role_id, created_at, **deleted_at** | ✅ | 账号-角色关联（复合主键：account_id + role_id + deleted_at） |
+| account_groups | account_id, group_id, created_at, **deleted_at** | ✅ | 账号-群组关联（复合主键：account_id + group_id + deleted_at） |
 #### ✅ 实施任务清单
 
 - [ ] 编写数据库迁移脚本 `db/migrations/0002_accounts.up.sql`
-  - 包含所有表定义、索引、外键约束
-  - 添加 `ON DELETE CASCADE` 级联删除
+  - 包含所有表定义、索引、**不含外键约束**
+  - 添加软删除字段 `deleted_at`
+  - 创建条件索引（过滤 deleted_at IS NULL）
 - [ ] 创建账号领域模型 `internal/account/domain/account.go`
   - Account 结构体
   - Credential 结构体
   - FederatedIdentity 结构体
 - [ ] 实现账号仓储接口 `internal/account/repository/account_repository.go`
   - `FindByID`, `FindByUsername`, `FindByCredential`
-  - `CreateAccount`, `UpdateAccount`, `DeleteAccount`
+  - `CreateAccount`, `UpdateAccount`, `SoftDeleteAccount`
   - `AddCredential`, `VerifyCredential`, `RemoveCredential`
   - `LinkFederatedIdentity`, `UnlinkFederatedIdentity`
+  - **所有修改操作必须支持事务传递**
+
+#### 🔄 事务处理策略
+
+```mermaid
+flowchart TD
+    A["开始操作"] --> B["BEGIN 事务"]
+    B --> C{"操作类型"}
+    
+    C -->|"创建账号"| D["1. INSERT accounts<br/>2. INSERT account_credentials<br/>email + password"]
+    C -->|"删除账号"| E["1. UPDATE accounts<br/>SET deleted_at = NOW()<br/>2. UPDATE account_credentials<br/>SET deleted_at = NOW()"]
+    C -->|"绑定第三方"| F["1. 查询账号是否存在<br/>2. INSERT federated_identities"]
+    
+    D --> G{"所有操作成功？"}
+    E --> G
+    F --> G
+    
+    G -->|"是"| H["COMMIT 提交"]
+    G -->|"否"| I["ROLLBACK 回滚"]
+    
+    H --> J["返回成功"]
+    I --> K["返回错误"]
+    
+    style H fill:#e1ffe1
+    style I fill:#ffe0e0
+```
+
+**必须使用事务的场景：**
+
+1. **账号注册** - 同时创建 account + credentials
+2. **账号删除** - 软删除 account + 关联的所有 credentials
+3. **凭证更换** - 删除旧凭证 + 添加新凭证（如换绑手机号）
+4. **角色分配** - 批量添加/删除角色关联
+5. **第三方绑定** - 创建 account（如不存在）+ 创建 federated_identity
+
+**代码示例：**
+
+```go
+func (r *AccountRepository) CreateAccount(ctx context.Context, account *Account, credentials []*Credential) error {
+    // 开始事务
+    tx, err := r.db.BeginTx(ctx, nil)
+    if err != nil {
+        return err
+    }
+    defer tx.Rollback() // 确保异常时回滚
+    
+    // 1. 插入账号
+    if err := tx.CreateAccount(ctx, account); err != nil {
+        return err
+    }
+    
+    // 2. 插入凭证（email/password）
+    for _, cred := range credentials {
+        cred.AccountID = account.ID
+        if err := tx.CreateCredential(ctx, cred); err != nil {
+            return err
+        }
+    }
+    
+    // 提交事务
+    return tx.Commit()
+}
+```
 
 #### 📊 ER 关系图
 
@@ -201,25 +291,131 @@ erDiagram
         varchar display_name
         varchar status
         jsonb metadata
+        timestamptz deleted_at "软删除"
     }
     
     account_credentials {
         uuid id PK
-        uuid account_id FK
+        uuid account_id "应用层FK"
         varchar credential_type
         varchar identifier
         text credential_value
         boolean verified
+        timestamptz deleted_at "软删除"
     }
     
     federated_identities {
         uuid id PK
-        uuid account_id FK
+        uuid account_id "应用层FK"
         varchar provider
         varchar provider_user_id
         jsonb profile
+        timestamptz deleted_at "软删除"
     }
 ```
+
+---
+
+#### 🔍 软删除 vs 硬删除对比
+
+| 维度 | 软删除（本项目采用） | 硬删除 |
+|------|---------------------|--------|
+| **数据恢复** | ✅ 可恢复（UPDATE deleted_at = NULL） | ❌ 无法恢复 |
+| **审计追踪** | ✅ 完整保留操作历史 | ❌ 记录永久丢失 |
+| **合规要求** | ✅ 满足 GDPR "被遗忘权"（可后期物理删除） | ⚠️ 难以追溯 |
+| **查询性能** | ⚠️ 需要 WHERE deleted_at IS NULL | ✅ 无额外过滤 |
+| **存储空间** | ⚠️ 数据不断增长 | ✅ 空间节省 |
+| **唯一约束** | ⚠️ 需要条件唯一索引 | ✅ 简单唯一索引 |
+| **SSO 场景适用性** | ✅ **强烈推荐** | ❌ 不推荐 |
+
+**软删除实施要点：**
+
+1. **查询时默认过滤**：所有 SELECT 都加 `WHERE deleted_at IS NULL`
+2. **唯一索引调整**：使用条件唯一索引 `WHERE deleted_at IS NULL`
+3. **定期清理**：软删除超过 1 年的数据可物理删除（满足数据保留政策）
+4. **管理接口**：提供"恢复已删除账号"功能
+
+---
+
+#### 🔗 外键约束 vs 应用层约束对比
+
+| 维度 | 数据库外键 | 应用层约束（本项目采用） |
+|------|-----------|-------------------------|
+| **数据一致性** | ✅ 数据库强制保证 | ⚠️ 需应用层逻辑保证 |
+| **性能影响** | ❌ 锁等待、死锁风险 | ✅ 无额外锁开销 |
+| **水平扩展** | ❌ 跨库分片困难 | ✅ 易于分库分表 |
+| **灵活性** | ❌ 模式变更困难 | ✅ 灵活调整关联逻辑 |
+| **开发复杂度** | ✅ 简单 | ⚠️ 需手动维护 |
+| **故障隔离** | ❌ 级联失败风险 | ✅ 单表故障不影响其他表 |
+| **高并发场景** | ❌ 锁竞争严重 | ✅ **推荐** |
+
+**不使用外键的实施要点：**
+
+1. **应用层检查**：删除账号前查询关联数据
+   ```go
+   // 删除前检查
+   hasTokens := repo.HasActiveTokens(accountID)
+   if hasTokens {
+       return errors.New("账号有活跃 Token，无法删除")
+   }
+   ```
+
+2. **事务保证一致性**：使用数据库事务确保原子性（见上面的事务处理策略）
+
+3. **定期数据校验**：后台任务检测孤儿记录
+   ```sql
+   -- 查找孤儿凭证（账号已删除但凭证未删除）
+   SELECT * FROM account_credentials 
+   WHERE account_id NOT IN (
+       SELECT id FROM accounts WHERE deleted_at IS NULL
+   ) AND deleted_at IS NULL;
+   ```
+
+4. **监控告警**：发现数据不一致时及时告警
+
+---
+
+#### ⚡ 性能优化建议
+
+**1. 条件索引（Partial Index）**
+```sql
+-- 仅索引未删除的数据，减少索引大小 50%+
+CREATE INDEX idx_accounts_username 
+ON accounts(username) 
+WHERE deleted_at IS NULL;
+
+CREATE UNIQUE INDEX idx_credentials_email 
+ON account_credentials(credential_type, identifier) 
+WHERE deleted_at IS NULL AND credential_type = 'email';
+```
+
+**2. 定期归档**
+```sql
+-- 每月归档软删除超过 1 年的数据到归档表
+INSERT INTO accounts_archive 
+SELECT * FROM accounts 
+WHERE deleted_at < NOW() - INTERVAL '1 year';
+
+DELETE FROM accounts 
+WHERE deleted_at < NOW() - INTERVAL '1 year';
+```
+
+**3. 查询优化 - 使用统一的查询基类**
+```go
+// 定义查询基类，自动添加软删除过滤
+type BaseRepository struct {
+    db *sql.DB
+}
+
+func (r *BaseRepository) buildQuery(base string) string {
+    return base + " AND deleted_at IS NULL"
+}
+
+// 使用示例
+query := r.buildQuery("SELECT * FROM accounts WHERE id = ?")
+```
+
+---
 
 **参考文档**:
 - PostgreSQL 官方文档
