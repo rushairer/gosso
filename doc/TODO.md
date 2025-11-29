@@ -286,48 +286,122 @@ func (r *AccountRepository) CreateAccount(ctx context.Context, account *Account,
     return nil
 }
 
-// 示例 2：账号软删除（级联删除关联数据）
+// 示例 2：账号软删除（正确的分层架构）
+
+// ========== Repository 层（internal/account/repository/account_repository.go） ==========
+type AccountRepository interface {
+    // 软删除账号（带事务）
+    SoftDeleteAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+    // 软删除账号的所有凭证
+    SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+    // 软删除账号的角色关联
+    SoftDeleteRolesByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+    // 软删除账号的第三方身份
+    SoftDeleteFederatedIdentitiesByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+}
+
+type accountRepositoryImpl struct {
+    db *sql.DB
+}
+
+func (r *accountRepositoryImpl) SoftDeleteAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
+    query := `UPDATE accounts SET deleted_at = $1, updated_at = $1 
+              WHERE id = $2 AND deleted_at IS NULL`
+    _, err := tx.ExecContext(ctx, query, deletedAt, accountID)
+    return err
+}
+
+func (r *accountRepositoryImpl) SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
+    query := `UPDATE account_credentials SET deleted_at = $1 
+              WHERE account_id = $2 AND deleted_at IS NULL`
+    _, err := tx.ExecContext(ctx, query, deletedAt, accountID)
+    return err
+}
+
+func (r *accountRepositoryImpl) SoftDeleteRolesByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
+    query := `UPDATE account_roles SET deleted_at = $1 
+              WHERE account_id = $2 AND deleted_at IS NULL`
+    _, err := tx.ExecContext(ctx, query, deletedAt, accountID)
+    return err
+}
+
+func (r *accountRepositoryImpl) SoftDeleteFederatedIdentitiesByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
+    query := `UPDATE federated_identities SET deleted_at = $1 
+              WHERE account_id = $2 AND deleted_at IS NULL`
+    _, err := tx.ExecContext(ctx, query, deletedAt, accountID)
+    return err
+}
+
+// ========== Token Repository 层 ==========
+type TokenRepository interface {
+    RevokeTokensByAccount(ctx context.Context, tx *sql.Tx, accountID string, revokedAt time.Time, reason string) error
+}
+
+func (r *tokenRepositoryImpl) RevokeTokensByAccount(ctx context.Context, tx *sql.Tx, accountID string, revokedAt time.Time, reason string) error {
+    query := `UPDATE oauth2_tokens 
+              SET revoked_at = $1, revoke_reason = $2 
+              WHERE account_id = $3 AND revoked_at IS NULL`
+    _, err := tx.ExecContext(ctx, query, revokedAt, reason, accountID)
+    return err
+}
+
+// ========== Service 层（internal/account/service/account_service.go） ==========
+type AccountService struct {
+    accountRepo AccountRepository
+    tokenRepo   TokenRepository
+    db          *sql.DB
+}
+
+// Service 层职责：业务逻辑编排、事务管理、业务验证
 func (s *AccountService) SoftDeleteAccount(ctx context.Context, accountID string) error {
-    return s.db.WithTransaction(ctx, func(tx *sql.Tx) error {
-        now := time.Now()
-        
-        // 1. 软删除主账号
-        if _, err := tx.ExecContext(ctx, 
-            "UPDATE accounts SET deleted_at = $1 WHERE id = $2 AND deleted_at IS NULL",
-            now, accountID); err != nil {
-            return err
-        }
-        
-        // 2. 软删除所有凭证
-        if _, err := tx.ExecContext(ctx,
-            "UPDATE account_credentials SET deleted_at = $1 WHERE account_id = $2 AND deleted_at IS NULL",
-            now, accountID); err != nil {
-            return err
-        }
-        
-        // 3. 软删除角色关联
-        if _, err := tx.ExecContext(ctx,
-            "UPDATE account_roles SET deleted_at = $1 WHERE account_id = $2 AND deleted_at IS NULL",
-            now, accountID); err != nil {
-            return err
-        }
-        
-        // 4. 软删除第三方身份
-        if _, err := tx.ExecContext(ctx,
-            "UPDATE federated_identities SET deleted_at = $1 WHERE account_id = $2 AND deleted_at IS NULL",
-            now, accountID); err != nil {
-            return err
-        }
-        
-        // 5. 撤销所有活跃 Token
-        if _, err := tx.ExecContext(ctx,
-            "UPDATE oauth2_tokens SET revoked_at = $1, revoke_reason = 'account_deleted' WHERE account_id = $2 AND revoked_at IS NULL",
-            now, accountID); err != nil {
-            return err
-        }
-        
-        return nil
+    // 1. 业务前置验证（可选）
+    // - 检查账号是否存在
+    // - 检查是否有权限删除
+    // - 记录审计日志
+    
+    // 2. 开始事务，协调多个 Repository 操作
+    tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
+        Isolation: sql.LevelReadCommitted,
     })
+    if err != nil {
+        return fmt.Errorf("开始事务失败: %w", err)
+    }
+    defer tx.Rollback() // 确保异常时回滚
+    
+    now := time.Now()
+    
+    // 3. 调用 Repository 方法，而不是直接执行 SQL
+    if err := s.accountRepo.SoftDeleteAccount(ctx, tx, accountID, now); err != nil {
+        return fmt.Errorf("软删除账号失败: %w", err)
+    }
+    
+    if err := s.accountRepo.SoftDeleteCredentialsByAccount(ctx, tx, accountID, now); err != nil {
+        return fmt.Errorf("软删除凭证失败: %w", err)
+    }
+    
+    if err := s.accountRepo.SoftDeleteRolesByAccount(ctx, tx, accountID, now); err != nil {
+        return fmt.Errorf("软删除角色关联失败: %w", err)
+    }
+    
+    if err := s.accountRepo.SoftDeleteFederatedIdentitiesByAccount(ctx, tx, accountID, now); err != nil {
+        return fmt.Errorf("软删除第三方身份失败: %w", err)
+    }
+    
+    if err := s.tokenRepo.RevokeTokensByAccount(ctx, tx, accountID, now, "account_deleted"); err != nil {
+        return fmt.Errorf("撤销 Token 失败: %w", err)
+    }
+    
+    // 4. 提交事务
+    if err := tx.Commit(); err != nil {
+        return fmt.Errorf("提交事务失败: %w", err)
+    }
+    
+    // 5. 业务后置处理（事务外操作）
+    // - 清除 Redis 缓存
+    // - 发送通知（邮件/Webhook）
+    // - 记录审计日志
+    
+    return nil
 }
 
 // 示例 3：事务辅助方法（可复用）
