@@ -19,15 +19,3 @@ type AuditRecord struct {
 	Meta      json.RawMessage `json:"meta,omitempty"`
 	CreatedAt time.Time       `json:"created_at"`
 }
-
-type AuditEntry struct {
-	ID        uuid.UUID       `json:"id"`
-	TxID      uuid.UUID       `json:"tx_id"`
-	AccountID *uuid.UUID      `json:"account_id,omitempty"`
-	Action    string          `json:"action"`
-	Payload   json.RawMessage `json:"payload"`
-	Attempts  uint            `json:"attempts"`
-	LastError *string         `json:"last_error,omitempty"`
-	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
-}

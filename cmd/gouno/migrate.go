@@ -99,7 +99,7 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, error) {
 		return nil, fmt.Errorf("init config failed: %v", err)
 	}
 
-	defaultDriver := config.GlobalConfig.DatabaseConfig.GetDefaultDriver()
+	defaultDriver := config.GlobalConfig().DatabaseConfig.GetDefaultDriver()
 	if defaultDriver == nil {
 		return nil, fmt.Errorf("default driver not found")
 	}

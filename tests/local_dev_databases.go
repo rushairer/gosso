@@ -1,4 +1,4 @@
-package test
+package tests
 
 import (
 	"database/sql"
@@ -15,7 +15,7 @@ import (
 
 func NewTestDB() *sql.DB {
 	initTestConfig()
-	dsn := config.GlobalConfig.DatabaseConfig.GetDefaultDriver().DSN
+	dsn := config.GlobalConfig().DatabaseConfig.GetDefaultDriver().DSN
 
 	log.Println(dsn)
 	if postgres, err := sql.Open("postgres", dsn); err == nil {

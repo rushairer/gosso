@@ -3,12 +3,36 @@ package config
 import (
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
-var GlobalConfig GoUnoConfig
+var (
+	globalConfig GoUnoConfig
+
+	configMutex sync.RWMutex
+
+	logger *zap.Logger
+)
+
+func GlobalConfig() GoUnoConfig {
+	configMutex.Lock()
+	defer configMutex.Unlock()
+	return globalConfig
+}
+
+// SetLogger 设置配置模块使用的 logger 实例
+func SetLogger(l *zap.Logger) {
+	logger = l
+}
+
+// GetLogger 返回配置模块使用的 logger 实例
+func GetLogger() *zap.Logger {
+	return logger
+}
 
 type GoUnoConfig struct {
 	WebServerConfig    WebServerConfig    `mapstructure:"web_server"`
@@ -18,6 +42,7 @@ type GoUnoConfig struct {
 	TaskPipelineConfig TaskPipelineConfig `mapstructure:"task_pipeline"`
 	SMTPConfig         SMTPConfig         `mapstructure:"smtp"`
 	CaptchaConfig      CaptchaConfig      `mapstructure:"captcha"`
+	LogConfig          LogConfig          `mapstructure:"log"`
 }
 
 type WebServerConfig struct {
@@ -45,7 +70,7 @@ type DatabaseConfig struct {
 	Drivers map[DatabaseConfigDriverName]DatabaseConfigDriver `mapstructure:"drivers"`
 }
 
-func (c *DatabaseConfig) GetDriver(name DatabaseConfigDriverName) *DatabaseConfigDriver {
+func (c DatabaseConfig) GetDriver(name DatabaseConfigDriverName) *DatabaseConfigDriver {
 	if driver, ok := c.Drivers[name]; ok {
 		return &driver
 	} else {
@@ -53,7 +78,7 @@ func (c *DatabaseConfig) GetDriver(name DatabaseConfigDriverName) *DatabaseConfi
 	}
 }
 
-func (c *DatabaseConfig) GetDefaultDriver() *DatabaseConfigDriver {
+func (c DatabaseConfig) GetDefaultDriver() *DatabaseConfigDriver {
 	if driver, ok := c.Drivers[c.Default]; ok {
 		return &driver
 	} else {
@@ -92,7 +117,10 @@ type CaptchaConfig struct {
 	Type string `mapstructure:"type"`
 }
 
-
+type LogConfig struct {
+	// 日志级别: -1: debug, 0: info, 1: warn, 2: error, 3: fatal, 4: panic 5: fatal
+	Level int `mapstructure:"level"`
+}
 
 func InitConfig(configPath string, env string) (err error) {
 	// 设置所有默认值
@@ -111,17 +139,13 @@ func InitConfig(configPath string, env string) (err error) {
 		return
 	}
 
-	if err = viper.Unmarshal(&GlobalConfig); err != nil {
+	if err = viper.Unmarshal(&globalConfig); err != nil {
 		log.Fatalf("unmarshal config failed, err: %v", err)
 		return
 	}
 
-
-
 	return
 }
-
-
 
 func setConfigDefaults() {
 	// 验证码配置

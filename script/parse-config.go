@@ -121,7 +121,7 @@ func main() {
 	}
 
 	// 直接使用 GlobalConfig
-	cfg := config.GlobalConfig
+	cfg := config.GlobalConfig()
 
 	// 获取环境配置
 	envConfig, exists := deploy.GetEnvironment(env)
