@@ -50,3 +50,5 @@ coverage*.html
 *.dll
 *.so
 *.dylib
+redis
+metadata

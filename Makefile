@@ -100,3 +100,20 @@ help:
 	@echo "  help                 - Show this help message"
 
 .PHONY: default build run dev test docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs env-dev env-test env-prod env-all help
+# Examples - 示例程序
+.PHONY: examples example-account example-redis example-metadata
+
+examples: example-account example-redis example-metadata
+	@echo "✅ All examples completed"
+
+example-account:
+	@echo "========== Running Account Example =========="
+	@go run ./examples/account || echo "⚠️  Account example requires database"
+
+example-redis:
+	@echo "========== Running Redis Example =========="
+	@go run ./examples/redis || echo "⚠️  Redis example requires Redis service"
+
+example-metadata:
+	@echo "========== Running Metadata Example =========="
+	@go run ./examples/metadata
