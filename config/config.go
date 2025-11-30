@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/viper"
@@ -97,14 +98,19 @@ type LogConfig struct {
 	Level int `mapstructure:"level"`
 }
 
-func NewGoUnoConfig(
+type ConfigManager struct {
+	configMutex sync.RWMutex
+	config      *GoUnoConfig
+}
+
+func NewConfigManager(
 	configPath string,
 	env string,
-) *GoUnoConfig {
+) *ConfigManager {
 
-	config := GoUnoConfig{}
+	configManager := ConfigManager{}
 
-	setConfigDefaults()
+	configManager.setConfigDefaults()
 	viper.AddConfigPath(configPath)
 	viper.SetConfigName(env)
 	viper.SetConfigType("yaml")
@@ -118,15 +124,28 @@ func NewGoUnoConfig(
 		return nil
 	}
 
-	if err := viper.Unmarshal(&config); err != nil {
+	newConifg := GoUnoConfig{}
+	if err := viper.Unmarshal(&newConifg); err != nil {
 		log.Fatalf("unmarshal config failed, err: %v", err)
 		return nil
 	}
-
-	return &config
+	configManager.SetConfig(&newConifg)
+	return &configManager
 }
 
-func setConfigDefaults() {
+func (cm *ConfigManager) SetConfig(config *GoUnoConfig) {
+	cm.configMutex.Lock()
+	defer cm.configMutex.Unlock()
+	cm.config = config
+}
+
+func (cm *ConfigManager) Config() GoUnoConfig {
+	cm.configMutex.RLock()
+	defer cm.configMutex.RUnlock()
+	return *cm.config
+}
+
+func (cm *ConfigManager) setConfigDefaults() {
 	// 验证码配置
 	viper.SetDefault("captcha_type", "math")
 

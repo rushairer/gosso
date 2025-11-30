@@ -13,8 +13,9 @@ import (
 )
 
 func NewTestDB() *sql.DB {
-	globalConfig := NewTestConfig()
-	dsn := globalConfig.DatabaseConfig.GetDefaultDriver().DSN
+	configManager := NewTestConfigManager()
+
+	dsn := configManager.Config().DatabaseConfig.GetDefaultDriver().DSN
 
 	if postgres, err := sql.Open("postgres", dsn); err == nil {
 		if err = postgres.Ping(); err == nil {
@@ -29,10 +30,10 @@ func NewTestDB() *sql.DB {
 	}
 }
 
-func NewTestConfig() (globalConfig *config.GoUnoConfig) {
+func NewTestConfigManager() (configManager *config.ConfigManager) {
 	projectRoot := projectRoot()
 	configPath := filepath.Join(projectRoot, "config")
-	globalConfig = config.NewGoUnoConfig(configPath, "test")
+	configManager = config.NewConfigManager(configPath, "test")
 	return
 }
 

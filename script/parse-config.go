@@ -7,8 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/rushairer/gosso/config" // 引用项目的 config 包
+	// 引用项目的 config 包
 	"github.com/rushairer/gosso/deploy" // 引用项目的 deploy 包
+	"github.com/rushairer/gosso/tests"
 )
 
 func parsePostgresDSN(dsn string) (user, password, host string, port int, database string) {
@@ -116,7 +117,8 @@ func main() {
 	}
 
 	// 直接使用 GlobalConfig
-	cfg := config.NewGoUnoConfig("config", env)
+	configManager := tests.NewTestConfigManager()
+	cfg := configManager.Config()
 
 	// 获取环境配置
 	envConfig, exists := deploy.GetEnvironment(env)

@@ -59,7 +59,8 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		log.Fatalf("bind debug flag failed, err: %v", err)
 	}
 
-	globalConfig := config.NewGoUnoConfig(configPath, env)
+	configManager := config.NewConfigManager(configPath, env)
+	globalConfig := configManager.Config()
 
 	if globalConfig.WebServerConfig.Debug {
 		gin.SetMode(gin.DebugMode)
