@@ -59,12 +59,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		log.Fatalf("bind debug flag failed, err: %v", err)
 	}
 
-	err := config.InitConfig(configPath, env)
-	if err != nil {
-		log.Fatalf("init config failed, err: %v", err)
-	}
-
-	globalConfig := config.GlobalConfig()
+	globalConfig := config.NewGoUnoConfig(configPath, env)
 
 	if globalConfig.WebServerConfig.Debug {
 		gin.SetMode(gin.DebugMode)
@@ -75,13 +70,10 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	loggerLevel := zap.NewAtomicLevelAt(zapcore.Level(globalConfig.LogConfig.Level))
 	logger := utility.NewLogger(loggerLevel)
 
-	// 设置 logger 到配置模块
-	config.SetLogger(logger)
-
 	logger.Sugar().Info("starting web server...")
 
 	// init db
-	// defaultDriver := config.GlobalConfig().DatabaseConfig.GetDefaultDriver()
+	// defaultDriver := globalConfig.DatabaseConfig.GetDefaultDriver()
 	// if defaultDriver == nil {
 	// 	log.Fatalf("default driver not found")
 	// }
@@ -90,17 +82,17 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	engine.Use(
 		gin.Logger(),
 		middleware.RecoveryMiddleware(),
-		middleware.TimeoutMiddleware(config.GlobalConfig().WebServerConfig.RequestTimeout),
-		gounoMiddleware.RateLimitMiddleware(config.GlobalConfig().WebServerConfig.RateLimitPerMinute, time.Minute),
+		middleware.TimeoutMiddleware(globalConfig.WebServerConfig.RequestTimeout),
+		gounoMiddleware.RateLimitMiddleware(globalConfig.WebServerConfig.RateLimitPerMinute, time.Minute),
 	)
 	router.RegisterWebRouter(engine)
 
 	httpServer := &http.Server{
-		Addr:              fmt.Sprintf("%s:%s", config.GlobalConfig().WebServerConfig.Address, config.GlobalConfig().WebServerConfig.Port),
-		IdleTimeout:       config.GlobalConfig().WebServerConfig.IdleTimeout,
-		WriteTimeout:      config.GlobalConfig().WebServerConfig.WriteTimeout,
-		ReadTimeout:       config.GlobalConfig().WebServerConfig.ReadTimeout,
-		ReadHeaderTimeout: config.GlobalConfig().WebServerConfig.ReadHeaderTimeout,
+		Addr:              fmt.Sprintf("%s:%s", globalConfig.WebServerConfig.Address, globalConfig.WebServerConfig.Port),
+		IdleTimeout:       globalConfig.WebServerConfig.IdleTimeout,
+		WriteTimeout:      globalConfig.WebServerConfig.WriteTimeout,
+		ReadTimeout:       globalConfig.WebServerConfig.ReadTimeout,
+		ReadHeaderTimeout: globalConfig.WebServerConfig.ReadHeaderTimeout,
 		Handler:           engine,
 	}
 

@@ -3,36 +3,10 @@ package config
 import (
 	"log"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/spf13/viper"
-	"go.uber.org/zap"
 )
-
-var (
-	globalConfig GoUnoConfig
-
-	configMutex sync.RWMutex
-
-	logger *zap.Logger
-)
-
-func GlobalConfig() GoUnoConfig {
-	configMutex.Lock()
-	defer configMutex.Unlock()
-	return globalConfig
-}
-
-// SetLogger 设置配置模块使用的 logger 实例
-func SetLogger(l *zap.Logger) {
-	logger = l
-}
-
-// GetLogger 返回配置模块使用的 logger 实例
-func GetLogger() *zap.Logger {
-	return logger
-}
 
 type GoUnoConfig struct {
 	WebServerConfig    WebServerConfig    `mapstructure:"web_server"`
@@ -58,6 +32,7 @@ type WebServerConfig struct {
 }
 
 type DatabaseConfigDriverName string
+
 type DatabaseConfigDriver struct {
 	Name     DatabaseConfigDriverName `mapstructure:"name"`
 	Driver   string                   `mapstructure:"driver"`
@@ -122,10 +97,14 @@ type LogConfig struct {
 	Level int `mapstructure:"level"`
 }
 
-func InitConfig(configPath string, env string) (err error) {
-	// 设置所有默认值
-	setConfigDefaults()
+func NewGoUnoConfig(
+	configPath string,
+	env string,
+) *GoUnoConfig {
 
+	config := GoUnoConfig{}
+
+	setConfigDefaults()
 	viper.AddConfigPath(configPath)
 	viper.SetConfigName(env)
 	viper.SetConfigType("yaml")
@@ -134,17 +113,17 @@ func InitConfig(configPath string, env string) (err error) {
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
-	if err = viper.ReadInConfig(); err != nil {
+	if err := viper.ReadInConfig(); err != nil {
 		log.Fatalf("read config failed, err: %v", err)
-		return
+		return nil
 	}
 
-	if err = viper.Unmarshal(&globalConfig); err != nil {
+	if err := viper.Unmarshal(&config); err != nil {
 		log.Fatalf("unmarshal config failed, err: %v", err)
-		return
+		return nil
 	}
 
-	return
+	return &config
 }
 
 func setConfigDefaults() {

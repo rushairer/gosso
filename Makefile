@@ -96,6 +96,12 @@ help:
 	@echo "  env-prod             - Generate production environment variables"
 	@echo "  env-all              - Generate all environment variables"
 	@echo ""
+	@echo "📝 Example Commands:"
+	@echo "  examples             - Run all examples"
+	@echo "  example-account      - Run account module example"
+	@echo "  example-redis        - Run Redis cache example"
+	@echo "  example-metadata     - Run Metadata usage example"
+	@echo ""
 	@echo "🆘 Help Commands:"
 	@echo "  help                 - Show this help message"
 

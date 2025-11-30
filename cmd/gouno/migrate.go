@@ -95,11 +95,9 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, error) {
 	env := viper.Get("gouno_env").(string)
 
 	configPath := cmd.Flag("config_path").Value.String()
-	if err := config.InitConfig(configPath, env); err != nil {
-		return nil, fmt.Errorf("init config failed: %v", err)
-	}
+	globalConfig := config.NewGoUnoConfig(configPath, env)
 
-	defaultDriver := config.GlobalConfig().DatabaseConfig.GetDefaultDriver()
+	defaultDriver := globalConfig.DatabaseConfig.GetDefaultDriver()
 	if defaultDriver == nil {
 		return nil, fmt.Errorf("default driver not found")
 	}

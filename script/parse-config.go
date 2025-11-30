@@ -110,18 +110,13 @@ func main() {
 
 	env := os.Args[1]
 
-	// 使用 config 包的 InitConfig 函数
-	if err := config.InitConfig("config", env); err != nil {
-		log.Fatalf("❌ 初始化配置失败: %v", err)
-	}
-
 	// 初始化部署配置
 	if err := deploy.InitDeployConfig("deploy"); err != nil {
 		log.Fatalf("❌ 初始化部署配置失败: %v", err)
 	}
 
 	// 直接使用 GlobalConfig
-	cfg := config.GlobalConfig()
+	cfg := config.NewGoUnoConfig("config", env)
 
 	// 获取环境配置
 	envConfig, exists := deploy.GetEnvironment(env)
