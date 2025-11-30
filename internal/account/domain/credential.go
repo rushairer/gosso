@@ -28,7 +28,7 @@ type Credential struct {
 	Value             string                 `json:"-"` // 不序列化到 JSON（安全）
 	Verified          bool                   `json:"verified"`
 	PrimaryCredential bool                   `json:"primary_credential"`
-	Metadata          map[string]interface{} `json:"metadata"`
+	Metadata          map[string]any `json:"metadata"`
 	CreatedAt         time.Time              `json:"created_at"`
 	VerifiedAt        *time.Time             `json:"verified_at,omitempty"`
 	LastUsedAt        *time.Time             `json:"last_used_at,omitempty"`

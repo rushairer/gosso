@@ -57,7 +57,7 @@ type RegisterAccountRequest struct {
 	Password     string                 // 密码（必须）
 	Locale       string                 // 语言偏好
 	Timezone     string                 // 时区
-	Metadata     map[string]interface{} // 扩展元数据
+	Metadata     map[string]any // 扩展元数据
 }
 
 type accountServiceImpl struct {

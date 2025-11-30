@@ -21,7 +21,7 @@ type FederatedIdentity struct {
 	AccountID      string                 `json:"account_id"`
 	Provider       Provider               `json:"provider"`
 	ProviderUserID string                 `json:"provider_user_id"`
-	Profile        map[string]interface{} `json:"profile"`
+	Profile        map[string]any `json:"profile"`
 	CreatedAt      time.Time              `json:"created_at"`
 	UpdatedAt      time.Time              `json:"updated_at"`
 	DeletedAt      *time.Time             `json:"deleted_at,omitempty"`

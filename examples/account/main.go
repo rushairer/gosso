@@ -1,4 +1,4 @@
-package examples
+package main
 
 import (
 	"context"
@@ -12,8 +12,8 @@ import (
 	"github.com/rushairer/gosso/internal/db"
 )
 
-// AccountExamples 账号模块使用示例
-func AccountExamples() {
+// 账号模块使用示例
+func main() {
 	// 1. 连接数据库
 	dbConfig := &db.Config{
 		Host:            "localhost",
@@ -67,7 +67,7 @@ func registerExample(ctx context.Context, accountService service.AccountService)
 		Password:    "SecurePassword123!",
 		Locale:      "en",
 		Timezone:    "America/New_York",
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"source":      "web",
 			"campaign_id": "summer2024",
 		},
@@ -122,12 +122,12 @@ func bindFederatedIdentityExample(ctx context.Context, accountService service.Ac
 	accountID := "some-account-id"
 	provider := domain.ProviderGoogle
 	providerUserID := "google-user-12345"
-	profile := map[string]interface{}{
-		"email":        "john.doe@gmail.com",
-		"name":         "John Doe",
-		"picture":      "https://lh3.googleusercontent.com/...",
-		"verified":     true,
-		"locale":       "en",
+	profile := map[string]any{
+		"email":    "john.doe@gmail.com",
+		"name":     "John Doe",
+		"picture":  "https://lh3.googleusercontent.com/...",
+		"verified": true,
+		"locale":   "en",
 	}
 
 	err := accountService.BindFederatedIdentity(ctx, accountID, provider, providerUserID, profile)
