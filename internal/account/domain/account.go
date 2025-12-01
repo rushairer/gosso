@@ -17,17 +17,17 @@ const (
 
 // Account 账号领域模型
 type Account struct {
-	ID          string                 `json:"id"`
-	Username    *string                `json:"username,omitempty"`
-	DisplayName string                 `json:"display_name"`
-	AvatarURL   *string                `json:"avatar_url,omitempty"`
-	Status      AccountStatus          `json:"status"`
-	Locale      string                 `json:"locale"`
-	Timezone    string                 `json:"timezone"`
+	ID          string         `json:"id"`
+	Username    *string        `json:"username,omitempty"`
+	DisplayName string         `json:"display_name"`
+	AvatarURL   *string        `json:"avatar_url,omitempty"`
+	Status      AccountStatus  `json:"status"`
+	Locale      string         `json:"locale"`
+	Timezone    string         `json:"timezone"`
 	Metadata    map[string]any `json:"metadata"`
-	CreatedAt   time.Time              `json:"created_at"`
-	UpdatedAt   time.Time              `json:"updated_at"`
-	DeletedAt   *time.Time             `json:"deleted_at,omitempty"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   *time.Time     `json:"deleted_at,omitempty"`
 }
 
 // NewAccount 创建新账号

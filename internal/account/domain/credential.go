@@ -21,18 +21,18 @@ const (
 
 // Credential 凭证领域模型
 type Credential struct {
-	ID                string                 `json:"id"`
-	AccountID         string                 `json:"account_id"`
-	Type              CredentialType         `json:"credential_type"`
-	Identifier        *string                `json:"identifier,omitempty"`
-	Value             string                 `json:"-"` // 不序列化到 JSON（安全）
-	Verified          bool                   `json:"verified"`
-	PrimaryCredential bool                   `json:"primary_credential"`
+	ID                string         `json:"id"`
+	AccountID         string         `json:"account_id"`
+	Type              CredentialType `json:"credential_type"`
+	Identifier        *string        `json:"identifier,omitempty"`
+	Value             string         `json:"-"` // 不序列化到 JSON（安全）
+	Verified          bool           `json:"verified"`
+	PrimaryCredential bool           `json:"primary_credential"`
 	Metadata          map[string]any `json:"metadata"`
-	CreatedAt         time.Time              `json:"created_at"`
-	VerifiedAt        *time.Time             `json:"verified_at,omitempty"`
-	LastUsedAt        *time.Time             `json:"last_used_at,omitempty"`
-	DeletedAt         *time.Time             `json:"deleted_at,omitempty"`
+	CreatedAt         time.Time      `json:"created_at"`
+	VerifiedAt        *time.Time     `json:"verified_at,omitempty"`
+	LastUsedAt        *time.Time     `json:"last_used_at,omitempty"`
+	DeletedAt         *time.Time     `json:"deleted_at,omitempty"`
 }
 
 // NewCredential 创建新凭证

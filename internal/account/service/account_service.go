@@ -50,22 +50,22 @@ type AccountService interface {
 
 // RegisterAccountRequest 注册账号请求
 type RegisterAccountRequest struct {
-	Username     string                 // 用户名（可选）
-	DisplayName  string                 // 显示名称
-	Email        string                 // 邮箱（可选）
-	Phone        string                 // 手机号（可选）
-	Password     string                 // 密码（必须）
-	Locale       string                 // 语言偏好
-	Timezone     string                 // 时区
-	Metadata     map[string]any // 扩展元数据
+	Username    string         // 用户名（可选）
+	DisplayName string         // 显示名称
+	Email       string         // 邮箱（可选）
+	Phone       string         // 手机号（可选）
+	Password    string         // 密码（必须）
+	Locale      string         // 语言偏好
+	Timezone    string         // 时区
+	Metadata    map[string]any // 扩展元数据
 }
 
 type accountServiceImpl struct {
-	db                      *sql.DB
-	accountRepo             repository.AccountRepository
-	credentialRepo          repository.CredentialRepository
-	federatedIdentityRepo   repository.FederatedIdentityRepository
-	roleRepo                repository.RoleRepository
+	db                    *sql.DB
+	accountRepo           repository.AccountRepository
+	credentialRepo        repository.CredentialRepository
+	federatedIdentityRepo repository.FederatedIdentityRepository
+	roleRepo              repository.RoleRepository
 }
 
 // NewAccountService 创建账号服务

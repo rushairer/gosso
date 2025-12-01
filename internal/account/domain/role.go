@@ -8,14 +8,14 @@ import (
 
 // Role 角色领域模型
 type Role struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Description *string    `json:"description,omitempty"`
-	Permissions []string   `json:"permissions"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Description *string        `json:"description,omitempty"`
+	Permissions []string       `json:"permissions"`
 	Metadata    map[string]any `json:"metadata"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   *time.Time     `json:"deleted_at,omitempty"`
 }
 
 // NewRole 创建新角色
@@ -78,14 +78,14 @@ func (r *Role) HasPermission(permission string) bool {
 
 // Group 群组领域模型
 type Group struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Description *string    `json:"description,omitempty"`
-	ParentID    *string    `json:"parent_id,omitempty"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Description *string        `json:"description,omitempty"`
+	ParentID    *string        `json:"parent_id,omitempty"`
 	Metadata    map[string]any `json:"metadata"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   *time.Time     `json:"deleted_at,omitempty"`
 }
 
 // NewGroup 创建新群组

@@ -17,14 +17,14 @@ const (
 
 // FederatedIdentity 第三方身份领域模型
 type FederatedIdentity struct {
-	ID             string                 `json:"id"`
-	AccountID      string                 `json:"account_id"`
-	Provider       Provider               `json:"provider"`
-	ProviderUserID string                 `json:"provider_user_id"`
+	ID             string         `json:"id"`
+	AccountID      string         `json:"account_id"`
+	Provider       Provider       `json:"provider"`
+	ProviderUserID string         `json:"provider_user_id"`
 	Profile        map[string]any `json:"profile"`
-	CreatedAt      time.Time              `json:"created_at"`
-	UpdatedAt      time.Time              `json:"updated_at"`
-	DeletedAt      *time.Time             `json:"deleted_at,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	DeletedAt      *time.Time     `json:"deleted_at,omitempty"`
 }
 
 // NewFederatedIdentity 创建新的第三方身份

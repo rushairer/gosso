@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"log"
 	"testing"
 	"time"
 
@@ -28,26 +29,29 @@ func TestRegisterAccount(t *testing.T) {
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo)
 
-	// 设置 mock 期望
-	mock.ExpectBegin()
+	// 设置 mock 期望（按实际执行顺序）
 	
-	// 期望查询邮箱是否已存在
+	// 1. 期望查询邮箱是否已存在（在事务外执行）
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
 		WithArgs(domain.CredentialTypeEmail, "test@example.com").
 		WillReturnError(sql.ErrNoRows)
 
-	// 期望插入账号
+	// 2. 开始事务
+	mock.ExpectBegin()
+
+	// 3. 期望插入账号
 	mock.ExpectExec("INSERT INTO accounts").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	// 期望插入密码凭证
+	// 4. 期望批量插入凭证（密码 + 邮箱，共 2 条）
+	// CreateCredentials 使用循环插入，所以需要 2 个 ExpectExec
+	mock.ExpectExec("INSERT INTO account_credentials").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	
 	mock.ExpectExec("INSERT INTO account_credentials").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	// 期望插入邮箱凭证
-	mock.ExpectExec("INSERT INTO account_credentials").
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
+	// 5. 提交事务
 	mock.ExpectCommit()
 
 	// 执行注册
@@ -62,10 +66,12 @@ func TestRegisterAccount(t *testing.T) {
 
 	account, err := accountService.RegisterAccount(context.Background(), req)
 
+	log.Println(err)
 	// 验证结果
 	assert.NoError(t, err)
 	assert.NotNil(t, account)
-	assert.Equal(t, "testuser", account.Username)
+	assert.NotNil(t, account.Username)
+	assert.Equal(t, "testuser", *account.Username)
 	assert.Equal(t, "Test User", account.DisplayName)
 	assert.Equal(t, domain.AccountStatusActive, account.Status)
 
@@ -86,13 +92,23 @@ func TestRegisterAccount_DuplicateEmail(t *testing.T) {
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo)
 
-	// 设置 mock：邮箱已存在
-	rows := sqlmock.NewRows([]string{"id", "account_id", "credential_type", "identifier"}).
-		AddRow("existing-id", "existing-account-id", domain.CredentialTypeEmail, "test@example.com")
+	// 设置 mock：邮箱已存在（在事务外查询）
+	// 注意：需要返回所有列，与 FindByTypeAndIdentifier 的 Scan 匹配
+	rows := sqlmock.NewRows([]string{
+		"id", "account_id", "credential_type", "identifier", 
+		"credential_value", "verified", "primary_credential", "metadata",
+		"created_at", "verified_at", "last_used_at", "deleted_at",
+	}).AddRow(
+		"existing-id", "existing-account-id", domain.CredentialTypeEmail, "test@example.com",
+		"", true, true, []byte("{}"),
+		time.Now(), nil, nil, nil,
+	)
 
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
 		WithArgs(domain.CredentialTypeEmail, "test@example.com").
 		WillReturnRows(rows)
+
+	// 注意：检测到重复邮箱后，不会开始事务，所以不需要 ExpectBegin
 
 	// 执行注册
 	req := &RegisterAccountRequest{
@@ -103,6 +119,11 @@ func TestRegisterAccount_DuplicateEmail(t *testing.T) {
 	}
 
 	account, err := accountService.RegisterAccount(context.Background(), req)
+
+	// 打印详细错误信息
+	if err != nil {
+		t.Logf("错误信息: %v", err)
+	}
 
 	// 验证结果：应该返回错误
 	assert.Error(t, err)
