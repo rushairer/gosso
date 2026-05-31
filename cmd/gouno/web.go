@@ -84,7 +84,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		gin.Logger(),
 		middleware.RecoveryMiddleware(),
 		middleware.TimeoutMiddleware(globalConfig.WebServerConfig.RequestTimeout),
-		gounoMiddleware.RateLimitMiddleware(globalConfig.WebServerConfig.RateLimitPerMinute, time.Minute),
+		gounoMiddleware.RateLimitMiddleware(ctx, globalConfig.WebServerConfig.RateLimitPerMinute, time.Minute),
 	)
 	router.RegisterWebRouter(engine)
 
