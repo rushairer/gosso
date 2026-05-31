@@ -14,7 +14,7 @@ func TimeoutMiddleware(requestTimeout time.Duration) gin.HandlerFunc {
 		timeout.WithTimeout(requestTimeout),
 		timeout.WithResponse(
 			func(ctx *gin.Context) {
-				ctx.JSON(http.StatusOK, gouno.ErrRequestTimeoutResponse)
+				ctx.JSON(http.StatusRequestTimeout, gouno.RequestTimeoutResponse)
 			},
 		),
 	)
@@ -23,7 +23,7 @@ func TimeoutMiddleware(requestTimeout time.Duration) gin.HandlerFunc {
 func RecoveryMiddleware() gin.HandlerFunc {
 	return gin.CustomRecovery(
 		func(ctx *gin.Context, err any) {
-			ctx.JSON(http.StatusOK, gouno.ErrInternalServerErrorResponse)
+			ctx.JSON(http.StatusInternalServerError, gouno.InternalServerErrorResponse)
 		},
 	)
 }
