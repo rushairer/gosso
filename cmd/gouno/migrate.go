@@ -13,7 +13,6 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var migrateCmd = &cobra.Command{
@@ -86,16 +85,10 @@ func init() {
 
 // 初始化配置和迁移实例
 func initMigrate(cmd *cobra.Command) (*migrate.Migrate, error) {
-	if err := viper.BindEnv("gouno_env"); err != nil {
-		return nil, fmt.Errorf("bind env failed: %v", err)
-	}
-	if err := viper.BindPFlag("gouno_env", cmd.Flags().Lookup("env")); err != nil {
-		return nil, fmt.Errorf("bind flag failed: %v", err)
-	}
-	env := viper.Get("gouno_env").(string)
-
 	configPath := cmd.Flag("config_path").Value.String()
-	configManager := config.NewConfigManager(configPath, env)
+	env := cmd.Flag("env").Value.String()
+
+	configManager := config.NewConfigManager(cmd, configPath, env)
 	globalConfig := configManager.Config()
 
 	defaultDriver := globalConfig.DatabaseConfig.GetDefaultDriver()

@@ -16,7 +16,6 @@ import (
 	"github.com/rushairer/gosso/utility"
 	gounoMiddleware "github.com/rushairer/gouno/middleware"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -35,31 +34,13 @@ func init() {
 }
 
 func startWebServer(cmd *cobra.Command, args []string) {
-	// Create context that listens for the interrupt signal from the OS.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := viper.BindEnv("gouno_env"); err != nil {
-		log.Fatalf("bind env failed, err: %v", err)
-	}
-	if err := viper.BindPFlag("gouno_env", cmd.Flags().Lookup("env")); err != nil {
-		log.Fatalf("bind flag failed, err: %v", err)
-	}
-	env := viper.Get("gouno_env").(string)
-
 	configPath := cmd.Flag("config_path").Value.String()
+	env := cmd.Flag("env").Value.String()
 
-	if err := viper.BindPFlag("web_server.address", cmd.Flags().Lookup("address")); err != nil {
-		log.Fatalf("bind address flag failed, err: %v", err)
-	}
-	if err := viper.BindPFlag("web_server.port", cmd.Flags().Lookup("port")); err != nil {
-		log.Fatalf("bind port flag failed, err: %v", err)
-	}
-	if err := viper.BindPFlag("web_server.debug", cmd.Flags().Lookup("debug")); err != nil {
-		log.Fatalf("bind debug flag failed, err: %v", err)
-	}
-
-	configManager := config.NewConfigManager(configPath, env)
+	configManager := config.NewConfigManager(cmd, configPath, env)
 	globalConfig := configManager.Config()
 
 	if globalConfig.WebServerConfig.Debug {
