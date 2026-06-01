@@ -81,7 +81,7 @@ func registerExample(ctx context.Context, accountService service.AccountService)
 
 	fmt.Printf("✅ 注册成功:\n")
 	fmt.Printf("   账号 ID: %s\n", account.ID)
-	fmt.Printf("   用户名: %s\n", account.Username)
+	fmt.Printf("   用户名: %v\n", account.Username)
 	fmt.Printf("   显示名称: %s\n", account.DisplayName)
 	fmt.Printf("   状态: %s\n", account.Status)
 }
@@ -97,7 +97,7 @@ func findAccountExample(ctx context.Context, accountService service.AccountServi
 
 	fmt.Printf("✅ 查找账号成功:\n")
 	fmt.Printf("   账号 ID: %s\n", account.ID)
-	fmt.Printf("   用户名: %s\n", account.Username)
+	fmt.Printf("   用户名: %v\n", account.Username)
 	fmt.Printf("   创建时间: %s\n", account.CreatedAt.Format(time.RFC3339))
 }
 

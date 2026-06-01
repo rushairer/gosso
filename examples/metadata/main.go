@@ -10,7 +10,7 @@ import (
 
 // Metadata 字段使用示例
 func main() {
-	fmt.Println("========== Metadata 使用示例 ==========\n")
+	fmt.Println("========== Metadata 使用示例 ==========")
 
 	// 示例 1: 创建账号时设置 Metadata
 	createAccountExample()
