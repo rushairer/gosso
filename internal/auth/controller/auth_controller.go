@@ -61,6 +61,10 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.Hand
 		auth.POST("/logout", c.Logout)
 		auth.GET("/session", c.GetSession)
 
+		// Session management endpoints
+		auth.GET("/sessions", c.ListSessions)
+		auth.DELETE("/sessions/:id", c.RevokeSession)
+
 		// MFA endpoints
 		mfaVerifyHandlers := []gin.HandlerFunc{c.MFAVerify}
 		if mfaLimit != nil {
@@ -219,6 +223,65 @@ func (c *AuthController) GetSession(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(session))
+}
+
+// ListSessions GET /api/auth/sessions
+func (c *AuthController) ListSessions(ctx *gin.Context) {
+	jwtClaims, exists := ctx.Get("jwt_claims")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "no claims"))
+		return
+	}
+
+	tc, ok := jwtClaims.(*tokenDomain.AccessTokenClaims)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "invalid claims type"))
+		return
+	}
+
+	sessions, err := c.authSvc.ListSessions(ctx, tc.AccountID)
+	if err != nil {
+		c.logger.Error("Failed to list sessions", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to list sessions"))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(sessions))
+}
+
+// RevokeSession DELETE /api/auth/sessions/:id
+func (c *AuthController) RevokeSession(ctx *gin.Context) {
+	jwtClaims, exists := ctx.Get("jwt_claims")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "no claims"))
+		return
+	}
+
+	tc, ok := jwtClaims.(*tokenDomain.AccessTokenClaims)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "invalid claims type"))
+		return
+	}
+
+	sessionID := ctx.Param("id")
+	if sessionID == "" {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "session id required"))
+		return
+	}
+
+	// 不允许撤销当前会话（应该用 logout）
+	if sessionID == tc.SessionID {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "use /logout to revoke current session"))
+		return
+	}
+
+	if err := c.authSvc.RevokeSession(ctx, tc.AccountID, sessionID); err != nil {
+		c.logger.Error("Failed to revoke session", zap.Error(err))
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{"revoked": true}))
 }
 
 // MFAVerifyRequest MFA 验证请求体

@@ -80,6 +80,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Add per-endpoint rate limiting: login (5/min), MFA (10/min), passkey (10/min), password reset (60/min).
 - Add CSRF double-submit cookie middleware (`middleware/csrf.go`) — skips Bearer auth and GET/HEAD/OPTIONS.
 - Add `RateLimitsConfig` for per-endpoint rate limit configuration.
+- Add session management endpoints: `GET /api/auth/sessions` (list active sessions), `DELETE /api/auth/sessions/:id` (revoke specific session).
+- Add `ListSessionsByAccount` and `RevokeSession` to session service.
+- Add concurrent session limit (default 10) with automatic oldest-session eviction.
 
 ### Changed
 

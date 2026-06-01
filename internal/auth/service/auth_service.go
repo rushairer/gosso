@@ -180,6 +180,9 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		return nil, fmt.Errorf("create session: %w", err)
 	}
 
+	// 5.5 强制执行并发会话限制
+	s.sessionSvc.EnforceSessionLimit(ctx, account.ID)
+
 	// 6. 获取角色和权限
 	roles, err := s.roleRepo.FindRolesByAccountID(ctx, account.ID)
 	if err != nil {
@@ -315,6 +318,9 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	if err := s.sessionSvc.CreateSession(ctx, session); err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
 	}
+
+	// 4.5 强制执行并发会话限制
+	s.sessionSvc.EnforceSessionLimit(ctx, account.ID)
 
 	// 5. 获取角色
 	roles, err := s.roleRepo.FindRolesByAccountID(ctx, account.ID)
@@ -462,6 +468,20 @@ func (s *AuthService) ValidateSession(ctx context.Context, sessionID string) (*s
 		return nil, fmt.Errorf("invalid session id: %w", err)
 	}
 	return s.sessionSvc.ValidateSession(ctx, parsedID)
+}
+
+// ListSessions 列出账号的所有活跃会话
+func (s *AuthService) ListSessions(ctx context.Context, accountID string) ([]*sessionDomain.Session, error) {
+	return s.sessionSvc.ListSessionsByAccount(ctx, accountID)
+}
+
+// RevokeSession 撤销指定会话
+func (s *AuthService) RevokeSession(ctx context.Context, accountID, sessionID string) error {
+	parsedID, err := uuid.Parse(sessionID)
+	if err != nil {
+		return fmt.Errorf("invalid session id: %w", err)
+	}
+	return s.sessionSvc.RevokeSession(ctx, accountID, parsedID)
 }
 
 // MFAService 返回 MFA 服务实例

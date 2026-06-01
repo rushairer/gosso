@@ -19,13 +19,16 @@ const (
 	AccountSessionsPrefix = "account_sessions:"
 	// DefaultSessionTTL 默认会话过期时间（24小时）
 	DefaultSessionTTL = 24 * time.Hour
+	// DefaultMaxSessions 默认最大并发会话数
+	DefaultMaxSessions = 10
 )
 
 // SessionService 会话管理服务
 type SessionService struct {
-	redis     *cache.RedisClient
-	logger    *zap.Logger
+	redis      *cache.RedisClient
+	logger     *zap.Logger
 	sessionTTL time.Duration
+	maxSessions int
 }
 
 // NewSessionService 创建会话服务实例
@@ -35,10 +38,16 @@ func NewSessionService(redis *cache.RedisClient, logger *zap.Logger) *SessionSer
 	}
 
 	return &SessionService{
-		redis:     redis,
-		logger:    logger,
-		sessionTTL: DefaultSessionTTL,
+		redis:       redis,
+		logger:      logger,
+		sessionTTL:  DefaultSessionTTL,
+		maxSessions: DefaultMaxSessions,
 	}
+}
+
+// SetMaxSessions 设置最大并发会话数
+func (s *SessionService) SetMaxSessions(n int) {
+	s.maxSessions = n
 }
 
 // SetSessionTTL 设置会话过期时间
@@ -212,6 +221,87 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 		zap.Int("count", len(sessionIDs)))
 
 	return nil
+}
+
+// ListSessionsByAccount 列出账号的所有活跃会话
+func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID string) ([]*domain.Session, error) {
+	indexKey := s.buildAccountSessionsKey(accountID)
+
+	sessionIDs, err := s.redis.SMembers(ctx, indexKey)
+	if err != nil {
+		return nil, fmt.Errorf("get account sessions: %w", err)
+	}
+
+	var sessions []*domain.Session
+	for _, sid := range sessionIDs {
+		sessionUUID, err := uuid.Parse(sid)
+		if err != nil {
+			continue
+		}
+		session, err := s.GetSession(ctx, sessionUUID)
+		if err != nil {
+			// 会话已过期或不存在，从索引中移除
+			_ = s.redis.SRem(ctx, indexKey, sid)
+			continue
+		}
+		sessions = append(sessions, session)
+	}
+
+	return sessions, nil
+}
+
+// RevokeSession 撤销指定会话（ownership check）
+func (s *SessionService) RevokeSession(ctx context.Context, accountID string, sessionID uuid.UUID) error {
+	session, err := s.GetSession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+
+	if session.AccountID.String() != accountID {
+		return fmt.Errorf("session does not belong to account")
+	}
+
+	// 从索引中移除
+	indexKey := s.buildAccountSessionsKey(accountID)
+	_ = s.redis.SRem(ctx, indexKey, sessionID.String())
+
+	return s.DeleteSession(ctx, sessionID)
+}
+
+// EnforceSessionLimit 检查并强制执行最大并发会话数限制
+// 当超出限制时，删除最旧的会话
+func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID string) {
+	if s.maxSessions <= 0 {
+		return
+	}
+
+	sessions, err := s.ListSessionsByAccount(ctx, accountID)
+	if err != nil {
+		return
+	}
+
+	if len(sessions) <= s.maxSessions {
+		return
+	}
+
+	// 按 LastActiveAt 排序，删除最旧的
+	// 简单冒泡排序（会话数通常很少）
+	for i := 0; i < len(sessions)-1; i++ {
+		for j := i + 1; j < len(sessions); j++ {
+			if sessions[i].LastActiveAt.After(sessions[j].LastActiveAt) {
+				sessions[i], sessions[j] = sessions[j], sessions[i]
+			}
+		}
+	}
+
+	// 删除多余的旧会话
+	toRemove := len(sessions) - s.maxSessions
+	for i := 0; i < toRemove; i++ {
+		s.logger.Info("Revoking old session due to limit",
+			zap.String("session_id", sessions[i].ID.String()),
+			zap.String("account_id", accountID))
+		_ = s.RevokeSession(ctx, accountID, sessions[i].ID)
+	}
 }
 
 // 错误定义
