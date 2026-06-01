@@ -1,0 +1,210 @@
+package testutil
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"time"
+
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/rushairer/gosso/config"
+	"github.com/rushairer/gosso/internal/cache"
+	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
+)
+
+// TestEnv holds shared test infrastructure connections.
+type TestEnv struct {
+	DB        *sql.DB
+	Redis     *cache.RedisClient
+	Config    config.GoUnoConfig
+	Logger    *zap.Logger
+	cleanups  []func()
+}
+
+// SetupTestEnv loads test config, connects to Postgres + Redis, runs migrations.
+// Requires docker-compose.test.yml to be running (make docker-test-up).
+func SetupTestEnv(ctx context.Context) (*TestEnv, error) {
+	// Resolve config path relative to project root
+	_, thisFile, _, _ := runtime.Caller(0)
+	projectRoot := filepath.Join(filepath.Dir(thisFile), "..", "..")
+	configPath := filepath.Join(projectRoot, "config")
+
+	cm := config.NewConfigManager(nil, configPath, "test")
+	cfg := cm.Config()
+
+	logger, _ := zap.NewDevelopment()
+
+	// Connect to Postgres
+	dbDriver := cfg.DatabaseConfig.GetDefaultDriver()
+	if dbDriver == nil {
+		return nil, fmt.Errorf("default database driver not found in test config")
+	}
+
+	db, err := sql.Open("pgx", dbDriver.DSN)
+	if err != nil {
+		return nil, fmt.Errorf("open database: %w", err)
+	}
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("ping database: %w (is docker-compose.test.yml running?)", err)
+	}
+
+	// Run migrations
+	migrationsPath := filepath.Join(projectRoot, "db", "migrations")
+	if err := runMigrations(db, migrationsPath); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("run migrations: %w", err)
+	}
+
+	// Connect to Redis
+	redis, err := cache.NewRedisClient(cfg.RedisConfig.DSN, 10, 10*time.Second, logger)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("connect redis: %w (is docker-compose.test.yml running?)", err)
+	}
+
+	env := &TestEnv{
+		DB:     db,
+		Redis:  redis,
+		Config: cfg,
+		Logger: logger,
+	}
+	env.cleanups = append(env.cleanups, func() { db.Close() })
+	env.cleanups = append(env.cleanups, func() { redis.Close() })
+
+	return env, nil
+}
+
+// Cleanup closes all connections.
+func (e *TestEnv) Cleanup() {
+	for i := len(e.cleanups) - 1; i >= 0; i-- {
+		e.cleanups[i]()
+	}
+}
+
+// TruncateAll truncates all test data between tests.
+func (e *TestEnv) TruncateAll(ctx context.Context) error {
+	tables := []string{
+		"account_groups",
+		"account_roles",
+		"roles",
+		"federated_identities",
+		"account_credentials",
+		"accounts",
+		"groups",
+		"oauth2_clients",
+		"webauthn_credentials",
+		"audit_record",
+	}
+	for _, t := range tables {
+		if _, err := e.DB.ExecContext(ctx, fmt.Sprintf("TRUNCATE TABLE %s CASCADE", t)); err != nil {
+			// Ignore missing tables (some migrations may not have run)
+			e.Logger.Debug("truncate table failed (may not exist)", zap.String("table", t), zap.Error(err))
+		}
+	}
+
+	// Flush test Redis keys
+	rdb := e.Redis.GetClient()
+	if rdb != nil {
+		if err := rdb.FlushDB(ctx).Err(); err != nil {
+			e.Logger.Warn("flush redis failed", zap.Error(err))
+		}
+	}
+
+	return nil
+}
+
+// SeedAccount inserts a test account with a password credential.
+// Returns account ID.
+func (e *TestEnv) SeedAccount(ctx context.Context, username, email, password string) (string, error) {
+	var accountID string
+	err := e.DB.QueryRowContext(ctx,
+		`INSERT INTO accounts (username, display_name, status) VALUES ($1, $1, 'active') RETURNING id`,
+		username,
+	).Scan(&accountID)
+	if err != nil {
+		return "", fmt.Errorf("insert account: %w", err)
+	}
+
+	// Insert password credential (bcrypt hash)
+	hash, err := hashPassword(password)
+	if err != nil {
+		return "", fmt.Errorf("hash password: %w", err)
+	}
+
+	_, err = e.DB.ExecContext(ctx,
+		`INSERT INTO account_credentials (account_id, credential_type, identifier, credential_value, verified, primary_credential)
+		 VALUES ($1, 'password', $2, $3, true, true)`,
+		accountID, username, hash,
+	)
+	if err != nil {
+		return "", fmt.Errorf("insert credential: %w", err)
+	}
+
+	// Insert email credential
+	if email != "" {
+		_, err = e.DB.ExecContext(ctx,
+			`INSERT INTO account_credentials (account_id, credential_type, identifier, verified, primary_credential)
+			 VALUES ($1, 'email', $2, true, false)`,
+			accountID, email,
+		)
+		if err != nil {
+			return "", fmt.Errorf("insert email credential: %w", err)
+		}
+	}
+
+	return accountID, nil
+}
+
+func runMigrations(db *sql.DB, migrationsPath string) error {
+	absPath, err := filepath.Abs(migrationsPath)
+	if err != nil {
+		return fmt.Errorf("abs path: %w", err)
+	}
+
+	driver, err := postgres.WithInstance(db, &postgres.Config{
+		MigrationsTable: "schema_migrations",
+	})
+	if err != nil {
+		return fmt.Errorf("create postgres driver: %w", err)
+	}
+
+	m, err := migrate.NewWithDatabaseInstance(
+		fmt.Sprintf("file://%s", absPath),
+		"postgres",
+		driver,
+	)
+	if err != nil {
+		return fmt.Errorf("create migrate instance: %w", err)
+	}
+	defer func() {
+		if src, closeErr := m.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: close migrate: %v %v\n", src, closeErr)
+		}
+	}()
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("migrate up: %w", err)
+	}
+
+	return nil
+}
+
+func hashPassword(password string) (string, error) {
+	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hashedBytes), nil
+}

@@ -20,6 +20,11 @@ test:
 	fi
 	GOFLAGS="-gcflags=all=-l" goconvey -port 9090 -excludedDirs="bin,cmd,config,doc,log,router" -cover
 
+test-integration:
+	@echo "🧪 Running integration tests..."
+	@echo "📋 Ensure docker-compose.test.yml is running (make docker-test-up)"
+	go test -tags=integration -v -count=1 -timeout=120s ./internal/auth/service/ ./internal/session/service/ ./middleware/
+
 docker-dev-up:
 	@echo "🚀 启动开发环境..."
 	@eval $$(go run script/parse-config.go development) && docker-compose -f docker-compose.development.yml up -d
@@ -80,6 +85,7 @@ help:
 	@echo ""
 	@echo "🧪 Testing Commands:"
 	@echo "  test                 - Run tests with goconvey"
+	@echo "  test-integration     - Run integration tests (requires docker-test-up)"
 	@echo ""
 	@echo "🐳 Docker Environment Commands:"
 	@echo "  docker-dev-up        - Start development environment with Docker"
@@ -105,7 +111,7 @@ help:
 	@echo "🆘 Help Commands:"
 	@echo "  help                 - Show this help message"
 
-.PHONY: default build run dev test docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs env-dev env-test env-prod env-all help
+.PHONY: default build run dev test test-integration docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs env-dev env-test env-prod env-all help
 # Examples - 示例程序
 .PHONY: examples example-account example-redis example-metadata
 

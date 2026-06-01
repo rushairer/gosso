@@ -7,6 +7,11 @@ web_server:
     write_timeout: 30s
     request_timeout: 10s
     rate_limit_per_minute: 120
+    rate_limits:
+        login: 5
+        token: 10
+        passkey: 10
+        api: 60
 database:
     default: postgres
     drivers:
@@ -45,3 +50,15 @@ captcha:
     type: math
 log:
     level: 0 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: fatal, 4: panic 5: fatal
+auth:
+    jwt_secret: "${GOUNO_JWT_SECRET}"
+    issuer: "https://gosso.example.com"
+    access_token_expiry: 15m
+    refresh_token_expiry: 720h
+    authorization_code_expiry: 10m
+    default_scopes:
+        - openid
+        - profile
+        - email
+    private_key_path: "/app/keys/private.pem"
+    password_reset_base_url: "https://gosso.example.com/reset-password"

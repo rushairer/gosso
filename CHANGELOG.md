@@ -83,12 +83,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Add session management endpoints: `GET /api/auth/sessions` (list active sessions), `DELETE /api/auth/sessions/:id` (revoke specific session).
 - Add `ListSessionsByAccount` and `RevokeSession` to session service.
 - Add concurrent session limit (default 10) with automatic oldest-session eviction.
+- Add integration test infrastructure (`internal/testutil/testutil.go`) — shared DB/Redis setup, migrations, account seeding.
+- Add integration tests for auth service: login success/failure, token refresh, logout, rate limiting, session list/revoke.
+- Add integration tests for session service: CRUD, validation, account session listing, revoke, session limit enforcement.
+- Add integration tests for Redis rate limiter middleware: within-limit, over-limit, per-key isolation, response headers.
+- Add `make test-integration` target for running integration tests against Docker test environment.
+- Add multi-stage `Dockerfile` for production builds (Go 1.23 builder + Alpine runtime, ~20MB image).
+- Add `.dockerignore` for optimized Docker build context.
+- Add `config/nginx.conf` — reverse proxy configuration for production.
+- Add `config/redis.conf` — production Redis configuration with persistence and memory limits.
+- Add `config/postgresql.conf` — production PostgreSQL configuration.
+- Add `script/postgres/init.sh` — database extension initialization script.
+- Add GitHub Actions CI pipeline (`.github/workflows/ci.yml`) — lint, unit tests, integration tests, build, Docker image.
 
 ### Changed
 
 - Upgrade gouno dependency from v0.3.1 to v1.0.0.
 - Upgrade bytedance/sonic from v1.14.0 to v1.15.1 for Go version compatibility.
 - Router now registers all auth/OAuth2/OIDC routes.
+- Update `config/test.yaml` — add auth section, fix Redis DSN to `127.0.0.1:6381` for host-based test access.
 - JWT auth middleware now supports `access_token` query/form parameter in addition to Bearer header.
 - OAuth2 consent page renders HTML form instead of JSON response.
 - `AuthController.NewAuthController` now accepts `*SocialLoginService` parameter.
