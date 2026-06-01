@@ -76,6 +76,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Add `WebAuthnCredential` domain model and `WebAuthnCredentialRepository`.
 - Add `mfa_types` field to login MFA response — lists available MFA methods (`totp`, `passkey`).
 - Add `type` field to MFA verify request for passkey MFA flow.
+- Add Redis-backed distributed rate limiter (`middleware/redis_ratelimit.go`) — sliding window with Lua script.
+- Add per-endpoint rate limiting: login (5/min), MFA (10/min), passkey (10/min), password reset (60/min).
+- Add CSRF double-submit cookie middleware (`middleware/csrf.go`) — skips Bearer auth and GET/HEAD/OPTIONS.
+- Add `RateLimitsConfig` for per-endpoint rate limit configuration.
 
 ### Changed
 

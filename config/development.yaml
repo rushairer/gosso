@@ -7,6 +7,11 @@ web_server:
     write_timeout: 30s
     request_timeout: 10s
     rate_limit_per_minute: 120
+    rate_limits:
+        login: 5
+        token: 10
+        passkey: 10
+        api: 60
 database:
     default: postgres
     drivers:

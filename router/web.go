@@ -2,15 +2,19 @@ package router
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rushairer/gosso/config"
 	adminController "github.com/rushairer/gosso/internal/admin/controller"
 	authController "github.com/rushairer/gosso/internal/auth/controller"
 	authMiddleware "github.com/rushairer/gosso/internal/auth/middleware"
+	"github.com/rushairer/gosso/internal/cache"
 	oauth2Controller "github.com/rushairer/gosso/internal/oauth2/controller"
 	oidcController "github.com/rushairer/gosso/internal/oidc/controller"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 	"github.com/rushairer/gosso/docs"
+	"github.com/rushairer/gosso/middleware"
 	"github.com/rushairer/gouno"
 )
 
@@ -24,6 +28,8 @@ func RegisterWebRouter(
 	adminCtrl *adminController.AdminController,
 	tokenSvc *tokenService.TokenService,
 	passkeyCtrl *authController.PasskeyController,
+	redis *cache.RedisClient,
+	rateLimits config.RateLimitsConfig,
 ) {
 	// 测试路由
 	registerWebTestRouter(server)
@@ -35,12 +41,18 @@ func RegisterWebRouter(
 	// JWT 认证中间件
 	jwtAuth := authMiddleware.JWTAuthMiddleware(tokenSvc)
 
+	// Per-endpoint 限流中间件
+	loginLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Login, time.Minute)
+	mfaLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute)
+	passwordLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute)
+	passkeyLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Passkey, time.Minute)
+
 	// /api/* 路由
 	api := server.Group("/api")
 	{
 		// 认证路由（审计中间件注入 IP/UserAgent）
 		api.Use(authMiddleware.AuditMetadataMiddleware())
-		authCtrl.RegisterRoutes(api)
+		authCtrl.RegisterRoutes(api, loginLimit, mfaLimit, passwordLimit)
 
 		// 客户端管理路由（需要 JWT 认证）
 		clientCtrl.RegisterRoutes(api, jwtAuth)
@@ -50,9 +62,11 @@ func RegisterWebRouter(
 		admin.Use(jwtAuth, authMiddleware.AdminRequiredMiddleware())
 		adminCtrl.RegisterRoutes(admin)
 
-		// Passkey 路由
+		// Passkey 路由（带限流）
 		if passkeyCtrl != nil {
-			passkeyCtrl.RegisterRoutes(api, jwtAuth)
+			passkeyGroup := api.Group("")
+			passkeyGroup.Use(passkeyLimit)
+			passkeyCtrl.RegisterRoutes(passkeyGroup, jwtAuth)
 		}
 	}
 

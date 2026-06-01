@@ -19,15 +19,24 @@ type GoUnoConfig struct {
 }
 
 type WebServerConfig struct {
-	Debug              bool          `mapstructure:"debug"`
-	Address            string        `mapstructure:"address"`
-	Port               string        `mapstructure:"port"`
-	IdleTimeout        time.Duration `mapstructure:"idle_timeout"`
-	ReadTimeout        time.Duration `mapstructure:"read_timeout"`
-	ReadHeaderTimeout  time.Duration `mapstructure:"read_header_timeout"`
-	WriteTimeout       time.Duration `mapstructure:"write_timeout"`
-	RequestTimeout     time.Duration `mapstructure:"request_timeout"`
-	RateLimitPerMinute int           `mapstructure:"rate_limit_per_minute"`
+	Debug              bool            `mapstructure:"debug"`
+	Address            string          `mapstructure:"address"`
+	Port               string          `mapstructure:"port"`
+	IdleTimeout        time.Duration   `mapstructure:"idle_timeout"`
+	ReadTimeout        time.Duration   `mapstructure:"read_timeout"`
+	ReadHeaderTimeout  time.Duration   `mapstructure:"read_header_timeout"`
+	WriteTimeout       time.Duration   `mapstructure:"write_timeout"`
+	RequestTimeout     time.Duration   `mapstructure:"request_timeout"`
+	RateLimitPerMinute int             `mapstructure:"rate_limit_per_minute"`
+	RateLimits         RateLimitsConfig `mapstructure:"rate_limits"`
+}
+
+// RateLimitsConfig per-endpoint 速率限制配置（每分钟请求数）
+type RateLimitsConfig struct {
+	Login   int `mapstructure:"login"`   // 登录端点，默认 5
+	Token   int `mapstructure:"token"`   // Token 端点，默认 10
+	Passkey int `mapstructure:"passkey"` // Passkey 端点，默认 10
+	API     int `mapstructure:"api"`     // 通用 API，默认 60
 }
 
 type DatabaseConfigDriverName string

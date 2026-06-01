@@ -1392,6 +1392,15 @@ components:
       type: http
       scheme: basic
       description: HTTP Basic Auth with client_id as username and client_secret as password
+    CSRFToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: |
+        CSRF protection via double-submit cookie pattern.
+        1. GET any endpoint to receive `csrf_token` cookie
+        2. Read cookie value and send as `X-CSRF-Token` header on POST/PUT/DELETE
+        3. Not required when using `Authorization: Bearer` header (JWT auth)
 
   # ── Parameters ──
 
@@ -1450,14 +1459,46 @@ components:
             code: 401
             message: unauthorized
     Forbidden:
-      description: Forbidden
+      description: Forbidden (insufficient permissions or CSRF token mismatch)
+      headers:
+        X-RateLimit-Limit:
+          schema: { type: integer }
+          description: Maximum requests per window
+        X-RateLimit-Remaining:
+          schema: { type: integer }
+          description: Remaining requests in current window
+        X-RateLimit-Reset:
+          schema: { type: integer }
+          description: Unix timestamp when the window resets
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
           example:
             code: 403
-            message: forbidden
+            message: CSRF token mismatch
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          schema: { type: integer }
+          description: Maximum requests per window
+        X-RateLimit-Remaining:
+          schema: { type: integer }
+          description: Remaining requests (always 0 when rate limited)
+        X-RateLimit-Reset:
+          schema: { type: integer }
+          description: Unix timestamp when the window resets
+        Retry-After:
+          schema: { type: integer }
+          description: Seconds to wait before retrying
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: 429
+            message: rate limit exceeded
     NotFound:
       description: Not found
       content:

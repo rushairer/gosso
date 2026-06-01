@@ -47,16 +47,27 @@ func NewAuthController(
 }
 
 // RegisterRoutes 注册认证路由
-func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup) {
+// loginLimit, mfaLimit, passwordLimit: 可选的 per-endpoint 限流中间件
+func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.HandlerFunc, mfaLimit gin.HandlerFunc, passwordLimit gin.HandlerFunc) {
 	auth := rg.Group("/auth")
 	{
-		auth.POST("/login", c.Login)
+		loginHandlers := []gin.HandlerFunc{c.Login}
+		if loginLimit != nil {
+			loginHandlers = []gin.HandlerFunc{loginLimit, c.Login}
+		}
+		auth.POST("/login", loginHandlers...)
+
 		auth.POST("/refresh", c.Refresh)
 		auth.POST("/logout", c.Logout)
 		auth.GET("/session", c.GetSession)
 
 		// MFA endpoints
-		auth.POST("/mfa/verify", c.MFAVerify)
+		mfaVerifyHandlers := []gin.HandlerFunc{c.MFAVerify}
+		if mfaLimit != nil {
+			mfaVerifyHandlers = []gin.HandlerFunc{mfaLimit, c.MFAVerify}
+		}
+		auth.POST("/mfa/verify", mfaVerifyHandlers...)
+
 		auth.POST("/mfa/enroll", c.MFAEnroll)
 		auth.POST("/mfa/activate", c.MFAActivate)
 		auth.DELETE("/mfa", c.MFADisable)
@@ -71,7 +82,11 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup) {
 		auth.POST("/verify/confirm", c.ConfirmVerification)
 
 		// Password reset endpoints (unauthenticated)
-		auth.POST("/password/forgot", c.ForgotPassword)
+		passwordHandlers := []gin.HandlerFunc{c.ForgotPassword}
+		if passwordLimit != nil {
+			passwordHandlers = []gin.HandlerFunc{passwordLimit, c.ForgotPassword}
+		}
+		auth.POST("/password/forgot", passwordHandlers...)
 		auth.POST("/password/reset", c.ResetPassword)
 	}
 }

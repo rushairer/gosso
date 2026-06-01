@@ -208,8 +208,15 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		middleware.RecoveryMiddleware(),
 		middleware.TimeoutMiddleware(globalConfig.WebServerConfig.RequestTimeout),
 		gounoMiddleware.RateLimitMiddleware(ctx, globalConfig.WebServerConfig.RateLimitPerMinute, time.Minute),
+		middleware.CSRFMiddleware(!globalConfig.WebServerConfig.Debug,
+			"/api/auth/passkey/login",
+			"/api/auth/social",
+			"/oauth2",
+			"/.well-known",
+			"/swagger",
+		),
 	)
-	router.RegisterWebRouter(engine, authCtrl, oauth2Ctrl, clientCtrl, oidcCtrl, adminCtrl, tokenSvc, passkeyCtrl)
+	router.RegisterWebRouter(engine, authCtrl, oauth2Ctrl, clientCtrl, oidcCtrl, adminCtrl, tokenSvc, passkeyCtrl, redis, globalConfig.WebServerConfig.RateLimits)
 
 	httpServer := &http.Server{
 		Addr:              fmt.Sprintf("%s:%s", globalConfig.WebServerConfig.Address, globalConfig.WebServerConfig.Port),
