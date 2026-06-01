@@ -5,14 +5,17 @@ import (
 )
 
 type GoUnoConfig struct {
-	WebServerConfig    WebServerConfig    `mapstructure:"web_server"`
-	DatabaseConfig     DatabaseConfig     `mapstructure:"database"`
-	BigCacheConfig     BigCacheConfig     `mapstructure:"bigcache"`
-	RedisConfig        RedisConfig        `mapstructure:"redis"`
-	TaskPipelineConfig TaskPipelineConfig `mapstructure:"task_pipeline"`
-	SMTPConfig         SMTPConfig         `mapstructure:"smtp"`
-	CaptchaConfig      CaptchaConfig      `mapstructure:"captcha"`
-	LogConfig          LogConfig          `mapstructure:"log"`
+	WebServerConfig    WebServerConfig      `mapstructure:"web_server"`
+	DatabaseConfig     DatabaseConfig       `mapstructure:"database"`
+	BigCacheConfig     BigCacheConfig       `mapstructure:"bigcache"`
+	RedisConfig        RedisConfig          `mapstructure:"redis"`
+	TaskPipelineConfig TaskPipelineConfig   `mapstructure:"task_pipeline"`
+	SMTPConfig         SMTPConfig           `mapstructure:"smtp"`
+	CaptchaConfig      CaptchaConfig        `mapstructure:"captcha"`
+	LogConfig          LogConfig            `mapstructure:"log"`
+	AuthConfig         AuthConfig           `mapstructure:"auth"`
+	CORSConfig         CORSConfig           `mapstructure:"cors"`
+	OAuthProviders     OAuthProvidersConfig `mapstructure:"oauth_providers"`
 }
 
 type WebServerConfig struct {
@@ -91,4 +94,40 @@ type CaptchaConfig struct {
 type LogConfig struct {
 	// 日志级别: -1: debug, 0: info, 1: warn, 2: error, 3: fatal, 4: panic 5: fatal
 	Level int `mapstructure:"level"`
+}
+
+type AuthConfig struct {
+	JWTSecret               string        `mapstructure:"jwt_secret"`
+	Issuer                  string        `mapstructure:"issuer"`
+	AccessTokenExpiry       time.Duration `mapstructure:"access_token_expiry"`
+	RefreshTokenExpiry      time.Duration `mapstructure:"refresh_token_expiry"`
+	AuthorizationCodeExpiry time.Duration `mapstructure:"authorization_code_expiry"`
+	DefaultScopes           []string      `mapstructure:"default_scopes"`
+	PrivateKeyPath          string        `mapstructure:"private_key_path"`
+	KeyID                   string        `mapstructure:"key_id"`
+	PasswordResetBaseURL    string        `mapstructure:"password_reset_base_url"`
+	WebAuthnRPID            string        `mapstructure:"webauthn_rp_id"`
+	WebAuthnRPName          string        `mapstructure:"webauthn_rp_name"`
+	WebAuthnRPOrigin        string        `mapstructure:"webauthn_rp_origin"`
+}
+
+type CORSConfig struct {
+	AllowedOrigins   []string `mapstructure:"allowed_origins"`
+	AllowedMethods   []string `mapstructure:"allowed_methods"`
+	AllowedHeaders   []string `mapstructure:"allowed_headers"`
+	AllowCredentials bool     `mapstructure:"allow_credentials"`
+	MaxAge           int      `mapstructure:"max_age"`
+}
+
+type OAuthProviderConfig struct {
+	ClientID     string   `mapstructure:"client_id"`
+	ClientSecret string   `mapstructure:"client_secret"`
+	RedirectURI  string   `mapstructure:"redirect_uri"`
+	Scopes       []string `mapstructure:"scopes"`
+}
+
+type OAuthProvidersConfig struct {
+	Google OAuthProviderConfig `mapstructure:"google"`
+	GitHub OAuthProviderConfig `mapstructure:"github"`
+	WeChat OAuthProviderConfig `mapstructure:"wechat"`
 }

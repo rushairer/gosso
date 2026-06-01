@@ -1,0 +1,2102 @@
+openapi: 3.0.3
+info:
+  title: gosso - SSO Authentication Server
+  description: |
+    A production-ready Single Sign-On (SSO) authentication server built with Go.
+
+    Supports:
+    - Username/password login with MFA (TOTP + backup codes)
+    - OAuth 2.0 Authorization Server (authorization code, refresh token, client credentials)
+    - OpenID Connect Provider (ID token, discovery, JWKS, userinfo)
+    - Social login (Google, GitHub, WeChat)
+    - Admin account management
+    - Email/phone verification and password reset
+  version: 1.0.0
+  contact:
+    name: rushairer
+    url: https://github.com/rushairer/gosso
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: Auth
+    description: Authentication endpoints (login, logout, MFA, social login, verification, password reset)
+  - name: OAuth2 Clients
+    description: OAuth2 client registration and management (JWT required)
+  - name: OAuth2 Protocol
+    description: OAuth 2.0 protocol endpoints (authorize, token, revoke, introspect)
+  - name: Admin
+    description: Admin account management (JWT + admin role required)
+  - name: OIDC
+    description: OpenID Connect endpoints (discovery, JWKS, userinfo)
+  - name: Passkey
+    description: WebAuthn/Passkey authentication (register, login, MFA, management)
+  - name: Health
+    description: Health check and test endpoints
+
+paths:
+  /:
+    get:
+      tags: [Health]
+      summary: Root health check
+      operationId: rootHealthCheck
+      responses:
+        "200":
+          description: Server is running
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: Hello gouno!
+
+  /test/alive:
+    get:
+      tags: [Health]
+      summary: Alive check
+      operationId: testAlive
+      responses:
+        "200":
+          description: Server is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: pong
+
+  # ──────────────────────────────────────────────
+  # Auth
+  # ──────────────────────────────────────────────
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with username and password
+      description: |
+        Authenticates a user with username and password.
+        If MFA is enabled, returns an MFA token instead of full credentials.
+        If MFA is not enabled, returns access token, refresh token, and session ID.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful or MFA required
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Response_LoginSuccess"
+                  - $ref: "#/components/schemas/Response_MFARequired"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      description: Exchanges a valid refresh token for a new access token and refresh token pair.
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+      responses:
+        "200":
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response_TokenPair"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout
+      description: Revokes the current session and access token. Requires a valid JWT.
+      operationId: logout
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: logged out
+
+  /api/auth/session:
+    get:
+      tags: [Auth]
+      summary: Get current session
+      description: Returns the current session details. Requires a valid JWT.
+      operationId: getSession
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/mfa/verify:
+    post:
+      tags: [Auth]
+      summary: Verify MFA code
+      description: Verifies a TOTP or backup code during the MFA login flow.
+      operationId: mfaVerify
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MFAVerifyRequest"
+      responses:
+        "200":
+          description: MFA verified, returns tokens
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response_TokenPairWithSession"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/mfa/enroll:
+    post:
+      tags: [Auth]
+      summary: Enroll TOTP MFA
+      description: Starts TOTP enrollment for the authenticated account. Returns a secret and provisioning URI.
+      operationId: mfaEnroll
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MFAEnrollRequest"
+      responses:
+        "200":
+          description: TOTP enrollment data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/auth/mfa/activate:
+    post:
+      tags: [Auth]
+      summary: Activate TOTP MFA
+      description: Activates TOTP after verifying a code during enrollment.
+      operationId: mfaActivate
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MFAActivateRequest"
+      responses:
+        "200":
+          description: TOTP activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: TOTP activated
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/mfa:
+    delete:
+      tags: [Auth]
+      summary: Disable TOTP MFA
+      description: Disables TOTP MFA for the authenticated account.
+      operationId: mfaDisable
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: MFA disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: MFA disabled
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/mfa/backup-codes:
+    post:
+      tags: [Auth]
+      summary: Generate backup codes
+      description: Generates a new set of backup codes for the authenticated account. Previous codes are invalidated.
+      operationId: mfaGenerateBackupCodes
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Backup codes generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: success
+                  data:
+                    type: object
+                    properties:
+                      backup_codes:
+                        type: array
+                        items:
+                          type: string
+                        example: ["a1b2c3d4", "e5f6g7h8"]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/social/{provider}:
+    get:
+      tags: [Auth]
+      summary: Get social login URL
+      description: Returns a redirect to the OAuth2 authorization URL of the specified provider (google, github, wechat).
+      operationId: socialAuthURL
+      parameters:
+        - $ref: "#/components/parameters/SocialProvider"
+        - name: state
+          in: query
+          schema:
+            type: string
+          description: OAuth2 state parameter for CSRF protection
+      responses:
+        "302":
+          description: Redirect to provider authorization URL
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "501":
+          description: Social login not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/auth/social/{provider}/callback:
+    get:
+      tags: [Auth]
+      summary: Social login callback
+      description: Handles the OAuth2 callback from the social login provider. Exchanges the authorization code for tokens.
+      operationId: socialCallback
+      parameters:
+        - $ref: "#/components/parameters/SocialProvider"
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+          description: OAuth2 authorization code from the provider
+      responses:
+        "200":
+          description: Social login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response_TokenPairWithSession"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/verify/send:
+    post:
+      tags: [Auth]
+      summary: Send verification code
+      description: Sends a verification code to the specified email or phone number. Requires authentication.
+      operationId: sendVerification
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendVerificationRequest"
+      responses:
+        "200":
+          description: Verification code sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: verification code sent
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/auth/verify/confirm:
+    post:
+      tags: [Auth]
+      summary: Confirm verification code
+      description: Confirms a verification code and marks the credential as verified.
+      operationId: confirmVerification
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmVerificationRequest"
+      responses:
+        "200":
+          description: Credential verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: credential verified
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/auth/password/forgot:
+    post:
+      tags: [Auth]
+      summary: Request password reset
+      description: |
+        Sends a password reset email if the email exists. Always returns 200 to prevent email enumeration.
+      operationId: forgotPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordRequest"
+      responses:
+        "200":
+          description: Reset email sent (or email not found — same response)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: if the email exists, a reset link has been sent
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/auth/password/reset:
+    post:
+      tags: [Auth]
+      summary: Reset password with token
+      description: Resets the password using a valid reset token.
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+      responses:
+        "200":
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: password has been reset successfully
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  # ──────────────────────────────────────────────
+  # OAuth2 Clients
+  # ──────────────────────────────────────────────
+
+  /api/oauth2/clients:
+    get:
+      tags: [OAuth2 Clients]
+      summary: List OAuth2 clients
+      description: Returns all OAuth2 clients owned by the authenticated account.
+      operationId: listClients
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of OAuth2 clients
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/OAuth2Client"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [OAuth2 Clients]
+      summary: Register a new OAuth2 client
+      description: Creates a new OAuth2 client for the authenticated account. Returns the client ID and secret.
+      operationId: registerClient
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterClientRequest"
+      responses:
+        "201":
+          description: Client created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: success
+                  data:
+                    $ref: "#/components/schemas/RegisterClientResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/oauth2/clients/{client_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientID"
+
+    get:
+      tags: [OAuth2 Clients]
+      summary: Get OAuth2 client details
+      operationId: getClient
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Client details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: success
+                  data:
+                    $ref: "#/components/schemas/OAuth2Client"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      tags: [OAuth2 Clients]
+      summary: Update OAuth2 client
+      operationId: updateClient
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateClientRequest"
+      responses:
+        "200":
+          description: Client updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: success
+                  data:
+                    $ref: "#/components/schemas/OAuth2Client"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags: [OAuth2 Clients]
+      summary: Delete OAuth2 client
+      operationId: deleteClient
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Client deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: client deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ──────────────────────────────────────────────
+  # OAuth2 Protocol
+  # ──────────────────────────────────────────────
+
+  /oauth2/authorize:
+    get:
+      tags: [OAuth2 Protocol]
+      summary: OAuth2 Authorization endpoint
+      description: |
+        Initiates the OAuth2 authorization code flow.
+        If the user has already consented, redirects with the authorization code.
+        Otherwise, renders the consent form (HTML).
+        Requires authentication (JWT).
+      operationId: oauth2Authorize
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: client_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: response_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [code]
+        - name: scope
+          in: query
+          schema:
+            type: string
+          description: Space-separated list of scopes
+        - name: state
+          in: query
+          schema:
+            type: string
+          description: Opaque value for CSRF protection
+        - name: code_challenge
+          in: query
+          schema:
+            type: string
+          description: PKCE code challenge
+        - name: code_challenge_method
+          in: query
+          schema:
+            type: string
+            enum: [S256, plain]
+          description: PKCE code challenge method
+        - name: nonce
+          in: query
+          schema:
+            type: string
+          description: OIDC nonce
+      responses:
+        "302":
+          description: Redirect to redirect_uri with authorization code
+          headers:
+            Location:
+              schema:
+                type: string
+                example: https://app.example.com/callback?code=abc123&state=xyz
+        "200":
+          description: Consent form (HTML)
+          content:
+            text/html:
+              schema:
+                type: string
+        "400":
+          description: OAuth2 error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2Error"
+
+    post:
+      tags: [OAuth2 Protocol]
+      summary: Submit consent decision
+      description: Submits the user's consent decision for the OAuth2 authorization flow.
+      operationId: oauth2SubmitConsent
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [client_id, redirect_uri, scope, approved]
+              properties:
+                client_id:
+                  type: string
+                redirect_uri:
+                  type: string
+                scope:
+                  type: string
+                state:
+                  type: string
+                approved:
+                  type: string
+                  enum: ["true", "false"]
+                code_challenge:
+                  type: string
+                code_challenge_method:
+                  type: string
+                nonce:
+                  type: string
+      responses:
+        "302":
+          description: Redirect to redirect_uri with authorization code
+        "400":
+          description: OAuth2 error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2Error"
+
+  /oauth2/token:
+    post:
+      tags: [OAuth2 Protocol]
+      summary: OAuth2 Token endpoint
+      description: |
+        Exchanges an authorization code, refresh token, or client credentials for tokens.
+        Supports grant types: `authorization_code`, `refresh_token`, `client_credentials`.
+        Client authentication via request body or HTTP Basic Auth.
+      operationId: oauth2Token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenRequest"
+      responses:
+        "200":
+          description: Token response (RFC 6749)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: OAuth2 error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2Error"
+        "401":
+          description: Client authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2Error"
+
+  /oauth2/revoke:
+    post:
+      tags: [OAuth2 Protocol]
+      summary: Revoke a token
+      description: Revokes a refresh token. Requires authentication.
+      operationId: oauth2Revoke
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: The token to revoke
+      responses:
+        "200":
+          description: Token revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /oauth2/introspect:
+    post:
+      tags: [OAuth2 Protocol]
+      summary: Token introspection (RFC 7662)
+      description: |
+        Introspects an access or refresh token. Client authentication via HTTP Basic Auth or form parameters.
+        Returns token metadata if active, or `{"active": false}` if not.
+      operationId: oauth2Introspect
+      security:
+        - BasicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: The token to introspect
+      responses:
+        "200":
+          description: Introspection result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntrospectionResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2Error"
+        "401":
+          description: Client authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2Error"
+
+  # ──────────────────────────────────────────────
+  # OIDC
+  # ──────────────────────────────────────────────
+
+  /.well-known/openid-configuration:
+    get:
+      tags: [OIDC]
+      summary: OpenID Connect Discovery
+      description: Returns the OpenID Connect Discovery document.
+      operationId: oidcDiscovery
+      responses:
+        "200":
+          description: OIDC Discovery document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OIDCDiscovery"
+
+  /.well-known/jwks.json:
+    get:
+      tags: [OIDC]
+      summary: JSON Web Key Set
+      description: Returns the public keys used to verify JWT tokens.
+      operationId: oidcJWKS
+      responses:
+        "200":
+          description: JWKS document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JWKS"
+
+  /oidc/userinfo:
+    get:
+      tags: [OIDC]
+      summary: UserInfo endpoint
+      description: Returns claims about the authenticated user. Requires a valid JWT with appropriate scopes.
+      operationId: oidcUserInfo
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: UserInfo response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [OIDC]
+      summary: UserInfo endpoint (POST)
+      description: Same as GET but accepts POST requests.
+      operationId: oidcUserInfoPost
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: UserInfo response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ──────────────────────────────────────────────
+  # Admin
+  # ──────────────────────────────────────────────
+
+  /api/admin/accounts:
+    get:
+      tags: [Admin]
+      summary: List accounts
+      description: Returns a paginated list of accounts. Requires admin role.
+      operationId: adminListAccounts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, suspended, deleted]
+          description: Filter by account status
+      responses:
+        "200":
+          description: Paginated account list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: success
+                  data:
+                    $ref: "#/components/schemas/PaginatedAccounts"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/admin/accounts/{account_id}:
+    parameters:
+      - $ref: "#/components/parameters/AccountID"
+
+    get:
+      tags: [Admin]
+      summary: Get account details
+      operationId: adminGetAccount
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Account details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: success
+                  data:
+                    $ref: "#/components/schemas/Account"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags: [Admin]
+      summary: Soft delete account
+      description: Soft deletes an account and all associated data (credentials, federated identities, roles).
+      operationId: adminDeleteAccount
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Account deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: account deleted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/admin/accounts/{account_id}/disable:
+    post:
+      tags: [Admin]
+      summary: Suspend account
+      description: Suspends an active account. The account cannot log in while suspended.
+      operationId: adminDisableAccount
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AccountID"
+      responses:
+        "200":
+          description: Account suspended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: account disabled
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/admin/accounts/{account_id}/enable:
+    post:
+      tags: [Admin]
+      summary: Activate account
+      description: Activates a suspended account.
+      operationId: adminEnableAccount
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AccountID"
+      responses:
+        "200":
+          description: Account activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: account enabled
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/admin/accounts/{account_id}/roles:
+    parameters:
+      - $ref: "#/components/parameters/AccountID"
+
+    get:
+      tags: [Admin]
+      summary: List account roles
+      operationId: adminGetAccountRoles
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Account roles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Role"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+    post:
+      tags: [Admin]
+      summary: Assign role to account
+      operationId: adminAddRole
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_id]
+              properties:
+                role_id:
+                  type: string
+                  description: The role ID to assign
+      responses:
+        "200":
+          description: Role assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: role assigned
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/admin/accounts/{account_id}/roles/{role_id}:
+    delete:
+      tags: [Admin]
+      summary: Remove role from account
+      operationId: adminRemoveRole
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AccountID"
+        - $ref: "#/components/parameters/RoleID"
+      responses:
+        "200":
+          description: Role removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: role removed
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+# ════════════════════════════════════════════════
+# Passkey (WebAuthn) Endpoints
+# ════════════════════════════════════════════════
+
+  /api/auth/passkey/register/begin:
+    post:
+      tags: [Passkey]
+      summary: Begin passkey registration
+      description: Start WebAuthn credential creation ceremony. Returns PublicKeyCredentialCreationOptions.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Registration options
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/passkey/register/complete:
+    post:
+      tags: [Passkey]
+      summary: Complete passkey registration
+      description: Complete WebAuthn credential creation ceremony with the browser's attestation response.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Passkey registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/passkey/login/begin:
+    post:
+      tags: [Passkey]
+      summary: Begin passkey login
+      description: Start WebAuthn authentication ceremony. If account_id is provided, uses regular login; otherwise uses discoverable login.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                account_id:
+                  type: string
+                  description: Optional account ID for non-discoverable login
+      responses:
+        "200":
+          description: Login options with request_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+
+  /api/auth/passkey/login/complete:
+    post:
+      tags: [Passkey]
+      summary: Complete passkey login
+      description: Complete WebAuthn authentication ceremony with the browser's assertion response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [request_id]
+              properties:
+                request_id:
+                  type: string
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/passkeys:
+    get:
+      tags: [Passkey]
+      summary: List passkeys
+      description: List all registered passkeys for the authenticated account.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of passkeys
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/passkeys/{id}:
+    delete:
+      tags: [Passkey]
+      summary: Delete passkey
+      description: Delete a registered passkey (ownership check enforced).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Passkey deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/passkey/mfa/begin:
+    post:
+      tags: [Passkey]
+      summary: Begin passkey MFA verification
+      description: Start WebAuthn ceremony for MFA verification using a passkey.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mfa_token]
+              properties:
+                mfa_token:
+                  type: string
+      responses:
+        "200":
+          description: MFA options
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/passkey/mfa/complete:
+    post:
+      tags: [Passkey]
+      summary: Complete passkey MFA verification
+      description: Complete WebAuthn MFA ceremony. After this, call /api/auth/mfa/verify with type=passkey to get tokens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mfa_token]
+              properties:
+                mfa_token:
+                  type: string
+      responses:
+        "200":
+          description: Passkey verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+# ════════════════════════════════════════════════
+# Components
+# ════════════════════════════════════════════════
+
+components:
+
+  # ── Security Schemes ──
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token obtained from login, token, or social login endpoints
+    BasicAuth:
+      type: http
+      scheme: basic
+      description: HTTP Basic Auth with client_id as username and client_secret as password
+
+  # ── Parameters ──
+
+  parameters:
+    AccountID:
+      name: account_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Account UUID
+    ClientID:
+      name: client_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: OAuth2 client ID
+    RoleID:
+      name: role_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Role UUID
+    SocialProvider:
+      name: provider
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [google, github, wechat]
+      description: Social login provider name
+
+  # ── Responses ──
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: 400
+            message: invalid request body
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: 401
+            message: unauthorized
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: 403
+            message: forbidden
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: 404
+            message: not found
+    TooManyRequests:
+      description: Too many requests (rate limited)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: 429
+            message: too many requests
+
+  # ── Schemas ──
+
+  schemas:
+
+    # -- Generic --
+
+    Response:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 200
+        message:
+          type: string
+          example: success
+        data:
+          description: Response data (type varies by endpoint)
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 400
+        message:
+          type: string
+          example: error message
+
+    OAuth2Error:
+      type: object
+      description: RFC 6749 error response
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_request
+            - invalid_client
+            - invalid_grant
+            - unauthorized_client
+            - unsupported_grant_type
+            - invalid_scope
+            - consent_denied
+            - server_error
+        error_description:
+          type: string
+
+    # -- Auth Request Bodies --
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          example: johndoe
+        password:
+          type: string
+          format: password
+          example: SecurePassword123!
+
+    RefreshTokenRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+
+    MFAVerifyRequest:
+      type: object
+      required: [mfa_token, code]
+      properties:
+        mfa_token:
+          type: string
+          description: MFA token received from login response when MFA is required
+        code:
+          type: string
+          description: TOTP code or backup code
+          example: "123456"
+
+    MFAEnrollRequest:
+      type: object
+      required: [account_id]
+      properties:
+        account_id:
+          type: string
+          format: uuid
+
+    MFAActivateRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          description: TOTP code to verify enrollment
+          example: "123456"
+
+    SendVerificationRequest:
+      type: object
+      required: [type, identifier]
+      properties:
+        type:
+          type: string
+          enum: [email, phone]
+        identifier:
+          type: string
+          description: Email address or phone number
+          example: user@example.com
+
+    ConfirmVerificationRequest:
+      type: object
+      required: [type, identifier, code]
+      properties:
+        type:
+          type: string
+          enum: [email, phone]
+        identifier:
+          type: string
+          example: user@example.com
+        code:
+          type: string
+          example: "123456"
+
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+
+    ResetPasswordRequest:
+      type: object
+      required: [token, new_password]
+      properties:
+        token:
+          type: string
+          description: Password reset token received via email
+        new_password:
+          type: string
+          format: password
+          minLength: 8
+
+    # -- Auth Response Wrappers --
+
+    Response_LoginSuccess:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 200
+        message:
+          type: string
+          example: success
+        data:
+          type: object
+          properties:
+            access_token:
+              type: string
+            refresh_token:
+              type: string
+            token_type:
+              type: string
+              example: Bearer
+            expires_in:
+              type: integer
+              description: Access token lifetime in seconds
+              example: 900
+            session_id:
+              type: string
+              format: uuid
+
+    Response_MFARequired:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 200
+        message:
+          type: string
+          example: success
+        data:
+          type: object
+          properties:
+            requires_mfa:
+              type: boolean
+              example: true
+            mfa_token:
+              type: string
+              description: Temporary token to use with MFA verify endpoint
+            mfa_token_type:
+              type: string
+              example: Bearer
+
+    Response_TokenPair:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 200
+        message:
+          type: string
+          example: success
+        data:
+          type: object
+          properties:
+            access_token:
+              type: string
+            refresh_token:
+              type: string
+            token_type:
+              type: string
+              example: Bearer
+            expires_in:
+              type: integer
+              example: 900
+
+    Response_TokenPairWithSession:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 200
+        message:
+          type: string
+          example: success
+        data:
+          type: object
+          properties:
+            access_token:
+              type: string
+            refresh_token:
+              type: string
+            token_type:
+              type: string
+              example: Bearer
+            expires_in:
+              type: integer
+              example: 900
+            session_id:
+              type: string
+              format: uuid
+
+    # -- Domain Models --
+
+    Account:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+          nullable: true
+        display_name:
+          type: string
+        avatar_url:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, suspended, deleted]
+        locale:
+          type: string
+          example: en
+        timezone:
+          type: string
+          example: UTC
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    Role:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        permissions:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    OAuth2Client:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        client_id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        redirect_uris:
+          type: array
+          items:
+            type: string
+            format: uri
+        grant_types:
+          type: array
+          items:
+            type: string
+            enum: [authorization_code, refresh_token, client_credentials]
+        scopes:
+          type: array
+          items:
+            type: string
+        is_confidential:
+          type: boolean
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PaginatedAccounts:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Account"
+        total:
+          type: integer
+          example: 42
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+
+    # -- OAuth2 Client Management --
+
+    RegisterClientRequest:
+      type: object
+      required: [name, redirect_uris]
+      properties:
+        name:
+          type: string
+          example: My App
+        description:
+          type: string
+          example: My OAuth2 application
+        redirect_uris:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uri
+          example: ["https://app.example.com/callback"]
+        grant_types:
+          type: array
+          items:
+            type: string
+            enum: [authorization_code, refresh_token, client_credentials]
+          default: [authorization_code]
+        scopes:
+          type: array
+          items:
+            type: string
+          example: ["openid", "profile", "email"]
+        is_confidential:
+          type: boolean
+          default: false
+
+    RegisterClientResponse:
+      type: object
+      properties:
+        client_id:
+          type: string
+          description: Unique client identifier
+        client_secret:
+          type: string
+          description: Client secret (only shown once, only for confidential clients)
+        name:
+          type: string
+
+    UpdateClientRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        redirect_uris:
+          type: array
+          items:
+            type: string
+            format: uri
+        grant_types:
+          type: array
+          items:
+            type: string
+        scopes:
+          type: array
+          items:
+            type: string
+
+    # -- OAuth2 Protocol --
+
+    TokenRequest:
+      type: object
+      required: [grant_type]
+      properties:
+        grant_type:
+          type: string
+          enum: [authorization_code, refresh_token, client_credentials]
+        code:
+          type: string
+          description: Authorization code (for authorization_code grant)
+        redirect_uri:
+          type: string
+          format: uri
+          description: Must match the redirect_uri from the authorization request
+        client_id:
+          type: string
+        client_secret:
+          type: string
+          description: Client secret (for confidential clients)
+        code_verifier:
+          type: string
+          description: PKCE code verifier
+        refresh_token:
+          type: string
+          description: Refresh token (for refresh_token grant)
+        scope:
+          type: string
+          description: Requested scopes (for client_credentials grant)
+
+    TokenResponse:
+      type: object
+      description: RFC 6749 token response
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          description: Access token lifetime in seconds
+          example: 900
+        scope:
+          type: string
+          description: Space-separated list of granted scopes
+        id_token:
+          type: string
+          description: OpenID Connect ID token (only when openid scope is requested)
+
+    IntrospectionResponse:
+      type: object
+      description: RFC 7662 introspection response
+      properties:
+        active:
+          type: boolean
+          description: Whether the token is active
+        scope:
+          type: string
+        client_id:
+          type: string
+        username:
+          type: string
+        token_type:
+          type: string
+        exp:
+          type: integer
+          description: Expiration time (Unix timestamp)
+        iat:
+          type: integer
+          description: Issued-at time (Unix timestamp)
+        sub:
+          type: string
+          description: Subject (account ID)
+        aud:
+          type: string
+          description: Audience (client ID)
+        iss:
+          type: string
+          description: Issuer
+        jti:
+          type: string
+          description: JWT ID
+
+    # -- OIDC --
+
+    OIDCDiscovery:
+      type: object
+      description: OpenID Connect Discovery document
+      properties:
+        issuer:
+          type: string
+          format: uri
+        authorization_endpoint:
+          type: string
+          format: uri
+        token_endpoint:
+          type: string
+          format: uri
+        userinfo_endpoint:
+          type: string
+          format: uri
+        jwks_uri:
+          type: string
+          format: uri
+        scopes_supported:
+          type: array
+          items:
+            type: string
+        response_types_supported:
+          type: array
+          items:
+            type: string
+        grant_types_supported:
+          type: array
+          items:
+            type: string
+        subject_types_supported:
+          type: array
+          items:
+            type: string
+        id_token_signing_alg_values_supported:
+          type: array
+          items:
+            type: string
+        token_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+        claims_supported:
+          type: array
+          items:
+            type: string
+
+    JWKS:
+      type: object
+      description: JSON Web Key Set
+      properties:
+        keys:
+          type: array
+          items:
+            type: object
+            properties:
+              kty:
+                type: string
+                example: RSA
+              use:
+                type: string
+                example: sig
+              kid:
+                type: string
+              alg:
+                type: string
+                example: RS256
+              n:
+                type: string
+              e:
+                type: string
+
+    UserInfo:
+      type: object
+      description: OpenID Connect UserInfo response
+      properties:
+        sub:
+          type: string
+          description: Subject identifier (account ID)
+        name:
+          type: string
+          description: Display name (profile scope)
+        preferred_username:
+          type: string
+          description: Username (profile scope)
+        email:
+          type: string
+          format: email
+          description: Email address (email scope)
+        email_verified:
+          type: boolean
+          description: Whether email is verified (email scope)
+        locale:
+          type: string
+          description: Locale preference (profile scope)
+        zoneinfo:
+          type: string
+          description: Timezone (profile scope)
+        updated_at:
+          type: integer
+          description: Last update time (profile scope)

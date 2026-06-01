@@ -15,6 +15,8 @@ import (
 const (
 	// SessionKeyPrefix Redis 会话键前缀
 	SessionKeyPrefix = "session:"
+	// AccountSessionsPrefix 账号会话索引键前缀
+	AccountSessionsPrefix = "account_sessions:"
 	// DefaultSessionTTL 默认会话过期时间（24小时）
 	DefaultSessionTTL = 24 * time.Hour
 )
@@ -65,6 +67,12 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 	if err := s.redis.Set(ctx, key, data, s.sessionTTL); err != nil {
 		s.logger.Error("Failed to create session", zap.Error(err), zap.String("session_id", session.ID.String()))
 		return fmt.Errorf("create session: %w", err)
+	}
+
+	// 维护账号会话索引
+	indexKey := s.buildAccountSessionsKey(session.AccountID.String())
+	if err := s.redis.SAdd(ctx, indexKey, session.ID.String()); err != nil {
+		s.logger.Warn("Failed to index session by account", zap.Error(err), zap.String("session_id", session.ID.String()))
 	}
 
 	s.logger.Info("Session created",
@@ -166,6 +174,44 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID uuid.UUI
 // buildSessionKey 构建 Redis 键
 func (s *SessionService) buildSessionKey(sessionID uuid.UUID) string {
 	return fmt.Sprintf("%s%s", SessionKeyPrefix, sessionID.String())
+}
+
+// buildAccountSessionsKey 构建账号会话索引键
+func (s *SessionService) buildAccountSessionsKey(accountID string) string {
+	return fmt.Sprintf("%s%s", AccountSessionsPrefix, accountID)
+}
+
+// RevokeAllForAccount 撤销指定账号的所有会话
+func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID string) error {
+	indexKey := s.buildAccountSessionsKey(accountID)
+
+	sessionIDs, err := s.redis.SMembers(ctx, indexKey)
+	if err != nil {
+		s.logger.Error("Failed to get account sessions", zap.String("account_id", accountID), zap.Error(err))
+		return fmt.Errorf("get account sessions: %w", err)
+	}
+
+	if len(sessionIDs) > 0 {
+		keys := make([]string, len(sessionIDs))
+		for i, sid := range sessionIDs {
+			keys[i] = SessionKeyPrefix + sid
+		}
+		if err := s.redis.Del(ctx, keys...); err != nil {
+			s.logger.Error("Failed to delete account sessions", zap.String("account_id", accountID), zap.Error(err))
+			return fmt.Errorf("delete account sessions: %w", err)
+		}
+	}
+
+	// 删除索引本身
+	if err := s.redis.Del(ctx, indexKey); err != nil {
+		s.logger.Warn("Failed to delete account sessions index", zap.String("account_id", accountID), zap.Error(err))
+	}
+
+	s.logger.Info("All sessions revoked for account",
+		zap.String("account_id", accountID),
+		zap.Int("count", len(sessionIDs)))
+
+	return nil
 }
 
 // 错误定义

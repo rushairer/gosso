@@ -26,6 +26,9 @@ type AccountRepository interface {
 
 	// SoftDeleteAccount 软删除账号（需要事务）
 	SoftDeleteAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+
+	// FindAll 分页查询账号列表（管理员用）
+	FindAll(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error)
 }
 
 // accountRepositoryImpl 账号仓储实现
@@ -211,4 +214,87 @@ func (r *accountRepositoryImpl) SoftDeleteAccount(ctx context.Context, tx *sql.T
 	}
 
 	return nil
+}
+
+// FindAll 分页查询账号列表
+func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	// 构建条件
+	where := "deleted_at IS NULL"
+	args := []interface{}{}
+	if status != "" {
+		where += " AND status = $3"
+		args = append(args, status)
+	}
+
+	// Count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM accounts WHERE %s", where)
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count accounts: %w", err)
+	}
+
+	if total == 0 {
+		return []*domain.Account{}, 0, nil
+	}
+
+	// Select
+	var selectQuery string
+	if status != "" {
+		selectQuery = fmt.Sprintf(`
+			SELECT id, username, display_name, avatar_url, status, locale, timezone, metadata, created_at, updated_at, deleted_at
+			FROM accounts
+			WHERE %s
+			ORDER BY created_at DESC
+			LIMIT $1 OFFSET $2`, where)
+		args = append([]interface{}{pageSize, offset}, args...)
+	} else {
+		selectQuery = fmt.Sprintf(`
+			SELECT id, username, display_name, avatar_url, status, locale, timezone, metadata, created_at, updated_at, deleted_at
+			FROM accounts
+			WHERE %s
+			ORDER BY created_at DESC
+			LIMIT $1 OFFSET $2`, where)
+		args = []interface{}{pageSize, offset}
+	}
+
+	rows, err := r.db.QueryContext(ctx, selectQuery, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query accounts: %w", err)
+	}
+	defer rows.Close()
+
+	var accounts []*domain.Account
+	for rows.Next() {
+		account := &domain.Account{}
+		var metadataJSON []byte
+		if err := rows.Scan(
+			&account.ID,
+			&account.Username,
+			&account.DisplayName,
+			&account.AvatarURL,
+			&account.Status,
+			&account.Locale,
+			&account.Timezone,
+			&metadataJSON,
+			&account.CreatedAt,
+			&account.UpdatedAt,
+			&account.DeletedAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scan account: %w", err)
+		}
+		if err := json.Unmarshal(metadataJSON, &account.Metadata); err != nil {
+			return nil, 0, fmt.Errorf("unmarshal metadata: %w", err)
+		}
+		accounts = append(accounts, account)
+	}
+
+	return accounts, total, nil
 }

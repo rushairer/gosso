@@ -27,7 +27,7 @@ func TestRegisterAccount(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil)
 
 	// 设置 mock 期望（按实际执行顺序）
 	
@@ -90,7 +90,7 @@ func TestRegisterAccount_DuplicateEmail(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil)
 
 	// 设置 mock：邮箱已存在（在事务外查询）
 	// 注意：需要返回所有列，与 FindByTypeAndIdentifier 的 Scan 匹配
@@ -144,7 +144,7 @@ func TestChangePassword(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil)
 
 	accountID := "test-account-id"
 	oldPassword := "OldPassword123!"
@@ -184,7 +184,7 @@ func TestSoftDeleteAccount(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil)
 
 	accountID := "test-account-id"
 

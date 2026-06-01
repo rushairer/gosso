@@ -1,0 +1,30 @@
+package oauth2
+
+import (
+	"database/sql"
+
+	"github.com/rushairer/gosso/config"
+	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/oauth2/repository"
+	"github.com/rushairer/gosso/internal/oauth2/service"
+	"go.uber.org/zap"
+)
+
+// InitializeOAuth2Module 初始化 OAuth2 模块
+func InitializeOAuth2Module(
+	db *sql.DB,
+	redis *cache.RedisClient,
+	logger *zap.Logger,
+	authConfig config.AuthConfig,
+) (
+	service.OAuth2ClientService,
+	*service.AuthCodeService,
+	*service.ConsentService,
+) {
+	clientRepo := repository.NewOAuth2ClientRepository(db)
+	clientSvc := service.NewOAuth2ClientService(db, clientRepo)
+	authCodeSvc := service.NewAuthCodeService(redis, logger, authConfig.AuthorizationCodeExpiry)
+	consentSvc := service.NewConsentService(redis, logger)
+
+	return clientSvc, authCodeSvc, consentSvc
+}

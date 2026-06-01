@@ -3,12 +3,16 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/account/repository"
+	"github.com/rushairer/gosso/internal/audit"
+	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
+	auditService "github.com/rushairer/gosso/internal/audit/service"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -46,6 +50,18 @@ type AccountService interface {
 
 	// RemoveRole 移除账号的角色
 	RemoveRole(ctx context.Context, accountID, roleID string) error
+
+	// ListAccounts 分页查询账号列表（管理员用）
+	ListAccounts(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error)
+
+	// SuspendAccount 禁用账号
+	SuspendAccount(ctx context.Context, accountID string) error
+
+	// ActivateAccount 启用账号
+	ActivateAccount(ctx context.Context, accountID string) error
+
+	// GetAccountRoles 获取账号的角色列表
+	GetAccountRoles(ctx context.Context, accountID string) ([]*domain.Role, error)
 }
 
 // RegisterAccountRequest 注册账号请求
@@ -66,6 +82,7 @@ type accountServiceImpl struct {
 	credentialRepo        repository.CredentialRepository
 	federatedIdentityRepo repository.FederatedIdentityRepository
 	roleRepo              repository.RoleRepository
+	auditor               *auditService.Auditor
 }
 
 // NewAccountService 创建账号服务
@@ -75,6 +92,7 @@ func NewAccountService(
 	credentialRepo repository.CredentialRepository,
 	federatedIdentityRepo repository.FederatedIdentityRepository,
 	roleRepo repository.RoleRepository,
+	auditor *auditService.Auditor,
 ) AccountService {
 	return &accountServiceImpl{
 		db:                    db,
@@ -82,6 +100,7 @@ func NewAccountService(
 		credentialRepo:        credentialRepo,
 		federatedIdentityRepo: federatedIdentityRepo,
 		roleRepo:              roleRepo,
+		auditor:               auditor,
 	}
 }
 
@@ -200,11 +219,14 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		return nil, fmt.Errorf("提交事务失败: %w", err)
 	}
 
-	// 8. 后置处理（事务外，失败不影响注册结果）
-	go func() {
-		// 发送验证邮件/短信
-		// 记录审计日志
-	}()
+	// 8. 审计日志
+	s.auditLog(ctx, auditDomain.NewRecord(
+		auditDomain.ActionAccountRegister,
+		audit.IPFromContext(ctx),
+		parseUUID(account.ID),
+		mustMarshalJSON(map[string]any{"account_id": account.ID}),
+		mustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+	))
 
 	return account, nil
 }
@@ -287,13 +309,14 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		return fmt.Errorf("提交事务失败: %w", err)
 	}
 
-	// 6. 后置处理（事务外）
-	go func() {
-		// 清除缓存
-		// 撤销所有 Token
-		// 发送通知
-		// 记录审计日志
-	}()
+	// 6. 审计日志
+	s.auditLog(ctx, auditDomain.NewRecord(
+		auditDomain.ActionAccountDelete,
+		audit.IPFromContext(ctx),
+		parseUUID(accountID),
+		mustMarshalJSON(map[string]any{"account_id": accountID}),
+		mustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+	))
 
 	return nil
 }
@@ -376,11 +399,14 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 		return fmt.Errorf("提交事务失败: %w", err)
 	}
 
-	// 5. 后置处理
-	go func() {
-		// 撤销所有活跃会话和 Token
-		// 发送密码修改通知
-	}()
+	// 5. 审计日志
+	s.auditLog(ctx, auditDomain.NewRecord(
+		auditDomain.ActionPasswordChange,
+		audit.IPFromContext(ctx),
+		parseUUID(accountID),
+		mustMarshalJSON(map[string]any{"account_id": accountID}),
+		mustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+	))
 
 	return nil
 }
@@ -471,6 +497,13 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 		return fmt.Errorf("提交事务失败: %w", err)
 	}
 
+	s.auditLog(ctx, auditDomain.NewRecord(
+		auditDomain.ActionRoleAssign,
+		audit.IPFromContext(ctx),
+		parseUUID(accountID),
+		mustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
+		mustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+	))
 	return nil
 }
 
@@ -496,7 +529,76 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 		return fmt.Errorf("提交事务失败: %w", err)
 	}
 
+	s.auditLog(ctx, auditDomain.NewRecord(
+		auditDomain.ActionRoleRemove,
+		audit.IPFromContext(ctx),
+		parseUUID(accountID),
+		mustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
+		mustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+	))
 	return nil
+}
+
+// ListAccounts 分页查询账号列表
+func (s *accountServiceImpl) ListAccounts(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error) {
+	return s.accountRepo.FindAll(ctx, page, pageSize, status)
+}
+
+// SuspendAccount 禁用账号
+func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID string) error {
+	account, err := s.accountRepo.FindByID(ctx, accountID)
+	if err != nil {
+		return fmt.Errorf("查找账号失败: %w", err)
+	}
+
+	if !account.IsActive() {
+		return fmt.Errorf("账号状态不允许禁用: %s", account.Status)
+	}
+
+	account.Suspend()
+	if err := s.UpdateAccount(ctx, account); err != nil {
+		return err
+	}
+
+	s.auditLog(ctx, auditDomain.NewRecord(
+		auditDomain.ActionAccountSuspend,
+		audit.IPFromContext(ctx),
+		parseUUID(accountID),
+		mustMarshalJSON(map[string]any{"account_id": accountID}),
+		mustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+	))
+	return nil
+}
+
+// ActivateAccount 启用账号
+func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID string) error {
+	account, err := s.accountRepo.FindByID(ctx, accountID)
+	if err != nil {
+		return fmt.Errorf("查找账号失败: %w", err)
+	}
+
+	if !account.IsSuspended() {
+		return fmt.Errorf("账号状态不允许启用: %s", account.Status)
+	}
+
+	account.Activate()
+	if err := s.UpdateAccount(ctx, account); err != nil {
+		return err
+	}
+
+	s.auditLog(ctx, auditDomain.NewRecord(
+		auditDomain.ActionAccountActivate,
+		audit.IPFromContext(ctx),
+		parseUUID(accountID),
+		mustMarshalJSON(map[string]any{"account_id": accountID}),
+		mustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+	))
+	return nil
+}
+
+// GetAccountRoles 获取账号的角色列表
+func (s *accountServiceImpl) GetAccountRoles(ctx context.Context, accountID string) ([]*domain.Role, error) {
+	return s.roleRepo.FindRolesByAccountID(ctx, accountID)
 }
 
 // validateRegistration 验证注册请求
@@ -537,4 +639,23 @@ func (s *accountServiceImpl) checkCredentialExists(ctx context.Context, credType
 		}
 	}
 	return nil
+}
+
+func (s *accountServiceImpl) auditLog(ctx context.Context, record *auditDomain.AuditRecord) {
+	if s.auditor != nil {
+		_ = s.auditor.Log(ctx, record)
+	}
+}
+
+func mustMarshalJSON(v any) json.RawMessage {
+	b, _ := json.Marshal(v)
+	return json.RawMessage(b)
+}
+
+func parseUUID(s string) *uuid.UUID {
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return nil
+	}
+	return &id
 }

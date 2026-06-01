@@ -1,0 +1,537 @@
+package controller
+
+import (
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountRepo "github.com/rushairer/gosso/internal/account/repository"
+	authService "github.com/rushairer/gosso/internal/auth/service"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	tokenService "github.com/rushairer/gosso/internal/token/service"
+	"github.com/rushairer/gouno"
+	"go.uber.org/zap"
+)
+
+// AuthController 认证控制器
+type AuthController struct {
+	authSvc          *authService.AuthService
+	tokenSvc         *tokenService.TokenService
+	socialSvc        *authService.SocialLoginService
+	verificationSvc  *authService.VerificationService
+	passwordResetSvc *authService.PasswordResetService
+	credentialRepo   accountRepo.CredentialRepository
+	logger           *zap.Logger
+}
+
+// NewAuthController 创建认证控制器实例
+func NewAuthController(
+	authSvc *authService.AuthService,
+	tokenSvc *tokenService.TokenService,
+	socialSvc *authService.SocialLoginService,
+	verificationSvc *authService.VerificationService,
+	passwordResetSvc *authService.PasswordResetService,
+	credentialRepo accountRepo.CredentialRepository,
+	logger *zap.Logger,
+) *AuthController {
+	return &AuthController{
+		authSvc:          authSvc,
+		tokenSvc:         tokenSvc,
+		socialSvc:        socialSvc,
+		verificationSvc:  verificationSvc,
+		passwordResetSvc: passwordResetSvc,
+		credentialRepo:   credentialRepo,
+		logger:           logger,
+	}
+}
+
+// RegisterRoutes 注册认证路由
+func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup) {
+	auth := rg.Group("/auth")
+	{
+		auth.POST("/login", c.Login)
+		auth.POST("/refresh", c.Refresh)
+		auth.POST("/logout", c.Logout)
+		auth.GET("/session", c.GetSession)
+
+		// MFA endpoints
+		auth.POST("/mfa/verify", c.MFAVerify)
+		auth.POST("/mfa/enroll", c.MFAEnroll)
+		auth.POST("/mfa/activate", c.MFAActivate)
+		auth.DELETE("/mfa", c.MFADisable)
+		auth.POST("/mfa/backup-codes", c.MFAGenerateBackupCodes)
+
+		// Social login endpoints
+		auth.GET("/social/:provider", c.SocialAuthURL)
+		auth.GET("/social/:provider/callback", c.SocialCallback)
+
+		// Verification endpoints
+		auth.POST("/verify/send", c.SendVerification)
+		auth.POST("/verify/confirm", c.ConfirmVerification)
+
+		// Password reset endpoints (unauthenticated)
+		auth.POST("/password/forgot", c.ForgotPassword)
+		auth.POST("/password/reset", c.ResetPassword)
+	}
+}
+
+// LoginRequest 登录请求体
+type LoginRequestBody struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+// Login POST /api/auth/login
+func (c *AuthController) Login(ctx *gin.Context) {
+	var req LoginRequestBody
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+
+	result, err := c.authSvc.LoginByUsernamePassword(ctx, &authService.LoginRequest{
+		Username:  req.Username,
+		Password:  req.Password,
+		IP:        ctx.ClientIP(),
+		UserAgent: ctx.Request.UserAgent(),
+	})
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, err.Error()))
+		return
+	}
+
+	if result.RequiresMFA {
+		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
+			"requires_mfa":    true,
+			"mfa_token":       result.AccessToken,
+			"mfa_token_type":  "Bearer",
+			"mfa_types":       result.MFATypes,
+		}))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
+		"access_token":  result.AccessToken,
+		"refresh_token": result.RefreshToken,
+		"token_type":    "Bearer",
+		"expires_in":    900,
+		"session_id":    result.Session.ID.String(),
+	}))
+}
+
+// RefreshTokenRequest 刷新令牌请求体
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+// Refresh POST /api/auth/refresh
+func (c *AuthController) Refresh(ctx *gin.Context) {
+	var req RefreshTokenRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+
+	result, err := c.authSvc.RefreshTokens(ctx, req.RefreshToken)
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
+		"access_token":  result.AccessToken,
+		"refresh_token": result.RefreshToken,
+		"token_type":    "Bearer",
+		"expires_in":    900,
+	}))
+}
+
+// LogoutRequest 注销请求体
+type LogoutRequest struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+// Logout POST /api/auth/logout
+func (c *AuthController) Logout(ctx *gin.Context) {
+	sessionID, exists := ctx.Get("account_id")
+	_ = sessionID
+	_ = exists
+
+	// 尝试撤销 access token（从 header 获取）
+	authHeader := ctx.GetHeader("Authorization")
+	var accessTokenJTI string
+	var tokenExpiresAt time.Time
+	if len(authHeader) > 7 {
+		claims, err := c.tokenSvc.ValidateAccessToken(authHeader[7:])
+		if err == nil {
+			accessTokenJTI = claims.ID
+			if claims.ExpiresAt != nil {
+				tokenExpiresAt = claims.ExpiresAt.Time
+			}
+		}
+	}
+
+	// 从 claims 获取 session_id
+	if jwtClaims, exists := ctx.Get("jwt_claims"); exists {
+		if tc, ok := jwtClaims.(*tokenDomain.AccessTokenClaims); ok {
+			_ = c.authSvc.Logout(ctx, tc.AccountID, tc.SessionID, accessTokenJTI, tokenExpiresAt)
+		}
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("logged out"))
+}
+
+// GetSession GET /api/auth/session
+func (c *AuthController) GetSession(ctx *gin.Context) {
+	jwtClaims, exists := ctx.Get("jwt_claims")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "no claims"))
+		return
+	}
+
+	tc, ok := jwtClaims.(*tokenDomain.AccessTokenClaims)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "invalid claims type"))
+		return
+	}
+
+	session, err := c.authSvc.ValidateSession(ctx, tc.SessionID)
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "session invalid"))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(session))
+}
+
+// MFAVerifyRequest MFA 验证请求体
+type MFAVerifyRequest struct {
+	MFAToken string `json:"mfa_token" binding:"required"`
+	Code     string `json:"code"`
+	Type     string `json:"type"` // "totp" (default) or "passkey"
+}
+
+// MFAVerify POST /api/auth/mfa/verify
+func (c *AuthController) MFAVerify(ctx *gin.Context) {
+	var req MFAVerifyRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+
+	if req.Type != "passkey" && req.Code == "" {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "code is required"))
+		return
+	}
+
+	result, err := c.authSvc.VerifyMFALogin(ctx, req.MFAToken, req.Code, req.Type, ctx.ClientIP(), ctx.Request.UserAgent())
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
+		"access_token":  result.AccessToken,
+		"refresh_token": result.RefreshToken,
+		"token_type":    "Bearer",
+		"expires_in":    900,
+		"session_id":    result.Session.ID.String(),
+	}))
+}
+
+// MFAEnrollRequest MFA 注册请求体
+type MFAEnrollRequest struct {
+	AccountID string `json:"account_id" binding:"required"`
+}
+
+// MFAEnroll POST /api/auth/mfa/enroll
+func (c *AuthController) MFAEnroll(ctx *gin.Context) {
+	var req MFAEnrollRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+
+	// 验证当前用户只能为自己注册 MFA
+	jwtClaims, exists := ctx.Get("jwt_claims")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
+		return
+	}
+	tc := jwtClaims.(*tokenDomain.AccessTokenClaims)
+	if tc.AccountID != req.AccountID {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "cannot enroll MFA for another account"))
+		return
+	}
+
+	enrollment, err := c.authSvc.MFAService().EnrollTOTP(ctx, req.AccountID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(enrollment))
+}
+
+// MFAActivateRequest MFA 激活请求体
+type MFAActivateRequest struct {
+	Code string `json:"code" binding:"required"`
+}
+
+// MFAActivate POST /api/auth/mfa/activate
+func (c *AuthController) MFAActivate(ctx *gin.Context) {
+	var req MFAActivateRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+
+	jwtClaims, exists := ctx.Get("jwt_claims")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
+		return
+	}
+	tc := jwtClaims.(*tokenDomain.AccessTokenClaims)
+
+	if err := c.authSvc.MFAService().ActivateTOTP(ctx, tc.AccountID, req.Code); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("TOTP activated"))
+}
+
+// MFADisable DELETE /api/auth/mfa
+func (c *AuthController) MFADisable(ctx *gin.Context) {
+	jwtClaims, exists := ctx.Get("jwt_claims")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
+		return
+	}
+	tc := jwtClaims.(*tokenDomain.AccessTokenClaims)
+
+	if err := c.authSvc.MFAService().DisableTOTP(ctx, tc.AccountID); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("MFA disabled"))
+}
+
+// MFAGenerateBackupCodes POST /api/auth/mfa/backup-codes
+func (c *AuthController) MFAGenerateBackupCodes(ctx *gin.Context) {
+	jwtClaims, exists := ctx.Get("jwt_claims")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
+		return
+	}
+	tc := jwtClaims.(*tokenDomain.AccessTokenClaims)
+
+	codes, err := c.authSvc.MFAService().GenerateBackupCodes(ctx, tc.AccountID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
+		"backup_codes": codes,
+	}))
+}
+
+// SocialAuthURL GET /api/auth/social/:provider
+func (c *AuthController) SocialAuthURL(ctx *gin.Context) {
+	if c.socialSvc == nil {
+		ctx.JSON(http.StatusNotImplemented, gouno.NewErrorResponse(http.StatusNotImplemented, "social login not configured"))
+		return
+	}
+
+	provider := ctx.Param("provider")
+	state := ctx.Query("state")
+	if state == "" {
+		state = "default"
+	}
+
+	authURL, err := c.socialSvc.GetAuthURL(ctx, provider, state)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		return
+	}
+
+	ctx.Redirect(http.StatusFound, authURL)
+}
+
+// SocialCallback GET /api/auth/social/:provider/callback
+func (c *AuthController) SocialCallback(ctx *gin.Context) {
+	if c.socialSvc == nil {
+		ctx.JSON(http.StatusNotImplemented, gouno.NewErrorResponse(http.StatusNotImplemented, "social login not configured"))
+		return
+	}
+
+	provider := ctx.Param("provider")
+	code := ctx.Query("code")
+	if code == "" {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "missing code parameter"))
+		return
+	}
+
+	result, err := c.socialSvc.HandleCallback(ctx, provider, code, ctx.ClientIP(), ctx.Request.UserAgent())
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
+		"access_token":  result.AccessToken,
+		"refresh_token": result.RefreshToken,
+		"token_type":    "Bearer",
+		"expires_in":    900,
+		"session_id":    result.Session.ID.String(),
+	}))
+}
+
+// SendVerificationRequest 发送验证码请求体
+type SendVerificationRequest struct {
+	Type       string `json:"type" binding:"required"`       // "email" or "phone"
+	Identifier string `json:"identifier" binding:"required"` // email address or phone number
+}
+
+// SendVerification POST /api/auth/verify/send
+func (c *AuthController) SendVerification(ctx *gin.Context) {
+	var req SendVerificationRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+
+	if req.Type != "email" && req.Type != "phone" {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "type must be 'email' or 'phone'"))
+		return
+	}
+
+	jwtClaims, exists := ctx.Get("jwt_claims")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
+		return
+	}
+	tc := jwtClaims.(*tokenDomain.AccessTokenClaims)
+
+	if err := c.verificationSvc.SendCode(ctx, req.Type, req.Identifier, tc.AccountID); err != nil {
+		ctx.JSON(http.StatusTooManyRequests, gouno.NewErrorResponse(http.StatusTooManyRequests, err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("verification code sent"))
+}
+
+// ConfirmVerificationRequest 确认验证码请求体
+type ConfirmVerificationRequest struct {
+	Type       string `json:"type" binding:"required"`
+	Identifier string `json:"identifier" binding:"required"`
+	Code       string `json:"code" binding:"required"`
+}
+
+// ConfirmVerification POST /api/auth/verify/confirm
+func (c *AuthController) ConfirmVerification(ctx *gin.Context) {
+	var req ConfirmVerificationRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+
+	if req.Type != "email" && req.Type != "phone" {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "type must be 'email' or 'phone'"))
+		return
+	}
+
+	jwtClaims, exists := ctx.Get("jwt_claims")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
+		return
+	}
+	tc := jwtClaims.(*tokenDomain.AccessTokenClaims)
+
+	// 校验验证码
+	accountID, err := c.verificationSvc.VerifyCode(ctx, req.Type, req.Identifier, req.Code)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		return
+	}
+
+	// 验证码属于当前用户
+	if accountID != tc.AccountID {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "verification code does not belong to this account"))
+		return
+	}
+
+	// 查找凭证并标记为已验证
+	var credType accountDomain.CredentialType
+	if req.Type == "email" {
+		credType = accountDomain.CredentialTypeEmail
+	} else {
+		credType = accountDomain.CredentialTypePhone
+	}
+
+	cred, err := c.credentialRepo.FindByTypeAndIdentifier(ctx, credType, req.Identifier)
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "credential not found"))
+		return
+	}
+
+	if cred.AccountID != tc.AccountID {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "credential does not belong to this account"))
+		return
+	}
+
+	cred.Verify()
+	if err := c.credentialRepo.UpdateCredential(ctx, nil, cred); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to update credential"))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("credential verified"))
+}
+
+// ForgotPasswordRequestBody 忘记密码请求体
+type ForgotPasswordRequestBody struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+// ForgotPassword POST /api/auth/password/forgot
+func (c *AuthController) ForgotPassword(ctx *gin.Context) {
+	var req ForgotPasswordRequestBody
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+
+	if err := c.passwordResetSvc.RequestReset(ctx, req.Email); err != nil {
+		c.logger.Warn("Password reset request error", zap.Error(err))
+	}
+
+	// 始终返回 200，防止邮箱枚举
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("if the email exists, a reset link has been sent"))
+}
+
+// ResetPasswordRequestBody 重置密码请求体
+type ResetPasswordRequestBody struct {
+	Token       string `json:"token" binding:"required"`
+	NewPassword string `json:"new_password" binding:"required,min=8"`
+}
+
+// ResetPassword POST /api/auth/password/reset
+func (c *AuthController) ResetPassword(ctx *gin.Context) {
+	var req ResetPasswordRequestBody
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+
+	if err := c.passwordResetSvc.VerifyAndReset(ctx, req.Token, req.NewPassword); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("password has been reset successfully"))
+}

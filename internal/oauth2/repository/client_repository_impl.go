@@ -1,0 +1,209 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/rushairer/gosso/internal/oauth2/domain"
+)
+
+type oauth2ClientRepositoryImpl struct {
+	db *sql.DB
+}
+
+// NewOAuth2ClientRepository 创建 OAuth2 客户端仓储实例
+func NewOAuth2ClientRepository(db *sql.DB) OAuth2ClientRepository {
+	return &oauth2ClientRepositoryImpl{db: db}
+}
+
+func (r *oauth2ClientRepositoryImpl) Create(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client) error {
+	redirectURIs, err := json.Marshal(client.RedirectURIs)
+	if err != nil {
+		return fmt.Errorf("marshal redirect_uris: %w", err)
+	}
+	grantTypes, err := json.Marshal(client.GrantTypes)
+	if err != nil {
+		return fmt.Errorf("marshal grant_types: %w", err)
+	}
+	scopes, err := json.Marshal(client.Scopes)
+	if err != nil {
+		return fmt.Errorf("marshal scopes: %w", err)
+	}
+	var metadata []byte
+	if client.Metadata != nil {
+		metadata, err = json.Marshal(client.Metadata)
+		if err != nil {
+			return fmt.Errorf("marshal metadata: %w", err)
+		}
+	}
+
+	query := `
+		INSERT INTO oauth2_clients (account_id, client_id, client_secret_hash, name, description, redirect_uris, grant_types, scopes, is_confidential, metadata)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		RETURNING id, created_at, updated_at`
+
+	err = tx.QueryRowContext(ctx, query,
+		client.AccountID,
+		client.ClientID,
+		client.ClientSecretHash,
+		client.Name,
+		client.Description,
+		redirectURIs,
+		grantTypes,
+		scopes,
+		client.IsConfidential,
+		metadata,
+	).Scan(&client.ID, &client.CreatedAt, &client.UpdatedAt)
+
+	if err != nil {
+		return fmt.Errorf("insert oauth2_client: %w", err)
+	}
+
+	return nil
+}
+
+func (r *oauth2ClientRepositoryImpl) FindByClientID(ctx context.Context, clientID string) (*domain.OAuth2Client, error) {
+	query := `
+		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at
+		FROM oauth2_clients
+		WHERE client_id = $1 AND deleted_at IS NULL`
+
+	client := &domain.OAuth2Client{}
+	var redirectURIs, grantTypes, scopes, metadata []byte
+
+	err := r.db.QueryRowContext(ctx, query, clientID).Scan(
+		&client.ID, &client.AccountID, &client.ClientID, &client.ClientSecretHash,
+		&client.Name, &client.Description, &redirectURIs, &grantTypes, &scopes,
+		&client.IsConfidential, &metadata, &client.CreatedAt, &client.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, domain.ErrClientNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find oauth2_client by client_id: %w", err)
+	}
+
+	if err := json.Unmarshal(redirectURIs, &client.RedirectURIs); err != nil {
+		return nil, fmt.Errorf("unmarshal redirect_uris: %w", err)
+	}
+	if err := json.Unmarshal(grantTypes, &client.GrantTypes); err != nil {
+		return nil, fmt.Errorf("unmarshal grant_types: %w", err)
+	}
+	if err := json.Unmarshal(scopes, &client.Scopes); err != nil {
+		return nil, fmt.Errorf("unmarshal scopes: %w", err)
+	}
+	if metadata != nil {
+		if err := json.Unmarshal(metadata, &client.Metadata); err != nil {
+			return nil, fmt.Errorf("unmarshal metadata: %w", err)
+		}
+	}
+
+	return client, nil
+}
+
+func (r *oauth2ClientRepositoryImpl) FindByAccountID(ctx context.Context, accountID string) ([]*domain.OAuth2Client, error) {
+	query := `
+		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at
+		FROM oauth2_clients
+		WHERE account_id = $1 AND deleted_at IS NULL
+		ORDER BY created_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("find oauth2_clients by account_id: %w", err)
+	}
+	defer rows.Close()
+
+	var clients []*domain.OAuth2Client
+	for rows.Next() {
+		client := &domain.OAuth2Client{}
+		var redirectURIs, grantTypes, scopes, metadata []byte
+
+		if err := rows.Scan(
+			&client.ID, &client.AccountID, &client.ClientID, &client.ClientSecretHash,
+			&client.Name, &client.Description, &redirectURIs, &grantTypes, &scopes,
+			&client.IsConfidential, &metadata, &client.CreatedAt, &client.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan oauth2_client: %w", err)
+		}
+
+		if err := json.Unmarshal(redirectURIs, &client.RedirectURIs); err != nil {
+			return nil, fmt.Errorf("unmarshal redirect_uris: %w", err)
+		}
+		if err := json.Unmarshal(grantTypes, &client.GrantTypes); err != nil {
+			return nil, fmt.Errorf("unmarshal grant_types: %w", err)
+		}
+		if err := json.Unmarshal(scopes, &client.Scopes); err != nil {
+			return nil, fmt.Errorf("unmarshal scopes: %w", err)
+		}
+		if metadata != nil {
+			if err := json.Unmarshal(metadata, &client.Metadata); err != nil {
+				return nil, fmt.Errorf("unmarshal metadata: %w", err)
+			}
+		}
+
+		clients = append(clients, client)
+	}
+
+	return clients, nil
+}
+
+func (r *oauth2ClientRepositoryImpl) Update(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client) error {
+	redirectURIs, err := json.Marshal(client.RedirectURIs)
+	if err != nil {
+		return fmt.Errorf("marshal redirect_uris: %w", err)
+	}
+	grantTypes, err := json.Marshal(client.GrantTypes)
+	if err != nil {
+		return fmt.Errorf("marshal grant_types: %w", err)
+	}
+	scopes, err := json.Marshal(client.Scopes)
+	if err != nil {
+		return fmt.Errorf("marshal scopes: %w", err)
+	}
+	var metadata []byte
+	if client.Metadata != nil {
+		metadata, err = json.Marshal(client.Metadata)
+		if err != nil {
+			return fmt.Errorf("marshal metadata: %w", err)
+		}
+	}
+
+	query := `
+		UPDATE oauth2_clients
+		SET name = $1, description = $2, redirect_uris = $3, grant_types = $4, scopes = $5, metadata = $6, updated_at = NOW()
+		WHERE id = $7 AND deleted_at IS NULL
+		RETURNING updated_at`
+
+	err = tx.QueryRowContext(ctx, query,
+		client.Name, client.Description, redirectURIs, grantTypes, scopes, metadata, client.ID,
+	).Scan(&client.UpdatedAt)
+
+	if err == sql.ErrNoRows {
+		return domain.ErrClientNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("update oauth2_client: %w", err)
+	}
+
+	return nil
+}
+
+func (r *oauth2ClientRepositoryImpl) SoftDelete(ctx context.Context, tx *sql.Tx, id string, deletedAt time.Time) error {
+	query := `UPDATE oauth2_clients SET deleted_at = $1, updated_at = $1 WHERE id = $2 AND deleted_at IS NULL`
+	result, err := tx.ExecContext(ctx, query, deletedAt, id)
+	if err != nil {
+		return fmt.Errorf("soft delete oauth2_client: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+	if rows == 0 {
+		return domain.ErrClientNotFound
+	}
+	return nil
+}

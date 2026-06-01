@@ -35,7 +35,7 @@ func main() {
 	defer database.Close()
 
 	// 2. 初始化账号服务
-	accountService := account.InitializeAccountModule(database.DB)
+	accountService := account.InitializeAccountModule(database.DB, nil)
 
 	ctx := context.Background()
 

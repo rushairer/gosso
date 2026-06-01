@@ -1,0 +1,125 @@
+package service
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/oauth2/domain"
+	"go.uber.org/zap"
+)
+
+const (
+	AuthCodeKeyPrefix = "auth_code:"
+	AuthCodeLength    = 32
+)
+
+// AuthCodeService 授权码服务（Redis 存储）
+type AuthCodeService struct {
+	redis  *cache.RedisClient
+	logger *zap.Logger
+	expiry time.Duration
+}
+
+// NewAuthCodeService 创建授权码服务实例
+func NewAuthCodeService(redis *cache.RedisClient, logger *zap.Logger, expiry time.Duration) *AuthCodeService {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	return &AuthCodeService{
+		redis:  redis,
+		logger: logger,
+		expiry: expiry,
+	}
+}
+
+// GenerateCode 生成授权码并存储到 Redis
+func (s *AuthCodeService) GenerateCode(
+	ctx context.Context,
+	clientID, accountID, redirectURI string,
+	scopes []string,
+	codeChallenge, codeChallengeMethod, nonce string,
+) (*domain.AuthorizationCode, error) {
+	bytes := make([]byte, AuthCodeLength)
+	if _, err := rand.Read(bytes); err != nil {
+		return nil, fmt.Errorf("generate random code: %w", err)
+	}
+	codeString := hex.EncodeToString(bytes)
+
+	ac := &domain.AuthorizationCode{
+		Code:                codeString,
+		ClientID:            clientID,
+		AccountID:           accountID,
+		RedirectURI:         redirectURI,
+		Scopes:              scopes,
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod,
+		Nonce:               nonce,
+		ExpiresAt:           time.Now().Add(s.expiry),
+		Used:                false,
+	}
+
+	data, err := json.Marshal(ac)
+	if err != nil {
+		return nil, fmt.Errorf("marshal authorization code: %w", err)
+	}
+
+	key := AuthCodeKeyPrefix + codeString
+	if err := s.redis.Set(ctx, key, data, s.expiry); err != nil {
+		return nil, fmt.Errorf("store authorization code: %w", err)
+	}
+
+	s.logger.Info("Authorization code generated",
+		zap.String("client_id", clientID),
+		zap.String("account_id", accountID))
+
+	return ac, nil
+}
+
+// ValidateCode 验证授权码，PKCE 校验，然后删除（单次使用）
+func (s *AuthCodeService) ValidateCode(ctx context.Context, code, clientID, redirectURI string, codeVerifier *string) (*domain.AuthorizationCode, error) {
+	key := AuthCodeKeyPrefix + code
+	data, err := s.redis.Get(ctx, key)
+	if err == cache.ErrKeyNotFound {
+		return nil, domain.ErrCodeNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get authorization code: %w", err)
+	}
+
+	// 立即删除（单次使用）
+	if delErr := s.redis.Del(ctx, key); delErr != nil {
+		s.logger.Warn("Failed to delete authorization code after retrieval", zap.Error(delErr))
+	}
+
+	var ac domain.AuthorizationCode
+	if err := json.Unmarshal([]byte(data), &ac); err != nil {
+		return nil, fmt.Errorf("unmarshal authorization code: %w", err)
+	}
+
+	if ac.IsExpired() {
+		return nil, domain.ErrCodeExpired
+	}
+	if ac.Used {
+		return nil, domain.ErrCodeAlreadyUsed
+	}
+	if ac.ClientID != clientID {
+		return nil, domain.ErrCodeClientMismatch
+	}
+	if ac.RedirectURI != redirectURI {
+		return nil, domain.ErrCodeURIMismatch
+	}
+
+	// PKCE 验证
+	if codeVerifier != nil {
+		if !ac.VerifyPKCE(*codeVerifier) {
+			return nil, domain.ErrPKCEVerificationFailed
+		}
+	}
+
+	return &ac, nil
+}

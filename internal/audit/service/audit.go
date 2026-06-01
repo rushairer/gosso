@@ -32,7 +32,7 @@ func NewAuditor(ctx context.Context, db *sql.DB) *Auditor {
 		ConcurrencyLimit: 100, // 批量并发限制
 	})
 	auditor.recordSchema = batchflow.NewSQLSchema(
-		"audit_records",                                                                                      // 表名
+		"audit_record",                                                                                      // 表名
 		batchflow.ConflictIgnoreOperationConfig,                                                              // 冲突策略
 		"id", "tx_id", "account_id", "action", "actor", "resource", "old", "new", "meta", "dd", "created_at", // 列名
 	)
@@ -68,7 +68,7 @@ func (a *Auditor) Do(
 			SetTime("created_at", auditRecord.CreatedAt)
 
 		if auditRecord.AccountID != nil {
-			request.SetString("did", auditRecord.AccountID.String())
+			request.SetString("account_id", auditRecord.AccountID.String())
 		}
 
 		if err := a.batchflow.Submit(ctx, request); err != nil {
@@ -76,4 +76,29 @@ func (a *Auditor) Do(
 		}
 	}
 	return nil
+}
+
+// Log submits an audit record for async batch write. Safe for nil receiver (no-op).
+func (a *Auditor) Log(ctx context.Context, record *domain.AuditRecord) error {
+	if a == nil {
+		return nil
+	}
+
+	request := batchflow.NewRequest(a.recordSchema).
+		Set("id", record.ID).
+		Set("tx_id", record.TxID).
+		SetString("action", record.Action).
+		SetString("actor", record.Actor).
+		Set("resource", record.Resource).
+		Set("old", record.Old).
+		Set("new", record.New).
+		Set("meta", record.Meta).
+		SetString("dd", record.CreatedAt.Format("20060102")).
+		SetTime("created_at", record.CreatedAt)
+
+	if record.AccountID != nil {
+		request.SetString("account_id", record.AccountID.String())
+	}
+
+	return a.batchflow.Submit(ctx, request)
 }
