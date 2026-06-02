@@ -16,6 +16,7 @@ import (
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/cache"
+	dbutil "github.com/rushairer/gosso/internal/db"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
@@ -27,6 +28,8 @@ const (
 	PasswordResetTokenTTL       = 30 * time.Minute
 	PasswordResetCooldownTTL    = 60 * time.Second
 	PasswordResetMaxAttempts    = 5
+	PasswordResetRevokeTimeout  = 30 * time.Second
+	MinPasswordLength           = 8
 )
 
 // PasswordResetEmailSender password reset email sender interface
@@ -147,7 +150,7 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 
 // VerifyAndReset verifies the reset token and sets a new password
 func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPassword string) error {
-	if len(newPassword) < 8 {
+	if len(newPassword) < MinPasswordLength {
 		return errors.New("password must be at least 8 characters")
 	}
 
@@ -174,9 +177,6 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		return errors.New("reset token exhausted, please request a new one")
 	}
 
-	// One-time use: delete immediately
-	_ = s.redis.Del(ctx, tokenKey)
-
 	// Hash new password
 	hashedPassword, err := accountDomain.HashPassword(newPassword)
 	if err != nil {
@@ -189,24 +189,20 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		return fmt.Errorf("find password credential: %w", err)
 	}
 
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
 	cred.Value = hashedPassword
-	if err := s.credentialRepo.UpdateCredential(ctx, tx, cred); err != nil {
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.credentialRepo.UpdateCredential(ctx, tx, cred)
+	})
+	if err != nil {
 		return fmt.Errorf("update password: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
+	// One-time use: delete token only after successful password update
+	_ = s.redis.Del(ctx, tokenKey)
 
 	// Asynchronously revoke all old sessions
 	go func() {
-		bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		bgCtx, cancel := context.WithTimeout(context.Background(), PasswordResetRevokeTimeout)
 		defer cancel()
 		if err := s.sessionSvc.RevokeAllForAccount(bgCtx, data.AccountID); err != nil {
 			s.logger.Error("Failed to revoke sessions after password reset",

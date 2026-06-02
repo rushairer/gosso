@@ -42,13 +42,12 @@ func InitializeAuthModule(
 	baseURL string,
 	auditor *auditService.Auditor,
 	tokenSvc *tokenService.TokenService,
+	credentialRepo accountRepo.CredentialRepository,
+	accountRepoImpl accountRepo.AccountRepository,
+	roleRepo accountRepo.RoleRepository,
+	federatedIdentityRepo accountRepo.FederatedIdentityRepository,
 ) *AuthModule {
 	sessionSvc := sessionService.NewSessionService(redis, logger)
-
-	credentialRepo := accountRepo.NewCredentialRepository(db)
-	accountRepoImpl := accountRepo.NewAccountRepository(db)
-	roleRepo := accountRepo.NewRoleRepository(db)
-	federatedIdentityRepo := accountRepo.NewFederatedIdentityRepository(db)
 
 	// PasskeyService (if WebAuthn is configured)
 	var passkeySvc *service.PasskeyService
@@ -70,7 +69,7 @@ func InitializeAuthModule(
 
 	var socialSvc *service.SocialLoginService
 	if len(providers) > 0 {
-		socialSvc = service.NewSocialLoginService(db, accountSvc, sessionSvc, tokenSvc, accountRepoImpl, credentialRepo, roleRepo, federatedIdentityRepo, providers, logger)
+		socialSvc = service.NewSocialLoginService(db, accountSvc, authSvc, accountRepoImpl, credentialRepo, federatedIdentityRepo, providers, logger)
 	}
 
 	emailSvc := notificationService.NewEmailService(smtpConfig, logger)

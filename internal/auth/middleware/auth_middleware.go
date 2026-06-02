@@ -24,13 +24,6 @@ func JWTAuthMiddleware(tokenSvc *tokenService.TokenService) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		tokenString := extractBearerToken(ctx)
 		if tokenString == "" {
-			// Fallback to query/form parameters (supports HTML form submissions)
-			tokenString = ctx.Query("access_token")
-			if tokenString == "" {
-				tokenString = ctx.PostForm("access_token")
-			}
-		}
-		if tokenString == "" {
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "missing authorization"))
 			return
 		}

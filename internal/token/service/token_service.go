@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/cache"
@@ -186,17 +187,39 @@ func (s *TokenService) ValidateRefreshToken(ctx context.Context, token string) (
 	return &rt, nil
 }
 
-// RotateRefreshToken rotates refresh tokens: deletes the old token and generates a new one
+// rotateAndDeleteScript atomically retrieves and deletes a refresh token in a single Redis operation.
+// Returns the token data if it existed (and was deleted), or nil if it was already consumed.
+// This prevents TOCTOU race conditions during refresh token rotation.
+var rotateAndDeleteScript = redis.NewScript(`
+local data = redis.call('GET', KEYS[1])
+if data then
+    redis.call('DEL', KEYS[1])
+end
+return data
+`)
+
+// RotateRefreshToken rotates refresh tokens: atomically validates and deletes the old token, then generates a new one.
+// The validate+delete is performed as a single Redis Lua script to prevent concurrent rotation race conditions.
 func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) (*domain.RefreshToken, error) {
-	rt, err := s.ValidateRefreshToken(ctx, oldToken)
+	oldKey := s.buildRefreshTokenKey(oldToken)
+
+	// Atomically GET + DELETE the old token
+	result, err := rotateAndDeleteScript.Run(ctx, s.redis.GetClient(), []string{oldKey}).Result()
+	if err == redis.Nil || result == nil {
+		return nil, fmt.Errorf("refresh token not found or expired")
+	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("rotate refresh token: %w", err)
 	}
 
-	// Delete the old token
-	oldKey := s.buildRefreshTokenKey(oldToken)
-	if err := s.redis.Del(ctx, oldKey); err != nil {
-		s.logger.Warn("Failed to delete old refresh token", zap.Error(err))
+	dataStr, ok := result.(string)
+	if !ok {
+		return nil, fmt.Errorf("unexpected token data type")
+	}
+
+	var rt domain.RefreshToken
+	if err := json.Unmarshal([]byte(dataStr), &rt); err != nil {
+		return nil, fmt.Errorf("unmarshal refresh token: %w", err)
 	}
 
 	// Remove old hash from the session index

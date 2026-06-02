@@ -91,12 +91,12 @@ func TestGetAuthURL_ScopesJoined(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestNewSocialLoginService_NilLogger(t *testing.T) {
-	svc := NewSocialLoginService(nil, nil, nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil)
+	svc := NewSocialLoginService(nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil)
 	assert.NotNil(t, svc.logger)
 }
 
 func TestNewSocialLoginService_DefaultHTTPClient(t *testing.T) {
-	svc := NewSocialLoginService(nil, nil, nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil)
+	svc := NewSocialLoginService(nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil)
 	assert.NotNil(t, svc.httpClient)
 	assert.Equal(t, 10*time.Second, svc.httpClient.Timeout)
 }

@@ -16,6 +16,7 @@ import (
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
+	dbutil "github.com/rushairer/gosso/internal/db"
 )
 
 const (
@@ -133,18 +134,11 @@ func (s *MFAService) EnrollTOTP(ctx context.Context, accountID string) (*TOTPEnr
 		CreatedAt:  time.Now(),
 	}
 
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.credentialRepo.CreateCredentials(ctx, tx, []*accountDomain.Credential{cred})
+	})
 	if err != nil {
-		return nil, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.credentialRepo.CreateCredentials(ctx, tx, []*accountDomain.Credential{cred}); err != nil {
 		return nil, fmt.Errorf("save totp credential: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit: %w", err)
 	}
 
 	return &TOTPEnrollment{
@@ -188,16 +182,13 @@ func (s *MFAService) ActivateTOTP(ctx context.Context, accountID, code string) e
 	for _, c := range creds {
 		if !c.Verified && !c.IsDeleted() {
 			c.Verify()
-			tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+			err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+				return s.credentialRepo.UpdateCredential(ctx, tx, c)
+			})
 			if err != nil {
-				return fmt.Errorf("begin transaction: %w", err)
-			}
-			defer func() { _ = tx.Rollback() }()
-
-			if err := s.credentialRepo.UpdateCredential(ctx, tx, c); err != nil {
 				return fmt.Errorf("update totp credential: %w", err)
 			}
-			return tx.Commit()
+			return nil
 		}
 	}
 
@@ -211,31 +202,27 @@ func (s *MFAService) DisableTOTP(ctx context.Context, accountID string) error {
 		return fmt.Errorf("find totp credential: %w", err)
 	}
 
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	for _, c := range creds {
-		if !c.IsDeleted() {
-			if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
-				s.logger.Warn("Failed to delete TOTP credential", zap.String("cred_id", c.ID), zap.Error(err))
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		for _, c := range creds {
+			if !c.IsDeleted() {
+				if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
+					s.logger.Warn("Failed to delete TOTP credential", zap.String("cred_id", c.ID), zap.Error(err))
+				}
 			}
 		}
-	}
 
-	// Also delete all backup codes
-	backupCreds, _ := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeBackupCode)
-	for _, c := range backupCreds {
-		if !c.IsDeleted() {
-			if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
-				s.logger.Warn("Failed to delete backup code credential", zap.String("cred_id", c.ID), zap.Error(err))
+		// Also delete all backup codes
+		backupCreds, _ := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeBackupCode)
+		for _, c := range backupCreds {
+			if !c.IsDeleted() {
+				if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
+					s.logger.Warn("Failed to delete backup code credential", zap.String("cred_id", c.ID), zap.Error(err))
+				}
 			}
 		}
-	}
-
-	return tx.Commit()
+		return nil
+	})
+	return err
 }
 
 // GenerateBackupCodes generates backup codes
@@ -266,18 +253,11 @@ func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) 
 		})
 	}
 
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.credentialRepo.CreateCredentials(ctx, tx, creds)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.credentialRepo.CreateCredentials(ctx, tx, creds); err != nil {
 		return nil, fmt.Errorf("save backup codes: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit: %w", err)
 	}
 
 	return codes, nil
@@ -296,13 +276,13 @@ func (s *MFAService) VerifyBackupCode(ctx context.Context, accountID, code strin
 		}
 		if bcrypt.CompareHashAndPassword([]byte(c.Value), []byte(code)) == nil {
 			// Success, delete the code
-			tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+			err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+				return s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now())
+			})
 			if err != nil {
-				s.logger.Warn("Failed to begin tx for backup code deletion", zap.Error(err))
-				return true, nil // Verification passed but deletion failed, still return true
+				s.logger.Error("Failed to soft-delete backup code", zap.String("cred_id", c.ID), zap.Error(err))
+				return false, fmt.Errorf("delete backup code: %w", err)
 			}
-			_ = s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now())
-			_ = tx.Commit()
 			return true, nil
 		}
 	}
@@ -311,13 +291,19 @@ func (s *MFAService) VerifyBackupCode(ctx context.Context, accountID, code strin
 }
 
 func (s *MFAService) deleteUnverifiedTOTP(ctx context.Context, accountID string) error {
-	creds, _ := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
+	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
+	if err != nil {
+		s.logger.Warn("Failed to find TOTP credentials for cleanup", zap.Error(err), zap.String("account_id", accountID))
+		return err
+	}
 	for _, c := range creds {
 		if !c.Verified && !c.IsDeleted() {
-			tx, _ := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-			if tx != nil {
-				_ = s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now())
-				_ = tx.Commit()
+			err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+				return s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now())
+			})
+			if err != nil {
+				s.logger.Error("Failed to soft-delete unverified TOTP", zap.String("cred_id", c.ID), zap.Error(err))
+				return fmt.Errorf("soft delete credential: %w", err)
 			}
 		}
 	}
@@ -325,13 +311,19 @@ func (s *MFAService) deleteUnverifiedTOTP(ctx context.Context, accountID string)
 }
 
 func (s *MFAService) deleteBackupCodes(ctx context.Context, accountID string) error {
-	creds, _ := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeBackupCode)
+	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeBackupCode)
+	if err != nil {
+		s.logger.Warn("Failed to find backup code credentials for cleanup", zap.Error(err), zap.String("account_id", accountID))
+		return err
+	}
 	for _, c := range creds {
 		if !c.IsDeleted() {
-			tx, _ := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-			if tx != nil {
-				_ = s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now())
-				_ = tx.Commit()
+			err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+				return s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now())
+			})
+			if err != nil {
+				s.logger.Error("Failed to soft-delete backup code", zap.String("cred_id", c.ID), zap.Error(err))
+				return fmt.Errorf("soft delete credential: %w", err)
 			}
 		}
 	}

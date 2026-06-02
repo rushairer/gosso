@@ -12,16 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
-	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
-	sessionService "github.com/rushairer/gosso/internal/session/service"
-	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
-	tokenService "github.com/rushairer/gosso/internal/token/service"
+	dbutil "github.com/rushairer/gosso/internal/db"
 )
 
 // OAuthProviderConfig single OAuth provider configuration
@@ -39,11 +35,9 @@ type OAuthProviderConfig struct {
 type SocialLoginService struct {
 	db                    *sql.DB
 	accountSvc            accountService.AccountService
-	sessionSvc            *sessionService.SessionService
-	tokenSvc              *tokenService.TokenService
+	sessionTokenCreator   SessionTokenCreator
 	accountRepo           accountRepo.AccountRepository
 	credentialRepo        accountRepo.CredentialRepository
-	roleRepo              accountRepo.RoleRepository
 	federatedIdentityRepo accountRepo.FederatedIdentityRepository
 	providers             map[string]*OAuthProviderConfig
 	httpClient            *http.Client
@@ -54,11 +48,9 @@ type SocialLoginService struct {
 func NewSocialLoginService(
 	db *sql.DB,
 	accountSvc accountService.AccountService,
-	sessionSvc *sessionService.SessionService,
-	tokenSvc *tokenService.TokenService,
+	sessionTokenCreator SessionTokenCreator,
 	accountRepo accountRepo.AccountRepository,
 	credentialRepo accountRepo.CredentialRepository,
-	roleRepo accountRepo.RoleRepository,
 	federatedIdentityRepo accountRepo.FederatedIdentityRepository,
 	providers map[string]*OAuthProviderConfig,
 	logger *zap.Logger,
@@ -69,11 +61,9 @@ func NewSocialLoginService(
 	return &SocialLoginService{
 		db:                    db,
 		accountSvc:            accountSvc,
-		sessionSvc:            sessionSvc,
-		tokenSvc:              tokenSvc,
+		sessionTokenCreator:   sessionTokenCreator,
 		accountRepo:           accountRepo,
 		credentialRepo:        credentialRepo,
-		roleRepo:              roleRepo,
 		federatedIdentityRepo: federatedIdentityRepo,
 		providers:             providers,
 		httpClient:            &http.Client{Timeout: 10 * time.Second},
@@ -231,7 +221,17 @@ func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, i
 		return nil, errors.New("account is not active")
 	}
 
-	return s.createSessionAndTokens(ctx, account, ip, userAgent)
+	session, accessToken, refreshToken, err := s.sessionTokenCreator.CreateSessionAndTokens(ctx, account, ip, userAgent)
+	if err != nil {
+		return nil, err
+	}
+
+	return &LoginResult{
+		Account:      account,
+		Session:      session,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken.Token,
+	}, nil
 }
 
 func (s *SocialLoginService) createNewUser(ctx context.Context, provider, providerUserID, email, name, ip, userAgent string) (*LoginResult, error) {
@@ -241,76 +241,34 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 
 	account := accountDomain.NewAccount(name)
 
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return nil, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.accountRepo.CreateAccount(ctx, tx, account); err != nil {
-		return nil, fmt.Errorf("create account: %w", err)
-	}
-
-	if email != "" {
-		emailCred := accountDomain.NewEmailCredential(account.ID, email)
-		emailCred.PrimaryCredential = true
-		emailCred.Verify()
-		if err := s.credentialRepo.CreateCredentials(ctx, tx, []*accountDomain.Credential{emailCred}); err != nil {
-			s.logger.Warn("Failed to create email credential for social login", zap.Error(err))
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		if err := s.accountRepo.CreateAccount(ctx, tx, account); err != nil {
+			return fmt.Errorf("create account: %w", err)
 		}
-	}
 
-	identity := accountDomain.NewFederatedIdentity(account.ID, accountDomain.Provider(provider), providerUserID, nil)
-	if err := s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity); err != nil {
-		return nil, fmt.Errorf("create federated identity: %w", err)
-	}
+		if email != "" {
+			emailCred := accountDomain.NewEmailCredential(account.ID, email)
+			emailCred.PrimaryCredential = true
+			emailCred.Verify()
+			if err := s.credentialRepo.CreateCredentials(ctx, tx, []*accountDomain.Credential{emailCred}); err != nil {
+				s.logger.Warn("Failed to create email credential for social login", zap.Error(err))
+			}
+		}
 
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit: %w", err)
-	}
+		identity := accountDomain.NewFederatedIdentity(account.ID, accountDomain.Provider(provider), providerUserID, nil)
+		if err := s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity); err != nil {
+			return fmt.Errorf("create federated identity: %w", err)
+		}
 
-	return s.createSessionAndTokens(ctx, account, ip, userAgent)
-}
-
-func (s *SocialLoginService) createSessionAndTokens(ctx context.Context, account *accountDomain.Account, ip, userAgent string) (*LoginResult, error) {
-	now := time.Now()
-	session := &sessionDomain.Session{
-		ID:           uuid.New(),
-		AccountID:    uuid.MustParse(account.ID),
-		IP:           ip,
-		UserAgent:    userAgent,
-		CreatedAt:    now,
-		LastActiveAt: now,
-	}
-	if account.Username != nil {
-		session.Username = *account.Username
-	}
-
-	if err := s.sessionSvc.CreateSession(ctx, session); err != nil {
-		return nil, fmt.Errorf("create session: %w", err)
-	}
-
-	roles, _ := s.roleRepo.FindRolesByAccountID(ctx, account.ID)
-	var roleNames []string
-	var allPermissions []string
-	for _, role := range roles {
-		roleNames = append(roleNames, role.Name)
-		allPermissions = append(allPermissions, role.Permissions...)
-	}
-
-	accessToken, err := s.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
-		AccountID:   account.ID,
-		Roles:       roleNames,
-		Permissions: allPermissions,
-		SessionID:   session.ID.String(),
+		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("generate access token: %w", err)
+		return nil, err
 	}
 
-	refreshToken, err := s.tokenSvc.GenerateRefreshToken(ctx, account.ID, "", session.ID.String(), "")
+	session, accessToken, refreshToken, err := s.sessionTokenCreator.CreateSessionAndTokens(ctx, account, ip, userAgent)
 	if err != nil {
-		return nil, fmt.Errorf("generate refresh token: %w", err)
+		return nil, err
 	}
 
 	return &LoginResult{

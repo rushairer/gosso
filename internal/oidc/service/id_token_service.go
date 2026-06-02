@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
@@ -74,7 +75,7 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 			Audience:  jwt.ClaimStrings{clientID},
 			ExpiresAt: jwt.NewNumericDate(now.Add(10 * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(now),
-			ID:        accountID,
+			ID:        uuid.New().String(),
 		},
 		Sub:      accountID,
 		Nonce:    nonce,
@@ -108,10 +109,10 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 }
 
 func (s *IDTokenService) addEmailClaims(ctx context.Context, accountID string, claims *IDTokenClaims) {
-	cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, accountDomain.CredentialTypeEmail, "")
-	if err == nil && cred.AccountID == accountID && cred.Identifier != nil {
-		claims.Email = *cred.Identifier
-		verified := cred.IsVerified()
+	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeEmail)
+	if err == nil && len(creds) > 0 && creds[0].Identifier != nil {
+		claims.Email = *creds[0].Identifier
+		verified := creds[0].IsVerified()
 		claims.EmailVerified = &verified
 	}
 }

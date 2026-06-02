@@ -1,11 +1,12 @@
 package controller
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
@@ -23,6 +24,7 @@ type AuthController struct {
 	verificationSvc  *authService.VerificationService
 	passwordResetSvc *authService.PasswordResetService
 	credentialRepo   accountRepo.CredentialRepository
+	secureCookie     bool
 	logger           *zap.Logger
 }
 
@@ -49,6 +51,7 @@ func NewAuthController(
 	verificationSvc *authService.VerificationService,
 	passwordResetSvc *authService.PasswordResetService,
 	credentialRepo accountRepo.CredentialRepository,
+	secureCookie bool,
 	logger *zap.Logger,
 ) *AuthController {
 	return &AuthController{
@@ -58,6 +61,7 @@ func NewAuthController(
 		verificationSvc:  verificationSvc,
 		passwordResetSvc: passwordResetSvc,
 		credentialRepo:   credentialRepo,
+		secureCookie:     secureCookie,
 		logger:           logger,
 	}
 }
@@ -411,8 +415,13 @@ func (c *AuthController) SocialAuthURL(ctx *gin.Context) {
 	provider := ctx.Param("provider")
 
 	// Generate cryptographic state for CSRF protection
-	state := uuid.New().String()
-	ctx.SetCookie("oauth_state", state, 600, "/api/auth/social", "", false, true)
+	stateBytes := make([]byte, 32)
+	if _, err := rand.Read(stateBytes); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to generate state"))
+		return
+	}
+	state := hex.EncodeToString(stateBytes)
+	ctx.SetCookie("oauth_state", state, 600, "/api/auth/social", "", c.secureCookie, true)
 
 	authURL, err := c.socialSvc.GetAuthURL(ctx, provider, state)
 	if err != nil {
@@ -433,7 +442,7 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 	// Validate state parameter (CSRF protection)
 	state := ctx.Query("state")
 	savedState, _ := ctx.Cookie("oauth_state")
-	ctx.SetCookie("oauth_state", "", -1, "/api/auth/social", "", false, true)
+	ctx.SetCookie("oauth_state", "", -1, "/api/auth/social", "", c.secureCookie, true)
 	if state == "" || savedState == "" || state != savedState {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid or missing state parameter"))
 		return

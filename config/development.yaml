@@ -26,12 +26,12 @@ database:
         mysql:
             name: mysql
             driver: mysql
-            dsn: gosso:gosso123@tcp(mysql:3306)/gosso_dev?charset=utf8mb4&parseTime=True&loc=Local
+            dsn: ${GOUNO_DATABASE_DRIVERS_MYSQL_DSN}
             log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
         postgres:
             name: postgres
             driver: pgx
-            dsn: host=postgres user=gosso password=gosso123 dbname=gosso_dev port=5432 sslmode=disable TimeZone=Asia/Shanghai search_path=public
+            dsn: ${GOUNO_DATABASE_DRIVERS_POSTGRES_DSN}
             log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
 redis:
     dsn: redis:6379
@@ -52,7 +52,7 @@ captcha:
 log:
     level: 0 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
 auth:
-    jwt_secret: "gosso-dev-secret-change-in-production"
+    jwt_secret: ${GOUNO_AUTH_JWT_SECRET}
     issuer: "http://localhost:8080"
     access_token_expiry: 15m
     refresh_token_expiry: 720h

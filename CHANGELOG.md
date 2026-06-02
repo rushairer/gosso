@@ -7,7 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
+### Fixed
+
+- **Security**: Remove hardcoded passwords and secrets from `.env.*` files and `config/development.yaml`; use environment variable references instead.
+- **Security**: Atomic refresh token rotation via Redis Lua script — eliminates TOCTOU race condition between GET and DELETE (`internal/token/service/token_service.go`).
+- **Security**: MFAService transaction error propagation — `deleteUnverifiedTOTP`, `deleteBackupCodes`, and `VerifyBackupCode` now properly return errors instead of silently discarding them (`internal/auth/service/mfa_service.go`).
+- **Security**: Password reset token is now deleted only after successful password update, not before — prevents token loss on DB failure (`internal/auth/service/password_reset_service.go`).
+- **Security**: Social login now enforces session limits by reusing the same `CreateSessionAndTokens` path as password login (`internal/auth/service/social_login_service.go`).
+- **Security**: OAuth state cookie uses dynamic `Secure` flag based on `!cfg.WebServerConfig.Debug` instead of hardcoded `false` (`internal/auth/controller/auth_controller.go`).
+- **Security**: JWT middleware only reads token from `Authorization: Bearer` header — removes fallback to query/form params (`internal/auth/middleware/auth_middleware.go`).
+- **Security**: ID Token `jti` claim uses unique UUID per token instead of reusing `accountID` (`internal/oidc/service/id_token_service.go`).
+- **Security**: ID Token email lookup fixed — uses `FindByAccountAndType(accountID)` instead of `FindByTypeAndIdentifier("")` (`internal/oidc/service/id_token_service.go`).
+- Replace `logger.Fatal` with `logger.Error` for graceful shutdown in web server (`cmd/gouno/web.go`).
+
+### Changed
+
+- Add standalone `RunInTransaction(*sql.DB)` helper; replace 24 manual `BeginTx/defer Rollback/Commit` patterns across 6 service files (`internal/db/transaction.go`).
+- Extract inline magic numbers into named constants: `loginRateLimitWindow`, `loginMaxAttempts`, `MinPasswordLength`, `PasswordResetRevokeTimeout` (`internal/auth/service/auth_login.go`, `password_reset_service.go`, `account_service.go`).
+- `AccountModule` now exports shared repositories; auth, OIDC, and OAuth2 modules reuse them instead of creating duplicate instances (`internal/account/wire.go`, `internal/auth/wire.go`, `internal/oidc/wire.go`, `internal/oauth2/wire.go`).
+- `OAuthState` uses `crypto/rand` for state parameter generation instead of UUID (`internal/auth/controller/auth_controller.go`).
+- `SocialLoginService` depends on `SessionTokenCreator` interface instead of duplicating session/token creation logic (`internal/auth/service/interfaces.go`, `social_login_service.go`).
+- Email service reuses a single `gomail.Dialer` instance instead of creating one per send (`internal/notification/service/email_service.go`).
+- PII masking in verification service logs (`internal/auth/service/verification_service.go`).
 
 - Add `AuthModule` struct to `internal/auth/wire.go` — replaces 7-value tuple return from `InitializeAuthModule`.
 - Add `gomail.v2` dependency for email sending with STARTTLS support.

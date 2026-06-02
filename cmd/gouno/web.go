@@ -25,7 +25,6 @@ import (
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/oauth2"
 	oauth2Controller "github.com/rushairer/gosso/internal/oauth2/controller"
-	oauth2Repo "github.com/rushairer/gosso/internal/oauth2/repository"
 	"github.com/rushairer/gosso/internal/oidc"
 	oidcController "github.com/rushairer/gosso/internal/oidc/controller"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
@@ -118,7 +117,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		logger.Fatal("server forced to shutdown", zap.Error(err))
+		logger.Error("server forced to shutdown", zap.Error(err))
 	}
 
 	logger.Sugar().Info("server exiting")
@@ -194,7 +193,7 @@ type appModules struct {
 
 // initModules initializes all business modules and controllers
 func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logger *zap.Logger, cfg config.GoUnoConfig, auditor *auditService.Auditor) *appModules {
-	accountSvc := account.InitializeAccountModule(db, auditor)
+	accountMod := account.InitializeAccountModule(db, auditor)
 
 	keySvc, err := tokenService.NewKeyService(
 		cfg.AuthConfig.PrivateKeyPath,
@@ -220,22 +219,22 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	providers := buildOAuthProviders(cfg)
 
 	authMod := auth.InitializeAuthModule(
-		db, redis, logger, cfg.AuthConfig, cfg.SMTPConfig, accountSvc, providers, keySvc, cfg.AuthConfig.PasswordResetBaseURL, auditor, tokenSvc,
+		db, redis, logger, cfg.AuthConfig, cfg.SMTPConfig, accountMod.Service, providers, keySvc, cfg.AuthConfig.PasswordResetBaseURL, auditor, tokenSvc,
+		accountMod.CredentialRepo, accountMod.AccountRepo, accountMod.RoleRepo, accountMod.FederatedIdentityRepo,
 	)
 
-	oauth2ClientSvc, authCodeSvc, consentSvc, deviceCodeSvc := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig)
-	idTokenSvc, discoverySvc, jwksSvc, userInfoSvc, logoutSvc := oidc.InitializeOIDCModule(db, tokenSvc, accountSvc, cfg.AuthConfig, authMod.SessionService, logger)
+	oauth2ClientSvc, authCodeSvc, consentSvc, deviceCodeSvc, clientRepo := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig)
+	idTokenSvc, discoverySvc, jwksSvc, userInfoSvc, logoutSvc := oidc.InitializeOIDCModule(tokenSvc, accountMod.Service, cfg.AuthConfig, authMod.SessionService, accountMod.CredentialRepo, logger)
 
-	clientRepo := oauth2Repo.NewOAuth2ClientRepository(db)
-	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, authMod.CredentialRepo, logger)
+	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, authMod.CredentialRepo, !cfg.WebServerConfig.Debug, logger)
 	oauth2Ctrl := oauth2Controller.NewOAuth2Controller(oauth2ClientSvc, authCodeSvc, consentSvc, tokenSvc, idTokenSvc, deviceCodeSvc, cfg.AuthConfig.Issuer, logger)
 	clientCtrl := oauth2Controller.NewClientController(oauth2ClientSvc, logger)
 	oidcCtrl := oidcController.NewOIDCController(discoverySvc, jwksSvc, userInfoSvc, logoutSvc, clientRepo, tokenSvc, cfg.AuthConfig.Issuer, logger)
-	adminCtrl := adminController.NewAdminController(accountSvc, logger)
+	adminCtrl := adminController.NewAdminController(accountMod.Service, logger)
 
 	var passkeyCtrl *authController.PasskeyController
 	if authMod.PasskeyService != nil {
-		passkeyCtrl = authController.NewPasskeyController(authMod.PasskeyService, authMod.AuthService, tokenSvc, accountSvc, logger)
+		passkeyCtrl = authController.NewPasskeyController(authMod.PasskeyService, authMod.AuthService, tokenSvc, accountMod.Service, logger)
 	}
 
 	return &appModules{

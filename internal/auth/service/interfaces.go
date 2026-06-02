@@ -38,6 +38,12 @@ type TokenManager interface {
 	AccessExpiry() time.Duration
 }
 
+// SessionTokenCreator creates sessions and tokens for authenticated accounts.
+// Used by SocialLoginService to share session/token creation logic with AuthService.
+type SessionTokenCreator interface {
+	CreateSessionAndTokens(ctx context.Context, account *accountDomain.Account, ip, userAgent string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error)
+}
+
 // AccountReader defines the read-only account operations used by controllers.
 type AccountReader interface {
 	FindAccountByID(ctx context.Context, accountID string) (*accountDomain.Account, error)
