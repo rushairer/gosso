@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"time"
@@ -10,28 +11,29 @@ import (
 	"github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/db"
+
+	_ "github.com/lib/pq"
 )
 
 // Account module usage example
 func main() {
 	// 1. Connect to the database
-	dbConfig := &db.Config{
-		Host:            "localhost",
-		Port:            5432,
-		User:            "postgres",
-		Password:        "password",
-		Database:        "gosso",
-		SSLMode:         "disable",
-		MaxOpenConns:    25,
-		MaxIdleConns:    5,
-		ConnMaxLifetime: 5 * time.Minute,
-		ConnMaxIdleTime: 10 * time.Minute,
+	dsn := "host=localhost port=5432 user=postgres password=password dbname=gosso sslmode=disable"
+
+	sqlDB, err := sql.Open("postgres", dsn)
+	if err != nil {
+		log.Fatalf("Failed to open database connection: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(10 * time.Minute)
+
+	if err := sqlDB.Ping(); err != nil {
+		log.Fatalf("Database connection test failed: %v", err)
 	}
 
-	database, err := db.Connect(dbConfig)
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
+	database := db.NewDB(sqlDB)
 	defer database.Close()
 
 	// 2. Initialize the account service

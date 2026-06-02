@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Add sentinel errors `ErrAccountNotFound`, `ErrCredentialNotFound`, `ErrRoleNotFound`, `ErrFederatedIdentityNotFound` to repository layer for `errors.Is()` matching.
+- Add `AuthURL`, `TokenURL`, `UserInfoURL` fields to `OAuthProviderConfig` — OAuth2 provider URLs are now configurable via YAML with sensible defaults.
+- Add `rate_limits` section to `config/production.yaml` for per-endpoint rate limit configuration.
+- Add `cors` section to `config/production.yaml` with GOUNO_ environment variable placeholders.
+- Add `Validate()` check: rate limits values must be non-negative.
 - Add unit tests for middleware: RequestIDMiddleware, ZapLoggerMiddleware, CSRFMiddleware, generateCSRFToken (`middleware/middleware_test.go`).
 - Add OAuth2 Device Authorization Grant (RFC 8628) — enables input-constrained devices (CLIs, smart TVs, IoT) to obtain tokens.
 - Add `POST /oauth2/device/code` endpoint — initiates device authorization flow, returns `device_code`, `user_code`, `verification_uri`.
@@ -119,6 +124,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `SocialLoginService.createNewUser` now uses repository methods (`accountRepo.CreateAccount`, `credentialRepo.CreateCredentials`, `federatedIdentityRepo.CreateFederatedIdentity`) instead of raw SQL.
+- `NewSocialLoginService` now accepts `accountRepo.AccountRepository` parameter.
+- `SocialLoginService.GetAuthURL` reads authorization URL from provider config instead of hardcoded switch statement.
+- `buildOAuthProviders` in `cmd/gouno/web.go` now reads URLs from config with `defaultIfEmpty` fallback.
+- Remove global in-memory rate limiter middleware (problematic in multi-instance deployments); Redis-based per-endpoint rate limiting remains.
+- Repository not-found errors standardized to sentinel errors with `fmt.Errorf("%w: %s", ErrXxxNotFound, identifier)` pattern.
+- `SessionService.EnforceSessionLimit` now uses `sort.Slice` instead of bubble sort.
+- Fix log level comments in all YAML configs: `3: dpanic, 4: panic, 5: fatal`.
+- Remove dead code: `db.Connect()`, `db.Config`, `BigCacheConfig` struct and YAML sections.
+- Remove unused `db *sql.DB` field from `AuthService`.
 - `InitializeAuthModule` now returns `*sessionService.SessionService` as 7th return value.
 - `InitializeOIDCModule` now accepts `*sessionService.SessionService` parameter and returns `*oidcService.LogoutService` as 5th value.
 - `NewOIDCController` now accepts `logoutSvc`, `clientRepo`, `tokenSvc`, and `issuer` parameters for logout support.
@@ -163,6 +178,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Fix `WithTransaction` and `WithTransactionIsolation` not handling `panic(nil)` — now properly rolls back instead of silently committing.
 - Fix CI: upgrade golangci-lint to v2.12.2 (v1 couldn't target Go 1.25), migrate config to v2 format.
 - Fix CI: upgrade golangci-lint-action to v7 (v6 doesn't support golangci-lint v2).
 - Fix CI: update auth integration test to match `InitializeAuthModule` 11-parameter signature (added `tokenSvc`).

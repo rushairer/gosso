@@ -30,6 +30,7 @@ type OAuthProviderConfig struct {
 	ClientSecret string
 	RedirectURI  string
 	Scopes       []string
+	AuthURL      string
 	TokenURL     string
 	UserInfoURL  string
 }
@@ -40,6 +41,7 @@ type SocialLoginService struct {
 	accountSvc            accountService.AccountService
 	sessionSvc            *sessionService.SessionService
 	tokenSvc              *tokenService.TokenService
+	accountRepo           accountRepo.AccountRepository
 	credentialRepo        accountRepo.CredentialRepository
 	roleRepo              accountRepo.RoleRepository
 	federatedIdentityRepo accountRepo.FederatedIdentityRepository
@@ -54,6 +56,7 @@ func NewSocialLoginService(
 	accountSvc accountService.AccountService,
 	sessionSvc *sessionService.SessionService,
 	tokenSvc *tokenService.TokenService,
+	accountRepo accountRepo.AccountRepository,
 	credentialRepo accountRepo.CredentialRepository,
 	roleRepo accountRepo.RoleRepository,
 	federatedIdentityRepo accountRepo.FederatedIdentityRepository,
@@ -68,6 +71,7 @@ func NewSocialLoginService(
 		accountSvc:            accountSvc,
 		sessionSvc:            sessionSvc,
 		tokenSvc:              tokenSvc,
+		accountRepo:           accountRepo,
 		credentialRepo:        credentialRepo,
 		roleRepo:              roleRepo,
 		federatedIdentityRepo: federatedIdentityRepo,
@@ -84,16 +88,8 @@ func (s *SocialLoginService) GetAuthURL(ctx context.Context, provider, state str
 		return "", fmt.Errorf("unsupported provider: %s", provider)
 	}
 
-	var authURL string
-	switch provider {
-	case "google":
-		authURL = "https://accounts.google.com/o/oauth2/v2/auth"
-	case "github":
-		authURL = "https://github.com/login/oauth/authorize"
-	case "wechat":
-		authURL = "https://open.weixin.qq.com/connect/qrconnect"
-	default:
-		return "", fmt.Errorf("unsupported provider: %s", provider)
+	if p.AuthURL == "" {
+		return "", fmt.Errorf("auth URL not configured for provider: %s", provider)
 	}
 
 	params := url.Values{}
@@ -103,7 +99,7 @@ func (s *SocialLoginService) GetAuthURL(ctx context.Context, provider, state str
 	params.Set("scope", strings.Join(p.Scopes, " "))
 	params.Set("state", state)
 
-	return authURL + "?" + params.Encode(), nil
+	return p.AuthURL + "?" + params.Encode(), nil
 }
 
 // HandleCallback handles the third-party callback
@@ -243,20 +239,7 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 		name = "User"
 	}
 
-	now := time.Now()
-	accountID := uuid.New().String()
-
-	// Create account
-	account := &accountDomain.Account{
-		ID:          accountID,
-		DisplayName: name,
-		Status:      accountDomain.AccountStatusActive,
-		Locale:      "en",
-		Timezone:    "UTC",
-		Metadata:    make(map[string]any),
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
+	account := accountDomain.NewAccount(name)
 
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
@@ -264,42 +247,22 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Insert account
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO accounts (id, display_name, status, locale, timezone, metadata, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		account.ID, account.DisplayName, account.Status, account.Locale, account.Timezone,
-		`{}`, account.CreatedAt, account.UpdatedAt,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("insert account: %w", err)
+	if err := s.accountRepo.CreateAccount(ctx, tx, account); err != nil {
+		return nil, fmt.Errorf("create account: %w", err)
 	}
 
-	// Create email credential
 	if email != "" {
-		emailCred := accountDomain.NewEmailCredential(accountID, email)
+		emailCred := accountDomain.NewEmailCredential(account.ID, email)
+		emailCred.PrimaryCredential = true
 		emailCred.Verify()
-		_, err = tx.ExecContext(ctx,
-			`INSERT INTO account_credentials (id, account_id, credential_type, identifier, credential_value, verified, primary_credential, metadata, created_at, verified_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-			emailCred.ID, emailCred.AccountID, emailCred.Type, emailCred.Identifier, "",
-			emailCred.Verified, true, `{}`, emailCred.CreatedAt, emailCred.VerifiedAt,
-		)
-		if err != nil {
+		if err := s.credentialRepo.CreateCredentials(ctx, tx, []*accountDomain.Credential{emailCred}); err != nil {
 			s.logger.Warn("Failed to create email credential for social login", zap.Error(err))
 		}
 	}
 
-	// Create federated identity
-	identity := accountDomain.NewFederatedIdentity(accountID, accountDomain.Provider(provider), providerUserID, nil)
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO federated_identities (id, account_id, provider, provider_user_id, profile, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		identity.ID, identity.AccountID, identity.Provider, identity.ProviderUserID,
-		`{}`, identity.CreatedAt, identity.UpdatedAt,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("insert federated identity: %w", err)
+	identity := accountDomain.NewFederatedIdentity(account.ID, accountDomain.Provider(provider), providerUserID, nil)
+	if err := s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity); err != nil {
+		return nil, fmt.Errorf("create federated identity: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {

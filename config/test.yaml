@@ -32,8 +32,6 @@ redis:
     dsn: redis://127.0.0.1:6381/0
     max_active_conns: 6000
     pool_timeout_seconds: 60
-bigcache:
-    hard_max_cache_size: 6
 task_pipeline:
     flush_size: 32
     buffer_size: 64
@@ -47,7 +45,7 @@ smtp:
 captcha:
     type: math
 log:
-    level: -1 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: fatal, 4: panic 5: fatal
+    level: -1 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
 auth:
     jwt_secret: "gosso-test-secret-for-integration"
     issuer: "http://localhost:8080"

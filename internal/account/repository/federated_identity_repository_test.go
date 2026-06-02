@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -201,5 +202,6 @@ func TestSoftDeleteByID_NotFound(t *testing.T) {
 	err = repo.SoftDeleteByID(context.Background(), tx, "nonexistent", deletedAt)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "federated identity not found or already deleted")
+	assert.Contains(t, err.Error(), "federated identity not found")
+	assert.True(t, errors.Is(err, ErrFederatedIdentityNotFound))
 }

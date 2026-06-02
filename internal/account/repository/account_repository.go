@@ -4,10 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/rushairer/gosso/internal/account/domain"
+)
+
+// Sentinel errors for repository operations
+var (
+	ErrAccountNotFound = errors.New("account not found")
 )
 
 // AccountRepository defines the interface for account repository
@@ -98,7 +104,7 @@ func (r *accountRepositoryImpl) FindByID(ctx context.Context, accountID string) 
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("account not found: %s", accountID)
+		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, accountID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query account: %w", err)
@@ -138,7 +144,7 @@ func (r *accountRepositoryImpl) FindByUsername(ctx context.Context, username str
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("account not found with username: %s", username)
+		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, username)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query account: %w", err)
@@ -186,7 +192,7 @@ func (r *accountRepositoryImpl) UpdateAccount(ctx context.Context, tx *sql.Tx, a
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("account not found or already deleted: %s", account.ID)
+		return fmt.Errorf("%w: %s", ErrAccountNotFound, account.ID)
 	}
 
 	return nil
@@ -210,7 +216,7 @@ func (r *accountRepositoryImpl) SoftDeleteAccount(ctx context.Context, tx *sql.T
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("account not found or already deleted: %s", accountID)
+		return fmt.Errorf("%w: %s", ErrAccountNotFound, accountID)
 	}
 
 	return nil

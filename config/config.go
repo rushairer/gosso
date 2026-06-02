@@ -8,7 +8,6 @@ import (
 type GoUnoConfig struct {
 	WebServerConfig    WebServerConfig      `mapstructure:"web_server"`
 	DatabaseConfig     DatabaseConfig       `mapstructure:"database"`
-	BigCacheConfig     BigCacheConfig       `mapstructure:"bigcache"`
 	RedisConfig        RedisConfig          `mapstructure:"redis"`
 	TaskPipelineConfig TaskPipelineConfig   `mapstructure:"task_pipeline"`
 	SMTPConfig         SMTPConfig           `mapstructure:"smtp"`
@@ -68,10 +67,6 @@ func (c DatabaseConfig) GetDefaultDriver() *DatabaseConfigDriver {
 	} else {
 		return nil
 	}
-}
-
-type BigCacheConfig struct {
-	HardMaxCacheSize int `mapstructure:"hard_max_cache_size"`
 }
 
 type RedisConfig struct {
@@ -136,6 +131,9 @@ type OAuthProviderConfig struct {
 	ClientSecret string   `mapstructure:"client_secret"`
 	RedirectURI  string   `mapstructure:"redirect_uri"`
 	Scopes       []string `mapstructure:"scopes"`
+	AuthURL      string   `mapstructure:"auth_url"`
+	TokenURL     string   `mapstructure:"token_url"`
+	UserInfoURL  string   `mapstructure:"userinfo_url"`
 }
 
 type OAuthProvidersConfig struct {
@@ -163,6 +161,10 @@ func (c *GoUnoConfig) Validate() error {
 	}
 	if c.AuthConfig.RefreshTokenExpiry <= 0 {
 		return fmt.Errorf("auth: refresh_token_expiry must be positive")
+	}
+	if c.WebServerConfig.RateLimits.Login < 0 || c.WebServerConfig.RateLimits.Token < 0 ||
+		c.WebServerConfig.RateLimits.Passkey < 0 || c.WebServerConfig.RateLimits.API < 0 {
+		return fmt.Errorf("web_server: rate_limits values must be non-negative")
 	}
 	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -117,7 +118,8 @@ func TestRoleRepo_FindByName_NotFound(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "role not found with name")
+	assert.Contains(t, err.Error(), "role not found")
+	assert.True(t, errors.Is(err, ErrRoleNotFound))
 }
 
 func TestRoleRepo_FindAll_Success(t *testing.T) {
@@ -251,7 +253,8 @@ func TestRoleRepo_RemoveRoleFromAccount_NotFound(t *testing.T) {
 	})
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "account-role association not found")
+	assert.Contains(t, err.Error(), "role not found")
+	assert.True(t, errors.Is(err, ErrRoleNotFound))
 }
 
 func TestRoleRepo_SoftDeleteRolesByAccountID(t *testing.T) {

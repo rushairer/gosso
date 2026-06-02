@@ -4,10 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/rushairer/gosso/internal/account/domain"
+)
+
+// Sentinel errors for repository operations
+var (
+	ErrCredentialNotFound = errors.New("credential not found")
 )
 
 // CredentialRepository defines the interface for credential repository
@@ -156,7 +162,7 @@ func (r *credentialRepositoryImpl) FindByTypeAndIdentifier(ctx context.Context, 
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("credential not found: %s=%s", credType, identifier)
+		return nil, fmt.Errorf("%w: %s=%s", ErrCredentialNotFound, credType, identifier)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query credential: %w", err)
@@ -177,7 +183,7 @@ func (r *credentialRepositoryImpl) FindPasswordCredential(ctx context.Context, a
 	}
 
 	if len(credentials) == 0 {
-		return nil, fmt.Errorf("password credential not found for account: %s", accountID)
+		return nil, fmt.Errorf("%w: account=%s", ErrCredentialNotFound, accountID)
 	}
 
 	return credentials[0], nil
@@ -216,7 +222,7 @@ func (r *credentialRepositoryImpl) UpdateCredential(ctx context.Context, tx *sql
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("credential not found or already deleted: %s", credential.ID)
+		return fmt.Errorf("%w: %s", ErrCredentialNotFound, credential.ID)
 	}
 
 	return nil
@@ -256,7 +262,7 @@ func (r *credentialRepositoryImpl) SoftDeleteCredential(ctx context.Context, tx 
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("credential not found or already deleted: %s", credentialID)
+		return fmt.Errorf("%w: %s", ErrCredentialNotFound, credentialID)
 	}
 
 	return nil

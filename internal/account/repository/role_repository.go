@@ -4,10 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/rushairer/gosso/internal/account/domain"
+)
+
+// Sentinel errors for repository operations
+var (
+	ErrRoleNotFound = errors.New("role not found")
 )
 
 // RoleRepository defines the interface for role repository
@@ -120,7 +126,7 @@ func (r *roleRepositoryImpl) UpdateRole(ctx context.Context, tx *sql.Tx, role *d
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("role not found or already deleted: %s", role.ID)
+		return fmt.Errorf("%w: %s", ErrRoleNotFound, role.ID)
 	}
 
 	return nil
@@ -150,7 +156,7 @@ func (r *roleRepositoryImpl) FindByID(ctx context.Context, roleID string) (*doma
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("role not found: %s", roleID)
+		return nil, fmt.Errorf("%w: %s", ErrRoleNotFound, roleID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query role: %w", err)
@@ -191,7 +197,7 @@ func (r *roleRepositoryImpl) FindByName(ctx context.Context, name string) (*doma
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("role not found with name: %s", name)
+		return nil, fmt.Errorf("%w: %s", ErrRoleNotFound, name)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query role: %w", err)
@@ -274,7 +280,7 @@ func (r *roleRepositoryImpl) SoftDeleteByID(ctx context.Context, tx *sql.Tx, rol
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("role not found or already deleted: %s", roleID)
+		return fmt.Errorf("%w: %s", ErrRoleNotFound, roleID)
 	}
 
 	return nil
@@ -314,7 +320,7 @@ func (r *roleRepositoryImpl) RemoveRoleFromAccount(ctx context.Context, tx *sql.
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("account-role association not found or already deleted")
+		return fmt.Errorf("%w: account=%s role=%s", ErrRoleNotFound, accountID, roleID)
 	}
 
 	return nil

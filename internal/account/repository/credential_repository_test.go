@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -200,7 +201,8 @@ func TestFindPasswordCredential_NotFound(t *testing.T) {
 	_, err = repo.FindPasswordCredential(context.Background(), "account-001")
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "password credential not found")
+	assert.Contains(t, err.Error(), "credential not found")
+	assert.True(t, errors.Is(err, ErrCredentialNotFound))
 }
 
 // ──────────────────────────────────────────────
@@ -264,5 +266,6 @@ func TestSoftDeleteCredential_NotFound(t *testing.T) {
 	err = repo.SoftDeleteCredential(context.Background(), tx, "nonexistent", time.Now())
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "credential not found or already deleted")
+	assert.Contains(t, err.Error(), "credential not found")
+	assert.True(t, errors.Is(err, ErrCredentialNotFound))
 }

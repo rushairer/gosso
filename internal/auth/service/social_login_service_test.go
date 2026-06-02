@@ -19,6 +19,7 @@ func newTestSocialLoginService() *SocialLoginService {
 				ClientSecret: "google-secret",
 				RedirectURI:  "https://app.example.com/callback",
 				Scopes:       []string{"openid", "email", "profile"},
+				AuthURL:      "https://accounts.google.com/o/oauth2/v2/auth",
 				TokenURL:     "https://oauth2.googleapis.com/token",
 				UserInfoURL:  "https://www.googleapis.com/oauth2/v2/userinfo",
 			},
@@ -27,6 +28,7 @@ func newTestSocialLoginService() *SocialLoginService {
 				ClientSecret: "github-secret",
 				RedirectURI:  "https://app.example.com/github/callback",
 				Scopes:       []string{"user:email"},
+				AuthURL:      "https://github.com/login/oauth/authorize",
 				TokenURL:     "https://github.com/login/oauth/access_token",
 				UserInfoURL:  "https://api.github.com/user",
 			},
@@ -89,12 +91,12 @@ func TestGetAuthURL_ScopesJoined(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestNewSocialLoginService_NilLogger(t *testing.T) {
-	svc := NewSocialLoginService(nil, nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil)
+	svc := NewSocialLoginService(nil, nil, nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil)
 	assert.NotNil(t, svc.logger)
 }
 
 func TestNewSocialLoginService_DefaultHTTPClient(t *testing.T) {
-	svc := NewSocialLoginService(nil, nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil)
+	svc := NewSocialLoginService(nil, nil, nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil)
 	assert.NotNil(t, svc.httpClient)
 	assert.Equal(t, 10*time.Second, svc.httpClient.Timeout)
 }

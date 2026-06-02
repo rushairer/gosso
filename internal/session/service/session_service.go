@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -290,14 +291,9 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 	}
 
 	// Sort by LastActiveAt and revoke the oldest
-	// Simple bubble sort (session count is usually small)
-	for i := 0; i < len(sessions)-1; i++ {
-		for j := i + 1; j < len(sessions); j++ {
-			if sessions[i].LastActiveAt.After(sessions[j].LastActiveAt) {
-				sessions[i], sessions[j] = sessions[j], sessions[i]
-			}
-		}
-	}
+	sort.Slice(sessions, func(i, j int) bool {
+		return sessions[i].LastActiveAt.Before(sessions[j].LastActiveAt)
+	})
 
 	// Revoke excess old sessions
 	toRemove := len(sessions) - s.maxSessions

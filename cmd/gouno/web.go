@@ -11,7 +11,6 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	gounoMiddleware "github.com/rushairer/gouno/middleware"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -257,24 +256,37 @@ func buildOAuthProviders(cfg config.GoUnoConfig) map[string]*authService.OAuthPr
 		p := cfg.OAuthProviders.Google
 		providers["google"] = &authService.OAuthProviderConfig{
 			ClientID: p.ClientID, ClientSecret: p.ClientSecret, RedirectURI: p.RedirectURI, Scopes: p.Scopes,
-			TokenURL: "https://oauth2.googleapis.com/token", UserInfoURL: "https://www.googleapis.com/oauth2/v2/userinfo",
+			AuthURL: defaultIfEmpty(p.AuthURL, "https://accounts.google.com/o/oauth2/v2/auth"),
+			TokenURL: defaultIfEmpty(p.TokenURL, "https://oauth2.googleapis.com/token"),
+			UserInfoURL: defaultIfEmpty(p.UserInfoURL, "https://www.googleapis.com/oauth2/v2/userinfo"),
 		}
 	}
 	if cfg.OAuthProviders.GitHub.ClientID != "" {
 		p := cfg.OAuthProviders.GitHub
 		providers["github"] = &authService.OAuthProviderConfig{
 			ClientID: p.ClientID, ClientSecret: p.ClientSecret, RedirectURI: p.RedirectURI, Scopes: p.Scopes,
-			TokenURL: "https://github.com/login/oauth/access_token", UserInfoURL: "https://api.github.com/user",
+			AuthURL: defaultIfEmpty(p.AuthURL, "https://github.com/login/oauth/authorize"),
+			TokenURL: defaultIfEmpty(p.TokenURL, "https://github.com/login/oauth/access_token"),
+			UserInfoURL: defaultIfEmpty(p.UserInfoURL, "https://api.github.com/user"),
 		}
 	}
 	if cfg.OAuthProviders.WeChat.ClientID != "" {
 		p := cfg.OAuthProviders.WeChat
 		providers["wechat"] = &authService.OAuthProviderConfig{
 			ClientID: p.ClientID, ClientSecret: p.ClientSecret, RedirectURI: p.RedirectURI, Scopes: p.Scopes,
-			TokenURL: "https://api.weixin.qq.com/sns/oauth2/access_token", UserInfoURL: "https://api.weixin.qq.com/sns/userinfo",
+			AuthURL: defaultIfEmpty(p.AuthURL, "https://open.weixin.qq.com/connect/qrconnect"),
+			TokenURL: defaultIfEmpty(p.TokenURL, "https://api.weixin.qq.com/sns/oauth2/access_token"),
+			UserInfoURL: defaultIfEmpty(p.UserInfoURL, "https://api.weixin.qq.com/sns/userinfo"),
 		}
 	}
 	return providers
+}
+
+func defaultIfEmpty(value, defaultValue string) string {
+	if value == "" {
+		return defaultValue
+	}
+	return value
 }
 
 // setupEngine configures the Gin engine: middleware + routes
@@ -289,7 +301,6 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		middleware.ZapLoggerMiddleware(logger),
 		middleware.RecoveryMiddleware(),
 		middleware.TimeoutMiddleware(cfg.WebServerConfig.RequestTimeout),
-		gounoMiddleware.RateLimitMiddleware(ctx, cfg.WebServerConfig.RateLimitPerMinute, time.Minute),
 		middleware.CSRFMiddleware(!cfg.WebServerConfig.Debug,
 			"/api/auth/passkey/login",
 			"/api/auth/social",

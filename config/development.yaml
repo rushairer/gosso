@@ -37,8 +37,6 @@ redis:
     dsn: redis:6379
     max_active_conns: 6000
     pool_timeout_seconds: 60
-bigcache:
-    hard_max_cache_size: 6
 task_pipeline:
     flush_size: 32
     buffer_size: 64
@@ -52,7 +50,7 @@ smtp:
 captcha:
     type: math
 log:
-    level: 0 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: fatal, 4: panic 5: fatal
+    level: 0 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
 auth:
     jwt_secret: "gosso-dev-secret-change-in-production"
     issuer: "http://localhost:8080"
@@ -84,3 +82,32 @@ cors:
         - Authorization
     allow_credentials: true
     max_age: 86400
+oauth_providers:
+    google:
+        client_id: ""
+        client_secret: ""
+        redirect_uri: "http://localhost:8080/api/auth/social/google/callback"
+        scopes:
+            - openid
+            - email
+            - profile
+        auth_url: "https://accounts.google.com/o/oauth2/v2/auth"
+        token_url: "https://oauth2.googleapis.com/token"
+        userinfo_url: "https://www.googleapis.com/oauth2/v2/userinfo"
+    github:
+        client_id: ""
+        client_secret: ""
+        redirect_uri: "http://localhost:8080/api/auth/social/github/callback"
+        scopes:
+            - user:email
+        auth_url: "https://github.com/login/oauth/authorize"
+        token_url: "https://github.com/login/oauth/access_token"
+        userinfo_url: "https://api.github.com/user"
+    wechat:
+        client_id: ""
+        client_secret: ""
+        redirect_uri: "http://localhost:8080/api/auth/social/wechat/callback"
+        scopes: []
+        auth_url: "https://open.weixin.qq.com/connect/qrconnect"
+        token_url: "https://api.weixin.qq.com/sns/oauth2/access_token"
+        userinfo_url: "https://api.weixin.qq.com/sns/userinfo"

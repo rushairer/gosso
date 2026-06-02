@@ -4,10 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/rushairer/gosso/internal/account/domain"
+)
+
+// Sentinel errors for repository operations
+var (
+	ErrFederatedIdentityNotFound = errors.New("federated identity not found")
 )
 
 // FederatedIdentityRepository defines the interface for federated identity repository
@@ -89,7 +95,7 @@ func (r *federatedIdentityRepositoryImpl) FindByProvider(ctx context.Context, pr
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("federated identity not found: %s/%s", provider, providerUserID)
+		return nil, fmt.Errorf("%w: %s/%s", ErrFederatedIdentityNotFound, provider, providerUserID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query federated identity: %w", err)
@@ -180,7 +186,7 @@ func (r *federatedIdentityRepositoryImpl) SoftDeleteByID(ctx context.Context, tx
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("federated identity not found or already deleted: %s", identityID)
+		return fmt.Errorf("%w: %s", ErrFederatedIdentityNotFound, identityID)
 	}
 
 	return nil

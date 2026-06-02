@@ -35,6 +35,7 @@ func InitializeAuthModule(
 	sessionSvc := sessionService.NewSessionService(redis, logger)
 
 	credentialRepo := accountRepo.NewCredentialRepository(db)
+	accountRepoImpl := accountRepo.NewAccountRepository(db)
 	roleRepo := accountRepo.NewRoleRepository(db)
 	federatedIdentityRepo := accountRepo.NewFederatedIdentityRepository(db)
 
@@ -58,7 +59,7 @@ func InitializeAuthModule(
 
 	var socialSvc *service.SocialLoginService
 	if len(providers) > 0 {
-		socialSvc = service.NewSocialLoginService(db, accountSvc, sessionSvc, tokenSvc, credentialRepo, roleRepo, federatedIdentityRepo, providers, logger)
+		socialSvc = service.NewSocialLoginService(db, accountSvc, sessionSvc, tokenSvc, accountRepoImpl, credentialRepo, roleRepo, federatedIdentityRepo, providers, logger)
 	}
 
 	emailSvc := notificationService.NewEmailService(smtpConfig, logger)

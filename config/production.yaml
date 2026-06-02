@@ -1,3 +1,6 @@
+# Production configuration
+# Sensitive values can be overridden with GOUNO_ prefixed env vars.
+# Example: GOUNO_AUTH_JWT_SECRET=my-secret GOUNO_DATABASE_DRIVERS_POSTGRES_DSN=host=...
 web_server:
     address: 0.0.0.0
     port: 8080
@@ -34,8 +37,6 @@ redis:
     dsn: "${GOUNO_REDIS_DSN}"
     max_active_conns: 6000
     pool_timeout_seconds: 60
-bigcache:
-    hard_max_cache_size: 6
 task_pipeline:
     flush_size: 32
     buffer_size: 64
@@ -49,16 +50,54 @@ smtp:
 captcha:
     type: math
 log:
-    level: 0 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: fatal, 4: panic 5: fatal
+    level: 0 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
 auth:
     jwt_secret: "${GOUNO_JWT_SECRET}"
     issuer: "https://gosso.example.com"
     access_token_expiry: 15m
     refresh_token_expiry: 720h
     authorization_code_expiry: 10m
+    device_code_expiry: 10m
+    device_code_interval: 5s
     default_scopes:
         - openid
         - profile
         - email
     private_key_path: "/app/keys/private.pem"
     password_reset_base_url: "https://gosso.example.com/reset-password"
+cors:
+    allowed_origins:
+        - "${GOUNO_CORS_ORIGIN}"
+    allowed_methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+    allowed_headers:
+        - Origin
+        - Content-Type
+        - Accept
+        - Authorization
+    allow_credentials: true
+    max_age: 86400
+oauth_providers:
+    google:
+        client_id: "${GOUNO_GOOGLE_CLIENT_ID}"
+        client_secret: "${GOUNO_GOOGLE_CLIENT_SECRET}"
+        redirect_uri: "${GOUNO_GOOGLE_REDIRECT_URI}"
+        scopes:
+            - openid
+            - email
+            - profile
+    github:
+        client_id: "${GOUNO_GITHUB_CLIENT_ID}"
+        client_secret: "${GOUNO_GITHUB_CLIENT_SECRET}"
+        redirect_uri: "${GOUNO_GITHUB_REDIRECT_URI}"
+        scopes:
+            - user:email
+    wechat:
+        client_id: "${GOUNO_WECHAT_CLIENT_ID}"
+        client_secret: "${GOUNO_WECHAT_CLIENT_SECRET}"
+        redirect_uri: "${GOUNO_WECHAT_REDIRECT_URI}"
+        scopes: []

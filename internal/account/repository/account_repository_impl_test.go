@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -138,7 +139,8 @@ func TestFindByUsername_NotFound(t *testing.T) {
 	_, err = repo.FindByUsername(context.Background(), "nobody")
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "account not found with username")
+	assert.Contains(t, err.Error(), "account not found")
+	assert.True(t, errors.Is(err, ErrAccountNotFound))
 }
 
 // ──────────────────────────────────────────────
@@ -184,7 +186,8 @@ func TestUpdateAccount_NotFound(t *testing.T) {
 	err = repo.UpdateAccount(context.Background(), tx, a)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "account not found or already deleted")
+	assert.Contains(t, err.Error(), "account not found")
+	assert.True(t, errors.Is(err, ErrAccountNotFound))
 }
 
 // ──────────────────────────────────────────────
@@ -225,7 +228,8 @@ func TestSoftDeleteAccount_NotFound(t *testing.T) {
 	err = repo.SoftDeleteAccount(context.Background(), tx, "nonexistent", time.Now())
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "account not found or already deleted")
+	assert.Contains(t, err.Error(), "account not found")
+	assert.True(t, errors.Is(err, ErrAccountNotFound))
 }
 
 // ──────────────────────────────────────────────
