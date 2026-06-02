@@ -19,13 +19,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: gosso/go.sum
+          cache-dependency-path: go.sum
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
-          working-directory: gosso
 
   test:
     name: Unit Tests
@@ -36,17 +35,16 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: gosso/go.sum
+          cache-dependency-path: go.sum
 
       - name: Run unit tests
-        working-directory: gosso
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
           name: coverage
-          path: gosso/coverage.out
+          path: coverage.out
 
   govulncheck:
     name: Vulnerability Check
@@ -57,13 +55,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: gosso/go.sum
+          cache-dependency-path: go.sum
 
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       - name: Run govulncheck
-        working-directory: gosso
         run: govulncheck ./...
 
   integration-test:
@@ -102,10 +99,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: gosso/go.sum
+          cache-dependency-path: go.sum
 
       - name: Run integration tests
-        working-directory: gosso
         run: go test -tags=integration -v -count=1 -timeout=120s ./internal/auth/service/ ./internal/session/service/ ./middleware/
         env:
           GOUNO_DATABASE_DRIVERS_POSTGRES_DSN: "host=127.0.0.1 user=gosso password=gosso123 dbname=gosso_test port=5434 sslmode=disable"
@@ -122,10 +118,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: gosso/go.sum
+          cache-dependency-path: go.sum
 
       - name: Build binary
-        working-directory: gosso
         run: |
           go build -buildvcs=false -ldflags="-s -w" -o bin/gosso ./cmd
 
@@ -133,7 +128,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gosso-binary
-          path: gosso/bin/gosso
+          path: bin/gosso
 
   docker:
     name: Docker Build
@@ -148,7 +143,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build Docker image
-        working-directory: gosso
         run: |
           docker build \
             --build-arg VERSION=${{ github.sha }} \

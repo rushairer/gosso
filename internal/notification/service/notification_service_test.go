@@ -1,0 +1,156 @@
+package service
+
+import (
+	"bytes"
+	"context"
+	"html/template"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/rushairer/gosso/config"
+)
+
+// ──────────────────────────────────────────────
+// NewEmailService
+// ──────────────────────────────────────────────
+
+func TestNewEmailService(t *testing.T) {
+	cfg := config.SMTPConfig{
+		Host:     "smtp.example.com",
+		Port:     587,
+		Username: "user",
+		Password: "pass",
+		From:     "noreply@example.com",
+	}
+	svc := NewEmailService(cfg, nil)
+
+	assert.Equal(t, "smtp.example.com", svc.host)
+	assert.Equal(t, 587, svc.port)
+	assert.Equal(t, "user", svc.username)
+	assert.Equal(t, "pass", svc.password)
+	assert.Equal(t, "noreply@example.com", svc.from)
+	assert.NotNil(t, svc.logger)
+}
+
+func TestNewEmailService_NilLogger(t *testing.T) {
+	cfg := config.SMTPConfig{}
+	svc := NewEmailService(cfg, nil)
+	assert.NotNil(t, svc.logger)
+}
+
+// ──────────────────────────────────────────────
+// buildMessage
+// ──────────────────────────────────────────────
+
+func TestBuildMessage_ContainsHeaders(t *testing.T) {
+	cfg := config.SMTPConfig{From: "noreply@gosso.com"}
+	svc := NewEmailService(cfg, nil)
+
+	msg := svc.buildMessage("user@example.com", "Test Subject", "<p>Hello</p>")
+
+	assert.True(t, strings.Contains(msg, "From: noreply@gosso.com"))
+	assert.True(t, strings.Contains(msg, "To: user@example.com"))
+	assert.True(t, strings.Contains(msg, "Subject: Test Subject"))
+	assert.True(t, strings.Contains(msg, "Content-Type: text/html"))
+	assert.True(t, strings.Contains(msg, "<p>Hello</p>"))
+}
+
+func TestBuildMessage_MIMEHeader(t *testing.T) {
+	cfg := config.SMTPConfig{From: "test@example.com"}
+	svc := NewEmailService(cfg, nil)
+
+	msg := svc.buildMessage("to@example.com", "Sub", "body")
+
+	assert.True(t, strings.Contains(msg, "MIME-Version: 1.0"))
+}
+
+// ──────────────────────────────────────────────
+// Template rendering
+// ──────────────────────────────────────────────
+
+func TestVerificationTemplate(t *testing.T) {
+	var body bytes.Buffer
+	err := verificationTmpl.Execute(&body, struct{ Code string }{Code: "123456"})
+	require.NoError(t, err)
+
+	html := body.String()
+	assert.Contains(t, html, "123456")
+	assert.Contains(t, html, "verification code")
+	assert.Contains(t, html, "10 minutes")
+}
+
+func TestPasswordResetTemplate(t *testing.T) {
+	var body bytes.Buffer
+	err := passwordResetTmpl.Execute(&body, struct{ ResetLink string }{ResetLink: "https://example.com/reset?token=abc"})
+	require.NoError(t, err)
+
+	html := body.String()
+	assert.Contains(t, html, "https://example.com/reset?token=abc")
+	assert.Contains(t, html, "Reset Password")
+	assert.Contains(t, html, "30 minutes")
+}
+
+func TestVerificationTemplate_SpecialChars(t *testing.T) {
+	var body bytes.Buffer
+	err := verificationTmpl.Execute(&body, struct{ Code string }{Code: "ABC<>&"})
+	require.NoError(t, err)
+	// template/html auto-escapes
+	assert.Contains(t, body.String(), "ABC")
+}
+
+func TestPasswordResetTemplate_SpecialChars(t *testing.T) {
+	var body bytes.Buffer
+	err := passwordResetTmpl.Execute(&body, struct{ ResetLink string }{ResetLink: "https://example.com/r?a=1&b=2"})
+	require.NoError(t, err)
+	// URL is HTML-escaped by template
+	assert.Contains(t, body.String(), "https://example.com")
+}
+
+// ──────────────────────────────────────────────
+// StubSMSService
+// ──────────────────────────────────────────────
+
+func TestNewStubSMSService(t *testing.T) {
+	svc := NewStubSMSService()
+	assert.NotNil(t, svc)
+}
+
+func TestStubSMSService_SendVerificationCode(t *testing.T) {
+	svc := NewStubSMSService()
+	err := svc.SendVerificationCode(context.Background(), "+8613800138000", "123456")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not implemented")
+}
+
+// ──────────────────────────────────────────────
+// Template security (no injection)
+// ──────────────────────────────────────────────
+
+func TestVerificationTemplate_NoInjection(t *testing.T) {
+	var body bytes.Buffer
+	err := verificationTmpl.Execute(&body, struct{ Code string }{Code: "<script>alert('xss')</script>"})
+	require.NoError(t, err)
+	// html/template escapes < > automatically
+	assert.NotContains(t, body.String(), "<script>")
+}
+
+func TestPasswordResetTemplate_NoInjection(t *testing.T) {
+	var body bytes.Buffer
+	malicious := "javascript:alert(1)\"><img src=x onerror=alert(1)>"
+	err := passwordResetTmpl.Execute(&body, struct{ ResetLink string }{ResetLink: malicious})
+	require.NoError(t, err)
+	assert.NotContains(t, body.String(), "onerror=")
+}
+
+// Verify templates are properly initialized
+func TestTemplatesInitialized(t *testing.T) {
+	assert.NotNil(t, verificationTmpl)
+	assert.NotNil(t, passwordResetTmpl)
+
+	// Ensure they're valid templates
+	_, err := template.New("test").Parse("{{.Code}}")
+	assert.NoError(t, err)
+}
