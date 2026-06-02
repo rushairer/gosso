@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -67,11 +68,11 @@ type verifyCodeData struct {
 
 // SendCode sends verification code
 func (s *VerificationService) SendCode(ctx context.Context, credType, identifier, accountID string) error {
-	// Check cooldown
+	// Check cooldown (fail-open: if Redis is down, we still allow the request)
 	cooldownKey := s.buildCooldownKey(credType, identifier)
 	exists, err := s.redis.Exists(ctx, cooldownKey)
 	if err != nil {
-		s.logger.Warn("Failed to check cooldown", zap.Error(err))
+		s.logger.Warn("Failed to check cooldown, proceeding anyway", zap.Error(err))
 	}
 	if exists {
 		return errors.New("please wait before requesting another code")
@@ -99,7 +100,7 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 		return fmt.Errorf("store code: %w", err)
 	}
 
-	// Set cooldown
+	// Set cooldown (fail-open: if Redis is down, we lose cooldown but can still verify)
 	if err := s.redis.Set(ctx, cooldownKey, []byte("1"), VerifyCooldownTTL); err != nil {
 		s.logger.Warn("Failed to set cooldown", zap.Error(err))
 	}
@@ -147,8 +148,8 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 		return "", errors.New("verification code exhausted, please request a new one")
 	}
 
-	// Compare code
-	if data.Code != code {
+	// Compare code using constant-time comparison to prevent timing attacks
+	if subtle.ConstantTimeCompare([]byte(data.Code), []byte(code)) != 1 {
 		data.Attempts++
 		updatedData, _ := json.Marshal(data)
 		_ = s.redis.Set(ctx, codeKey, updatedData, VerifyCodeTTL)

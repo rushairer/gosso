@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+
+	"go.uber.org/zap"
 )
 
 // SMSService SMS sending service interface
@@ -11,13 +13,20 @@ type SMSService interface {
 }
 
 // StubSMSService stub implementation of the SMS service (replace with actual SMS gateway in production)
-type StubSMSService struct{}
+type StubSMSService struct {
+	logger *zap.Logger
+}
 
 // NewStubSMSService creates a stub SMS service
-func NewStubSMSService() *StubSMSService {
-	return &StubSMSService{}
+func NewStubSMSService(logger *zap.Logger) *StubSMSService {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	return &StubSMSService{logger: logger}
 }
 
 func (s *StubSMSService) SendVerificationCode(ctx context.Context, phone, code string) error {
-	return fmt.Errorf("SMS service not implemented")
+	s.logger.Warn("SMS service not implemented, cannot send verification code",
+		zap.String("phone", phone))
+	return fmt.Errorf("SMS verification is not yet supported, please use email verification")
 }

@@ -80,11 +80,11 @@ func NewPasswordResetService(
 
 // RequestReset requests password reset (sends password reset email)
 func (s *PasswordResetService) RequestReset(ctx context.Context, email string) error {
-	// Check cooldown
+	// Check cooldown (fail-open: if Redis is down, we still allow the request)
 	cooldownKey := s.buildCooldownKey(email)
 	exists, err := s.redis.Exists(ctx, cooldownKey)
 	if err != nil {
-		s.logger.Warn("Failed to check reset cooldown", zap.Error(err))
+		s.logger.Warn("Failed to check reset cooldown, proceeding anyway", zap.Error(err))
 	}
 	if exists {
 		return errors.New("please wait before requesting another reset")
@@ -129,7 +129,7 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 		return fmt.Errorf("store reset token: %w", err)
 	}
 
-	// Set cooldown
+	// Set cooldown (fail-open: if Redis is down, we lose cooldown but can still reset)
 	if err := s.redis.Set(ctx, cooldownKey, []byte("1"), PasswordResetCooldownTTL); err != nil {
 		s.logger.Warn("Failed to set reset cooldown", zap.Error(err))
 	}

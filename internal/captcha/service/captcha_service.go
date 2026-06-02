@@ -2,9 +2,10 @@ package service
 
 import (
 	"context"
+	crand "crypto/rand"
 	"encoding/json"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"time"
 
 	"github.com/google/uuid"
@@ -50,9 +51,9 @@ func (s *CaptchaService) SetCaptchaTTL(ttl time.Duration) {
 
 // GenerateMathCaptcha generates a math expression captcha
 func (s *CaptchaService) GenerateMathCaptcha(ctx context.Context) (*domain.Captcha, string, error) {
-	// Generate a simple addition expression
-	a := rand.Intn(50) + 1
-	b := rand.Intn(50) + 1
+	// Generate a simple addition expression using crypto/rand
+	a := cryptoRandInt(50) + 1
+	b := cryptoRandInt(50) + 1
 	question := fmt.Sprintf("%d + %d = ?", a, b)
 	answer := fmt.Sprintf("%d", a+b)
 
@@ -75,8 +76,8 @@ func (s *CaptchaService) GenerateMathCaptcha(ctx context.Context) (*domain.Captc
 
 // GenerateDigitCaptcha generates a numeric captcha
 func (s *CaptchaService) GenerateDigitCaptcha(ctx context.Context) (*domain.Captcha, string, error) {
-	// Generate a 6-digit random number
-	code := fmt.Sprintf("%06d", rand.Intn(1000000))
+	// Generate a 6-digit random number using crypto/rand
+	code := fmt.Sprintf("%06d", cryptoRandInt(1000000))
 
 	captcha := &domain.Captcha{
 		ID:        uuid.New(),
@@ -190,6 +191,17 @@ func (s *CaptchaService) getCaptcha(ctx context.Context, captchaID uuid.UUID) (*
 // buildCaptchaKey builds a Redis key
 func (s *CaptchaService) buildCaptchaKey(captchaID uuid.UUID) string {
 	return fmt.Sprintf("%s%s", CaptchaKeyPrefix, captchaID.String())
+}
+
+// cryptoRandInt returns a cryptographically secure random int in [0, max).
+func cryptoRandInt(max int64) int64 {
+	n, err := crand.Int(crand.Reader, big.NewInt(max))
+	if err != nil {
+		// This should never happen with crypto/rand unless the system's
+		// random source is broken. Panic to surface the issue immediately.
+		panic("crypto/rand failed: " + err.Error())
+	}
+	return n.Int64()
 }
 
 // Error definitions

@@ -18,6 +18,17 @@ import (
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
 
+// AuthModule holds all services and repositories for the authentication module.
+type AuthModule struct {
+	AuthService          *service.AuthService
+	SocialLoginService   *service.SocialLoginService
+	VerificationService  *service.VerificationService
+	PasswordResetService *service.PasswordResetService
+	CredentialRepo       accountRepo.CredentialRepository
+	PasskeyService       *service.PasskeyService
+	SessionService       *sessionService.SessionService
+}
+
 // InitializeAuthModule initializes the authentication module
 func InitializeAuthModule(
 	db *sql.DB,
@@ -31,7 +42,7 @@ func InitializeAuthModule(
 	baseURL string,
 	auditor *auditService.Auditor,
 	tokenSvc *tokenService.TokenService,
-) (*service.AuthService, *service.SocialLoginService, *service.VerificationService, *service.PasswordResetService, accountRepo.CredentialRepository, *service.PasskeyService, *sessionService.SessionService) {
+) *AuthModule {
 	sessionSvc := sessionService.NewSessionService(redis, logger)
 
 	credentialRepo := accountRepo.NewCredentialRepository(db)
@@ -63,10 +74,18 @@ func InitializeAuthModule(
 	}
 
 	emailSvc := notificationService.NewEmailService(smtpConfig, logger)
-	smsSvc := notificationService.NewStubSMSService()
+	smsSvc := notificationService.NewStubSMSService(logger)
 	verificationSvc := service.NewVerificationService(redis, emailSvc, smsSvc, logger)
 
 	passwordResetSvc := service.NewPasswordResetService(redis, credentialRepo, emailSvc, sessionSvc, accountSvc, db, baseURL, logger)
 
-	return authSvc, socialSvc, verificationSvc, passwordResetSvc, credentialRepo, passkeySvc, sessionSvc
+	return &AuthModule{
+		AuthService:          authSvc,
+		SocialLoginService:   socialSvc,
+		VerificationService:  verificationSvc,
+		PasswordResetService: passwordResetSvc,
+		CredentialRepo:       credentialRepo,
+		PasskeyService:       passkeySvc,
+		SessionService:       sessionSvc,
+	}
 }

@@ -219,23 +219,23 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 
 	providers := buildOAuthProviders(cfg)
 
-	authSvc, socialSvc, verificationSvc, passwordResetSvc, credentialRepo, passkeySvc, sessionSvc := auth.InitializeAuthModule(
+	authMod := auth.InitializeAuthModule(
 		db, redis, logger, cfg.AuthConfig, cfg.SMTPConfig, accountSvc, providers, keySvc, cfg.AuthConfig.PasswordResetBaseURL, auditor, tokenSvc,
 	)
 
 	oauth2ClientSvc, authCodeSvc, consentSvc, deviceCodeSvc := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig)
-	idTokenSvc, discoverySvc, jwksSvc, userInfoSvc, logoutSvc := oidc.InitializeOIDCModule(db, tokenSvc, accountSvc, cfg.AuthConfig, sessionSvc, logger)
+	idTokenSvc, discoverySvc, jwksSvc, userInfoSvc, logoutSvc := oidc.InitializeOIDCModule(db, tokenSvc, accountSvc, cfg.AuthConfig, authMod.SessionService, logger)
 
 	clientRepo := oauth2Repo.NewOAuth2ClientRepository(db)
-	authCtrl := authController.NewAuthController(authSvc, tokenSvc, socialSvc, verificationSvc, passwordResetSvc, credentialRepo, logger)
+	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, authMod.CredentialRepo, logger)
 	oauth2Ctrl := oauth2Controller.NewOAuth2Controller(oauth2ClientSvc, authCodeSvc, consentSvc, tokenSvc, idTokenSvc, deviceCodeSvc, cfg.AuthConfig.Issuer, logger)
 	clientCtrl := oauth2Controller.NewClientController(oauth2ClientSvc, logger)
 	oidcCtrl := oidcController.NewOIDCController(discoverySvc, jwksSvc, userInfoSvc, logoutSvc, clientRepo, tokenSvc, cfg.AuthConfig.Issuer, logger)
 	adminCtrl := adminController.NewAdminController(accountSvc, logger)
 
 	var passkeyCtrl *authController.PasskeyController
-	if passkeySvc != nil {
-		passkeyCtrl = authController.NewPasskeyController(passkeySvc, authSvc, tokenSvc, accountSvc, logger)
+	if authMod.PasskeyService != nil {
+		passkeyCtrl = authController.NewPasskeyController(authMod.PasskeyService, authMod.AuthService, tokenSvc, accountSvc, logger)
 	}
 
 	return &appModules{

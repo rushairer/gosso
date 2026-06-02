@@ -156,6 +156,9 @@ func (c *GoUnoConfig) Validate() error {
 	if c.AuthConfig.Issuer == "" {
 		return fmt.Errorf("auth: issuer is empty")
 	}
+	if c.AuthConfig.JWTSecret == "" {
+		return fmt.Errorf("auth: jwt_secret is empty")
+	}
 	if c.AuthConfig.AccessTokenExpiry <= 0 {
 		return fmt.Errorf("auth: access_token_expiry must be positive")
 	}

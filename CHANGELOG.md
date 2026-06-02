@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Add `AuthModule` struct to `internal/auth/wire.go` — replaces 7-value tuple return from `InitializeAuthModule`.
+- Add `gomail.v2` dependency for email sending with STARTTLS support.
+- Add `cryptoRandInt` helper to `internal/captcha/service/captcha_service.go` for cryptographically secure random number generation.
+
+### Changed
+
+- **Security**: Verification code comparison now uses `crypto/subtle.ConstantTimeCompare` to prevent timing attacks (`internal/auth/service/verification_service.go`).
+- **Security**: Captcha generation now uses `crypto/rand` instead of `math/rand` for unpredictable codes (`internal/captcha/service/captcha_service.go`).
+- **Security**: `config.Validate()` now checks that `JWTSecret` is non-empty (`config/config.go`).
+- Email service now uses `gomail.v2` library instead of `net/smtp` for reliable STARTTLS support (`internal/notification/service/email_service.go`).
+- `InitializeAuthModule` returns `*AuthModule` struct instead of 7-value tuple (`internal/auth/wire.go`).
+- `StubSMSService` now accepts a logger and returns a more user-friendly error message (`internal/notification/service/sms_service.go`).
+- `AuthService` split into three files: `auth_service.go` (core), `auth_login.go` (login/logout), `auth_session.go` (session/refresh).
+- Redis error handling in verification and password reset services now includes comments documenting fail-open strategy.
+
+### Fixed
+
+- Remove dead code: redundant `os.Exit(1)` after `log.Fatalf` in `cmd/gouno/root.go`.
+
+### Removed
+
+- Remove unused `Group` struct and related methods from `internal/account/domain/role.go`.
+- Remove `buildMessage` method from `EmailService` (replaced by gomail).
+- Remove `buildMessage` tests from `internal/notification/service/notification_service_test.go`.
+
+### Added
+
 - Add sentinel errors `ErrAccountNotFound`, `ErrCredentialNotFound`, `ErrRoleNotFound`, `ErrFederatedIdentityNotFound` to repository layer for `errors.Is()` matching.
 - Add `AuthURL`, `TokenURL`, `UserInfoURL` fields to `OAuthProviderConfig` — OAuth2 provider URLs are now configurable via YAML with sensible defaults.
 - Add `rate_limits` section to `config/production.yaml` for per-endpoint rate limit configuration.

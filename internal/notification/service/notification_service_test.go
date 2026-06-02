@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"html/template"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -39,32 +38,6 @@ func TestNewEmailService_NilLogger(t *testing.T) {
 	cfg := config.SMTPConfig{}
 	svc := NewEmailService(cfg, nil)
 	assert.NotNil(t, svc.logger)
-}
-
-// ──────────────────────────────────────────────
-// buildMessage
-// ──────────────────────────────────────────────
-
-func TestBuildMessage_ContainsHeaders(t *testing.T) {
-	cfg := config.SMTPConfig{From: "noreply@gosso.com"}
-	svc := NewEmailService(cfg, nil)
-
-	msg := svc.buildMessage("user@example.com", "Test Subject", "<p>Hello</p>")
-
-	assert.True(t, strings.Contains(msg, "From: noreply@gosso.com"))
-	assert.True(t, strings.Contains(msg, "To: user@example.com"))
-	assert.True(t, strings.Contains(msg, "Subject: Test Subject"))
-	assert.True(t, strings.Contains(msg, "Content-Type: text/html"))
-	assert.True(t, strings.Contains(msg, "<p>Hello</p>"))
-}
-
-func TestBuildMessage_MIMEHeader(t *testing.T) {
-	cfg := config.SMTPConfig{From: "test@example.com"}
-	svc := NewEmailService(cfg, nil)
-
-	msg := svc.buildMessage("to@example.com", "Sub", "body")
-
-	assert.True(t, strings.Contains(msg, "MIME-Version: 1.0"))
 }
 
 // ──────────────────────────────────────────────
@@ -114,15 +87,15 @@ func TestPasswordResetTemplate_SpecialChars(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestNewStubSMSService(t *testing.T) {
-	svc := NewStubSMSService()
+	svc := NewStubSMSService(nil)
 	assert.NotNil(t, svc)
 }
 
 func TestStubSMSService_SendVerificationCode(t *testing.T) {
-	svc := NewStubSMSService()
+	svc := NewStubSMSService(nil)
 	err := svc.SendVerificationCode(context.Background(), "+8613800138000", "123456")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not implemented")
+	assert.Contains(t, err.Error(), "not yet supported")
 }
 
 // ──────────────────────────────────────────────

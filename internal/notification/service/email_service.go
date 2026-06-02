@@ -5,10 +5,9 @@ import (
 	"context"
 	"fmt"
 	"html/template"
-	"net/smtp"
-	"strings"
 
 	"go.uber.org/zap"
+	"gopkg.in/gomail.v2"
 
 	"github.com/rushairer/gosso/config"
 )
@@ -72,8 +71,7 @@ func (s *EmailService) SendVerificationCode(ctx context.Context, to, code string
 		return fmt.Errorf("render verification template: %w", err)
 	}
 
-	msg := s.buildMessage(to, subject, body.String())
-	return s.send(to, msg)
+	return s.send(to, subject, body.String())
 }
 
 // SendPasswordResetLink sends a password reset email
@@ -84,32 +82,19 @@ func (s *EmailService) SendPasswordResetLink(ctx context.Context, to, resetLink 
 		return fmt.Errorf("render password reset template: %w", err)
 	}
 
-	msg := s.buildMessage(to, subject, body.String())
-	return s.send(to, msg)
+	return s.send(to, subject, body.String())
 }
 
-func (s *EmailService) buildMessage(to, subject, body string) string {
-	var msg strings.Builder
-	fmt.Fprintf(&msg, "From: %s\r\n", s.from)
-	fmt.Fprintf(&msg, "To: %s\r\n", to)
-	fmt.Fprintf(&msg, "Subject: %s\r\n", subject)
-	msg.WriteString("MIME-Version: 1.0\r\n")
-	msg.WriteString("Content-Type: text/html; charset=\"utf-8\"\r\n")
-	msg.WriteString("\r\n")
-	msg.WriteString(body)
-	return msg.String()
-}
+func (s *EmailService) send(to, subject, htmlBody string) error {
+	msg := gomail.NewMessage()
+	msg.SetHeader("From", s.from)
+	msg.SetHeader("To", to)
+	msg.SetHeader("Subject", subject)
+	msg.SetBody("text/html", htmlBody)
 
-func (s *EmailService) send(to, msg string) error {
-	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+	dialer := gomail.NewDialer(s.host, s.port, s.username, s.password)
 
-	var auth smtp.Auth
-	if s.username != "" {
-		auth = smtp.PlainAuth("", s.username, s.password, s.host)
-	}
-
-	err := smtp.SendMail(addr, auth, s.from, []string{to}, []byte(msg))
-	if err != nil {
+	if err := dialer.DialAndSend(msg); err != nil {
 		s.logger.Error("Failed to send email",
 			zap.String("to", to),
 			zap.Error(err))
