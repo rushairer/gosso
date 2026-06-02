@@ -142,7 +142,7 @@ func initDatabase(cfg config.GoUnoConfig, logger *zap.Logger) (*sql.DB, error) {
 	db.SetConnMaxIdleTime(10 * time.Minute)
 
 	if err := db.Ping(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 

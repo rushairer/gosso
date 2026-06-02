@@ -159,30 +159,6 @@ func (m *mockAccountSvcForPasskey) UnbindFederatedIdentity(_ context.Context, _ 
 	return fmt.Errorf("not implemented")
 }
 
-// setupPasskeyRouter builds a gin.Engine with passkey controller.
-// Since PasskeyService requires WebAuthn + Redis, we test auth/validation paths.
-func setupPasskeyRouter(
-	passkeySvc *service.PasskeyService,
-	authSvc *mockAuthOrchForPasskey,
-	tokenMgr *mockTokenMgrForPasskey,
-	accountSvc *mockAccountSvcForPasskey,
-) *gin.Engine {
-	gin.SetMode(gin.TestMode)
-	engine := gin.New()
-
-	ctrl := NewPasskeyController(passkeySvc, authSvc, tokenMgr, accountSvc, zap.NewNop())
-
-	// Register routes with a mock JWT middleware that sets account_id
-	api := engine.Group("/api/auth")
-	jwtAuth := func(ctx *gin.Context) {
-		ctx.Set(middleware.ContextKeyAccountID, "account-001")
-		ctx.Next()
-	}
-	ctrl.RegisterRoutes(api, jwtAuth)
-
-	return engine
-}
-
 // ──────────────────────────────────────────────
 // RegisterBegin
 // ──────────────────────────────────────────────

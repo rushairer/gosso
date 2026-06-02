@@ -29,9 +29,7 @@ func createAccountExample() {
 	fmt.Println("=== 示例 1: 创建账号时设置 Metadata ===")
 
 	account := &domain.Account{
-		ID:          "account-001",
 		DisplayName: "张三",
-		Status:      domain.AccountStatusActive,
 		Metadata: map[string]any{
 			"department":   "engineering",
 			"level":        3,
@@ -129,9 +127,7 @@ func businessScenarioExample() {
 
 	// 模拟角色数据
 	role := &domain.Role{
-		ID:          "role-001",
-		Name:        "project_manager",
-		Permissions: []string{"project.create", "project.update", "user.view"},
+		Name: "project_manager",
 		Metadata: map[string]any{
 			"max_projects":    10,
 			"can_approve":     true,

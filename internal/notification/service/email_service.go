@@ -90,9 +90,9 @@ func (s *EmailService) SendPasswordResetLink(ctx context.Context, to, resetLink 
 
 func (s *EmailService) buildMessage(to, subject, body string) string {
 	var msg strings.Builder
-	msg.WriteString(fmt.Sprintf("From: %s\r\n", s.from))
-	msg.WriteString(fmt.Sprintf("To: %s\r\n", to))
-	msg.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
+	fmt.Fprintf(&msg, "From: %s\r\n", s.from)
+	fmt.Fprintf(&msg, "To: %s\r\n", to)
+	fmt.Fprintf(&msg, "Subject: %s\r\n", subject)
 	msg.WriteString("MIME-Version: 1.0\r\n")
 	msg.WriteString("Content-Type: text/html; charset=\"utf-8\"\r\n")
 	msg.WriteString("\r\n")

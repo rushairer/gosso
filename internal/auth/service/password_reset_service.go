@@ -12,7 +12,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/internal/account/domain"
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
@@ -92,7 +91,7 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 	}
 
 	// Find email credential
-	cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, domain.CredentialTypeEmail, email)
+	cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, accountDomain.CredentialTypeEmail, email)
 	if err != nil {
 		// Not found -> Silent success to prevent enumeration
 		s.logger.Debug("Password reset requested for non-existent email", zap.String("email", email))

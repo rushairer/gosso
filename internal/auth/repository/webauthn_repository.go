@@ -115,7 +115,7 @@ func (r *webAuthnCredentialRepositoryImpl) FindByAccountID(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var credentials []*domain.WebAuthnCredential
 	for rows.Next() {

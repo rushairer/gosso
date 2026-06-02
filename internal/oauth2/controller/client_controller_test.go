@@ -18,7 +18,6 @@ import (
 	"github.com/rushairer/gosso/internal/auth/middleware"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
-	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
 // ──────────────────────────────────────────────
@@ -67,32 +66,6 @@ func (m *mockOAuth2ClientService) DeleteClient(_ context.Context, _ string) erro
 	}
 	return nil
 }
-
-// ──────────────────────────────────────────────
-// Mock TokenManager (local interface)
-// ──────────────────────────────────────────────
-
-type mockOAuth2TokenManager struct{}
-
-func (m *mockOAuth2TokenManager) GenerateAccessToken(_ *tokenDomain.AccessTokenClaims) (string, error) {
-	return "mock-token", nil
-}
-
-func (m *mockOAuth2TokenManager) GenerateRefreshToken(_ context.Context, _, _, _, _ string) (*tokenDomain.RefreshToken, error) {
-	return &tokenDomain.RefreshToken{Token: "mock-refresh"}, nil
-}
-
-func (m *mockOAuth2TokenManager) RotateRefreshToken(_ context.Context, _ string) (*tokenDomain.RefreshToken, error) {
-	return &tokenDomain.RefreshToken{Token: "rotated"}, nil
-}
-
-func (m *mockOAuth2TokenManager) RevokeRefreshToken(_ context.Context, _ string) error { return nil }
-
-func (m *mockOAuth2TokenManager) IntrospectToken(_ context.Context, _ string) (map[string]any, error) {
-	return map[string]any{"active": true}, nil
-}
-
-func (m *mockOAuth2TokenManager) AccessExpiry() time.Duration { return 15 * time.Minute }
 
 // ──────────────────────────────────────────────
 // Test helpers

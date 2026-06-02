@@ -165,7 +165,6 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 			tokenClaims, err := c.tokenSvc.ValidateAccessToken(tokenString)
 			if err == nil && tokenClaims != nil {
-				accountID = tokenClaims.AccountID
 				clientID = tokenClaims.ClientID
 				if err := c.logoutSvc.LogoutBySessionID(ctx, tokenClaims.AccountID, tokenClaims.SessionID); err != nil {
 					c.logger.Error("Logout by session ID failed", zap.String("session_id", tokenClaims.SessionID), zap.Error(err))
