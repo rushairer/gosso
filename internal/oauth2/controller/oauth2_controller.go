@@ -32,7 +32,7 @@ type TokenManager interface {
 //go:embed template/consent.html
 var consentTemplateFS embed.FS
 
-// OAuth2Controller OAuth2 协议控制器
+// OAuth2Controller handles OAuth2 protocol endpoints.
 type OAuth2Controller struct {
 	clientSvc   oauth2Service.OAuth2ClientService
 	authCodeSvc *oauth2Service.AuthCodeService
@@ -43,7 +43,7 @@ type OAuth2Controller struct {
 	logger      *zap.Logger
 }
 
-// NewOAuth2Controller 创建 OAuth2 控制器实例
+// NewOAuth2Controller creates a new OAuth2 controller instance.
 func NewOAuth2Controller(
 	clientSvc oauth2Service.OAuth2ClientService,
 	authCodeSvc *oauth2Service.AuthCodeService,
@@ -67,7 +67,7 @@ func NewOAuth2Controller(
 	}
 }
 
-// RegisterRoutes 注册 OAuth2 路由
+// RegisterRoutes registers OAuth2 routes.
 func (c *OAuth2Controller) RegisterRoutes(server *gin.Engine, authMiddleware gin.HandlerFunc) {
 	oauth2 := server.Group("/oauth2")
 	{
@@ -143,7 +143,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 	})
 }
 
-// ConsentRequest 授权同意请求体
+// ConsentRequest is the consent approval request body.
 type ConsentRequest struct {
 	ClientID            string `form:"client_id" binding:"required"`
 	RedirectURI         string `form:"redirect_uri" binding:"required"`
@@ -163,7 +163,7 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		return
 	}
 
-	// 表单中 approved 通过 button value 提交
+	// approved is submitted via form button value
 	approved := ctx.PostForm("approved")
 	req.Approved = approved == "true"
 
@@ -200,7 +200,7 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	redirectWithCode(ctx, req.RedirectURI, code.Code, req.State)
 }
 
-// TokenRequest 令牌交换请求体
+// TokenRequest is the token exchange request body.
 type TokenRequest struct {
 	GrantType    string `json:"grant_type" binding:"required"`
 	Code         string `json:"code"`
@@ -392,7 +392,7 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// IntrospectRequest Token Introspection 请求体
+// IntrospectRequest is the token introspection request body.
 type IntrospectRequest struct {
 	Token string `json:"token" binding:"required"`
 }
@@ -405,7 +405,7 @@ func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 		return
 	}
 
-	// 客户端认证（Basic Auth 或 client_id/client_secret）- RFC 7662 要求必须认证
+	// Client authentication (Basic Auth or client_id/client_secret) - RFC 7662 requires authentication
 	clientID, clientSecret, hasBasicAuth := ctx.Request.BasicAuth()
 	if !hasBasicAuth {
 		clientID = ctx.PostForm("client_id")

@@ -10,27 +10,27 @@ import (
 	"github.com/rushairer/gosso/internal/account/domain"
 )
 
-// CredentialRepository 凭证仓储接口
+// CredentialRepository defines the interface for credential repository
 type CredentialRepository interface {
-	// CreateCredentials 批量创建凭证（需要事务）
+	// CreateCredentials creates multiple credentials (requires transaction)
 	CreateCredentials(ctx context.Context, tx *sql.Tx, credentials []*domain.Credential) error
 
-	// FindByAccountAndType 根据账号 ID 和类型查找凭证
+	// FindByAccountAndType finds credentials by account ID and type
 	FindByAccountAndType(ctx context.Context, accountID string, credType domain.CredentialType) ([]*domain.Credential, error)
 
-	// FindByTypeAndIdentifier 根据类型和标识符查找凭证（如通过邮箱查找）
+	// FindByTypeAndIdentifier finds a credential by type and identifier (e.g. by email)
 	FindByTypeAndIdentifier(ctx context.Context, credType domain.CredentialType, identifier string) (*domain.Credential, error)
 
-	// FindPasswordCredential 查找账号的密码凭证
+	// FindPasswordCredential finds password credential of an account
 	FindPasswordCredential(ctx context.Context, accountID string) (*domain.Credential, error)
 
-	// UpdateCredential 更新凭证（需要事务）
+	// UpdateCredential updates a credential (requires transaction)
 	UpdateCredential(ctx context.Context, tx *sql.Tx, credential *domain.Credential) error
 
-	// SoftDeleteCredentialsByAccount 软删除账号的所有凭证（需要事务）
+	// SoftDeleteCredentialsByAccount soft deletes all credentials of an account (requires transaction)
 	SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
 
-	// SoftDeleteCredential 软删除单个凭证（需要事务）
+	// SoftDeleteCredential soft deletes a single credential (requires transaction)
 	SoftDeleteCredential(ctx context.Context, tx *sql.Tx, credentialID string, deletedAt time.Time) error
 }
 
@@ -38,12 +38,12 @@ type credentialRepositoryImpl struct {
 	db *sql.DB
 }
 
-// NewCredentialRepository 创建凭证仓储
+// NewCredentialRepository creates a new credential repository
 func NewCredentialRepository(db *sql.DB) CredentialRepository {
 	return &credentialRepositoryImpl{db: db}
 }
 
-// CreateCredentials 批量创建凭证
+// CreateCredentials creates multiple credentials
 func (r *credentialRepositoryImpl) CreateCredentials(ctx context.Context, tx *sql.Tx, credentials []*domain.Credential) error {
 	query := `
 		INSERT INTO account_credentials 
@@ -78,7 +78,7 @@ func (r *credentialRepositoryImpl) CreateCredentials(ctx context.Context, tx *sq
 	return nil
 }
 
-// FindByAccountAndType 根据账号 ID 和类型查找凭证
+// FindByAccountAndType finds credentials by account ID and type
 func (r *credentialRepositoryImpl) FindByAccountAndType(ctx context.Context, accountID string, credType domain.CredentialType) ([]*domain.Credential, error) {
 	query := `
 		SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential, 
@@ -127,7 +127,7 @@ func (r *credentialRepositoryImpl) FindByAccountAndType(ctx context.Context, acc
 	return credentials, nil
 }
 
-// FindByTypeAndIdentifier 根据类型和标识符查找凭证
+// FindByTypeAndIdentifier finds a credential by type and identifier
 func (r *credentialRepositoryImpl) FindByTypeAndIdentifier(ctx context.Context, credType domain.CredentialType, identifier string) (*domain.Credential, error) {
 	query := `
 		SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
@@ -169,7 +169,7 @@ func (r *credentialRepositoryImpl) FindByTypeAndIdentifier(ctx context.Context, 
 	return cred, nil
 }
 
-// FindPasswordCredential 查找账号的密码凭证
+// FindPasswordCredential finds password credential of an account
 func (r *credentialRepositoryImpl) FindPasswordCredential(ctx context.Context, accountID string) (*domain.Credential, error) {
 	credentials, err := r.FindByAccountAndType(ctx, accountID, domain.CredentialTypePassword)
 	if err != nil {
@@ -183,7 +183,7 @@ func (r *credentialRepositoryImpl) FindPasswordCredential(ctx context.Context, a
 	return credentials[0], nil
 }
 
-// UpdateCredential 更新凭证
+// UpdateCredential updates a credential
 func (r *credentialRepositoryImpl) UpdateCredential(ctx context.Context, tx *sql.Tx, credential *domain.Credential) error {
 	query := `
 		UPDATE account_credentials
@@ -222,7 +222,7 @@ func (r *credentialRepositoryImpl) UpdateCredential(ctx context.Context, tx *sql
 	return nil
 }
 
-// SoftDeleteCredentialsByAccount 软删除账号的所有凭证
+// SoftDeleteCredentialsByAccount soft deletes all credentials of an account
 func (r *credentialRepositoryImpl) SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `
 		UPDATE account_credentials
@@ -238,7 +238,7 @@ func (r *credentialRepositoryImpl) SoftDeleteCredentialsByAccount(ctx context.Co
 	return nil
 }
 
-// SoftDeleteCredential 软删除单个凭证
+// SoftDeleteCredential soft deletes a single credential
 func (r *credentialRepositoryImpl) SoftDeleteCredential(ctx context.Context, tx *sql.Tx, credentialID string, deletedAt time.Time) error {
 	query := `
 		UPDATE account_credentials

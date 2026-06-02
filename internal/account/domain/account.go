@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// AccountStatus 账号状态
+// AccountStatus represents the account lifecycle state.
 type AccountStatus string
 
 const (
@@ -15,7 +15,7 @@ const (
 	AccountStatusDeleted   AccountStatus = "deleted"
 )
 
-// Account 账号领域模型
+// Account is the account domain model.
 type Account struct {
 	ID          string         `json:"id"`
 	Username    *string        `json:"username,omitempty"`
@@ -30,7 +30,7 @@ type Account struct {
 	DeletedAt   *time.Time     `json:"deleted_at,omitempty"`
 }
 
-// NewAccount 创建新账号
+// NewAccount creates a new account.
 func NewAccount(displayName string) *Account {
 	return &Account{
 		ID:          uuid.New().String(),
@@ -44,22 +44,22 @@ func NewAccount(displayName string) *Account {
 	}
 }
 
-// IsDeleted 是否已软删除
+// IsDeleted reports whether the account has been soft-deleted.
 func (a *Account) IsDeleted() bool {
 	return a.DeletedAt != nil
 }
 
-// IsActive 是否为活跃状态
+// IsActive reports whether the account is in active status.
 func (a *Account) IsActive() bool {
 	return a.Status == AccountStatusActive && !a.IsDeleted()
 }
 
-// IsSuspended 是否已被禁用
+// IsSuspended reports whether the account has been suspended.
 func (a *Account) IsSuspended() bool {
 	return a.Status == AccountStatusSuspended
 }
 
-// SoftDelete 软删除账号
+// SoftDelete soft-deletes the account.
 func (a *Account) SoftDelete() {
 	now := time.Now()
 	a.DeletedAt = &now
@@ -67,13 +67,13 @@ func (a *Account) SoftDelete() {
 	a.UpdatedAt = now
 }
 
-// Suspend 禁用账号
+// Suspend suspends the account.
 func (a *Account) Suspend() {
 	a.Status = AccountStatusSuspended
 	a.UpdatedAt = time.Now()
 }
 
-// Activate 启用账号
+// Activate reactivates the account.
 func (a *Account) Activate() {
 	a.Status = AccountStatusActive
 	a.UpdatedAt = time.Now()

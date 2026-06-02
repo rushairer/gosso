@@ -23,23 +23,23 @@ func NewAuditor(_ context.Context, db *sql.DB) *Auditor {
 	auditorCtx, cancel := context.WithCancel(context.Background())
 	auditor := Auditor{db: db, cancel: cancel}
 	auditor.batchflow = batchflow.NewPostgreSQLBatchFlow(auditorCtx, db, batchflow.PipelineConfig{
-		BufferSize:    100,                    // 缓冲区大小
-		FlushSize:     50,                     // 批量刷新大小
-		FlushInterval: 5 * time.Second,        // 刷新间隔
-		Timeout:       300 * time.Millisecond, // 超时时间
+		BufferSize:    100,                    // Buffer size
+		FlushSize:     50,                     // Batch flush size
+		FlushInterval: 5 * time.Second,        // Flush interval
+		Timeout:       300 * time.Millisecond, // Timeout
 		Retry: batchflow.RetryConfig{
-			Enabled:     true,                  // 是否重试
-			MaxAttempts: 3,                     // 总尝试次数（含首轮），建议 2~3
-			BackoffBase: 10 * time.Millisecond, // 退避基值（指数退避起点）
-			MaxBackoff:  20 * time.Millisecond, // 最大退避时长（上限）
+			Enabled:     true,                  // Enable retry
+			MaxAttempts: 3,                     // Total attempts (including first attempt), suggest 2-3
+			BackoffBase: 10 * time.Millisecond, // Backoff base (exponential backoff start)
+			MaxBackoff:  20 * time.Millisecond, // Max backoff duration (upper limit)
 		},
 
-		ConcurrencyLimit: 100, // 批量并发限制
+		ConcurrencyLimit: 100, // Batch concurrency limit
 	})
 	auditor.recordSchema = batchflow.NewSQLSchema(
-		"audit_record",                                                                                       // 表名
-		batchflow.ConflictIgnoreOperationConfig,                                                              // 冲突策略
-		"id", "tx_id", "account_id", "action", "actor", "resource", "old", "new", "meta", "dd", "created_at", // 列名
+		"audit_record",                                                                                       // Table name
+		batchflow.ConflictIgnoreOperationConfig,                                                              // Conflict policy
+		"id", "tx_id", "account_id", "action", "actor", "resource", "old", "new", "meta", "dd", "created_at", // Column names
 	)
 
 	return &auditor

@@ -23,7 +23,7 @@ import (
 	"github.com/rushairer/gosso/utility"
 )
 
-// LoginRequest 登录请求
+// LoginRequest login request
 type LoginRequest struct {
 	Username  string
 	Password  string
@@ -31,7 +31,7 @@ type LoginRequest struct {
 	UserAgent string
 }
 
-// LoginResult 登录结果
+// LoginResult login result
 type LoginResult struct {
 	Account      *accountDomain.Account
 	Session      *sessionDomain.Session
@@ -41,13 +41,13 @@ type LoginResult struct {
 	MFATypes     []string `json:"mfa_types,omitempty"`
 }
 
-// RefreshResult 刷新令牌结果
+// RefreshResult refresh token result
 type RefreshResult struct {
 	AccessToken  string
 	RefreshToken string
 }
 
-// AuthService 认证编排服务
+// AuthService authentication orchestration service
 type AuthService struct {
 	db             *sql.DB
 	accountSvc     accountService.AccountService
@@ -62,7 +62,7 @@ type AuthService struct {
 	logger         *zap.Logger
 }
 
-// NewAuthService 创建认证服务实例
+// NewAuthService creates a new auth service instance
 func NewAuthService(
 	db *sql.DB,
 	accountSvc accountService.AccountService,
@@ -94,7 +94,7 @@ func NewAuthService(
 	}
 }
 
-// LoginByUsernamePassword 用户名/密码登录
+// LoginByUsernamePassword login by username and password
 func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginRequest) (result *LoginResult, err error) {
 	defer func() {
 		if err != nil {
@@ -108,36 +108,36 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		}
 	}()
 
-	// 0. 检查登录失败限速
+	// 0. Check rate limit for login failures
 	attemptsKey := fmt.Sprintf("login_attempts:%s", req.Username)
 	count, err := s.redis.IncrWithExpiry(ctx, attemptsKey, 15*time.Minute)
 	if err == nil && count > 5 {
 		return nil, ErrAccountLocked
 	}
 
-	// 1. 查找账号
+	// 1. Find account
 	account, err := s.accountSvc.FindAccountByUsername(ctx, req.Username)
 	if err != nil {
 		return nil, ErrInvalidCredentials
 	}
 
-	// 2. 检查账号状态
+	// 2. Check account status
 	if account.Status != accountDomain.AccountStatusActive {
 		return nil, ErrAccountNotActive
 	}
 
-	// 3. 查找密码凭证
+	// 3. Find password credential
 	cred, err := s.credentialRepo.FindPasswordCredential(ctx, account.ID)
 	if err != nil {
 		return nil, ErrInvalidCredentials
 	}
 
-	// 4. 验证密码
+	// 4. Verify password
 	if !cred.VerifyPassword(req.Password) {
 		return nil, ErrInvalidCredentials
 	}
 
-	// 4.5 检查是否需要 MFA
+	// 4.5 Check if MFA is required
 	mfaEnabled, _ := s.mfaSvc.IsMFAEnabled(ctx, account.ID)
 	if mfaEnabled {
 		mfaToken, err := s.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
@@ -150,12 +150,12 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		return &LoginResult{
 			Account:     account,
 			RequiresMFA: true,
-			AccessToken: mfaToken, // 短期 MFA session token
+			AccessToken: mfaToken, // short-term MFA session token
 			MFATypes:    s.mfaSvc.GetMFATypes(ctx, account.ID),
 		}, nil
 	}
 
-	// 5. 创建会话
+	// 5. Create session
 	now := time.Now()
 	session := &sessionDomain.Session{
 		ID:           uuid.New(),
@@ -173,10 +173,10 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		return nil, fmt.Errorf("create session: %w", err)
 	}
 
-	// 5.5 强制执行并发会话限制
+	// 5.5 Enforce concurrent session limit
 	s.sessionSvc.EnforceSessionLimit(ctx, account.ID)
 
-	// 6. 获取角色和权限
+	// 6. Get roles and permissions
 	roles, err := s.roleRepo.FindRolesByAccountID(ctx, account.ID)
 	if err != nil {
 		s.logger.Warn("Failed to fetch roles for token", zap.Error(err), zap.String("account_id", account.ID))
@@ -190,7 +190,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		allPermissions = append(allPermissions, role.Permissions...)
 	}
 
-	// 7. 生成 Access Token
+	// 7. Generate Access Token
 	accessToken, err := s.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		AccountID:   account.ID,
 		Roles:       roleNames,
@@ -201,13 +201,13 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		return nil, fmt.Errorf("generate access token: %w", err)
 	}
 
-	// 8. 生成 Refresh Token
+	// 8. Generate Refresh Token
 	refreshToken, err := s.tokenSvc.GenerateRefreshToken(ctx, account.ID, "", session.ID.String(), "")
 	if err != nil {
 		return nil, fmt.Errorf("generate refresh token: %w", err)
 	}
 
-	// 9. 更新凭证最后使用时间
+	// 9. Update credential last used time
 	cred.MarkUsed()
 	if txErr := s.updateCredentialLastUsed(ctx, cred); txErr != nil {
 		s.logger.Warn("Failed to update credential last_used_at", zap.Error(txErr))
@@ -217,10 +217,10 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		zap.String("account_id", account.ID),
 		zap.String("session_id", session.ID.String()))
 
-	// 清除登录失败计数
+	// Clear login failures count
 	_ = s.redis.Del(ctx, attemptsKey)
 
-	// 10. 审计日志
+	// 10. Audit log
 	accountUUID := uuid.MustParse(account.ID)
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionLoginSuccess,
@@ -239,7 +239,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	}, nil
 }
 
-// VerifyMFALogin MFA 验证后完成登录
+// VerifyMFALogin completes login after MFA verification
 func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfaType, ip, userAgent string) (result *LoginResult, err error) {
 	defer func() {
 		if err != nil {
@@ -253,7 +253,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 		}
 	}()
 
-	// 1. 验证 MFA token
+	// 1. Verify MFA token
 	claims, err := s.tokenSvc.ValidateAccessToken(mfaToken)
 	if err != nil {
 		return nil, ErrInvalidMFAToken
@@ -263,15 +263,15 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	}
 	accountID := claims.AccountID
 
-	// 2. 根据 MFA 类型验证
+	// 2. Verify based on MFA type
 	switch mfaType {
 	case "passkey":
 		if s.passkeySvc == nil {
 			return nil, ErrPasskeyNotAvailable
 		}
-		// passkey 验证通过 HTTP request 完成，此处 mfaCode 是 sessionData JSON
-		// 但 Passkey MFA 的实际验证在 controller 层通过 CompleteMFALogin 完成
-		// 这里仅做 token 验证，passkey 验证结果通过 Redis 标记传递
+		// passkey verification is done via HTTP request, here mfaCode is sessionData JSON
+		// but the actual validation of Passkey MFA is completed in the controller layer via CompleteMFALogin
+		// here we only do token validation, passkey validation result is passed through Redis marker
 		passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", accountID)
 		verified, verr := s.redis.Get(ctx, passkeyKey)
 		if verr != nil || verified != "1" {
@@ -289,13 +289,13 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 		}
 	}
 
-	// 3. 查找账号
+	// 3. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrAccountNotFound, err)
 	}
 
-	// 4. 创建会话
+	// 4. Create session
 	now := time.Now()
 	session := &sessionDomain.Session{
 		ID:           uuid.New(),
@@ -312,10 +312,10 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 		return nil, fmt.Errorf("create session: %w", err)
 	}
 
-	// 4.5 强制执行并发会话限制
+	// 4.5 Enforce concurrent session limit
 	s.sessionSvc.EnforceSessionLimit(ctx, account.ID)
 
-	// 5. 获取角色
+	// 5. Get roles
 	roles, err := s.roleRepo.FindRolesByAccountID(ctx, account.ID)
 	if err != nil {
 		s.logger.Warn("Failed to fetch roles for MFA login", zap.Error(err))
@@ -328,7 +328,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 		allPermissions = append(allPermissions, role.Permissions...)
 	}
 
-	// 6. 生成 tokens
+	// 6. Generate tokens
 	accessToken, err := s.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		AccountID:   account.ID,
 		Roles:       roleNames,
@@ -346,7 +346,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 
 	s.logger.Info("MFA login successful", zap.String("account_id", account.ID))
 
-	// 审计日志
+	// Audit log
 	accountUUID := uuid.MustParse(account.ID)
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionMFALoginSuccess,
@@ -365,7 +365,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	}, nil
 }
 
-// LoginByPasskey 通过 Passkey 验证后直接登录（跳过密码验证）
+// LoginByPasskey login directly after passkey verification (skipping password check)
 func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAgent string) (result *LoginResult, err error) {
 	defer func() {
 		if err != nil {
@@ -379,18 +379,18 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 		}
 	}()
 
-	// 1. 查找账号
+	// 1. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
 		return nil, ErrAccountNotFound
 	}
 
-	// 2. 检查账号状态
+	// 2. Check account status
 	if account.Status != accountDomain.AccountStatusActive {
 		return nil, ErrAccountNotActive
 	}
 
-	// 3. 检查是否需要 MFA
+	// 3. Check if MFA is required
 	mfaEnabled, _ := s.mfaSvc.IsMFAEnabled(ctx, account.ID)
 	if mfaEnabled {
 		mfaToken, err := s.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
@@ -408,7 +408,7 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 		}, nil
 	}
 
-	// 4. 创建会话
+	// 4. Create session
 	now := time.Now()
 	session := &sessionDomain.Session{
 		ID:           uuid.New(),
@@ -428,7 +428,7 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 
 	s.sessionSvc.EnforceSessionLimit(ctx, account.ID)
 
-	// 5. 获取角色和权限
+	// 5. Get roles and permissions
 	roles, err := s.roleRepo.FindRolesByAccountID(ctx, account.ID)
 	if err != nil {
 		s.logger.Warn("Failed to fetch roles for token", zap.Error(err), zap.String("account_id", account.ID))
@@ -442,7 +442,7 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 		allPermissions = append(allPermissions, role.Permissions...)
 	}
 
-	// 6. 生成 Access Token
+	// 6. Generate Access Token
 	accessToken, err := s.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		AccountID:   account.ID,
 		Roles:       roleNames,
@@ -453,7 +453,7 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 		return nil, fmt.Errorf("generate access token: %w", err)
 	}
 
-	// 7. 生成 Refresh Token
+	// 7. Generate Refresh Token
 	refreshToken, err := s.tokenSvc.GenerateRefreshToken(ctx, account.ID, "", session.ID.String(), "")
 	if err != nil {
 		return nil, fmt.Errorf("generate refresh token: %w", err)
@@ -463,7 +463,7 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 		zap.String("account_id", account.ID),
 		zap.String("session_id", session.ID.String()))
 
-	// 8. 审计日志
+	// 8. Audit log
 	accountUUID := uuid.MustParse(account.ID)
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionLoginSuccess,
@@ -482,9 +482,9 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 	}, nil
 }
 
-// Logout 注销：删除会话 + 撤销令牌
+// Logout deletes session and revokes tokens
 func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, accessTokenJTI string, tokenExpiresAt time.Time) error {
-	// 1. 删除会话
+	// 1. Delete session
 	parsedSessionID, err := uuid.Parse(sessionID)
 	if err != nil {
 		return fmt.Errorf("invalid session id: %w", err)
@@ -494,14 +494,14 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 		s.logger.Warn("Failed to delete session during logout", zap.Error(err))
 	}
 
-	// 2. 撤销 Access Token（加入黑名单）
+	// 2. Revoke Access Token (add to blacklist)
 	if accessTokenJTI != "" {
 		if err := s.tokenSvc.RevokeAllForSession(ctx, sessionID); err != nil {
 			s.logger.Warn("Failed to revoke refresh tokens", zap.Error(err))
 		}
 	}
 
-	// 3. 审计日志
+	// 3. Audit log
 	var acctID *uuid.UUID
 	if accountID != "" {
 		id := uuid.MustParse(accountID)
@@ -519,15 +519,15 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 	return nil
 }
 
-// RefreshTokens 刷新令牌
+// RefreshTokens refreshes access and refresh tokens
 func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*RefreshResult, error) {
-	// 1. 验证并轮转 Refresh Token
+	// 1. Verify and rotate Refresh Token
 	newRefreshToken, err := s.tokenSvc.RotateRefreshToken(ctx, refreshToken)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidRefreshToken, err)
 	}
 
-	// 2. 验证会话是否仍然有效
+	// 2. Verify if the session is still active
 	sessionID, err := uuid.Parse(newRefreshToken.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidSessionID, err)
@@ -537,7 +537,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		return nil, fmt.Errorf("%w: %w", ErrSessionInvalid, err)
 	}
 
-	// 3. 重新获取角色和权限
+	// 3. Fetch roles and permissions again
 	roles, err := s.roleRepo.FindRolesByAccountID(ctx, newRefreshToken.AccountID)
 	if err != nil {
 		s.logger.Warn("Failed to fetch roles during refresh", zap.Error(err))
@@ -551,7 +551,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		allPermissions = append(allPermissions, role.Permissions...)
 	}
 
-	// 4. 生成新 Access Token
+	// 4. Generate new Access Token
 	accessToken, err := s.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		AccountID:   newRefreshToken.AccountID,
 		Roles:       roleNames,
@@ -562,7 +562,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		return nil, fmt.Errorf("generate access token: %w", err)
 	}
 
-	// 5. 刷新会话
+	// 5. Refresh session
 	_ = s.sessionSvc.RefreshSession(ctx, sessionID)
 
 	return &RefreshResult{
@@ -571,7 +571,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	}, nil
 }
 
-// ValidateSession 验证会话
+// ValidateSession validates the session
 func (s *AuthService) ValidateSession(ctx context.Context, sessionID string) (*sessionDomain.Session, error) {
 	parsedID, err := uuid.Parse(sessionID)
 	if err != nil {
@@ -580,12 +580,12 @@ func (s *AuthService) ValidateSession(ctx context.Context, sessionID string) (*s
 	return s.sessionSvc.ValidateSession(ctx, parsedID)
 }
 
-// ListSessions 列出账号的所有活跃会话
+// ListSessions lists all active sessions for the account
 func (s *AuthService) ListSessions(ctx context.Context, accountID string) ([]*sessionDomain.Session, error) {
 	return s.sessionSvc.ListSessionsByAccount(ctx, accountID)
 }
 
-// RevokeSession 撤销指定会话
+// RevokeSession revokes specified session
 func (s *AuthService) RevokeSession(ctx context.Context, accountID, sessionID string) error {
 	parsedID, err := uuid.Parse(sessionID)
 	if err != nil {
@@ -594,22 +594,22 @@ func (s *AuthService) RevokeSession(ctx context.Context, accountID, sessionID st
 	return s.sessionSvc.RevokeSession(ctx, accountID, parsedID)
 }
 
-// MFAService 返回 MFA 服务实例
+// MFAService returns the MFA service instance
 func (s *AuthService) MFAService() *MFAService {
 	return s.mfaSvc
 }
 
-// PasskeyService 返回 Passkey 服务实例
+// PasskeyService returns the Passkey service instance
 func (s *AuthService) PasskeyService() *PasskeyService {
 	return s.passkeySvc
 }
 
-// TokenService 返回 Token 服务实例
+// TokenService returns the Token service instance
 func (s *AuthService) TokenService() *tokenService.TokenService {
 	return s.tokenSvc
 }
 
-// ValidateMFAToken 验证 MFA token 并返回 claims
+// ValidateMFAToken validates MFA token and returns claims
 func (s *AuthService) ValidateMFAToken(ctx context.Context, mfaToken string) (*tokenDomain.AccessTokenClaims, error) {
 	claims, err := s.tokenSvc.ValidateAccessToken(mfaToken)
 	if err != nil {
@@ -621,7 +621,7 @@ func (s *AuthService) ValidateMFAToken(ctx context.Context, mfaToken string) (*t
 	return claims, nil
 }
 
-// MarkPasskeyMFAVerified 标记 passkey MFA 已通过验证
+// MarkPasskeyMFAVerified marks passkey MFA as verified
 func (s *AuthService) MarkPasskeyMFAVerified(ctx context.Context, accountID string) error {
 	key := fmt.Sprintf("webauthn:mfa_verified:%s", accountID)
 	return s.redis.Set(ctx, key, "1", challengeTTL)
@@ -635,7 +635,7 @@ func (s *AuthService) auditLog(ctx context.Context, record *auditDomain.AuditRec
 	}
 }
 
-// updateCredentialLastUsed 更新凭证最后使用时间
+// updateCredentialLastUsed updates the last used time of a credential
 func (s *AuthService) updateCredentialLastUsed(ctx context.Context, cred *accountDomain.Credential) error {
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {

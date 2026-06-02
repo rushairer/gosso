@@ -71,11 +71,11 @@ func TestValidateCode_SingleUse(t *testing.T) {
 		[]string{"openid"}, "", "", "")
 	require.NoError(t, err)
 
-	// 第一次使用成功
+	// First use succeeds
 	_, err = svc.ValidateCode(ctx, code.Code, "client-003", "http://localhost/callback", nil)
 	require.NoError(t, err)
 
-	// 第二次使用失败（已从 Redis 删除）
+	// Second use fails (already deleted from Redis)
 	_, err = svc.ValidateCode(ctx, code.Code, "client-003", "http://localhost/callback", nil)
 	assert.ErrorIs(t, err, domain.ErrCodeNotFound)
 }

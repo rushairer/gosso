@@ -12,9 +12,9 @@ import (
 	"github.com/rushairer/gosso/internal/db"
 )
 
-// 账号模块使用示例
+// Account module usage example
 func main() {
-	// 1. 连接数据库
+	// 1. Connect to the database
 	dbConfig := &db.Config{
 		Host:            "localhost",
 		Port:            5432,
@@ -30,35 +30,35 @@ func main() {
 
 	database, err := db.Connect(dbConfig)
 	if err != nil {
-		log.Fatalf("连接数据库失败: %v", err)
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer database.Close()
 
-	// 2. 初始化账号服务
+	// 2. Initialize the account service
 	accountService := account.InitializeAccountModule(database.DB, nil)
 
 	ctx := context.Background()
 
-	// 3. 注册账号示例
+	// 3. Register account example
 	registerExample(ctx, accountService)
 
-	// 4. 查找账号示例
+	// 4. Find account example
 	findAccountExample(ctx, accountService)
 
-	// 5. 修改密码示例
+	// 5. Change password example
 	changePasswordExample(ctx, accountService)
 
-	// 6. 绑定第三方身份示例
+	// 6. Bind third-party identity example
 	bindFederatedIdentityExample(ctx, accountService)
 
-	// 7. 分配角色示例
+	// 7. Assign role example
 	assignRoleExample(ctx, accountService)
 
-	// 8. 软删除账号示例
+	// 8. Soft-delete account example
 	softDeleteAccountExample(ctx, accountService)
 }
 
-// registerExample 注册账号示例
+// registerExample registers an account as an example
 func registerExample(ctx context.Context, accountService service.AccountService) {
 	req := &service.RegisterAccountRequest{
 		Username:    "johndoe",
@@ -75,49 +75,49 @@ func registerExample(ctx context.Context, accountService service.AccountService)
 
 	account, err := accountService.RegisterAccount(ctx, req)
 	if err != nil {
-		log.Printf("注册失败: %v", err)
+		log.Printf("Registration failed: %v", err)
 		return
 	}
 
-	fmt.Printf("✅ 注册成功:\n")
-	fmt.Printf("   账号 ID: %s\n", account.ID)
-	fmt.Printf("   用户名: %v\n", account.Username)
-	fmt.Printf("   显示名称: %s\n", account.DisplayName)
-	fmt.Printf("   状态: %s\n", account.Status)
+	fmt.Printf("✅ Registration succeeded:\n")
+	fmt.Printf("   Account ID: %s\n", account.ID)
+	fmt.Printf("   Username: %v\n", account.Username)
+	fmt.Printf("   Display Name: %s\n", account.DisplayName)
+	fmt.Printf("   Status: %s\n", account.Status)
 }
 
-// findAccountExample 查找账号示例
+// findAccountExample lists finding an account as an example
 func findAccountExample(ctx context.Context, accountService service.AccountService) {
-	// 根据用户名查找
+	// Find by username
 	account, err := accountService.FindAccountByUsername(ctx, "johndoe")
 	if err != nil {
-		log.Printf("查找账号失败: %v", err)
+		log.Printf("Failed to find account: %v", err)
 		return
 	}
 
-	fmt.Printf("✅ 查找账号成功:\n")
-	fmt.Printf("   账号 ID: %s\n", account.ID)
-	fmt.Printf("   用户名: %v\n", account.Username)
-	fmt.Printf("   创建时间: %s\n", account.CreatedAt.Format(time.RFC3339))
+	fmt.Printf("✅ Found account:\n")
+	fmt.Printf("   Account ID: %s\n", account.ID)
+	fmt.Printf("   Username: %v\n", account.Username)
+	fmt.Printf("   Created At: %s\n", account.CreatedAt.Format(time.RFC3339))
 }
 
-// changePasswordExample 修改密码示例
+// changePasswordExample changes password as an example
 func changePasswordExample(ctx context.Context, accountService service.AccountService) {
-	// 假设已经获取了账号 ID
+	// Assuming the account ID has been obtained
 	accountID := "some-account-id"
 	oldPassword := "OldPassword123!"
 	newPassword := "NewSecurePassword456!"
 
 	err := accountService.ChangePassword(ctx, accountID, oldPassword, newPassword)
 	if err != nil {
-		log.Printf("修改密码失败: %v", err)
+		log.Printf("Failed to change password: %v", err)
 		return
 	}
 
-	fmt.Printf("✅ 密码修改成功\n")
+	fmt.Printf("✅ Password changed successfully\n")
 }
 
-// bindFederatedIdentityExample 绑定第三方身份示例
+// bindFederatedIdentityExample binds a third-party identity as an example
 func bindFederatedIdentityExample(ctx context.Context, accountService service.AccountService) {
 	accountID := "some-account-id"
 	provider := domain.ProviderGoogle
@@ -132,36 +132,36 @@ func bindFederatedIdentityExample(ctx context.Context, accountService service.Ac
 
 	err := accountService.BindFederatedIdentity(ctx, accountID, provider, providerUserID, profile)
 	if err != nil {
-		log.Printf("绑定第三方身份失败: %v", err)
+		log.Printf("Failed to bind federated identity: %v", err)
 		return
 	}
 
-	fmt.Printf("✅ 成功绑定 Google 账号\n")
+	fmt.Printf("✅ Successfully bound Google account\n")
 }
 
-// assignRoleExample 分配角色示例
+// assignRoleExample assigns a role to an account as an example
 func assignRoleExample(ctx context.Context, accountService service.AccountService) {
 	accountID := "some-account-id"
 	roleID := "admin-role-id"
 
 	err := accountService.AssignRole(ctx, accountID, roleID)
 	if err != nil {
-		log.Printf("分配角色失败: %v", err)
+		log.Printf("Failed to assign role: %v", err)
 		return
 	}
 
-	fmt.Printf("✅ 成功分配角色\n")
+	fmt.Printf("✅ Role assigned successfully\n")
 }
 
-// softDeleteAccountExample 软删除账号示例
+// softDeleteAccountExample soft-deletes an account as an example
 func softDeleteAccountExample(ctx context.Context, accountService service.AccountService) {
 	accountID := "some-account-id"
 
 	err := accountService.SoftDeleteAccount(ctx, accountID)
 	if err != nil {
-		log.Printf("删除账号失败: %v", err)
+		log.Printf("Failed to delete account: %v", err)
 		return
 	}
 
-	fmt.Printf("✅ 账号已软删除（保留数据用于审计）\n")
+	fmt.Printf("✅ Account soft-deleted (data retained for auditing purposes)\n")
 }

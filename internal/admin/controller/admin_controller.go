@@ -12,13 +12,13 @@ import (
 	accountService "github.com/rushairer/gosso/internal/account/service"
 )
 
-// AdminController 管理员控制器
+// AdminController handles admin operations
 type AdminController struct {
 	accountSvc accountService.AccountService
 	logger     *zap.Logger
 }
 
-// NewAdminController 创建管理员控制器实例
+// NewAdminController creates a new admin controller instance
 func NewAdminController(accountSvc accountService.AccountService, logger *zap.Logger) *AdminController {
 	return &AdminController{
 		accountSvc: accountSvc,
@@ -26,7 +26,7 @@ func NewAdminController(accountSvc accountService.AccountService, logger *zap.Lo
 	}
 }
 
-// RegisterRoutes 注册管理员路由
+// RegisterRoutes registers admin routes
 func (c *AdminController) RegisterRoutes(rg *gin.RouterGroup) {
 	accounts := rg.Group("/accounts")
 	{
@@ -160,7 +160,7 @@ func (c *AdminController) GetAccountRoles(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(roles))
 }
 
-// AddRoleRequestBody 添加角色请求体
+// AddRoleRequestBody is the request body for adding a role
 type AddRoleRequestBody struct {
 	RoleID string `json:"role_id" binding:"required"`
 }

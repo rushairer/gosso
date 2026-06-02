@@ -6,17 +6,17 @@ import (
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
 
-// JWKSService OIDC JWKS 服务
+// JWKSService OIDC JWKS service
 type JWKSService struct {
 	keySvc *tokenService.KeyService
 }
 
-// NewJWKSService 创建 JWKS 服务实例
+// NewJWKSService creates a new instance of JWKSService
 func NewJWKSService(keySvc *tokenService.KeyService) *JWKSService {
 	return &JWKSService{keySvc: keySvc}
 }
 
-// GetJWKS 返回 JWKS 文档（RSA 公钥）
+// GetJWKS returns the JWKS document (RSA public key)
 func (s *JWKSService) GetJWKS() map[string]any {
 	pubKey := s.keySvc.PublicKey()
 	n := base64.RawURLEncoding.EncodeToString(pubKey.N.Bytes())

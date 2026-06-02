@@ -11,7 +11,7 @@ import (
 	"github.com/rushairer/gosso/internal/cache"
 )
 
-// slidingWindowScript Redis Lua 滑动窗口限流脚本
+// slidingWindowScript Redis Lua sliding window rate limiter script
 var slidingWindowScript = redis.NewScript(`
 local key = KEYS[1]
 local window = tonumber(ARGV[1]) * 1000
@@ -28,10 +28,10 @@ end
 return {0, 0}
 `)
 
-// RedisRateLimitMiddleware 基于 Redis 的分布式滑动窗口限流中间件
-// keyFunc: 从请求中提取限流 key（如 IP、accountID）
-// limit: 窗口内最大请求数
-// window: 时间窗口
+// RedisRateLimitMiddleware Redis-based distributed sliding window rate limiter middleware.
+// keyFunc: extracts rate limit key from request (e.g., IP, accountID).
+// limit: max requests within the window.
+// window: time window duration.
 func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context) string, limit int, window time.Duration) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		key := fmt.Sprintf("rate_limit:%s", keyFunc(ctx))
@@ -45,7 +45,7 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context)
 		).Int64Slice()
 
 		if err != nil {
-			// Redis 故障时放行（fail-open）
+			// Fail-open on Redis failure
 			ctx.Next()
 			return
 		}
@@ -73,7 +73,7 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context)
 	}
 }
 
-// IPKeyFunc 基于客户端 IP 的 key 提取函数
+// IPKeyFunc extracts rate limit key based on client IP.
 func IPKeyFunc(ctx *gin.Context) string {
 	return ctx.ClientIP()
 }

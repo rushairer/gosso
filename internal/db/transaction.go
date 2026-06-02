@@ -8,18 +8,18 @@ import (
 	"log"
 )
 
-// DB 数据库包装器，提供事务辅助方法
+// DB is a database wrapper that provides transaction helper methods
 type DB struct {
 	*sql.DB
 }
 
-// NewDB 创建数据库包装器
+// NewDB creates a database wrapper
 func NewDB(db *sql.DB) *DB {
 	return &DB{DB: db}
 }
 
-// WithTransaction 事务辅助方法，自动处理提交和回滚
-// 适用于简单场景，复杂业务逻辑建议显式管理事务
+// WithTransaction is a transaction helper method that automatically handles commit and rollback.
+// Suitable for simple scenarios; explicit transaction management is recommended for complex business logic.
 func (db *DB) WithTransaction(ctx context.Context, fn func(tx *sql.Tx) error) error {
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
@@ -51,7 +51,7 @@ func (db *DB) WithTransaction(ctx context.Context, fn func(tx *sql.Tx) error) er
 	return nil
 }
 
-// WithTransactionIsolation 带隔离级别的事务辅助方法
+// WithTransactionIsolation is a transaction helper method with a specified isolation level
 func (db *DB) WithTransactionIsolation(ctx context.Context, isolation sql.IsolationLevel, fn func(tx *sql.Tx) error) error {
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{
 		Isolation: isolation,

@@ -13,18 +13,18 @@ import (
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 )
 
-// ClientController OAuth2 客户端管理控制器
+// ClientController handles OAuth2 client management endpoints
 type ClientController struct {
 	clientSvc oauth2Service.OAuth2ClientService
 	logger    *zap.Logger
 }
 
-// NewClientController 创建客户端管理控制器实例
+// NewClientController creates a new client management controller instance
 func NewClientController(clientSvc oauth2Service.OAuth2ClientService, logger *zap.Logger) *ClientController {
 	return &ClientController{clientSvc: clientSvc, logger: logger}
 }
 
-// RegisterRoutes 注册客户端管理路由
+// RegisterRoutes registers client management routes
 func (c *ClientController) RegisterRoutes(rg *gin.RouterGroup, authMiddleware gin.HandlerFunc) {
 	clients := rg.Group("/oauth2/clients")
 	clients.Use(authMiddleware)
@@ -37,7 +37,7 @@ func (c *ClientController) RegisterRoutes(rg *gin.RouterGroup, authMiddleware gi
 	}
 }
 
-// RegisterClientRequest 注册客户端请求体
+// RegisterClientRequest is the request body for registering a client
 type RegisterClientRequest struct {
 	Name           string   `json:"name" binding:"required"`
 	Description    string   `json:"description"`
@@ -47,7 +47,7 @@ type RegisterClientRequest struct {
 	IsConfidential bool     `json:"is_confidential"`
 }
 
-// RegisterClientResponse 注册客户端响应体
+// RegisterClientResponse is the response body for registering a client
 type RegisterClientResponse struct {
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret,omitempty"`
@@ -194,7 +194,7 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(client))
 }
 
-// UpdateClientRequest 更新客户端请求体
+// UpdateClientRequest is the request body for updating a client
 type UpdateClientRequest struct {
 	Name         string   `json:"name"`
 	Description  string   `json:"description"`

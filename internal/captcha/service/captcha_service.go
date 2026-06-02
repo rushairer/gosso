@@ -15,22 +15,22 @@ import (
 )
 
 const (
-	// CaptchaKeyPrefix Redis 验证码键前缀
+	// CaptchaKeyPrefix is the Redis key prefix for captchas
 	CaptchaKeyPrefix = "captcha:"
-	// DefaultCaptchaTTL 默认验证码过期时间（5分钟）
+	// DefaultCaptchaTTL is the default captcha expiration time (5 minutes)
 	DefaultCaptchaTTL = 5 * time.Minute
-	// CaptchaLength 验证码长度
+	// CaptchaLength is the length of the captcha code
 	CaptchaLength = 6
 )
 
-// CaptchaService 验证码服务
+// CaptchaService is the captcha service
 type CaptchaService struct {
 	redis      *cache.RedisClient
 	logger     *zap.Logger
 	captchaTTL time.Duration
 }
 
-// NewCaptchaService 创建验证码服务实例
+// NewCaptchaService creates a new captcha service instance
 func NewCaptchaService(redis *cache.RedisClient, logger *zap.Logger) *CaptchaService {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -43,14 +43,14 @@ func NewCaptchaService(redis *cache.RedisClient, logger *zap.Logger) *CaptchaSer
 	}
 }
 
-// SetCaptchaTTL 设置验证码过期时间
+// SetCaptchaTTL sets the captcha expiration time
 func (s *CaptchaService) SetCaptchaTTL(ttl time.Duration) {
 	s.captchaTTL = ttl
 }
 
-// GenerateMathCaptcha 生成数学算式验证码
+// GenerateMathCaptcha generates a math expression captcha
 func (s *CaptchaService) GenerateMathCaptcha(ctx context.Context) (*domain.Captcha, string, error) {
-	// 生成简单的加法算式
+	// Generate a simple addition expression
 	a := rand.Intn(50) + 1
 	b := rand.Intn(50) + 1
 	question := fmt.Sprintf("%d + %d = ?", a, b)
@@ -73,9 +73,9 @@ func (s *CaptchaService) GenerateMathCaptcha(ctx context.Context) (*domain.Captc
 	return captcha, question, nil
 }
 
-// GenerateDigitCaptcha 生成数字验证码
+// GenerateDigitCaptcha generates a numeric captcha
 func (s *CaptchaService) GenerateDigitCaptcha(ctx context.Context) (*domain.Captcha, string, error) {
-	// 生成6位随机数字
+	// Generate a 6-digit random number
 	code := fmt.Sprintf("%06d", rand.Intn(1000000))
 
 	captcha := &domain.Captcha{
@@ -95,28 +95,28 @@ func (s *CaptchaService) GenerateDigitCaptcha(ctx context.Context) (*domain.Capt
 	return captcha, code, nil
 }
 
-// VerifyCaptcha 验证验证码
+// VerifyCaptcha verifies a captcha
 func (s *CaptchaService) VerifyCaptcha(ctx context.Context, captchaID uuid.UUID, answer string) error {
 	captcha, err := s.getCaptcha(ctx, captchaID)
 	if err != nil {
 		return err
 	}
 
-	// 检查是否已过期
+	// Check if expired
 	if captcha.IsExpired() {
 		s.logger.Warn("Captcha expired", zap.String("captcha_id", captchaID.String()))
-		// 删除过期验证码
+		// Delete expired captcha
 		_ = s.DeleteCaptcha(ctx, captchaID)
 		return ErrCaptchaExpired
 	}
 
-	// 检查是否已使用（防重放）
+	// Check if already used (replay prevention)
 	if captcha.Used {
 		s.logger.Warn("Captcha already used", zap.String("captcha_id", captchaID.String()))
 		return ErrCaptchaUsed
 	}
 
-	// 验证答案
+	// Verify answer
 	if captcha.Answer != answer {
 		s.logger.Warn("Captcha verification failed",
 			zap.String("captcha_id", captchaID.String()),
@@ -125,21 +125,21 @@ func (s *CaptchaService) VerifyCaptcha(ctx context.Context, captchaID uuid.UUID,
 		return ErrCaptchaInvalid
 	}
 
-	// 标记为已使用
+	// Mark as used
 	captcha.MarkUsed()
 	if err := s.storeCaptcha(ctx, captcha); err != nil {
 		s.logger.Error("Failed to mark captcha as used", zap.Error(err))
-		// 不返回错误，允许验证通过
+		// Do not return error, allow verification to pass
 	}
 
-	// 可选：立即删除验证码（更安全）
+	// Optional: delete captcha immediately (more secure)
 	_ = s.DeleteCaptcha(ctx, captchaID)
 
 	s.logger.Info("Captcha verified successfully", zap.String("captcha_id", captchaID.String()))
 	return nil
 }
 
-// DeleteCaptcha 删除验证码
+// DeleteCaptcha deletes a captcha
 func (s *CaptchaService) DeleteCaptcha(ctx context.Context, captchaID uuid.UUID) error {
 	key := s.buildCaptchaKey(captchaID)
 	if err := s.redis.Del(ctx, key); err != nil {
@@ -149,7 +149,7 @@ func (s *CaptchaService) DeleteCaptcha(ctx context.Context, captchaID uuid.UUID)
 	return nil
 }
 
-// storeCaptcha 存储验证码到 Redis
+// storeCaptcha stores a captcha in Redis
 func (s *CaptchaService) storeCaptcha(ctx context.Context, captcha *domain.Captcha) error {
 	data, err := json.Marshal(captcha)
 	if err != nil {
@@ -166,7 +166,7 @@ func (s *CaptchaService) storeCaptcha(ctx context.Context, captcha *domain.Captc
 	return nil
 }
 
-// getCaptcha 从 Redis 获取验证码
+// getCaptcha gets a captcha from Redis
 func (s *CaptchaService) getCaptcha(ctx context.Context, captchaID uuid.UUID) (*domain.Captcha, error) {
 	key := s.buildCaptchaKey(captchaID)
 	data, err := s.redis.Get(ctx, key)
@@ -187,12 +187,12 @@ func (s *CaptchaService) getCaptcha(ctx context.Context, captchaID uuid.UUID) (*
 	return &captcha, nil
 }
 
-// buildCaptchaKey 构建 Redis 键
+// buildCaptchaKey builds a Redis key
 func (s *CaptchaService) buildCaptchaKey(captchaID uuid.UUID) string {
 	return fmt.Sprintf("%s%s", CaptchaKeyPrefix, captchaID.String())
 }
 
-// 错误定义
+// Error definitions
 var (
 	ErrCaptchaNotFound = fmt.Errorf("captcha not found")
 	ErrCaptchaExpired  = fmt.Errorf("captcha expired")

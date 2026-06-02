@@ -23,17 +23,17 @@ const (
 	VerifyCodeLength     = 6
 )
 
-// EmailSender 邮件发送接口
+// EmailSender email sending interface
 type EmailSender interface {
 	SendVerificationCode(ctx context.Context, to, code string) error
 }
 
-// SMSSender 短信发送接口
+// SMSSender SMS sending interface
 type SMSSender interface {
 	SendVerificationCode(ctx context.Context, phone, code string) error
 }
 
-// VerificationService 验证码管理服务
+// VerificationService verification code management service
 type VerificationService struct {
 	redis    *cache.RedisClient
 	emailSvc EmailSender
@@ -41,7 +41,7 @@ type VerificationService struct {
 	logger   *zap.Logger
 }
 
-// NewVerificationService 创建验证码服务实例
+// NewVerificationService creates a new verification service instance
 func NewVerificationService(
 	redis *cache.RedisClient,
 	emailSvc EmailSender,
@@ -65,9 +65,9 @@ type verifyCodeData struct {
 	AccountID string `json:"account_id"`
 }
 
-// SendCode 发送验证码
+// SendCode sends verification code
 func (s *VerificationService) SendCode(ctx context.Context, credType, identifier, accountID string) error {
-	// 检查冷却
+	// Check cooldown
 	cooldownKey := s.buildCooldownKey(credType, identifier)
 	exists, err := s.redis.Exists(ctx, cooldownKey)
 	if err != nil {
@@ -77,13 +77,13 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 		return errors.New("please wait before requesting another code")
 	}
 
-	// 生成 6 位随机数字码
+	// Generate 6-digit random numeric code
 	code, err := generateNumericCode(VerifyCodeLength)
 	if err != nil {
 		return fmt.Errorf("generate code: %w", err)
 	}
 
-	// 存储到 Redis
+	// Store in Redis
 	data := verifyCodeData{
 		Code:      code,
 		Attempts:  0,
@@ -99,12 +99,12 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 		return fmt.Errorf("store code: %w", err)
 	}
 
-	// 设置冷却
+	// Set cooldown
 	if err := s.redis.Set(ctx, cooldownKey, []byte("1"), VerifyCooldownTTL); err != nil {
 		s.logger.Warn("Failed to set cooldown", zap.Error(err))
 	}
 
-	// 发送
+	// Send
 	switch credType {
 	case "email":
 		if err := s.emailSvc.SendVerificationCode(ctx, identifier, code); err != nil {
@@ -124,7 +124,7 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 	return nil
 }
 
-// VerifyCode 验证码校验，成功返回 accountID
+// VerifyCode verifies verification code, returns accountID upon success
 func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifier, code string) (string, error) {
 	codeKey := s.buildCodeKey(credType, identifier)
 
@@ -141,13 +141,13 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 		return "", fmt.Errorf("unmarshal code data: %w", err)
 	}
 
-	// 检查尝试次数
+	// Check attempt count
 	if data.Attempts >= VerifyCodeAttempts {
 		_ = s.redis.Del(ctx, codeKey)
 		return "", errors.New("verification code exhausted, please request a new one")
 	}
 
-	// 比对码
+	// Compare code
 	if data.Code != code {
 		data.Attempts++
 		updatedData, _ := json.Marshal(data)
@@ -155,7 +155,7 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 		return "", errors.New("invalid verification code")
 	}
 
-	// 成功 → 删除 Redis key
+	// Success -> delete Redis key
 	_ = s.redis.Del(ctx, codeKey)
 
 	return data.AccountID, nil

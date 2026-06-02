@@ -8,7 +8,7 @@ import (
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 )
 
-// OAuth2ClientRepository OAuth2 客户端仓储接口
+// OAuth2ClientRepository is the OAuth2 client repository interface
 type OAuth2ClientRepository interface {
 	Create(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client) error
 	FindByClientID(ctx context.Context, clientID string) (*domain.OAuth2Client, error)

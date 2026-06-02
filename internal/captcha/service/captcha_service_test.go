@@ -24,7 +24,7 @@ func setupTestCaptchaService(t *testing.T) *CaptchaService {
 	}
 
 	service := NewCaptchaService(redisClient, logger)
-	service.SetCaptchaTTL(10 * time.Second) // 测试用短过期时间
+	service.SetCaptchaTTL(10 * time.Second) // Short expiration time for testing
 
 	return service
 }
@@ -35,7 +35,7 @@ func TestCaptchaService_GenerateMathCaptcha(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 生成验证码
+	// Generate captcha
 	captcha, question, err := service.GenerateMathCaptcha(ctx)
 	require.NoError(t, err)
 	assert.NotEqual(t, uuid.Nil, captcha.ID)
@@ -45,7 +45,7 @@ func TestCaptchaService_GenerateMathCaptcha(t *testing.T) {
 
 	t.Logf("Math captcha: %s, answer: %s", question, captcha.Answer)
 
-	// 清理
+	// Cleanup
 	_ = service.DeleteCaptcha(ctx, captcha.ID)
 }
 
@@ -55,7 +55,7 @@ func TestCaptchaService_GenerateDigitCaptcha(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 生成验证码
+	// Generate captcha
 	captcha, code, err := service.GenerateDigitCaptcha(ctx)
 	require.NoError(t, err)
 	assert.NotEqual(t, uuid.Nil, captcha.ID)
@@ -65,7 +65,7 @@ func TestCaptchaService_GenerateDigitCaptcha(t *testing.T) {
 
 	t.Logf("Digit captcha: %s", code)
 
-	// 清理
+	// Cleanup
 	_ = service.DeleteCaptcha(ctx, captcha.ID)
 }
 
@@ -75,15 +75,15 @@ func TestCaptchaService_VerifyCaptcha_Success(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 生成验证码
+	// Generate captcha
 	captcha, code, err := service.GenerateDigitCaptcha(ctx)
 	require.NoError(t, err)
 
-	// 验证验证码（正确答案）
+	// Verify captcha (correct answer)
 	err = service.VerifyCaptcha(ctx, captcha.ID, code)
 	assert.NoError(t, err)
 
-	// 验证后应该被删除
+	// Should be deleted after verification
 	err = service.VerifyCaptcha(ctx, captcha.ID, code)
 	assert.Equal(t, ErrCaptchaNotFound, err)
 }
@@ -94,15 +94,15 @@ func TestCaptchaService_VerifyCaptcha_WrongAnswer(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 生成验证码
+	// Generate captcha
 	captcha, _, err := service.GenerateDigitCaptcha(ctx)
 	require.NoError(t, err)
 
-	// 验证验证码（错误答案）
+	// Verify captcha (wrong answer)
 	err = service.VerifyCaptcha(ctx, captcha.ID, "000000")
 	assert.Equal(t, ErrCaptchaInvalid, err)
 
-	// 清理
+	// Cleanup
 	_ = service.DeleteCaptcha(ctx, captcha.ID)
 }
 
@@ -112,7 +112,7 @@ func TestCaptchaService_VerifyCaptcha_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 验证不存在的验证码
+	// Verify a non-existent captcha
 	err := service.VerifyCaptcha(ctx, uuid.New(), "123456")
 	assert.Equal(t, ErrCaptchaNotFound, err)
 }
@@ -123,17 +123,17 @@ func TestCaptchaService_VerifyCaptcha_Expired(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 设置极短的过期时间
+	// Set a very short expiration time
 	service.SetCaptchaTTL(1 * time.Second)
 
-	// 生成验证码
+	// Generate captcha
 	captcha, code, err := service.GenerateDigitCaptcha(ctx)
 	require.NoError(t, err)
 
-	// 等待过期
+	// Wait for expiration
 	time.Sleep(2 * time.Second)
 
-	// 验证过期的验证码
+	// Verify expired captcha
 	err = service.VerifyCaptcha(ctx, captcha.ID, code)
-	assert.Equal(t, ErrCaptchaNotFound, err) // Redis 会自动删除过期的键
+	assert.Equal(t, ErrCaptchaNotFound, err) // Redis automatically deletes expired keys
 }

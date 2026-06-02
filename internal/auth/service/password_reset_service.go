@@ -30,7 +30,7 @@ const (
 	PasswordResetMaxAttempts    = 5
 )
 
-// PasswordResetEmailSender 密码重置邮件发送接口
+// PasswordResetEmailSender password reset email sender interface
 type PasswordResetEmailSender interface {
 	SendPasswordResetLink(ctx context.Context, to, resetLink string) error
 }
@@ -41,7 +41,7 @@ type passwordResetData struct {
 	Attempts  int    `json:"attempts"`
 }
 
-// PasswordResetService 密码重置服务
+// PasswordResetService password reset service
 type PasswordResetService struct {
 	redis          *cache.RedisClient
 	credentialRepo accountRepo.CredentialRepository
@@ -53,7 +53,7 @@ type PasswordResetService struct {
 	logger         *zap.Logger
 }
 
-// NewPasswordResetService 创建密码重置服务实例
+// NewPasswordResetService creates a new password reset service instance
 func NewPasswordResetService(
 	redis *cache.RedisClient,
 	credentialRepo accountRepo.CredentialRepository,
@@ -79,9 +79,9 @@ func NewPasswordResetService(
 	}
 }
 
-// RequestReset 请求密码重置（发送重置邮件）
+// RequestReset requests password reset (sends password reset email)
 func (s *PasswordResetService) RequestReset(ctx context.Context, email string) error {
-	// 检查冷却
+	// Check cooldown
 	cooldownKey := s.buildCooldownKey(email)
 	exists, err := s.redis.Exists(ctx, cooldownKey)
 	if err != nil {
@@ -91,29 +91,29 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 		return errors.New("please wait before requesting another reset")
 	}
 
-	// 查找邮箱凭证
+	// Find email credential
 	cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, domain.CredentialTypeEmail, email)
 	if err != nil {
-		// 未找到 → 静默成功，防枚举
+		// Not found -> Silent success to prevent enumeration
 		s.logger.Debug("Password reset requested for non-existent email", zap.String("email", email))
 		return nil
 	}
 
-	// 检查账号状态
+	// Check account status
 	account, err := s.accountSvc.FindAccountByID(ctx, cred.AccountID)
 	if err != nil || !account.IsActive() {
 		s.logger.Debug("Password reset requested for inactive account", zap.String("email", email))
 		return nil
 	}
 
-	// 生成 token
+	// Generate token
 	tokenBytes := make([]byte, PasswordResetTokenLength)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return fmt.Errorf("generate token: %w", err)
 	}
 	token := hex.EncodeToString(tokenBytes)
 
-	// 存储到 Redis（SHA256 hash 作 key）
+	// Store to Redis (using SHA256 hash as the key)
 	tokenHash := tokenDomain.HashToken(token)
 	data := passwordResetData{
 		AccountID: cred.AccountID,
@@ -130,12 +130,12 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 		return fmt.Errorf("store reset token: %w", err)
 	}
 
-	// 设置冷却
+	// Set cooldown
 	if err := s.redis.Set(ctx, cooldownKey, []byte("1"), PasswordResetCooldownTTL); err != nil {
 		s.logger.Warn("Failed to set reset cooldown", zap.Error(err))
 	}
 
-	// 发送邮件
+	// Send email
 	resetLink := fmt.Sprintf("%s?token=%s", s.baseURL, token)
 	if err := s.emailSender.SendPasswordResetLink(ctx, email, resetLink); err != nil {
 		s.logger.Error("Failed to send password reset email", zap.Error(err), zap.String("email", email))
@@ -146,13 +146,13 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 	return nil
 }
 
-// VerifyAndReset 验证重置 token 并设置新密码
+// VerifyAndReset verifies the reset token and sets a new password
 func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPassword string) error {
 	if len(newPassword) < 8 {
 		return errors.New("password must be at least 8 characters")
 	}
 
-	// 查找 token
+	// Find token
 	tokenHash := tokenDomain.HashToken(token)
 	tokenKey := s.buildTokenKey(tokenHash)
 
@@ -169,22 +169,22 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		return fmt.Errorf("unmarshal reset data: %w", err)
 	}
 
-	// 检查尝试次数
+	// Check attempts count
 	if data.Attempts >= PasswordResetMaxAttempts {
 		_ = s.redis.Del(ctx, tokenKey)
 		return errors.New("reset token exhausted, please request a new one")
 	}
 
-	// 一次性使用：立即删除
+	// One-time use: delete immediately
 	_ = s.redis.Del(ctx, tokenKey)
 
-	// Hash 新密码
+	// Hash new password
 	hashedPassword, err := accountDomain.HashPassword(newPassword)
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}
 
-	// 查找密码凭证并更新
+	// Find password credential and update it
 	cred, err := s.credentialRepo.FindPasswordCredential(ctx, data.AccountID)
 	if err != nil {
 		return fmt.Errorf("find password credential: %w", err)
@@ -205,7 +205,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 
-	// 异步撤销所有旧会话
+	// Asynchronously revoke all old sessions
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()

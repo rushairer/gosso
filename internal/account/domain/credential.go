@@ -7,7 +7,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// CredentialType 凭证类型
+// CredentialType represents the type of credential.
 type CredentialType string
 
 const (
@@ -19,13 +19,13 @@ const (
 	CredentialTypeBackupCode CredentialType = "backup_code"
 )
 
-// Credential 凭证领域模型
+// Credential is the credential domain model.
 type Credential struct {
 	ID                string         `json:"id"`
 	AccountID         string         `json:"account_id"`
 	Type              CredentialType `json:"credential_type"`
 	Identifier        *string        `json:"identifier,omitempty"`
-	Value             string         `json:"-"` // 不序列化到 JSON（安全）
+	Value             string         `json:"-"` // excluded from JSON serialization (security).
 	Verified          bool           `json:"verified"`
 	PrimaryCredential bool           `json:"primary_credential"`
 	Metadata          map[string]any `json:"metadata"`
@@ -35,7 +35,7 @@ type Credential struct {
 	DeletedAt         *time.Time     `json:"deleted_at,omitempty"`
 }
 
-// NewCredential 创建新凭证
+// NewCredential creates a new credential.
 func NewCredential(accountID string, credType CredentialType, identifier *string, value string) *Credential {
 	return &Credential{
 		ID:         uuid.New().String(),
@@ -49,7 +49,7 @@ func NewCredential(accountID string, credType CredentialType, identifier *string
 	}
 }
 
-// NewPasswordCredential 创建密码凭证（自动哈希）
+// NewPasswordCredential creates a password credential (auto-hashed).
 func NewPasswordCredential(accountID string, plainPassword string) (*Credential, error) {
 	hashedPassword, err := HashPassword(plainPassword)
 	if err != nil {
@@ -61,13 +61,13 @@ func NewPasswordCredential(accountID string, plainPassword string) (*Credential,
 		AccountID: accountID,
 		Type:      CredentialTypePassword,
 		Value:     hashedPassword,
-		Verified:  true, // 密码凭证创建时即为已验证
+		Verified:  true, // password credentials are verified at creation
 		Metadata:  make(map[string]interface{}),
 		CreatedAt: time.Now(),
 	}, nil
 }
 
-// NewEmailCredential 创建邮箱凭证
+// NewEmailCredential creates an email credential.
 func NewEmailCredential(accountID string, email string) *Credential {
 	return &Credential{
 		ID:         uuid.New().String(),
@@ -80,7 +80,7 @@ func NewEmailCredential(accountID string, email string) *Credential {
 	}
 }
 
-// NewPhoneCredential 创建手机凭证
+// NewPhoneCredential creates a phone credential.
 func NewPhoneCredential(accountID string, phone string) *Credential {
 	return &Credential{
 		ID:         uuid.New().String(),
@@ -93,36 +93,36 @@ func NewPhoneCredential(accountID string, phone string) *Credential {
 	}
 }
 
-// IsDeleted 是否已软删除
+// IsDeleted reports whether the credential has been soft-deleted.
 func (c *Credential) IsDeleted() bool {
 	return c.DeletedAt != nil
 }
 
-// IsVerified 是否已验证
+// IsVerified reports whether the credential has been verified.
 func (c *Credential) IsVerified() bool {
 	return c.Verified
 }
 
-// Verify 标记为已验证
+// Verify marks the credential as verified.
 func (c *Credential) Verify() {
 	now := time.Now()
 	c.Verified = true
 	c.VerifiedAt = &now
 }
 
-// MarkUsed 更新最后使用时间
+// MarkUsed updates the last-used timestamp.
 func (c *Credential) MarkUsed() {
 	now := time.Now()
 	c.LastUsedAt = &now
 }
 
-// SoftDelete 软删除凭证
+// SoftDelete soft-deletes the credential.
 func (c *Credential) SoftDelete() {
 	now := time.Now()
 	c.DeletedAt = &now
 }
 
-// VerifyPassword 验证密码（仅用于密码类型凭证）
+// VerifyPassword verifies the plaintext password (password credentials only).
 func (c *Credential) VerifyPassword(plainPassword string) bool {
 	if c.Type != CredentialTypePassword {
 		return false
@@ -130,7 +130,7 @@ func (c *Credential) VerifyPassword(plainPassword string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(c.Value), []byte(plainPassword)) == nil
 }
 
-// HashPassword 哈希密码
+// HashPassword hashes a plaintext password using bcrypt.
 func HashPassword(password string) (string, error) {
 	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {

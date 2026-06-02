@@ -10,38 +10,38 @@ import (
 	"github.com/rushairer/gosso/internal/account/domain"
 )
 
-// AccountRepository 账号仓储接口
+// AccountRepository defines the interface for account repository
 type AccountRepository interface {
-	// CreateAccount 创建账号（需要事务）
+	// CreateAccount creates a new account (requires transaction)
 	CreateAccount(ctx context.Context, tx *sql.Tx, account *domain.Account) error
 
-	// FindByID 根据 ID 查找账号
+	// FindByID finds an account by ID
 	FindByID(ctx context.Context, accountID string) (*domain.Account, error)
 
-	// FindByUsername 根据用户名查找账号
+	// FindByUsername finds an account by username
 	FindByUsername(ctx context.Context, username string) (*domain.Account, error)
 
-	// UpdateAccount 更新账号（需要事务）
+	// UpdateAccount updates an account (requires transaction)
 	UpdateAccount(ctx context.Context, tx *sql.Tx, account *domain.Account) error
 
-	// SoftDeleteAccount 软删除账号（需要事务）
+	// SoftDeleteAccount soft deletes an account (requires transaction)
 	SoftDeleteAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
 
-	// FindAll 分页查询账号列表（管理员用）
+	// FindAll queries accounts with pagination (for admin search)
 	FindAll(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error)
 }
 
-// accountRepositoryImpl 账号仓储实现
+// accountRepositoryImpl implements AccountRepository
 type accountRepositoryImpl struct {
 	db *sql.DB
 }
 
-// NewAccountRepository 创建账号仓储
+// NewAccountRepository creates a new account repository
 func NewAccountRepository(db *sql.DB) AccountRepository {
 	return &accountRepositoryImpl{db: db}
 }
 
-// CreateAccount 创建账号
+// CreateAccount creates a new account
 func (r *accountRepositoryImpl) CreateAccount(ctx context.Context, tx *sql.Tx, account *domain.Account) error {
 	query := `
 		INSERT INTO accounts (id, username, display_name, avatar_url, status, locale, timezone, metadata, created_at, updated_at)
@@ -72,7 +72,7 @@ func (r *accountRepositoryImpl) CreateAccount(ctx context.Context, tx *sql.Tx, a
 	return nil
 }
 
-// FindByID 根据 ID 查找账号
+// FindByID finds an account by ID
 func (r *accountRepositoryImpl) FindByID(ctx context.Context, accountID string) (*domain.Account, error) {
 	query := `
 		SELECT id, username, display_name, avatar_url, status, locale, timezone, metadata, created_at, updated_at, deleted_at
@@ -104,7 +104,7 @@ func (r *accountRepositoryImpl) FindByID(ctx context.Context, accountID string) 
 		return nil, fmt.Errorf("query account: %w", err)
 	}
 
-	// 解析 metadata
+	// Parse metadata
 	if err := json.Unmarshal(metadataJSON, &account.Metadata); err != nil {
 		return nil, fmt.Errorf("unmarshal metadata: %w", err)
 	}
@@ -112,7 +112,7 @@ func (r *accountRepositoryImpl) FindByID(ctx context.Context, accountID string) 
 	return account, nil
 }
 
-// FindByUsername 根据用户名查找账号
+// FindByUsername finds an account by username
 func (r *accountRepositoryImpl) FindByUsername(ctx context.Context, username string) (*domain.Account, error) {
 	query := `
 		SELECT id, username, display_name, avatar_url, status, locale, timezone, metadata, created_at, updated_at, deleted_at
@@ -144,7 +144,7 @@ func (r *accountRepositoryImpl) FindByUsername(ctx context.Context, username str
 		return nil, fmt.Errorf("query account: %w", err)
 	}
 
-	// 解析 metadata
+	// Parse metadata
 	if err := json.Unmarshal(metadataJSON, &account.Metadata); err != nil {
 		return nil, fmt.Errorf("unmarshal metadata: %w", err)
 	}
@@ -152,7 +152,7 @@ func (r *accountRepositoryImpl) FindByUsername(ctx context.Context, username str
 	return account, nil
 }
 
-// UpdateAccount 更新账号
+// UpdateAccount updates an account
 func (r *accountRepositoryImpl) UpdateAccount(ctx context.Context, tx *sql.Tx, account *domain.Account) error {
 	query := `
 		UPDATE accounts
@@ -192,7 +192,7 @@ func (r *accountRepositoryImpl) UpdateAccount(ctx context.Context, tx *sql.Tx, a
 	return nil
 }
 
-// SoftDeleteAccount 软删除账号
+// SoftDeleteAccount soft deletes an account
 func (r *accountRepositoryImpl) SoftDeleteAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `
 		UPDATE accounts
@@ -216,7 +216,7 @@ func (r *accountRepositoryImpl) SoftDeleteAccount(ctx context.Context, tx *sql.T
 	return nil
 }
 
-// FindAll 分页查询账号列表
+// FindAll queries accounts with pagination
 func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error) {
 	if page < 1 {
 		page = 1
@@ -226,7 +226,7 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 	}
 	offset := (page - 1) * pageSize
 
-	// 构建条件
+	// Build conditions
 	where := "deleted_at IS NULL"
 	args := []interface{}{}
 	if status != "" {

@@ -13,7 +13,7 @@ import (
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
-// OIDCController OIDC 协议控制器
+// OIDCController OIDC protocol controller
 type OIDCController struct {
 	discoverySvc *oidcService.DiscoveryService
 	jwksSvc      *oidcService.JWKSService
@@ -21,7 +21,7 @@ type OIDCController struct {
 	logger       *zap.Logger
 }
 
-// NewOIDCController 创建 OIDC 控制器实例
+// NewOIDCController creates a new instance of OIDCController
 func NewOIDCController(
 	discoverySvc *oidcService.DiscoveryService,
 	jwksSvc *oidcService.JWKSService,
@@ -36,7 +36,7 @@ func NewOIDCController(
 	}
 }
 
-// RegisterRoutes 注册 OIDC 路由
+// RegisterRoutes registers OIDC routes
 func (c *OIDCController) RegisterRoutes(server *gin.Engine, authMiddleware gin.HandlerFunc) {
 	server.GET("/.well-known/openid-configuration", c.Discovery)
 	server.GET("/.well-known/jwks.json", c.JWKS)
@@ -68,7 +68,7 @@ func (c *OIDCController) UserInfo(ctx *gin.Context) {
 		return
 	}
 
-	// 解析 scope
+	// Parse scope
 	scopes := strings.Split(claims.Scope, " ")
 
 	info, err := c.userInfoSvc.GetUserInfo(ctx, claims.AccountID, scopes)

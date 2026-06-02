@@ -4,19 +4,19 @@ import (
 	"time"
 )
 
-// TokenBlacklist Token 黑名单实体
+// TokenBlacklist token blacklist entity
 type TokenBlacklist struct {
-	// JTI JWT ID（Token 唯一标识）
+	// JTI JWT ID (unique token identifier)
 	JTI string `json:"jti"`
-	// Reason 撤销原因
+	// Reason revocation reason
 	Reason string `json:"reason"`
-	// RevokedAt 撤销时间
+	// RevokedAt revocation time
 	RevokedAt time.Time `json:"revoked_at"`
-	// ExpiresAt Token 原本的过期时间
+	// ExpiresAt original token expiration time
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// IsExpired 检查 Token 是否已过期（黑名单记录可以清理）
+// IsExpired checks if the token has expired (blacklist records can be cleaned up)
 func (t *TokenBlacklist) IsExpired() bool {
 	return time.Now().After(t.ExpiresAt)
 }

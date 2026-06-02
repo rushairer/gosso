@@ -8,7 +8,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// Config 数据库配置
+// Config database configuration
 type Config struct {
 	Host            string
 	Port            int
@@ -22,7 +22,7 @@ type Config struct {
 	ConnMaxIdleTime time.Duration
 }
 
-// Connect 连接数据库
+// Connect connects to the database
 func Connect(cfg *Config) (*DB, error) {
 	dsn := fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
@@ -31,24 +31,24 @@ func Connect(cfg *Config) (*DB, error) {
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("打开数据库连接失败: %w", err)
+		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
 
-	// 设置连接池参数
+	// Set connection pool parameters
 	db.SetMaxOpenConns(cfg.MaxOpenConns)
 	db.SetMaxIdleConns(cfg.MaxIdleConns)
 	db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
 	db.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 
-	// 测试连接
+	// Test connection
 	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("数据库连接测试失败: %w", err)
+		return nil, fmt.Errorf("database connection test failed: %w", err)
 	}
 
 	return NewDB(db), nil
 }
 
-// Close 关闭数据库连接
+// Close closes the database connection
 func (db *DB) Close() error {
 	return db.DB.Close()
 }

@@ -102,8 +102,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Translate all Chinese comments, doc-comments, error messages, and log strings to English across the entire codebase (78 files).
 - Normalize sentinel errors to use `errors.New()` instead of static `fmt.Errorf()` across auth, account, and verification services.
-- Translate all Chinese error messages to English in account service, auth services, and DB transaction helpers.
 - Add rollback error logging in `WithTransaction` and `WithTransactionIsolation` (previously silently discarded).
 - Upgrade gouno dependency from v0.3.1 to v1.0.0.
 - Upgrade bytedance/sonic from v1.14.0 to v1.15.1 for Go version compatibility.

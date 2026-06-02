@@ -23,13 +23,13 @@ const (
 	backupCodeLength = 8 // 8 bytes = 16 hex chars
 )
 
-// TOTPEnrollment TOTP 注册结果
+// TOTPEnrollment TOTP enrollment result
 type TOTPEnrollment struct {
 	Secret     string `json:"secret"`
 	OTPAuthURL string `json:"otpauth_url"`
 }
 
-// MFAService 多因素认证服务
+// MFAService multi-factor authentication service
 type MFAService struct {
 	credentialRepo accountRepo.CredentialRepository
 	passkeySvc     *PasskeyService
@@ -38,7 +38,7 @@ type MFAService struct {
 	logger         *zap.Logger
 }
 
-// NewMFAService 创建 MFA 服务实例
+// NewMFAService creates an MFA service instance
 func NewMFAService(
 	credentialRepo accountRepo.CredentialRepository,
 	db *sql.DB,
@@ -61,7 +61,7 @@ func NewMFAService(
 	return svc
 }
 
-// IsMFAEnabled 检查账号是否已激活 TOTP 或拥有 Passkey
+// IsMFAEnabled checks whether the account has TOTP activated or has Passkeys
 func (s *MFAService) IsMFAEnabled(ctx context.Context, accountID string) (bool, error) {
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
 	if err != nil {
@@ -83,7 +83,7 @@ func (s *MFAService) IsMFAEnabled(ctx context.Context, accountID string) (bool, 
 	return false, nil
 }
 
-// GetMFATypes 获取账号可用的 MFA 类型列表
+// GetMFATypes gets the list of available MFA types for the account
 func (s *MFAService) GetMFATypes(ctx context.Context, accountID string) []string {
 	var types []string
 
@@ -107,9 +107,9 @@ func (s *MFAService) GetMFATypes(ctx context.Context, accountID string) []string
 	return types
 }
 
-// EnrollTOTP 开始 TOTP 注册（生成 secret，存入 credential，verified=false）
+// EnrollTOTP starts TOTP enrollment (generates secret, saves to credential, verified=false)
 func (s *MFAService) EnrollTOTP(ctx context.Context, accountID string) (*TOTPEnrollment, error) {
-	// 生成 TOTP key
+	// Generate TOTP key
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      s.issuer,
 		AccountName: accountID,
@@ -118,10 +118,10 @@ func (s *MFAService) EnrollTOTP(ctx context.Context, accountID string) (*TOTPEnr
 		return nil, fmt.Errorf("generate totp key: %w", err)
 	}
 
-	// 删除已有的未验证 TOTP 凭证
+	// Delete existing unverified TOTP credentials
 	_ = s.deleteUnverifiedTOTP(ctx, accountID)
 
-	// 存储为未验证的 credential
+	// Save as unverified credential
 	cred := &accountDomain.Credential{
 		ID:         uuid.New().String(),
 		AccountID:  accountID,
@@ -153,7 +153,7 @@ func (s *MFAService) EnrollTOTP(ctx context.Context, accountID string) (*TOTPEnr
 	}, nil
 }
 
-// VerifyTOTP 验证 TOTP 码
+// VerifyTOTP verifies TOTP code
 func (s *MFAService) VerifyTOTP(ctx context.Context, accountID, code string) (bool, error) {
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
 	if err != nil {
@@ -169,9 +169,9 @@ func (s *MFAService) VerifyTOTP(ctx context.Context, accountID, code string) (bo
 	return false, nil
 }
 
-// ActivateTOTP 激活 TOTP（标记为已验证）
+// ActivateTOTP activates TOTP (marks as verified)
 func (s *MFAService) ActivateTOTP(ctx context.Context, accountID, code string) error {
-	// 先验证 code
+	// Verify code first
 	valid, err := s.VerifyTOTP(ctx, accountID, code)
 	if err != nil {
 		return err
@@ -204,7 +204,7 @@ func (s *MFAService) ActivateTOTP(ctx context.Context, accountID, code string) e
 	return errors.New("no pending TOTP enrollment found")
 }
 
-// DisableTOTP 禁用 TOTP
+// DisableTOTP disables TOTP
 func (s *MFAService) DisableTOTP(ctx context.Context, accountID string) error {
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
 	if err != nil {
@@ -225,7 +225,7 @@ func (s *MFAService) DisableTOTP(ctx context.Context, accountID string) error {
 		}
 	}
 
-	// 同时删除所有 backup codes
+	// Also delete all backup codes
 	backupCreds, _ := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeBackupCode)
 	for _, c := range backupCreds {
 		if !c.IsDeleted() {
@@ -238,9 +238,9 @@ func (s *MFAService) DisableTOTP(ctx context.Context, accountID string) error {
 	return tx.Commit()
 }
 
-// GenerateBackupCodes 生成备用码
+// GenerateBackupCodes generates backup codes
 func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) ([]string, error) {
-	// 删除旧的 backup codes
+	// Delete old backup codes
 	_ = s.deleteBackupCodes(ctx, accountID)
 
 	var codes []string
@@ -283,7 +283,7 @@ func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) 
 	return codes, nil
 }
 
-// VerifyBackupCode 验证备用码（成功后删除该码）
+// VerifyBackupCode verifies backup code (deletes it upon successful verification)
 func (s *MFAService) VerifyBackupCode(ctx context.Context, accountID, code string) (bool, error) {
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeBackupCode)
 	if err != nil {
@@ -295,11 +295,11 @@ func (s *MFAService) VerifyBackupCode(ctx context.Context, accountID, code strin
 			continue
 		}
 		if bcrypt.CompareHashAndPassword([]byte(c.Value), []byte(code)) == nil {
-			// 成功，删除该码
+			// Success, delete the code
 			tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 			if err != nil {
 				s.logger.Warn("Failed to begin tx for backup code deletion", zap.Error(err))
-				return true, nil // 验证通过但删除失败，仍返回 true
+				return true, nil // Verification passed but deletion failed, still return true
 			}
 			_ = s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now())
 			_ = tx.Commit()

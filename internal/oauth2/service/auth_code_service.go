@@ -19,14 +19,14 @@ const (
 	AuthCodeLength    = 32
 )
 
-// AuthCodeService 授权码服务（Redis 存储）
+// AuthCodeService handles authorization codes (stored in Redis)
 type AuthCodeService struct {
 	redis  *cache.RedisClient
 	logger *zap.Logger
 	expiry time.Duration
 }
 
-// NewAuthCodeService 创建授权码服务实例
+// NewAuthCodeService creates a new authorization code service instance
 func NewAuthCodeService(redis *cache.RedisClient, logger *zap.Logger, expiry time.Duration) *AuthCodeService {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -38,7 +38,7 @@ func NewAuthCodeService(redis *cache.RedisClient, logger *zap.Logger, expiry tim
 	}
 }
 
-// GenerateCode 生成授权码并存储到 Redis
+// GenerateCode generates an authorization code and stores it in Redis
 func (s *AuthCodeService) GenerateCode(
 	ctx context.Context,
 	clientID, accountID, redirectURI string,
@@ -81,7 +81,7 @@ func (s *AuthCodeService) GenerateCode(
 	return ac, nil
 }
 
-// ValidateCode 验证授权码，PKCE 校验，然后删除（单次使用）
+// ValidateCode validates an authorization code, checks PKCE, then deletes it (single use)
 func (s *AuthCodeService) ValidateCode(ctx context.Context, code, clientID, redirectURI string, codeVerifier *string) (*domain.AuthorizationCode, error) {
 	key := AuthCodeKeyPrefix + code
 	data, err := s.redis.Get(ctx, key)
@@ -92,7 +92,7 @@ func (s *AuthCodeService) ValidateCode(ctx context.Context, code, clientID, redi
 		return nil, fmt.Errorf("get authorization code: %w", err)
 	}
 
-	// 立即删除（单次使用）
+	// Delete immediately (single use)
 	if delErr := s.redis.Del(ctx, key); delErr != nil {
 		s.logger.Warn("Failed to delete authorization code after retrieval", zap.Error(delErr))
 	}
@@ -115,7 +115,7 @@ func (s *AuthCodeService) ValidateCode(ctx context.Context, code, clientID, redi
 		return nil, domain.ErrCodeURIMismatch
 	}
 
-	// PKCE 验证
+	// PKCE verification
 	if codeVerifier != nil {
 		if !ac.VerifyPKCE(*codeVerifier) {
 			return nil, domain.ErrPKCEVerificationFailed

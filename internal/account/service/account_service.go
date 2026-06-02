@@ -21,64 +21,64 @@ import (
 	"github.com/rushairer/gosso/utility"
 )
 
-// AccountService 账号服务接口
+// AccountService defines the account service interface.
 type AccountService interface {
-	// RegisterAccount 注册账号（邮箱/手机 + 密码）
+	// RegisterAccount registers a new account (email/phone + password).
 	RegisterAccount(ctx context.Context, req *RegisterAccountRequest) (*domain.Account, error)
 
-	// FindAccountByID 根据 ID 查找账号
+	// FindAccountByID finds an account by its ID.
 	FindAccountByID(ctx context.Context, accountID string) (*domain.Account, error)
 
-	// FindAccountByUsername 根据用户名查找账号
+	// FindAccountByUsername finds an account by its username.
 	FindAccountByUsername(ctx context.Context, username string) (*domain.Account, error)
 
-	// UpdateAccount 更新账号信息
+	// UpdateAccount updates account information.
 	UpdateAccount(ctx context.Context, account *domain.Account) error
 
-	// SoftDeleteAccount 软删除账号（级联删除所有关联数据）
+	// SoftDeleteAccount soft-deletes an account (cascades to all related data).
 	SoftDeleteAccount(ctx context.Context, accountID string) error
 
-	// VerifyCredential 验证凭证（邮箱/手机）
+	// VerifyCredential verifies a credential (email/phone).
 	VerifyCredential(ctx context.Context, credentialID string) error
 
-	// ChangePassword 修改密码
+	// ChangePassword changes the account password.
 	ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error
 
-	// BindFederatedIdentity 绑定第三方身份
+	// BindFederatedIdentity binds a third-party identity to the account.
 	BindFederatedIdentity(ctx context.Context, accountID string, provider domain.Provider, providerUserID string, profile map[string]interface{}) error
 
-	// UnbindFederatedIdentity 解绑第三方身份
+	// UnbindFederatedIdentity unbinds a third-party identity from the account.
 	UnbindFederatedIdentity(ctx context.Context, identityID string) error
 
-	// AssignRole 为账号分配角色
+	// AssignRole assigns a role to the account.
 	AssignRole(ctx context.Context, accountID, roleID string) error
 
-	// RemoveRole 移除账号的角色
+	// RemoveRole removes a role from the account.
 	RemoveRole(ctx context.Context, accountID, roleID string) error
 
-	// ListAccounts 分页查询账号列表（管理员用）
+	// ListAccounts returns a paginated list of accounts (admin use).
 	ListAccounts(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error)
 
-	// SuspendAccount 禁用账号
+	// SuspendAccount suspends the account.
 	SuspendAccount(ctx context.Context, accountID string) error
 
-	// ActivateAccount 启用账号
+	// ActivateAccount reactivates the account.
 	ActivateAccount(ctx context.Context, accountID string) error
 
-	// GetAccountRoles 获取账号的角色列表
+	// GetAccountRoles returns the roles assigned to the account.
 	GetAccountRoles(ctx context.Context, accountID string) ([]*domain.Role, error)
 }
 
-// RegisterAccountRequest 注册账号请求
+// RegisterAccountRequest is the request payload for account registration.
 type RegisterAccountRequest struct {
-	Username    string         // 用户名（可选）
-	DisplayName string         // 显示名称
-	Email       string         // 邮箱（可选）
-	Phone       string         // 手机号（可选）
-	Password    string         // 密码（必须）
-	Locale      string         // 语言偏好
-	Timezone    string         // 时区
-	Metadata    map[string]any // 扩展元数据
+	Username    string         // optional username
+	DisplayName string         // display name
+	Email       string         // optional email
+	Phone       string         // optional phone number
+	Password    string         // required password
+	Locale      string         // language preference
+	Timezone    string         // timezone
+	Metadata    map[string]any // extra metadata
 }
 
 type accountServiceImpl struct {
@@ -90,7 +90,7 @@ type accountServiceImpl struct {
 	auditor               *auditService.Auditor
 }
 
-// NewAccountService 创建账号服务
+// NewAccountService creates the account service.
 func NewAccountService(
 	db *sql.DB,
 	accountRepo repository.AccountRepository,
@@ -109,14 +109,14 @@ func NewAccountService(
 	}
 }
 
-// RegisterAccount 注册账号
+// RegisterAccount registers a new account.
 func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterAccountRequest) (*domain.Account, error) {
-	// 1. 业务验证
+	// 1. Validate request
 	if err := s.validateRegistration(req); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
 
-	// 2. 检查凭证是否已存在
+	// 2. Check if credentials already exist
 	if req.Email != "" {
 		if err := s.checkCredentialExists(ctx, domain.CredentialTypeEmail, req.Email); err != nil {
 			return nil, err
@@ -128,7 +128,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		}
 	}
 
-	// 3. 开始事务
+	// 3. Begin transaction
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
 	})
@@ -136,12 +136,12 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
-		_ = tx.Rollback() // 忽略 Rollback 错误（Commit 后 Rollback 会失败，这是预期行为）
+		_ = tx.Rollback() // ignore Rollback errors (Rollback after Commit is expected to fail)
 	}()
 
 	now := time.Now()
 
-	// 4. 创建账号
+	// 4. Create account
 	var username *string
 	if req.Username != "" {
 		username = &req.Username
@@ -163,10 +163,10 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		return nil, err
 	}
 
-	// 5. 创建凭证列表
+	// 5. Create credentials
 	var credentials []*domain.Credential
 
-	// 5.1 创建密码凭证
+	// 5.1 Create password credential
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
@@ -184,7 +184,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	}
 	credentials = append(credentials, passwordCred)
 
-	// 5.2 创建邮箱凭证
+	// 5.2 Create email credential
 	if req.Email != "" {
 		emailCred := &domain.Credential{
 			ID:                uuid.New().String(),
@@ -199,7 +199,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		credentials = append(credentials, emailCred)
 	}
 
-	// 5.3 创建手机凭证
+	// 5.3 Create phone credential
 	if req.Phone != "" {
 		phoneCred := &domain.Credential{
 			ID:                uuid.New().String(),
@@ -207,24 +207,24 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 			Type:              domain.CredentialTypePhone,
 			Identifier:        &req.Phone,
 			Verified:          false,
-			PrimaryCredential: req.Email == "", // 如果没有邮箱，手机为主要凭证
+			PrimaryCredential: req.Email == "", // phone is primary when no email is provided
 			Metadata:          make(map[string]interface{}),
 			CreatedAt:         now,
 		}
 		credentials = append(credentials, phoneCred)
 	}
 
-	// 6. 批量创建凭证
+	// 6. Bulk-create credentials
 	if err := s.credentialRepo.CreateCredentials(ctx, tx, credentials); err != nil {
 		return nil, err
 	}
 
-	// 7. 提交事务
+	// 7. Commit transaction
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
-	// 8. 审计日志
+	// 8. Audit log
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountRegister,
 		audit.IPFromContext(ctx),
@@ -236,17 +236,17 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	return account, nil
 }
 
-// FindAccountByID 根据 ID 查找账号
+// FindAccountByID finds an account by ID.
 func (s *accountServiceImpl) FindAccountByID(ctx context.Context, accountID string) (*domain.Account, error) {
 	return s.accountRepo.FindByID(ctx, accountID)
 }
 
-// FindAccountByUsername 根据用户名查找账号
+// FindAccountByUsername finds an account by username.
 func (s *accountServiceImpl) FindAccountByUsername(ctx context.Context, username string) (*domain.Account, error) {
 	return s.accountRepo.FindByUsername(ctx, username)
 }
 
-// UpdateAccount 更新账号信息
+// UpdateAccount updates account information.
 func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.Account) error {
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
@@ -271,14 +271,14 @@ func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.
 	return nil
 }
 
-// SoftDeleteAccount 软删除账号（级联删除所有关联数据）
+// SoftDeleteAccount soft-deletes an account (cascades to all related data).
 func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID string) error {
-	// 1. 业务验证
+	// 1. Validate request
 	if accountID == "" {
 		return errors.New("account ID is required")
 	}
 
-	// 2. 开始事务
+	// 2. Begin transaction
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
 	})
@@ -291,7 +291,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 
 	now := time.Now()
 
-	// 3. 软删除关联数据（按依赖关系顺序）
+	// 3. Soft-delete related data (in dependency order)
 	if err := s.credentialRepo.SoftDeleteCredentialsByAccount(ctx, tx, accountID, now); err != nil {
 		return err
 	}
@@ -304,17 +304,17 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		return err
 	}
 
-	// 4. 最后软删除账号
+	// 4. Soft-delete the account itself
 	if err := s.accountRepo.SoftDeleteAccount(ctx, tx, accountID, now); err != nil {
 		return err
 	}
 
-	// 5. 提交事务
+	// 5. Commit transaction
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 
-	// 6. 审计日志
+	// 6. Audit log
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountDelete,
 		audit.IPFromContext(ctx),
@@ -326,12 +326,12 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	return nil
 }
 
-// VerifyCredential 验证凭证
+// VerifyCredential verifies a credential.
 func (s *accountServiceImpl) VerifyCredential(ctx context.Context, credentialID string) error {
-	// 1. 查找凭证
+	// 1. Find credential
 	credentials, err := s.credentialRepo.FindByAccountAndType(ctx, credentialID, domain.CredentialTypeEmail)
 	if err != nil || len(credentials) == 0 {
-		// 尝试查找手机凭证
+		// Try phone credential as fallback
 		credentials, err = s.credentialRepo.FindByAccountAndType(ctx, credentialID, domain.CredentialTypePhone)
 		if err != nil || len(credentials) == 0 {
 			return errors.New("credential not found")
@@ -340,7 +340,7 @@ func (s *accountServiceImpl) VerifyCredential(ctx context.Context, credentialID 
 
 	credential := credentials[0]
 
-	// 2. 标记为已验证
+	// 2. Mark as verified
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
 	})
@@ -364,26 +364,26 @@ func (s *accountServiceImpl) VerifyCredential(ctx context.Context, credentialID 
 	return nil
 }
 
-// ChangePassword 修改密码
+// ChangePassword changes the account password.
 func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error {
-	// 1. 查找密码凭证
+	// 1. Find password credential
 	passwordCred, err := s.credentialRepo.FindPasswordCredential(ctx, accountID)
 	if err != nil {
 		return fmt.Errorf("find password credential: %w", err)
 	}
 
-	// 2. 验证旧密码
+	// 2. Verify old password
 	if !passwordCred.VerifyPassword(oldPassword) {
 		return errors.New("incorrect old password")
 	}
 
-	// 3. 生成新密码哈希
+	// 3. Hash new password
 	newPasswordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("hash new password: %w", err)
 	}
 
-	// 4. 更新密码
+	// 4. Update password
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
 	})
@@ -404,7 +404,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 
-	// 5. 审计日志
+	// 5. Audit log
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionPasswordChange,
 		audit.IPFromContext(ctx),
@@ -416,15 +416,15 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	return nil
 }
 
-// BindFederatedIdentity 绑定第三方身份
+// BindFederatedIdentity binds a third-party identity.
 func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountID string, provider domain.Provider, providerUserID string, profile map[string]interface{}) error {
-	// 1. 检查是否已绑定
+	// 1. Check if already bound
 	existing, err := s.federatedIdentityRepo.FindByProvider(ctx, provider, providerUserID)
 	if err == nil && existing != nil {
 		return errors.New("federated identity already bound")
 	}
 
-	// 2. 创建绑定
+	// 2. Create binding
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
 	})
@@ -457,7 +457,7 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 	return nil
 }
 
-// UnbindFederatedIdentity 解绑第三方身份
+// UnbindFederatedIdentity unbinds a third-party identity.
 func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, identityID string) error {
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
@@ -482,7 +482,7 @@ func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, identi
 	return nil
 }
 
-// AssignRole 为账号分配角色
+// AssignRole assigns a role to the account.
 func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID string) error {
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
@@ -512,7 +512,7 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 	return nil
 }
 
-// RemoveRole 移除账号的角色
+// RemoveRole removes a role from the account.
 func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID string) error {
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
@@ -544,12 +544,12 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 	return nil
 }
 
-// ListAccounts 分页查询账号列表
+// ListAccounts returns a paginated list of accounts.
 func (s *accountServiceImpl) ListAccounts(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error) {
 	return s.accountRepo.FindAll(ctx, page, pageSize, status)
 }
 
-// SuspendAccount 禁用账号
+// SuspendAccount suspends the account.
 func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID string) error {
 	account, err := s.accountRepo.FindByID(ctx, accountID)
 	if err != nil {
@@ -575,7 +575,7 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 	return nil
 }
 
-// ActivateAccount 启用账号
+// ActivateAccount reactivates the account.
 func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID string) error {
 	account, err := s.accountRepo.FindByID(ctx, accountID)
 	if err != nil {
@@ -601,12 +601,12 @@ func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID stri
 	return nil
 }
 
-// GetAccountRoles 获取账号的角色列表
+// GetAccountRoles returns the roles assigned to the account.
 func (s *accountServiceImpl) GetAccountRoles(ctx context.Context, accountID string) ([]*domain.Role, error) {
 	return s.roleRepo.FindRolesByAccountID(ctx, accountID)
 }
 
-// validateRegistration 验证注册请求
+// validateRegistration validates the registration request.
 var phoneRegex = regexp.MustCompile(`^\+?[1-9]\d{6,14}$`)
 
 func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) error {
@@ -618,7 +618,7 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 		return errors.New("password must be at least 8 characters")
 	}
 
-	// 密码强度检查：至少包含大写、小写、数字各一个
+	// Password strength check: must contain at least one uppercase, lowercase, and digit
 	var hasUpper, hasLower, hasDigit bool
 	for _, c := range req.Password {
 		switch {
@@ -642,14 +642,14 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 		return errors.New("display name is required")
 	}
 
-	// 邮箱格式验证
+	// Validate email format
 	if req.Email != "" {
 		if _, err := mail.ParseAddress(req.Email); err != nil {
 			return errors.New("invalid email format")
 		}
 	}
 
-	// 手机号格式验证
+	// Validate phone format
 	if req.Phone != "" {
 		if !phoneRegex.MatchString(req.Phone) {
 			return errors.New("invalid phone format")
@@ -659,7 +659,7 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 	return nil
 }
 
-// checkCredentialExists 检查凭证是否已存在
+// checkCredentialExists checks whether a credential with the given type and identifier already exists.
 func (s *accountServiceImpl) checkCredentialExists(ctx context.Context, credType domain.CredentialType, identifier string) error {
 	cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, credType, identifier)
 	if err == nil && cred != nil {

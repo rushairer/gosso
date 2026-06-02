@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Provider 第三方身份提供商
+// Provider represents a third-party identity provider.
 type Provider string
 
 const (
@@ -15,7 +15,7 @@ const (
 	ProviderWeChat Provider = "wechat"
 )
 
-// FederatedIdentity 第三方身份领域模型
+// FederatedIdentity is the federated identity domain model.
 type FederatedIdentity struct {
 	ID             string         `json:"id"`
 	AccountID      string         `json:"account_id"`
@@ -27,7 +27,7 @@ type FederatedIdentity struct {
 	DeletedAt      *time.Time     `json:"deleted_at,omitempty"`
 }
 
-// NewFederatedIdentity 创建新的第三方身份
+// NewFederatedIdentity creates a new federated identity.
 func NewFederatedIdentity(accountID string, provider Provider, providerUserID string, profile map[string]interface{}) *FederatedIdentity {
 	if profile == nil {
 		profile = make(map[string]interface{})
@@ -44,19 +44,19 @@ func NewFederatedIdentity(accountID string, provider Provider, providerUserID st
 	}
 }
 
-// IsDeleted 是否已软删除
+// IsDeleted reports whether the federated identity has been soft-deleted.
 func (fi *FederatedIdentity) IsDeleted() bool {
 	return fi.DeletedAt != nil
 }
 
-// SoftDelete 软删除第三方身份
+// SoftDelete soft-deletes the federated identity.
 func (fi *FederatedIdentity) SoftDelete() {
 	now := time.Now()
 	fi.DeletedAt = &now
 	fi.UpdatedAt = now
 }
 
-// UpdateProfile 更新资料
+// UpdateProfile updates the profile data.
 func (fi *FederatedIdentity) UpdateProfile(profile map[string]interface{}) {
 	fi.Profile = profile
 	fi.UpdatedAt = time.Now()

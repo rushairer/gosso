@@ -10,36 +10,36 @@ import (
 	"github.com/rushairer/gosso/internal/account/domain"
 )
 
-// RoleRepository 角色仓储接口
+// RoleRepository defines the interface for role repository
 type RoleRepository interface {
-	// CreateRole 创建角色（需要事务）
+	// CreateRole creates a role (requires transaction)
 	CreateRole(ctx context.Context, tx *sql.Tx, role *domain.Role) error
 
-	// UpdateRole 更新角色（需要事务）
+	// UpdateRole updates a role (requires transaction)
 	UpdateRole(ctx context.Context, tx *sql.Tx, role *domain.Role) error
 
-	// FindByID 根据 ID 查找角色
+	// FindByID finds a role by ID
 	FindByID(ctx context.Context, roleID string) (*domain.Role, error)
 
-	// FindByName 根据名称查找角色
+	// FindByName finds a role by name
 	FindByName(ctx context.Context, name string) (*domain.Role, error)
 
-	// FindAll 查找所有角色
+	// FindAll finds all roles
 	FindAll(ctx context.Context) ([]*domain.Role, error)
 
-	// SoftDeleteByID 软删除角色（需要事务）
+	// SoftDeleteByID soft deletes a role by ID (requires transaction)
 	SoftDeleteByID(ctx context.Context, tx *sql.Tx, roleID string, deletedAt time.Time) error
 
-	// AssignRoleToAccount 为账号分配角色（需要事务）
+	// AssignRoleToAccount assigns a role to an account (requires transaction)
 	AssignRoleToAccount(ctx context.Context, tx *sql.Tx, accountID, roleID string) error
 
-	// RemoveRoleFromAccount 移除账号的角色（软删除，需要事务）
+	// RemoveRoleFromAccount removes a role from an account (soft delete, requires transaction)
 	RemoveRoleFromAccount(ctx context.Context, tx *sql.Tx, accountID, roleID string, deletedAt time.Time) error
 
-	// FindRolesByAccountID 查找账号的所有角色
+	// FindRolesByAccountID finds all roles associated with an account ID
 	FindRolesByAccountID(ctx context.Context, accountID string) ([]*domain.Role, error)
 
-	// SoftDeleteRolesByAccountID 软删除账号的所有角色关联（需要事务）
+	// SoftDeleteRolesByAccountID soft deletes all role associations for an account (requires transaction)
 	SoftDeleteRolesByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
 }
 
@@ -47,12 +47,12 @@ type roleRepositoryImpl struct {
 	db *sql.DB
 }
 
-// NewRoleRepository 创建角色仓储
+// NewRoleRepository creates a new role repository
 func NewRoleRepository(db *sql.DB) RoleRepository {
 	return &roleRepositoryImpl{db: db}
 }
 
-// CreateRole 创建角色
+// CreateRole creates a role
 func (r *roleRepositoryImpl) CreateRole(ctx context.Context, tx *sql.Tx, role *domain.Role) error {
 	query := `
 		INSERT INTO roles (id, name, description, permissions, metadata, created_at, updated_at)
@@ -85,7 +85,7 @@ func (r *roleRepositoryImpl) CreateRole(ctx context.Context, tx *sql.Tx, role *d
 	return nil
 }
 
-// UpdateRole 更新角色
+// UpdateRole updates a role
 func (r *roleRepositoryImpl) UpdateRole(ctx context.Context, tx *sql.Tx, role *domain.Role) error {
 	query := `
 		UPDATE roles
@@ -126,7 +126,7 @@ func (r *roleRepositoryImpl) UpdateRole(ctx context.Context, tx *sql.Tx, role *d
 	return nil
 }
 
-// FindByID 根据 ID 查找角色
+// FindByID finds a role by ID
 func (r *roleRepositoryImpl) FindByID(ctx context.Context, roleID string) (*domain.Role, error) {
 	query := `
 		SELECT id, name, description, permissions, metadata, created_at, updated_at, deleted_at
@@ -167,7 +167,7 @@ func (r *roleRepositoryImpl) FindByID(ctx context.Context, roleID string) (*doma
 	return role, nil
 }
 
-// FindByName 根据名称查找角色
+// FindByName finds a role by name
 func (r *roleRepositoryImpl) FindByName(ctx context.Context, name string) (*domain.Role, error) {
 	query := `
 		SELECT id, name, description, permissions, metadata, created_at, updated_at, deleted_at
@@ -208,7 +208,7 @@ func (r *roleRepositoryImpl) FindByName(ctx context.Context, name string) (*doma
 	return role, nil
 }
 
-// FindAll 查找所有角色
+// FindAll finds all roles
 func (r *roleRepositoryImpl) FindAll(ctx context.Context) ([]*domain.Role, error) {
 	query := `
 		SELECT id, name, description, permissions, metadata, created_at, updated_at, deleted_at
@@ -256,7 +256,7 @@ func (r *roleRepositoryImpl) FindAll(ctx context.Context) ([]*domain.Role, error
 	return roles, nil
 }
 
-// SoftDeleteByID 软删除角色
+// SoftDeleteByID soft deletes a role
 func (r *roleRepositoryImpl) SoftDeleteByID(ctx context.Context, tx *sql.Tx, roleID string, deletedAt time.Time) error {
 	query := `
 		UPDATE roles
@@ -280,7 +280,7 @@ func (r *roleRepositoryImpl) SoftDeleteByID(ctx context.Context, tx *sql.Tx, rol
 	return nil
 }
 
-// AssignRoleToAccount 为账号分配角色
+// AssignRoleToAccount assigns a role to an account
 func (r *roleRepositoryImpl) AssignRoleToAccount(ctx context.Context, tx *sql.Tx, accountID, roleID string) error {
 	query := `
 		INSERT INTO account_roles (account_id, role_id, created_at)
@@ -296,7 +296,7 @@ func (r *roleRepositoryImpl) AssignRoleToAccount(ctx context.Context, tx *sql.Tx
 	return nil
 }
 
-// RemoveRoleFromAccount 移除账号的角色（软删除）
+// RemoveRoleFromAccount removes a role from an account (soft delete)
 func (r *roleRepositoryImpl) RemoveRoleFromAccount(ctx context.Context, tx *sql.Tx, accountID, roleID string, deletedAt time.Time) error {
 	query := `
 		UPDATE account_roles
@@ -320,7 +320,7 @@ func (r *roleRepositoryImpl) RemoveRoleFromAccount(ctx context.Context, tx *sql.
 	return nil
 }
 
-// FindRolesByAccountID 查找账号的所有角色
+// FindRolesByAccountID finds all roles associated with an account ID
 func (r *roleRepositoryImpl) FindRolesByAccountID(ctx context.Context, accountID string) ([]*domain.Role, error) {
 	query := `
 		SELECT r.id, r.name, r.description, r.permissions, r.metadata, r.created_at, r.updated_at, r.deleted_at
@@ -369,7 +369,7 @@ func (r *roleRepositoryImpl) FindRolesByAccountID(ctx context.Context, accountID
 	return roles, nil
 }
 
-// SoftDeleteRolesByAccountID 软删除账号的所有角色关联
+// SoftDeleteRolesByAccountID soft deletes all role associations for an account
 func (r *roleRepositoryImpl) SoftDeleteRolesByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `
 		UPDATE account_roles

@@ -124,7 +124,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	logger.Sugar().Info("server exiting")
 }
 
-// initDatabase 初始化数据库连接
+// initDatabase initializes the database connection
 func initDatabase(cfg config.GoUnoConfig, logger *zap.Logger) (*sql.DB, error) {
 	defaultDriver := cfg.DatabaseConfig.GetDefaultDriver()
 	if defaultDriver == nil {
@@ -150,7 +150,7 @@ func initDatabase(cfg config.GoUnoConfig, logger *zap.Logger) (*sql.DB, error) {
 	return db, nil
 }
 
-// initRedis 初始化 Redis 连接
+// initRedis initializes the Redis connection
 func initRedis(cfg config.GoUnoConfig, logger *zap.Logger) (*cache.RedisClient, error) {
 	redis, err := cache.NewRedisClient(
 		cfg.RedisConfig.DSN,
@@ -166,7 +166,7 @@ func initRedis(cfg config.GoUnoConfig, logger *zap.Logger) (*cache.RedisClient, 
 	return redis, nil
 }
 
-// listenAuditErrors 监听审计错误并记录日志
+// listenAuditErrors listens for audit errors and logs them
 func listenAuditErrors(ctx context.Context, auditor *auditService.Auditor, logger *zap.Logger) {
 	for {
 		select {
@@ -181,7 +181,7 @@ func listenAuditErrors(ctx context.Context, auditor *auditService.Auditor, logge
 	}
 }
 
-// appModules 聚合所有初始化后的模块和控制器
+// appModules aggregates all initialized modules and controllers
 type appModules struct {
 	authCtrl    *authController.AuthController
 	oauth2Ctrl  *oauth2Controller.OAuth2Controller
@@ -192,7 +192,7 @@ type appModules struct {
 	tokenSvc    *tokenService.TokenService
 }
 
-// initModules 初始化所有业务模块和控制器
+// initModules initializes all business modules and controllers
 func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logger *zap.Logger, cfg config.GoUnoConfig, auditor *auditService.Auditor) *appModules {
 	accountSvc := account.InitializeAccountModule(db, auditor)
 
@@ -248,7 +248,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	}
 }
 
-// buildOAuthProviders 从配置构建 OAuth 提供商映射
+// buildOAuthProviders builds OAuth provider mappings from configuration
 func buildOAuthProviders(cfg config.GoUnoConfig) map[string]*authService.OAuthProviderConfig {
 	providers := make(map[string]*authService.OAuthProviderConfig)
 	if cfg.OAuthProviders.Google.ClientID != "" {
@@ -275,7 +275,7 @@ func buildOAuthProviders(cfg config.GoUnoConfig) map[string]*authService.OAuthPr
 	return providers
 }
 
-// setupEngine 配置 Gin 引擎：中间件 + 路由
+// setupEngine configures the Gin engine: middleware + routes
 func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger, m *appModules, db *sql.DB, redis *cache.RedisClient) *gin.Engine {
 	engine := gin.New()
 
@@ -302,7 +302,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 	return engine
 }
 
-// buildCORSConfig 从配置构建 CORS 配置
+// buildCORSConfig builds CORS configuration from config
 func buildCORSConfig(cfg config.GoUnoConfig) cors.Config {
 	corsConfig := cors.Config{
 		AllowAllOrigins:  false,

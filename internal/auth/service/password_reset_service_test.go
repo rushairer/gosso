@@ -49,23 +49,23 @@ func TestPasswordReset_Success(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 模拟完整的 token 存储和验证流程（Redis 层面）
+	// Simulate complete token storage and verification flow (at the Redis layer)
 	tokenHash := tokenDomain.HashToken("test-token-123")
 	tokenKey := svc.buildTokenKey(tokenHash)
 	data := `{"account_id":"account-001","email":"test@example.com","attempts":0}`
 	err := redis.Set(ctx, tokenKey, []byte(data), PasswordResetTokenTTL)
 	require.NoError(t, err)
 
-	// 验证 token 存储成功
+	// Verify token was stored successfully
 	raw, err := redis.Get(ctx, tokenKey)
 	require.NoError(t, err)
 	assert.Contains(t, raw, "account-001")
 
-	// 删除 key（模拟一次性使用）
+	// Delete key (simulate one-time use)
 	err = redis.Del(ctx, tokenKey)
 	require.NoError(t, err)
 
-	// 再次获取应返回 not found
+	// Fetching again should return not found
 	_, err = redis.Get(ctx, tokenKey)
 	assert.Error(t, err)
 	assert.Equal(t, cache.ErrKeyNotFound, err)
@@ -78,12 +78,12 @@ func TestPasswordReset_Cooldown(t *testing.T) {
 	ctx := context.Background()
 	email := "cooldown@example.com"
 
-	// 设置冷却 key
+	// Set cooldown key
 	cooldownKey := svc.buildCooldownKey(email)
 	err := redis.Set(ctx, cooldownKey, []byte("1"), PasswordResetCooldownTTL)
 	require.NoError(t, err)
 
-	// 检查冷却
+	// Check cooldown
 	exists, err := redis.Exists(ctx, cooldownKey)
 	require.NoError(t, err)
 	assert.True(t, exists)
@@ -95,7 +95,7 @@ func TestPasswordReset_InvalidToken(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 使用不存在的 token hash
+	// Use a non-existent token hash
 	tokenHash := tokenDomain.HashToken("nonexistent-token")
 	tokenKey := svc.buildTokenKey(tokenHash)
 
@@ -110,17 +110,17 @@ func TestPasswordReset_ExpiredToken(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 存入 token 后手动删除模拟过期
+	// Manually delete to simulate expiration
 	tokenHash := tokenDomain.HashToken("expired-token")
 	tokenKey := svc.buildTokenKey(tokenHash)
 	data := `{"account_id":"account-002","email":"expired@example.com","attempts":0}`
 	err := redis.Set(ctx, tokenKey, []byte(data), PasswordResetTokenTTL)
 	require.NoError(t, err)
 
-	// 手动删除 key
+	// Manually delete key
 	_ = redis.Del(ctx, tokenKey)
 
-	// 获取应返回 not found
+	// Fetching should return not found
 	_, err = redis.Get(ctx, tokenKey)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
@@ -132,19 +132,19 @@ func TestPasswordReset_TokenExhausted(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 存入已耗尽 attempts 的 token
+	// Store a token with exhausted attempts
 	tokenHash := tokenDomain.HashToken("exhausted-token")
 	tokenKey := svc.buildTokenKey(tokenHash)
 	data := `{"account_id":"account-003","email":"exhausted@example.com","attempts":5}`
 	err := redis.Set(ctx, tokenKey, []byte(data), PasswordResetTokenTTL)
 	require.NoError(t, err)
 
-	// 验证 attempts >= 5
+	// Verify attempts >= 5
 	raw, err := redis.Get(ctx, tokenKey)
 	require.NoError(t, err)
 	assert.Contains(t, raw, `"attempts":5`)
 
-	// 删除 key（模拟 VerifyAndReset 中的 exhausted 处理）
+	// Delete key (simulate exhausted handling in VerifyAndReset)
 	err = redis.Del(ctx, tokenKey)
 	require.NoError(t, err)
 }
@@ -155,21 +155,21 @@ func TestPasswordReset_TokenReuse(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 存入 token
+	// Store token
 	tokenHash := tokenDomain.HashToken("reuse-token")
 	tokenKey := svc.buildTokenKey(tokenHash)
 	data := `{"account_id":"account-004","email":"reuse@example.com","attempts":0}`
 	err := redis.Set(ctx, tokenKey, []byte(data), PasswordResetTokenTTL)
 	require.NoError(t, err)
 
-	// 第一次获取成功
+	// First fetch succeeds
 	_, err = redis.Get(ctx, tokenKey)
 	require.NoError(t, err)
 
-	// 删除（一次性使用）
+	// Delete (one-time use)
 	_ = redis.Del(ctx, tokenKey)
 
-	// 第二次获取失败
+	// Second fetch fails
 	_, err = redis.Get(ctx, tokenKey)
 	assert.Error(t, err)
 	assert.Equal(t, cache.ErrKeyNotFound, err)
@@ -181,7 +181,7 @@ func TestPasswordReset_EmailNotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 不存在的邮箱：不存入 Redis、不发送邮件
+	// Non-existent email: no Redis entry, no email sent
 	cooldownKey := svc.buildCooldownKey("nonexistent@example.com")
 	exists, err := redis.Exists(ctx, cooldownKey)
 	require.NoError(t, err)
@@ -193,14 +193,14 @@ func TestPasswordReset_EmailNotFound(t *testing.T) {
 }
 
 func TestPasswordReset_TokenSecurity(t *testing.T) {
-	// 验证 SHA256 hash 不可逆，且长度正确
+	// Verify SHA256 hash is irreversible and has correct length
 	originalToken := "a]b1c2d3e4f5"
 	hashedToken := tokenDomain.HashToken(originalToken)
 
 	assert.NotEqual(t, originalToken, hashedToken)
 	assert.Len(t, hashedToken, 64) // SHA256 hex = 64 chars
 
-	// 相同输入产生相同 hash
+	// Same input produces the same hash
 	hashedAgain := tokenDomain.HashToken(originalToken)
 	assert.Equal(t, hashedToken, hashedAgain)
 }

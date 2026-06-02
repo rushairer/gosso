@@ -12,7 +12,7 @@ import (
 	authService "github.com/rushairer/gosso/internal/auth/service"
 )
 
-// PasskeyController Passkey 控制器
+// PasskeyController handles Passkey authentication endpoints.
 type PasskeyController struct {
 	passkeySvc *authService.PasskeyService
 	authSvc    authService.AuthOrchestrator
@@ -21,7 +21,7 @@ type PasskeyController struct {
 	logger     *zap.Logger
 }
 
-// NewPasskeyController 创建 Passkey 控制器实例
+// NewPasskeyController creates a new Passkey controller instance.
 func NewPasskeyController(
 	passkeySvc *authService.PasskeyService,
 	authSvc authService.AuthOrchestrator,
@@ -38,27 +38,27 @@ func NewPasskeyController(
 	}
 }
 
-// RegisterRoutes 注册 Passkey 路由
+// RegisterRoutes registers Passkey routes.
 func (c *PasskeyController) RegisterRoutes(rg *gin.RouterGroup, jwtAuth gin.HandlerFunc) {
 	passkey := rg.Group("/passkey")
 	{
-		// 注册 passkey（需要登录）
+		// Passkey registration (requires authentication)
 		passkey.POST("/register/begin", jwtAuth, c.RegisterBegin)
 		passkey.POST("/register/complete", jwtAuth, c.RegisterComplete)
 
-		// 登录（无需认证）
+		// Login (no authentication required)
 		passkey.POST("/login/begin", c.LoginBegin)
 		passkey.POST("/login/complete", c.LoginComplete)
 	}
 
-	// Passkey 管理（需要登录）
+	// Passkey management (requires authentication)
 	passkeys := rg.Group("/passkeys")
 	{
 		passkeys.GET("", jwtAuth, c.ListCredentials)
 		passkeys.DELETE("/:id", jwtAuth, c.DeleteCredential)
 	}
 
-	// Passkey MFA（无需 JWT，但需要 mfa_token）
+	// Passkey MFA (no JWT required, but requires mfa_token)
 	mfaPasskey := rg.Group("/passkey/mfa")
 	{
 		mfaPasskey.POST("/begin", c.MFABegin)
@@ -135,9 +135,9 @@ func (c *PasskeyController) RegisterComplete(ctx *gin.Context) {
 	}))
 }
 
-// LoginBeginRequest Passkey 登录开始请求体
+// LoginBeginRequest is the passkey login begin request body.
 type LoginBeginRequest struct {
-	AccountID string `json:"account_id"` // 可选，不填则使用 discoverable login
+	AccountID string `json:"account_id"` // Optional; if empty, uses discoverable login
 }
 
 // LoginBegin POST /api/auth/passkey/login/begin
@@ -172,7 +172,7 @@ func (c *PasskeyController) LoginBegin(ctx *gin.Context) {
 	}))
 }
 
-// LoginCompleteRequest Passkey 登录完成请求体
+// LoginCompleteRequest is the passkey login complete request body.
 type LoginCompleteRequest struct {
 	RequestID string `json:"request_id" binding:"required"`
 }
@@ -192,7 +192,7 @@ func (c *PasskeyController) LoginComplete(ctx *gin.Context) {
 		return
 	}
 
-	// 使用 accountID 完成完整登录流程（创建会话、生成 tokens）
+	// Complete full login flow with accountID (create session, generate tokens)
 	loginResult, err := c.authSvc.LoginByPasskey(ctx, accountID, ctx.ClientIP(), ctx.Request.UserAgent())
 	if err != nil {
 		c.logger.Error("Passkey login failed", zap.String("account_id", accountID), zap.Error(err))
@@ -209,7 +209,7 @@ func (c *PasskeyController) LoginComplete(ctx *gin.Context) {
 	}))
 }
 
-// MFABeginRequest Passkey MFA 开始请求体
+// MFABeginRequest is the passkey MFA begin request body.
 type MFABeginRequest struct {
 	MFAToken string `json:"mfa_token" binding:"required"`
 }
@@ -227,7 +227,7 @@ func (c *PasskeyController) MFABegin(ctx *gin.Context) {
 		return
 	}
 
-	// 使用 authSvc 验证 mfa token 并获取 accountID
+	// Validate mfa token via authSvc and retrieve accountID
 	claims, err := c.authSvc.ValidateMFAToken(ctx, req.MFAToken)
 	if err != nil {
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid mfa token"))
@@ -244,7 +244,7 @@ func (c *PasskeyController) MFABegin(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(options))
 }
 
-// MFACompleteRequest Passkey MFA 完成请求体
+// MFACompleteRequest is the passkey MFA complete request body.
 type MFACompleteRequest struct {
 	MFAToken string `json:"mfa_token" binding:"required"`
 }
@@ -269,7 +269,7 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 		return
 	}
 
-	// 标记 passkey MFA 已验证
+	// Mark passkey MFA as verified
 	if err := c.authSvc.MarkPasskeyMFAVerified(ctx, claims.AccountID); err != nil {
 		c.logger.Warn("Failed to mark passkey MFA verified", zap.Error(err))
 	}

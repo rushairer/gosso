@@ -14,8 +14,8 @@ type ConfigManager struct {
 	config      *GoUnoConfig
 }
 
-// NewConfigManager 创建配置管理器。
-// cmd 传入 Cobra 命令以绑定 CLI flag 到配置项，可传 nil。
+// NewConfigManager creates a configuration manager.
+// cmd is an optional Cobra command for binding CLI flags to config keys; may be nil.
 func NewConfigManager(
 	cmd *cobra.Command,
 	configPath string,
@@ -34,7 +34,7 @@ func NewConfigManager(
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
-	// 将 CLI flag 绑定到局部 viper 实例
+	// Bind CLI flags to the local viper instance
 	if cmd != nil {
 		if f := cmd.Flags().Lookup("address"); f != nil {
 			_ = v.BindPFlag("web_server.address", f)
@@ -75,10 +75,10 @@ func (cm *ConfigManager) Config() GoUnoConfig {
 }
 
 func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
-	// 验证码配置
+	// Captcha configuration
 	v.SetDefault("captcha_type", "math")
 
-	// Web服务器配置
+	// Web server configuration
 	v.SetDefault("web_server.debug", false)
 	v.SetDefault("web_server.address", "0.0.0.0")
 	v.SetDefault("web_server.port", "8080")
@@ -93,7 +93,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("web_server.rate_limits.passkey", 10)
 	v.SetDefault("web_server.rate_limits.api", 60)
 
-	// 数据库配置
+	// Database configuration
 	v.SetDefault("database.default", "sqlite")
 	v.SetDefault("database.drivers.sqlite.name", "sqlite")
 	v.SetDefault("database.drivers.sqlite.driver", "sqlite3")

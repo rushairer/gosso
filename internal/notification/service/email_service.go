@@ -39,7 +39,7 @@ var (
 </html>`))
 )
 
-// EmailService 邮件发送服务
+// EmailService email sending service
 type EmailService struct {
 	host     string
 	port     int
@@ -49,7 +49,7 @@ type EmailService struct {
 	logger   *zap.Logger
 }
 
-// NewEmailService 创建邮件服务实例
+// NewEmailService creates a new email service instance
 func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) *EmailService {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -64,7 +64,7 @@ func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) *EmailService {
 	}
 }
 
-// SendVerificationCode 发送验证码邮件
+// SendVerificationCode sends a verification code email
 func (s *EmailService) SendVerificationCode(ctx context.Context, to, code string) error {
 	subject := "Your Verification Code"
 	var body bytes.Buffer
@@ -76,7 +76,7 @@ func (s *EmailService) SendVerificationCode(ctx context.Context, to, code string
 	return s.send(to, msg)
 }
 
-// SendPasswordResetLink 发送密码重置邮件
+// SendPasswordResetLink sends a password reset email
 func (s *EmailService) SendPasswordResetLink(ctx context.Context, to, resetLink string) error {
 	subject := "Reset Your Password"
 	var body bytes.Buffer

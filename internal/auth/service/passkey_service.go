@@ -26,7 +26,7 @@ const (
 	redisKeyMFAChallenge   = "webauthn:mfa:%s"
 )
 
-// PasskeyCredentialView passkey 列表视图（不暴露敏感数据）
+// PasskeyCredentialView passkey list view (does not expose sensitive data)
 type PasskeyCredentialView struct {
 	ID              string     `json:"id"`
 	Name            string     `json:"name"`
@@ -36,7 +36,7 @@ type PasskeyCredentialView struct {
 	Transports      []string   `json:"transports,omitempty"`
 }
 
-// PasskeyService WebAuthn Passkey 服务
+// PasskeyService WebAuthn Passkey service
 type PasskeyService struct {
 	web      *wa.WebAuthn
 	credRepo repository.WebAuthnCredentialRepository
@@ -45,7 +45,7 @@ type PasskeyService struct {
 	logger   *zap.Logger
 }
 
-// NewPasskeyService 创建 Passkey 服务实例
+// NewPasskeyService creates a new PasskeyService instance
 func NewPasskeyService(
 	web *wa.WebAuthn,
 	credRepo repository.WebAuthnCredentialRepository,
@@ -65,9 +65,9 @@ func NewPasskeyService(
 	}
 }
 
-// BeginRegistration 开始 Passkey 注册，返回 CredentialCreation options
+// BeginRegistration starts Passkey registration, returning CredentialCreation options
 func (s *PasskeyService) BeginRegistration(ctx context.Context, accountID, username, displayName string) (*protocol.CredentialCreation, error) {
-	// 查找已有 credentials 用于排除
+	// Find existing credentials for exclusion
 	existingCreds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil {
 		s.logger.Warn("Failed to find existing credentials", zap.Error(err))
@@ -81,7 +81,7 @@ func (s *PasskeyService) BeginRegistration(ctx context.Context, accountID, usern
 		return nil, fmt.Errorf("begin registration: %w", err)
 	}
 
-	// 存储 challenge 到 Redis
+	// Store challenge to Redis
 	data, err := json.Marshal(sessionData)
 	if err != nil {
 		return nil, fmt.Errorf("marshal session data: %w", err)
@@ -95,9 +95,9 @@ func (s *PasskeyService) BeginRegistration(ctx context.Context, accountID, usern
 	return options, nil
 }
 
-// CompleteRegistration 完成 Passkey 注册
+// CompleteRegistration completes Passkey registration
 func (s *PasskeyService) CompleteRegistration(ctx context.Context, accountID, username, displayName string, request *http.Request) (*domain.WebAuthnCredential, error) {
-	// 从 Redis 获取 challenge
+	// Get challenge from Redis
 	key := fmt.Sprintf(redisKeyRegChallenge, accountID)
 	data, err := s.redis.Get(ctx, key)
 	if err != nil {
@@ -110,7 +110,7 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, accountID, us
 		return nil, fmt.Errorf("unmarshal session data: %w", err)
 	}
 
-	// 查找已有 credentials
+	// Find existing credentials
 	existingCreds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil {
 		existingCreds = nil
@@ -123,7 +123,7 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, accountID, us
 		return nil, fmt.Errorf("finish registration: %w", err)
 	}
 
-	// 保存 credential 到数据库
+	// Save credential to database
 	now := time.Now()
 	cred := &domain.WebAuthnCredential{
 		ID:              uuid.New().String(),
@@ -160,7 +160,7 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, accountID, us
 	return cred, nil
 }
 
-// BeginLogin 开始 Passkey 登录（MFA 场景，已知 accountID）
+// BeginLogin starts Passkey login (MFA scenario, known accountID)
 func (s *PasskeyService) BeginLogin(ctx context.Context, accountID string) (*protocol.CredentialAssertion, string, error) {
 	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil || len(creds) == 0 {
@@ -174,7 +174,7 @@ func (s *PasskeyService) BeginLogin(ctx context.Context, accountID string) (*pro
 		return nil, "", fmt.Errorf("begin login: %w", err)
 	}
 
-	// 使用随机 requestID 存储 challenge
+	// Store challenge using random requestID
 	requestID := uuid.New().String()
 	data, err := json.Marshal(sessionData)
 	if err != nil {
@@ -189,7 +189,7 @@ func (s *PasskeyService) BeginLogin(ctx context.Context, accountID string) (*pro
 	return options, requestID, nil
 }
 
-// BeginDiscoverableLogin 开始无密码登录（不知道 accountID）
+// BeginDiscoverableLogin starts passwordless login (unknown accountID)
 func (s *PasskeyService) BeginDiscoverableLogin(ctx context.Context) (*protocol.CredentialAssertion, string, error) {
 	options, sessionData, err := s.web.BeginDiscoverableLogin()
 	if err != nil {
@@ -210,9 +210,9 @@ func (s *PasskeyService) BeginDiscoverableLogin(ctx context.Context) (*protocol.
 	return options, requestID, nil
 }
 
-// CompleteLogin 完成 Passkey 登录验证
+// CompleteLogin completes Passkey login verification
 func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, request *http.Request) (string, *domain.WebAuthnCredential, error) {
-	// 从 Redis 获取 challenge
+	// Get challenge from Redis
 	key := fmt.Sprintf(redisKeyLoginChallenge, requestID)
 	data, err := s.redis.Get(ctx, key)
 	if err != nil {
@@ -225,7 +225,7 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 		return "", nil, fmt.Errorf("unmarshal session data: %w", err)
 	}
 
-	// 解析 response 获取 credential ID
+	// Parse response to get credential ID
 	parsedResponse, err := protocol.ParseCredentialRequestResponseBody(request.Body)
 	if err != nil {
 		return "", nil, fmt.Errorf("parse credential response: %w", err)
@@ -237,7 +237,7 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 		return "", nil, errors.New("credential not found")
 	}
 
-	// 查找该账号的所有 credentials
+	// Find all credentials for this account
 	allCreds, err := s.credRepo.FindByAccountID(ctx, cred.AccountID)
 	if err != nil {
 		return "", nil, fmt.Errorf("find credentials: %w", err)
@@ -250,7 +250,7 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 		return "", nil, fmt.Errorf("finish login: %w", err)
 	}
 
-	// 更新 sign count
+	// Update sign count
 	cred.SignCount = waCred.Authenticator.SignCount
 	cred.MarkUsed()
 
@@ -271,7 +271,7 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 	return cred.AccountID, cred, nil
 }
 
-// BeginMFALogin 开始 MFA Passkey 验证
+// BeginMFALogin starts MFA Passkey verification
 func (s *PasskeyService) BeginMFALogin(ctx context.Context, accountID string) (*protocol.CredentialAssertion, error) {
 	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil || len(creds) == 0 {
@@ -298,7 +298,7 @@ func (s *PasskeyService) BeginMFALogin(ctx context.Context, accountID string) (*
 	return options, nil
 }
 
-// CompleteMFALogin 完成 MFA Passkey 验证
+// CompleteMFALogin completes MFA Passkey verification
 func (s *PasskeyService) CompleteMFALogin(ctx context.Context, accountID string, request *http.Request) error {
 	key := fmt.Sprintf(redisKeyMFAChallenge, accountID)
 	data, err := s.redis.Get(ctx, key)
@@ -355,7 +355,7 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, accountID string,
 	return tx.Commit()
 }
 
-// HasPasskeys 检查账号是否有可用的 passkey
+// HasPasskeys checks if the account has any available passkey
 func (s *PasskeyService) HasPasskeys(ctx context.Context, accountID string) (bool, error) {
 	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil {
@@ -364,7 +364,7 @@ func (s *PasskeyService) HasPasskeys(ctx context.Context, accountID string) (boo
 	return len(creds) > 0, nil
 }
 
-// ListCredentials 列出账号的所有 passkeys
+// ListCredentials lists all passkeys for the account
 func (s *PasskeyService) ListCredentials(ctx context.Context, accountID string) ([]PasskeyCredentialView, error) {
 	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil {
@@ -385,7 +385,7 @@ func (s *PasskeyService) ListCredentials(ctx context.Context, accountID string) 
 	return views, nil
 }
 
-// DeleteCredential 删除 passkey（ownership check）
+// DeleteCredential deletes a passkey (ownership check)
 func (s *PasskeyService) DeleteCredential(ctx context.Context, accountID, credentialID string) error {
 	cred, err := s.credRepo.FindByCredentialID(ctx, credentialID)
 	if err != nil {
@@ -417,7 +417,7 @@ func (s *PasskeyService) DeleteCredential(ctx context.Context, accountID, creden
 	return nil
 }
 
-// toCredentialSlice 将 []*domain.WebAuthnCredential 转换为 []domain.WebAuthnCredential
+// toCredentialSlice converts []*domain.WebAuthnCredential to []domain.WebAuthnCredential
 func toCredentialSlice(creds []*domain.WebAuthnCredential) []domain.WebAuthnCredential {
 	if creds == nil {
 		return nil
@@ -429,7 +429,7 @@ func toCredentialSlice(creds []*domain.WebAuthnCredential) []domain.WebAuthnCred
 	return result
 }
 
-// transportsToStrings 将 protocol.AuthenticatorTransport 转换为 []string
+// transportsToStrings converts []protocol.AuthenticatorTransport to []string
 func transportsToStrings(transports []protocol.AuthenticatorTransport) []string {
 	if len(transports) == 0 {
 		return nil

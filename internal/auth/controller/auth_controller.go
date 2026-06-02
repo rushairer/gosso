@@ -15,7 +15,7 @@ import (
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
-// AuthController 认证控制器
+// AuthController authentication controller
 type AuthController struct {
 	authSvc          authService.AuthOrchestrator
 	tokenMgr         authService.TokenManager
@@ -26,7 +26,7 @@ type AuthController struct {
 	logger           *zap.Logger
 }
 
-// getClaimsFromContext 从 gin.Context 中提取并校验 JWT claims
+// getClaimsFromContext extracts and validates JWT claims from gin.Context
 func getClaimsFromContext(ctx *gin.Context) (*tokenDomain.AccessTokenClaims, bool) {
 	jwtClaims, exists := ctx.Get("jwt_claims")
 	if !exists {
@@ -41,7 +41,7 @@ func getClaimsFromContext(ctx *gin.Context) (*tokenDomain.AccessTokenClaims, boo
 	return tc, true
 }
 
-// NewAuthController 创建认证控制器实例
+// NewAuthController creates a new instance of AuthController
 func NewAuthController(
 	authSvc authService.AuthOrchestrator,
 	tokenMgr authService.TokenManager,
@@ -62,8 +62,8 @@ func NewAuthController(
 	}
 }
 
-// RegisterRoutes 注册认证路由
-// loginLimit, mfaLimit, passwordLimit: 可选的 per-endpoint 限流中间件
+// RegisterRoutes registers authentication routes
+// loginLimit, mfaLimit, passwordLimit: optional per-endpoint rate limiting middlewares
 func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.HandlerFunc, mfaLimit gin.HandlerFunc, passwordLimit gin.HandlerFunc) {
 	auth := rg.Group("/auth")
 	{
@@ -111,7 +111,7 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.Hand
 	}
 }
 
-// LoginRequest 登录请求体
+// LoginRequestBody login request body
 type LoginRequestBody struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
@@ -155,7 +155,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 	}))
 }
 
-// RefreshTokenRequest 刷新令牌请求体
+// RefreshTokenRequest refresh token request body
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
@@ -182,7 +182,7 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 	}))
 }
 
-// LogoutRequest 注销请求体
+// LogoutRequest logout request body
 type LogoutRequest struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
@@ -190,7 +190,7 @@ type LogoutRequest struct {
 
 // Logout POST /api/auth/logout
 func (c *AuthController) Logout(ctx *gin.Context) {
-	// 尝试撤销 access token（从 header 获取）
+	// Attempt to revoke access token (obtained from header)
 	authHeader := ctx.GetHeader("Authorization")
 	var accessTokenJTI string
 	var tokenExpiresAt time.Time
@@ -204,7 +204,7 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 		}
 	}
 
-	// 从 claims 获取 session_id
+	// Get session_id from claims
 	if jwtClaims, exists := ctx.Get("jwt_claims"); exists {
 		if tc, ok := jwtClaims.(*tokenDomain.AccessTokenClaims); ok {
 			_ = c.authSvc.Logout(ctx, tc.AccountID, tc.SessionID, accessTokenJTI, tokenExpiresAt)
@@ -260,7 +260,7 @@ func (c *AuthController) RevokeSession(ctx *gin.Context) {
 		return
 	}
 
-	// 不允许撤销当前会话（应该用 logout）
+	// Do not allow revoking the current session (should use logout)
 	if sessionID == tc.SessionID {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "use /logout to revoke current session"))
 		return
@@ -275,7 +275,7 @@ func (c *AuthController) RevokeSession(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{"revoked": true}))
 }
 
-// MFAVerifyRequest MFA 验证请求体
+// MFAVerifyRequest MFA verification request body
 type MFAVerifyRequest struct {
 	MFAToken string `json:"mfa_token" binding:"required"`
 	Code     string `json:"code"`
@@ -310,7 +310,7 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 	}))
 }
 
-// MFAEnrollRequest MFA 注册请求体
+// MFAEnrollRequest MFA enrollment request body
 type MFAEnrollRequest struct {
 	AccountID string `json:"account_id" binding:"required"`
 }
@@ -323,7 +323,7 @@ func (c *AuthController) MFAEnroll(ctx *gin.Context) {
 		return
 	}
 
-	// 验证当前用户只能为自己注册 MFA
+	// Verify that the current user can only enroll MFA for themselves
 	tc, ok := getClaimsFromContext(ctx)
 	if !ok {
 		return
@@ -342,7 +342,7 @@ func (c *AuthController) MFAEnroll(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(enrollment))
 }
 
-// MFAActivateRequest MFA 激活请求体
+// MFAActivateRequest MFA activation request body
 type MFAActivateRequest struct {
 	Code string `json:"code" binding:"required"`
 }
@@ -461,7 +461,7 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 	}))
 }
 
-// SendVerificationRequest 发送验证码请求体
+// SendVerificationRequest send verification code request body
 type SendVerificationRequest struct {
 	Type       string `json:"type" binding:"required"`       // "email" or "phone"
 	Identifier string `json:"identifier" binding:"required"` // email address or phone number
@@ -493,7 +493,7 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("verification code sent"))
 }
 
-// ConfirmVerificationRequest 确认验证码请求体
+// ConfirmVerificationRequest confirm verification code request body
 type ConfirmVerificationRequest struct {
 	Type       string `json:"type" binding:"required"`
 	Identifier string `json:"identifier" binding:"required"`
@@ -518,20 +518,20 @@ func (c *AuthController) ConfirmVerification(ctx *gin.Context) {
 		return
 	}
 
-	// 校验验证码
+	// Validate verification code
 	accountID, err := c.verificationSvc.VerifyCode(ctx, req.Type, req.Identifier, req.Code)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
 		return
 	}
 
-	// 验证码属于当前用户
+	// The verification code belongs to the current user
 	if accountID != tc.AccountID {
 		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "verification code does not belong to this account"))
 		return
 	}
 
-	// 查找凭证并标记为已验证
+	// Find credential and mark it as verified
 	var credType accountDomain.CredentialType
 	if req.Type == "email" {
 		credType = accountDomain.CredentialTypeEmail
@@ -559,7 +559,7 @@ func (c *AuthController) ConfirmVerification(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("credential verified"))
 }
 
-// ForgotPasswordRequestBody 忘记密码请求体
+// ForgotPasswordRequestBody forgot password request body
 type ForgotPasswordRequestBody struct {
 	Email string `json:"email" binding:"required,email"`
 }
@@ -576,11 +576,11 @@ func (c *AuthController) ForgotPassword(ctx *gin.Context) {
 		c.logger.Warn("Password reset request error", zap.Error(err))
 	}
 
-	// 始终返回 200，防止邮箱枚举
+	// Always return 200 to prevent email enumeration
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("if the email exists, a reset link has been sent"))
 }
 
-// ResetPasswordRequestBody 重置密码请求体
+// ResetPasswordRequestBody reset password request body
 type ResetPasswordRequestBody struct {
 	Token       string `json:"token" binding:"required"`
 	NewPassword string `json:"new_password" binding:"required,min=8"`

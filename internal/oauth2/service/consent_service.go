@@ -14,16 +14,16 @@ import (
 
 const (
 	ConsentKeyPrefix = "consent:"
-	ConsentTTL       = 90 * 24 * time.Hour // 90 天
+	ConsentTTL       = 90 * 24 * time.Hour // 90 days
 )
 
-// ConsentService 用户授权同意服务（Redis 存储）
+// ConsentService handles user consent for OAuth2 authorization (stored in Redis)
 type ConsentService struct {
 	redis  *cache.RedisClient
 	logger *zap.Logger
 }
 
-// NewConsentService 创建同意服务实例
+// NewConsentService creates a new consent service instance
 func NewConsentService(redis *cache.RedisClient, logger *zap.Logger) *ConsentService {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -34,12 +34,12 @@ func NewConsentService(redis *cache.RedisClient, logger *zap.Logger) *ConsentSer
 	}
 }
 
-// GetConsent 获取用户对指定客户端的授权记录
+// GetConsent retrieves the user's consent record for a specific client
 func (s *ConsentService) GetConsent(ctx context.Context, accountID, clientID string) (*domain.Consent, error) {
 	key := s.buildConsentKey(accountID, clientID)
 	data, err := s.redis.Get(ctx, key)
 	if err == cache.ErrKeyNotFound {
-		return nil, nil // 未授权过，不是错误
+		return nil, nil // Not authorized before, not an error
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get consent: %w", err)
@@ -53,7 +53,7 @@ func (s *ConsentService) GetConsent(ctx context.Context, accountID, clientID str
 	return &consent, nil
 }
 
-// SaveConsent 保存用户授权同意记录
+// SaveConsent saves the user's consent record
 func (s *ConsentService) SaveConsent(ctx context.Context, consent *domain.Consent) error {
 	consent.GrantedAt = time.Now()
 
@@ -74,7 +74,7 @@ func (s *ConsentService) SaveConsent(ctx context.Context, consent *domain.Consen
 	return nil
 }
 
-// DeleteConsent 删除用户授权同意记录
+// DeleteConsent deletes the user's consent record
 func (s *ConsentService) DeleteConsent(ctx context.Context, accountID, clientID string) error {
 	key := s.buildConsentKey(accountID, clientID)
 	if err := s.redis.Del(ctx, key); err != nil {

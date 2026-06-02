@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// AuthorizationCode OAuth2 授权码
+// AuthorizationCode OAuth2 authorization code
 type AuthorizationCode struct {
 	Code                string    `json:"code"`
 	ClientID            string    `json:"client_id"`
@@ -21,15 +21,15 @@ type AuthorizationCode struct {
 	Used                bool      `json:"used"`
 }
 
-// IsExpired 检查授权码是否已过期
+// IsExpired checks if the authorization code has expired
 func (a *AuthorizationCode) IsExpired() bool {
 	return time.Now().After(a.ExpiresAt)
 }
 
-// VerifyPKCE 验证 PKCE code_verifier
+// VerifyPKCE verifies the PKCE code_verifier
 func (a *AuthorizationCode) VerifyPKCE(verifier string) bool {
 	if a.CodeChallenge == "" || a.CodeChallengeMethod == "" {
-		return true // 无 PKCE 要求时直接通过
+		return true // No PKCE requirement, pass through
 	}
 
 	switch a.CodeChallengeMethod {
@@ -46,13 +46,13 @@ func base64URLEncode(data []byte) string {
 	return base64.RawURLEncoding.EncodeToString(data)
 }
 
-// HashPKCEVerifier 计算 PKCE code_challenge（S256 方法）
+// HashPKCEVerifier computes the PKCE code_challenge (S256 method)
 func HashPKCEVerifier(verifier string) string {
 	h := sha256.Sum256([]byte(verifier))
 	return base64URLEncode(h[:])
 }
 
-// 错误定义
+// Error definitions
 var (
 	ErrCodeNotFound           = fmt.Errorf("authorization code not found")
 	ErrCodeExpired            = fmt.Errorf("authorization code expired")

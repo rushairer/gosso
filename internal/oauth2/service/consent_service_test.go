@@ -40,7 +40,7 @@ func TestSaveAndGetConsent(t *testing.T) {
 	err := svc.SaveConsent(ctx, consent)
 	require.NoError(t, err)
 
-	// 获取
+	// Retrieve
 	got, err := svc.GetConsent(ctx, "account-001", "client-001")
 	require.NoError(t, err)
 	require.NotNil(t, got)
@@ -49,7 +49,7 @@ func TestSaveAndGetConsent(t *testing.T) {
 	assert.Equal(t, []string{"openid", "profile"}, got.Scopes)
 	assert.False(t, got.GrantedAt.IsZero())
 
-	// 清理
+	// Clean up
 	_ = svc.DeleteConsent(ctx, "account-001", "client-001")
 }
 
@@ -79,11 +79,11 @@ func TestDeleteConsent(t *testing.T) {
 	err := svc.SaveConsent(ctx, consent)
 	require.NoError(t, err)
 
-	// 删除
+	// Delete
 	err = svc.DeleteConsent(ctx, "account-002", "client-002")
 	require.NoError(t, err)
 
-	// 确认已删除
+	// Confirm deletion
 	got, err := svc.GetConsent(ctx, "account-002", "client-002")
 	require.NoError(t, err)
 	assert.Nil(t, got)

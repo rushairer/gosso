@@ -68,13 +68,13 @@ var migrateStatusCmd = &cobra.Command{
 }
 
 func init() {
-	// 添加全局标志
+	// Add global flags
 	migrateCmd.PersistentFlags().StringP("config_path", "c", "./config", "config file path")
 	migrateCmd.PersistentFlags().StringP("env", "e", "development", "env: development, test, production")
 	migrateCmd.PersistentFlags().StringP("migrations_path", "m", "./db/migrations", "migrations directory path")
 	migrateCmd.PersistentFlags().StringP("schema", "s", "public", "database schema name")
 
-	// 添加子命令
+	// Add subcommands
 	migrateCmd.AddCommand(migrateUpCmd)
 	migrateCmd.AddCommand(migrateDownCmd)
 	migrateCmd.AddCommand(migrateDropCmd)
@@ -83,7 +83,7 @@ func init() {
 	migrateCmd.AddCommand(migrateStatusCmd)
 }
 
-// 初始化配置和迁移实例
+// initMigrate initializes configuration and creates a migrate instance
 func initMigrate(cmd *cobra.Command) (*migrate.Migrate, error) {
 	configPath := cmd.Flag("config_path").Value.String()
 	env := cmd.Flag("env").Value.String()
@@ -96,33 +96,33 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, error) {
 		return nil, fmt.Errorf("default driver not found")
 	}
 
-	// 连接数据库
+	// Connect to database
 	db, err := sql.Open("pgx", defaultDriver.DSN)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	// 获取 schema 参数
+	// Get schema parameter
 	schemaName := cmd.Flag("schema").Value.String()
 
-	// 创建 postgres 驱动实例
+	// Create postgres driver instance
 	driver, err := postgres.WithInstance(db, &postgres.Config{
 		MigrationsTable: "schema_migrations",
-		DatabaseName:    "",         // 使用连接字符串中的数据库名
-		SchemaName:      schemaName, // 使用参数指定的 schema
+		DatabaseName:    "",         // Use database name from connection string
+		SchemaName:      schemaName, // Use schema specified by parameter
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create postgres driver: %w", err)
 	}
 
-	// 获取迁移文件路径
+	// Get migration file path
 	migrationsPath := cmd.Flag("migrations_path").Value.String()
 	absPath, err := filepath.Abs(migrationsPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
-	// 创建迁移实例
+	// Create migrate instance
 	m, err := migrate.NewWithDatabaseInstance(
 		fmt.Sprintf("file://%s", absPath),
 		"postgres",
@@ -135,7 +135,7 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, error) {
 	return m, nil
 }
 
-// closeMigrate 安全地关闭 migrate 实例并记录错误
+// closeMigrate safely closes the migrate instance and logs any errors
 func closeMigrate(m *migrate.Migrate) {
 	if source, err := m.Close(); err != nil {
 		log.Printf("Warning: Failed to close migrate instance: %v %v\n", source, err)
@@ -150,14 +150,14 @@ func runMigrateUp(cmd *cobra.Command, args []string) {
 	defer closeMigrate(m)
 
 	if len(args) > 0 {
-		// 指定步数的 up 迁移
+		// Up migration with specified step count
 		steps := parseSteps(args[0])
 		if err := m.Steps(steps); err != nil && err != migrate.ErrNoChange {
 			log.Fatalf("Migration up %d steps failed: %v", steps, err)
 		}
 		log.Printf("Migration up %d steps completed successfully", steps)
 	} else {
-		// 全部 up 迁移
+		// Run all up migrations
 		if err := m.Up(); err != nil && err != migrate.ErrNoChange {
 			log.Fatalf("Migration up failed: %v", err)
 		}
@@ -173,14 +173,14 @@ func runMigrateDown(cmd *cobra.Command, args []string) {
 	defer closeMigrate(m)
 
 	if len(args) > 0 {
-		// 指定步数的 down 迁移
+		// Down migration with specified step count
 		steps := parseSteps(args[0])
 		if err := m.Steps(-steps); err != nil && err != migrate.ErrNoChange {
 			log.Fatalf("Migration down %d steps failed: %v", steps, err)
 		}
 		log.Printf("Migration down %d steps completed successfully", steps)
 	} else {
-		// 全部 down 迁移
+		// Run all down migrations
 		if err := m.Down(); err != nil && err != migrate.ErrNoChange {
 			log.Fatalf("Migration down failed: %v", err)
 		}
@@ -264,7 +264,7 @@ func runMigrateStatus(cmd *cobra.Command, args []string) {
 	}
 }
 
-// 辅助函数
+// Helper functions
 func parseSteps(s string) int {
 	var steps int
 	if _, err := fmt.Sscanf(s, "%d", &steps); err != nil {

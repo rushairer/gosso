@@ -8,7 +8,7 @@ import (
 
 var EnvironmentConfig EnvironmentSettings
 
-// 环境配置结构体
+// EnvironmentSettings represents the environment configuration structure
 type EnvironmentSettings struct {
 	Environments map[string]Environment `mapstructure:"environments"`
 	Common       CommonConfig           `mapstructure:"common"`
@@ -86,7 +86,7 @@ type VolumeConfig struct {
 	GoModCache         string `mapstructure:"go_mod_cache"`
 }
 
-// LoadEnvironmentConfig 加载环境配置
+// LoadEnvironmentConfig loads the environment configuration
 func LoadEnvironmentConfig(configPath string) error {
 	envViper := viper.New()
 	envViper.AddConfigPath(configPath)
@@ -104,7 +104,7 @@ func LoadEnvironmentConfig(configPath string) error {
 	return nil
 }
 
-// GetEnvironment 获取指定环境的配置
+// GetEnvironment retrieves the configuration for a specified environment
 func GetEnvironment(env string) (*Environment, bool) {
 	if envConfig, exists := EnvironmentConfig.Environments[env]; exists {
 		return &envConfig, true
@@ -112,7 +112,7 @@ func GetEnvironment(env string) (*Environment, bool) {
 	return nil, false
 }
 
-// InitDeployConfig 初始化部署配置
+// InitDeployConfig initializes the deployment configuration
 func InitDeployConfig(deployPath string) error {
 	if err := LoadEnvironmentConfig(deployPath); err != nil {
 		log.Printf("Warning: failed to load environment config: %v", err)

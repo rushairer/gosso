@@ -35,16 +35,16 @@ func TestBlacklistService_RevokeToken(t *testing.T) {
 	reason := "user_logout"
 	expiresAt := time.Now().Add(1 * time.Hour)
 
-	// 撤销 Token
+	// Revoke Token
 	err := service.RevokeToken(ctx, jti, reason, expiresAt)
 	require.NoError(t, err)
 
-	// 检查是否已撤销
+	// Check if it is revoked
 	revoked, err := service.IsTokenRevoked(ctx, jti)
 	require.NoError(t, err)
 	assert.True(t, revoked)
 
-	// 清理
+	// Clean up
 	_ = service.RemoveFromBlacklist(ctx, jti)
 }
 
@@ -55,22 +55,22 @@ func TestBlacklistService_IsTokenRevoked(t *testing.T) {
 	ctx := context.Background()
 	jti := "test-token-456"
 
-	// 未撤销的 Token
+	// Unrevoked Token
 	revoked, err := service.IsTokenRevoked(ctx, jti)
 	require.NoError(t, err)
 	assert.False(t, revoked)
 
-	// 撤销 Token
+	// Revoke Token
 	expiresAt := time.Now().Add(1 * time.Hour)
 	err = service.RevokeToken(ctx, jti, "test", expiresAt)
 	require.NoError(t, err)
 
-	// 已撤销的 Token
+	// Revoked Token
 	revoked, err = service.IsTokenRevoked(ctx, jti)
 	require.NoError(t, err)
 	assert.True(t, revoked)
 
-	// 清理
+	// Clean up
 	_ = service.RemoveFromBlacklist(ctx, jti)
 }
 
@@ -83,11 +83,11 @@ func TestBlacklistService_GetRevokeInfo(t *testing.T) {
 	reason := "account_suspended"
 	expiresAt := time.Now().Add(2 * time.Hour)
 
-	// 撤销 Token
+	// Revoke Token
 	err := service.RevokeToken(ctx, jti, reason, expiresAt)
 	require.NoError(t, err)
 
-	// 获取撤销信息
+	// Get revoke info
 	info, err := service.GetRevokeInfo(ctx, jti)
 	require.NoError(t, err)
 	assert.Equal(t, jti, info.JTI)
@@ -95,7 +95,7 @@ func TestBlacklistService_GetRevokeInfo(t *testing.T) {
 	assert.True(t, info.RevokedAt.Before(time.Now().Add(1*time.Second)))
 	assert.True(t, info.ExpiresAt.After(time.Now()))
 
-	// 清理
+	// Clean up
 	_ = service.RemoveFromBlacklist(ctx, jti)
 }
 
@@ -106,13 +106,13 @@ func TestBlacklistService_RevokeExpiredToken(t *testing.T) {
 	ctx := context.Background()
 	jti := "test-expired-token"
 	reason := "test"
-	expiresAt := time.Now().Add(-1 * time.Hour) // 已过期
+	expiresAt := time.Now().Add(-1 * time.Hour) // Already expired
 
-	// 撤销已过期的 Token（应该不加入黑名单）
+	// Revoke expired Token (should not be added to the blacklist)
 	err := service.RevokeToken(ctx, jti, reason, expiresAt)
 	require.NoError(t, err)
 
-	// 检查是否在黑名单中（应该不在）
+	// Check if it is in the blacklist (should not be)
 	revoked, err := service.IsTokenRevoked(ctx, jti)
 	require.NoError(t, err)
 	assert.False(t, revoked)
@@ -126,15 +126,15 @@ func TestBlacklistService_RemoveFromBlacklist(t *testing.T) {
 	jti := "test-token-remove"
 	expiresAt := time.Now().Add(1 * time.Hour)
 
-	// 撤销 Token
+	// Revoke Token
 	err := service.RevokeToken(ctx, jti, "test", expiresAt)
 	require.NoError(t, err)
 
-	// 从黑名单移除
+	// Remove from blacklist
 	err = service.RemoveFromBlacklist(ctx, jti)
 	require.NoError(t, err)
 
-	// 检查是否已移除
+	// Check if it has been removed
 	revoked, err := service.IsTokenRevoked(ctx, jti)
 	require.NoError(t, err)
 	assert.False(t, revoked)
@@ -147,21 +147,21 @@ func TestBlacklistService_AutoExpiration(t *testing.T) {
 	ctx := context.Background()
 	jti := "test-token-auto-expire"
 	reason := "test"
-	expiresAt := time.Now().Add(2 * time.Second) // 2秒后过期
+	expiresAt := time.Now().Add(2 * time.Second) // Expires after 2 seconds
 
-	// 撤销 Token
+	// Revoke Token
 	err := service.RevokeToken(ctx, jti, reason, expiresAt)
 	require.NoError(t, err)
 
-	// 立即检查（应该在黑名单中）
+	// Check immediately (should be in the blacklist)
 	revoked, err := service.IsTokenRevoked(ctx, jti)
 	require.NoError(t, err)
 	assert.True(t, revoked)
 
-	// 等待过期
+	// Wait for expiration
 	time.Sleep(3 * time.Second)
 
-	// 过期后应该自动从黑名单移除
+	// After expiration, it should be automatically removed from the blacklist
 	revoked, err = service.IsTokenRevoked(ctx, jti)
 	require.NoError(t, err)
 	assert.False(t, revoked)

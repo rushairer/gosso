@@ -8,15 +8,15 @@ import (
 	auditService "github.com/rushairer/gosso/internal/audit/service"
 )
 
-// InitializeAccountModule 初始化账号模块（依赖注入）
+// InitializeAccountModule initializes the account module (dependency injection)
 func InitializeAccountModule(db *sql.DB, auditor *auditService.Auditor) service.AccountService {
-	// 创建 Repository 实例
+	// Create Repository instances
 	accountRepo := repository.NewAccountRepository(db)
 	credentialRepo := repository.NewCredentialRepository(db)
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	// 创建 Service 实例
+	// Create Service instances
 	accountService := service.NewAccountService(
 		db,
 		accountRepo,

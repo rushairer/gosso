@@ -9,22 +9,22 @@ import (
 	"go.uber.org/zap"
 )
 
-// RedisClient 封装 Redis 客户端，提供统一的缓存操作接口
+// RedisClient wraps the Redis client and provides a unified cache operation interface
 type RedisClient struct {
 	client *redis.Client
 	logger *zap.Logger
 }
 
-// NewRedisClient 创建 Redis 客户端实例
-// dsn 格式: redis://[user:password@]host:port/db
-// 示例: redis://:password@localhost:6379/0
+// NewRedisClient creates a new Redis client instance
+// DSN format: redis://[user:password@]host:port/db
+// Example: redis://:password@localhost:6379/0
 func NewRedisClient(dsn string, maxActiveConns int, poolTimeout time.Duration, logger *zap.Logger) (*RedisClient, error) {
 	opts, err := redis.ParseURL(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("parse redis DSN: %w", err)
 	}
 
-	// 配置连接池参数
+	// Configure connection pool parameters
 	opts.PoolSize = maxActiveConns
 	opts.PoolTimeout = poolTimeout
 	opts.MaxRetries = 3
@@ -33,7 +33,7 @@ func NewRedisClient(dsn string, maxActiveConns int, poolTimeout time.Duration, l
 
 	client := redis.NewClient(opts)
 
-	// 测试连接
+	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -56,17 +56,17 @@ func NewRedisClient(dsn string, maxActiveConns int, poolTimeout time.Duration, l
 	}, nil
 }
 
-// Close 关闭 Redis 连接
+// Close closes the Redis connection
 func (r *RedisClient) Close() error {
 	return r.client.Close()
 }
 
-// Ping 测试连接
+// Ping tests the connection
 func (r *RedisClient) Ping(ctx context.Context) error {
 	return r.client.Ping(ctx).Err()
 }
 
-// Set 设置键值（带过期时间）
+// Set sets a key-value pair (with expiration)
 func (r *RedisClient) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	err := r.client.Set(ctx, key, value, expiration).Err()
 	if err != nil {
@@ -76,7 +76,7 @@ func (r *RedisClient) Set(ctx context.Context, key string, value interface{}, ex
 	return nil
 }
 
-// Get 获取键值
+// Get gets a key's value
 func (r *RedisClient) Get(ctx context.Context, key string) (string, error) {
 	val, err := r.client.Get(ctx, key).Result()
 	if err == redis.Nil {
@@ -89,7 +89,7 @@ func (r *RedisClient) Get(ctx context.Context, key string) (string, error) {
 	return val, nil
 }
 
-// Del 删除键
+// Del deletes keys
 func (r *RedisClient) Del(ctx context.Context, keys ...string) error {
 	err := r.client.Del(ctx, keys...).Err()
 	if err != nil {
@@ -99,7 +99,7 @@ func (r *RedisClient) Del(ctx context.Context, keys ...string) error {
 	return nil
 }
 
-// Exists 检查键是否存在
+// Exists checks if a key exists
 func (r *RedisClient) Exists(ctx context.Context, key string) (bool, error) {
 	count, err := r.client.Exists(ctx, key).Result()
 	if err != nil {
@@ -109,7 +109,7 @@ func (r *RedisClient) Exists(ctx context.Context, key string) (bool, error) {
 	return count > 0, nil
 }
 
-// Expire 设置键的过期时间
+// Expire sets the expiration time for a key
 func (r *RedisClient) Expire(ctx context.Context, key string, expiration time.Duration) error {
 	err := r.client.Expire(ctx, key, expiration).Err()
 	if err != nil {
@@ -119,7 +119,7 @@ func (r *RedisClient) Expire(ctx context.Context, key string, expiration time.Du
 	return nil
 }
 
-// Incr 递增计数器
+// Incr increments a counter
 func (r *RedisClient) Incr(ctx context.Context, key string) (int64, error) {
 	val, err := r.client.Incr(ctx, key).Result()
 	if err != nil {
@@ -129,7 +129,7 @@ func (r *RedisClient) Incr(ctx context.Context, key string) (int64, error) {
 	return val, nil
 }
 
-// Decr 递减计数器
+// Decr decrements a counter
 func (r *RedisClient) Decr(ctx context.Context, key string) (int64, error) {
 	val, err := r.client.Decr(ctx, key).Result()
 	if err != nil {
@@ -139,7 +139,7 @@ func (r *RedisClient) Decr(ctx context.Context, key string) (int64, error) {
 	return val, nil
 }
 
-// SetNX 仅在键不存在时设置（分布式锁）
+// SetNX sets a key only if it does not exist (distributed lock)
 func (r *RedisClient) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {
 	ok, err := r.client.SetNX(ctx, key, value, expiration).Result()
 	if err != nil {
@@ -149,7 +149,7 @@ func (r *RedisClient) SetNX(ctx context.Context, key string, value interface{}, 
 	return ok, nil
 }
 
-// HSet 设置哈希字段
+// HSet sets hash fields
 func (r *RedisClient) HSet(ctx context.Context, key string, values ...interface{}) error {
 	err := r.client.HSet(ctx, key, values...).Err()
 	if err != nil {
@@ -159,7 +159,7 @@ func (r *RedisClient) HSet(ctx context.Context, key string, values ...interface{
 	return nil
 }
 
-// HGet 获取哈希字段
+// HGet gets a hash field
 func (r *RedisClient) HGet(ctx context.Context, key, field string) (string, error) {
 	val, err := r.client.HGet(ctx, key, field).Result()
 	if err == redis.Nil {
@@ -172,7 +172,7 @@ func (r *RedisClient) HGet(ctx context.Context, key, field string) (string, erro
 	return val, nil
 }
 
-// HGetAll 获取哈希所有字段
+// HGetAll gets all hash fields
 func (r *RedisClient) HGetAll(ctx context.Context, key string) (map[string]string, error) {
 	val, err := r.client.HGetAll(ctx, key).Result()
 	if err != nil {
@@ -182,7 +182,7 @@ func (r *RedisClient) HGetAll(ctx context.Context, key string) (map[string]strin
 	return val, nil
 }
 
-// HDel 删除哈希字段
+// HDel deletes hash fields
 func (r *RedisClient) HDel(ctx context.Context, key string, fields ...string) error {
 	err := r.client.HDel(ctx, key, fields...).Err()
 	if err != nil {
@@ -192,7 +192,7 @@ func (r *RedisClient) HDel(ctx context.Context, key string, fields ...string) er
 	return nil
 }
 
-// SAdd 添加集合成员
+// SAdd adds set members
 func (r *RedisClient) SAdd(ctx context.Context, key string, members ...interface{}) error {
 	err := r.client.SAdd(ctx, key, members...).Err()
 	if err != nil {
@@ -202,7 +202,7 @@ func (r *RedisClient) SAdd(ctx context.Context, key string, members ...interface
 	return nil
 }
 
-// SMembers 获取集合所有成员
+// SMembers gets all set members
 func (r *RedisClient) SMembers(ctx context.Context, key string) ([]string, error) {
 	val, err := r.client.SMembers(ctx, key).Result()
 	if err != nil {
@@ -212,7 +212,7 @@ func (r *RedisClient) SMembers(ctx context.Context, key string) ([]string, error
 	return val, nil
 }
 
-// SIsMember 检查成员是否在集合中
+// SIsMember checks if a member is in the set
 func (r *RedisClient) SIsMember(ctx context.Context, key string, member interface{}) (bool, error) {
 	ok, err := r.client.SIsMember(ctx, key, member).Result()
 	if err != nil {
@@ -222,7 +222,7 @@ func (r *RedisClient) SIsMember(ctx context.Context, key string, member interfac
 	return ok, nil
 }
 
-// SRem 删除集合成员
+// SRem removes set members
 func (r *RedisClient) SRem(ctx context.Context, key string, members ...interface{}) error {
 	err := r.client.SRem(ctx, key, members...).Err()
 	if err != nil {
@@ -232,7 +232,7 @@ func (r *RedisClient) SRem(ctx context.Context, key string, members ...interface
 	return nil
 }
 
-// TTL 获取键的剩余过期时间
+// TTL gets the remaining expiration time of a key
 func (r *RedisClient) TTL(ctx context.Context, key string) (time.Duration, error) {
 	ttl, err := r.client.TTL(ctx, key).Result()
 	if err != nil {
@@ -242,13 +242,13 @@ func (r *RedisClient) TTL(ctx context.Context, key string) (time.Duration, error
 	return ttl, nil
 }
 
-// GetClient 获取底层 Redis 客户端（用于高级操作）
+// GetClient returns the underlying Redis client (for advanced operations)
 func (r *RedisClient) GetClient() *redis.Client {
 	return r.client
 }
 
-// IncrWithExpiry 原子性递增计数器并设置过期时间（仅在 key 首次创建时）
-// 避免 Incr + Expire 之间的竞态条件
+// IncrWithExpiry atomically increments a counter and sets an expiration time (only on first creation)
+// Avoids race conditions between Incr and Expire
 func (r *RedisClient) IncrWithExpiry(ctx context.Context, key string, expiry time.Duration) (int64, error) {
 	script := redis.NewScript(`
 		local current = redis.call('INCR', KEYS[1])
@@ -265,5 +265,5 @@ func (r *RedisClient) IncrWithExpiry(ctx context.Context, key string, expiry tim
 	return result, nil
 }
 
-// ErrKeyNotFound Redis 键不存在错误
+// ErrKeyNotFound is the error returned when a Redis key does not exist
 var ErrKeyNotFound = fmt.Errorf("redis: key not found")

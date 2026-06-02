@@ -15,14 +15,14 @@ import (
 	"github.com/rushairer/gosso/internal/account/repository"
 )
 
-// TestRegisterAccount 测试账号注册
+// TestRegisterAccount tests account registration
 func TestRegisterAccount(t *testing.T) {
-	// 创建 mock 数据库
+	// Create mock database
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
 
-	// 创建仓储和服务
+	// Create repositories and services
 	accountRepo := repository.NewAccountRepository(db)
 	credentialRepo := repository.NewCredentialRepository(db)
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
@@ -30,32 +30,32 @@ func TestRegisterAccount(t *testing.T) {
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil)
 
-	// 设置 mock 期望（按实际执行顺序）
+	// Set mock expectations (in order of execution)
 
-	// 1. 期望查询邮箱是否已存在（在事务外执行）
+	// 1. Expect querying whether email exists (executed outside transaction)
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
 		WithArgs(domain.CredentialTypeEmail, "test@example.com").
 		WillReturnError(sql.ErrNoRows)
 
-	// 2. 开始事务
+	// 2. Begin transaction
 	mock.ExpectBegin()
 
-	// 3. 期望插入账号
+	// 3. Expect inserting account
 	mock.ExpectExec("INSERT INTO accounts").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	// 4. 期望批量插入凭证（密码 + 邮箱，共 2 条）
-	// CreateCredentials 使用循环插入，所以需要 2 个 ExpectExec
+	// 4. Expect batch inserting credentials (password + email, 2 in total)
+	// CreateCredentials uses a loop insertion, so 2 ExpectExecs are required
 	mock.ExpectExec("INSERT INTO account_credentials").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectExec("INSERT INTO account_credentials").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	// 5. 提交事务
+	// 5. Commit transaction
 	mock.ExpectCommit()
 
-	// 执行注册
+	// Execute registration
 	req := &RegisterAccountRequest{
 		Username:    "testuser",
 		DisplayName: "Test User",
@@ -68,7 +68,7 @@ func TestRegisterAccount(t *testing.T) {
 	account, err := accountService.RegisterAccount(context.Background(), req)
 
 	log.Println(err)
-	// 验证结果
+	// Verify results
 	assert.NoError(t, err)
 	assert.NotNil(t, account)
 	assert.NotNil(t, account.Username)
@@ -76,11 +76,11 @@ func TestRegisterAccount(t *testing.T) {
 	assert.Equal(t, "Test User", account.DisplayName)
 	assert.Equal(t, domain.AccountStatusActive, account.Status)
 
-	// 验证所有期望都被满足
+	// Verify all expectations are met
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TestRegisterAccount_DuplicateEmail 测试重复邮箱注册
+// TestRegisterAccount_DuplicateEmail tests duplicate email registration
 func TestRegisterAccount_DuplicateEmail(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -93,8 +93,8 @@ func TestRegisterAccount_DuplicateEmail(t *testing.T) {
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil)
 
-	// 设置 mock：邮箱已存在（在事务外查询）
-	// 注意：需要返回所有列，与 FindByTypeAndIdentifier 的 Scan 匹配
+	// Set mock: email already exists (queried outside transaction)
+	// Note: requires all columns to be returned to match Scan of FindByTypeAndIdentifier
 	rows := sqlmock.NewRows([]string{
 		"id", "account_id", "credential_type", "identifier",
 		"credential_value", "verified", "primary_credential", "metadata",
@@ -109,9 +109,9 @@ func TestRegisterAccount_DuplicateEmail(t *testing.T) {
 		WithArgs(domain.CredentialTypeEmail, "test@example.com").
 		WillReturnRows(rows)
 
-	// 注意：检测到重复邮箱后，不会开始事务，所以不需要 ExpectBegin
+	// Note: after detecting duplicate email, transaction won't begin, so ExpectBegin is not needed
 
-	// 执行注册
+	// Execute registration
 	req := &RegisterAccountRequest{
 		Username:    "testuser",
 		DisplayName: "Test User",
@@ -121,12 +121,12 @@ func TestRegisterAccount_DuplicateEmail(t *testing.T) {
 
 	account, err := accountService.RegisterAccount(context.Background(), req)
 
-	// 打印详细错误信息
+	// Print detailed error message
 	if err != nil {
-		t.Logf("错误信息: %v", err)
+		t.Logf("Error message: %v", err)
 	}
 
-	// 验证结果：应该返回错误
+	// Verify result: should return error
 	assert.Error(t, err)
 	assert.Nil(t, account)
 	assert.Contains(t, err.Error(), "email already registered")
@@ -134,7 +134,7 @@ func TestRegisterAccount_DuplicateEmail(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TestChangePassword 测试修改密码
+// TestChangePassword tests changing password
 func TestChangePassword(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -151,8 +151,8 @@ func TestChangePassword(t *testing.T) {
 	oldPassword := "OldPassword123!"
 	newPassword := "NewPassword456!"
 
-	// 模拟查找密码凭证
-	// 注意：实际的 bcrypt hash 需要提前生成
+	// Mock finding password credential
+	// Note: actual bcrypt hash needs to be generated in advance
 	passwordHash := "$2a$10$YourBcryptHashHere"
 	rows := sqlmock.NewRows([]string{"id", "account_id", "credential_type", "credential_value", "created_at"}).
 		AddRow("cred-id", accountID, domain.CredentialTypePassword, passwordHash, time.Now())
@@ -166,15 +166,15 @@ func TestChangePassword(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
-	// 注意：由于 bcrypt 验证，这个测试需要真实的密码哈希
-	// 这里仅作为示例展示测试结构
+	// Note: due to bcrypt verification, this test requires a real password hash
+	// Here it only serves as an example showing the test structure
 	err = accountService.ChangePassword(context.Background(), accountID, oldPassword, newPassword)
 
-	// 根据实际情况验证（这里会因为密码哈希不匹配而失败）
-	// 实际测试中应该使用真实的密码哈希对
+	// Verify according to actual situation (this will fail due to password hash mismatch)
+	// A real password hash pair should be used in actual testing
 }
 
-// TestSoftDeleteAccount 测试软删除账号
+// TestSoftDeleteAccount tests soft deleting account
 func TestSoftDeleteAccount(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -189,35 +189,35 @@ func TestSoftDeleteAccount(t *testing.T) {
 
 	accountID := "test-account-id"
 
-	// 设置 mock 期望
+	// Set mock expectations
 	mock.ExpectBegin()
 
-	// 期望软删除凭证
+	// Expect soft deleting credentials
 	mock.ExpectExec("UPDATE account_credentials SET deleted_at").
 		WithArgs(sqlmock.AnyArg(), accountID).
 		WillReturnResult(sqlmock.NewResult(0, 2))
 
-	// 期望软删除第三方身份
+	// Expect soft deleting third-party identities
 	mock.ExpectExec("UPDATE federated_identities SET deleted_at").
 		WithArgs(sqlmock.AnyArg(), accountID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	// 期望软删除角色关联
+	// Expect soft deleting role associations
 	mock.ExpectExec("UPDATE account_roles SET deleted_at").
 		WithArgs(sqlmock.AnyArg(), accountID).
 		WillReturnResult(sqlmock.NewResult(0, 3))
 
-	// 期望软删除账号
+	// Expect soft deleting account
 	mock.ExpectExec("UPDATE accounts SET deleted_at").
 		WithArgs(sqlmock.AnyArg(), accountID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	mock.ExpectCommit()
 
-	// 执行删除
+	// Execute deletion
 	err = accountService.SoftDeleteAccount(context.Background(), accountID)
 
-	// 验证结果
+	// Verify results
 	assert.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

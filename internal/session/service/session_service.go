@@ -14,17 +14,17 @@ import (
 )
 
 const (
-	// SessionKeyPrefix Redis 会话键前缀
+	// SessionKeyPrefix is the Redis key prefix for sessions.
 	SessionKeyPrefix = "session:"
-	// AccountSessionsPrefix 账号会话索引键前缀
+	// AccountSessionsPrefix is the Redis key prefix for account-session index.
 	AccountSessionsPrefix = "account_sessions:"
-	// DefaultSessionTTL 默认会话过期时间（24小时）
+	// DefaultSessionTTL is the default session expiry duration (24 hours).
 	DefaultSessionTTL = 24 * time.Hour
-	// DefaultMaxSessions 默认最大并发会话数
+	// DefaultMaxSessions is the default maximum concurrent sessions per account.
 	DefaultMaxSessions = 10
 )
 
-// SessionService 会话管理服务
+// SessionService manages user sessions backed by Redis.
 type SessionService struct {
 	redis       *cache.RedisClient
 	logger      *zap.Logger
@@ -32,7 +32,7 @@ type SessionService struct {
 	maxSessions int
 }
 
-// NewSessionService 创建会话服务实例
+// NewSessionService creates a new session service instance.
 func NewSessionService(redis *cache.RedisClient, logger *zap.Logger) *SessionService {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -46,17 +46,17 @@ func NewSessionService(redis *cache.RedisClient, logger *zap.Logger) *SessionSer
 	}
 }
 
-// SetMaxSessions 设置最大并发会话数
+// SetMaxSessions sets the maximum concurrent sessions per account.
 func (s *SessionService) SetMaxSessions(n int) {
 	s.maxSessions = n
 }
 
-// SetSessionTTL 设置会话过期时间
+// SetSessionTTL sets the session expiry duration.
 func (s *SessionService) SetSessionTTL(ttl time.Duration) {
 	s.sessionTTL = ttl
 }
 
-// CreateSession 创建新会话
+// CreateSession creates a new session.
 func (s *SessionService) CreateSession(ctx context.Context, session *domain.Session) error {
 	if session.ID == uuid.Nil {
 		session.ID = uuid.New()
@@ -66,7 +66,7 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 	session.CreatedAt = now
 	session.LastActiveAt = now
 
-	// 序列化会话数据
+	// Serialize session data
 	data, err := json.Marshal(session)
 	if err != nil {
 		s.logger.Error("Failed to marshal session", zap.Error(err), zap.String("session_id", session.ID.String()))
@@ -79,14 +79,14 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 		return fmt.Errorf("create session: %w", err)
 	}
 
-	// 维护账号会话索引
+	// Maintain account session index
 	indexKey := s.buildAccountSessionsKey(session.AccountID.String())
 	if err := s.redis.SAdd(ctx, indexKey, session.ID.String()); err != nil {
 		s.logger.Warn("Failed to index session by account", zap.Error(err), zap.String("session_id", session.ID.String()))
 	}
 	_ = s.redis.Expire(ctx, indexKey, s.sessionTTL)
 
-	// 强制执行最大并发会话数限制
+	// Enforce maximum concurrent session limit
 	s.EnforceSessionLimit(ctx, session.AccountID.String())
 
 	s.logger.Info("Session created",
@@ -97,7 +97,7 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 	return nil
 }
 
-// GetSession 获取会话信息
+// GetSession retrieves session information.
 func (s *SessionService) GetSession(ctx context.Context, sessionID uuid.UUID) (*domain.Session, error) {
 	key := s.buildSessionKey(sessionID)
 	data, err := s.redis.Get(ctx, key)
@@ -118,16 +118,16 @@ func (s *SessionService) GetSession(ctx context.Context, sessionID uuid.UUID) (*
 	return &session, nil
 }
 
-// UpdateSession 更新会话信息
+// UpdateSession updates session information.
 func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Session) error {
-	// 先检查会话是否存在
+	// Verify the session exists first
 	if _, err := s.GetSession(ctx, session.ID); err != nil {
 		return err
 	}
 
 	session.UpdateActivity()
 
-	// 序列化会话数据
+	// Serialize session data
 	data, err := json.Marshal(session)
 	if err != nil {
 		s.logger.Error("Failed to marshal session", zap.Error(err), zap.String("session_id", session.ID.String()))
@@ -144,7 +144,7 @@ func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Sess
 	return nil
 }
 
-// DeleteSession 删除会话
+// DeleteSession deletes a session.
 func (s *SessionService) DeleteSession(ctx context.Context, sessionID uuid.UUID) error {
 	key := s.buildSessionKey(sessionID)
 	if err := s.redis.Del(ctx, key); err != nil {
@@ -156,7 +156,7 @@ func (s *SessionService) DeleteSession(ctx context.Context, sessionID uuid.UUID)
 	return nil
 }
 
-// RefreshSession 刷新会话过期时间
+// RefreshSession refreshes the session expiration.
 func (s *SessionService) RefreshSession(ctx context.Context, sessionID uuid.UUID) error {
 	session, err := s.GetSession(ctx, sessionID)
 	if err != nil {
@@ -167,17 +167,17 @@ func (s *SessionService) RefreshSession(ctx context.Context, sessionID uuid.UUID
 	return s.UpdateSession(ctx, session)
 }
 
-// ValidateSession 验证会话是否有效
+// ValidateSession validates whether a session is still active.
 func (s *SessionService) ValidateSession(ctx context.Context, sessionID uuid.UUID) (*domain.Session, error) {
 	session, err := s.GetSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
 
-	// 检查会话是否过期
+	// Check if session has expired
 	if session.IsExpired(s.sessionTTL) {
 		s.logger.Warn("Session expired", zap.String("session_id", sessionID.String()))
-		// 删除过期会话
+		// Delete the expired session
 		_ = s.DeleteSession(ctx, sessionID)
 		return nil, ErrSessionExpired
 	}
@@ -185,17 +185,17 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID uuid.UUI
 	return session, nil
 }
 
-// buildSessionKey 构建 Redis 键
+// buildSessionKey builds the Redis key for a session.
 func (s *SessionService) buildSessionKey(sessionID uuid.UUID) string {
 	return fmt.Sprintf("%s%s", SessionKeyPrefix, sessionID.String())
 }
 
-// buildAccountSessionsKey 构建账号会话索引键
+// buildAccountSessionsKey builds the Redis key for the account session index.
 func (s *SessionService) buildAccountSessionsKey(accountID string) string {
 	return fmt.Sprintf("%s%s", AccountSessionsPrefix, accountID)
 }
 
-// RevokeAllForAccount 撤销指定账号的所有会话
+// RevokeAllForAccount revokes all sessions for the given account.
 func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID string) error {
 	indexKey := s.buildAccountSessionsKey(accountID)
 
@@ -216,7 +216,7 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 		}
 	}
 
-	// 删除索引本身
+	// Delete the index itself
 	if err := s.redis.Del(ctx, indexKey); err != nil {
 		s.logger.Warn("Failed to delete account sessions index", zap.String("account_id", accountID), zap.Error(err))
 	}
@@ -228,7 +228,7 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 	return nil
 }
 
-// ListSessionsByAccount 列出账号的所有活跃会话
+// ListSessionsByAccount lists all active sessions for the given account.
 func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID string) ([]*domain.Session, error) {
 	indexKey := s.buildAccountSessionsKey(accountID)
 
@@ -245,7 +245,7 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 		}
 		session, err := s.GetSession(ctx, sessionUUID)
 		if err != nil {
-			// 会话已过期或不存在，从索引中移除
+			// Session expired or not found; remove from index
 			_ = s.redis.SRem(ctx, indexKey, sid)
 			continue
 		}
@@ -255,7 +255,7 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 	return sessions, nil
 }
 
-// RevokeSession 撤销指定会话（ownership check）
+// RevokeSession revokes a specific session (with ownership check).
 func (s *SessionService) RevokeSession(ctx context.Context, accountID string, sessionID uuid.UUID) error {
 	session, err := s.GetSession(ctx, sessionID)
 	if err != nil {
@@ -266,15 +266,15 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 		return fmt.Errorf("session does not belong to account")
 	}
 
-	// 从索引中移除
+	// Remove from index
 	indexKey := s.buildAccountSessionsKey(accountID)
 	_ = s.redis.SRem(ctx, indexKey, sessionID.String())
 
 	return s.DeleteSession(ctx, sessionID)
 }
 
-// EnforceSessionLimit 检查并强制执行最大并发会话数限制
-// 当超出限制时，删除最旧的会话
+// EnforceSessionLimit checks and enforces the maximum concurrent session limit.
+// When the limit is exceeded, the oldest sessions are revoked.
 func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID string) {
 	if s.maxSessions <= 0 {
 		return
@@ -289,8 +289,8 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 		return
 	}
 
-	// 按 LastActiveAt 排序，删除最旧的
-	// 简单冒泡排序（会话数通常很少）
+	// Sort by LastActiveAt and revoke the oldest
+	// Simple bubble sort (session count is usually small)
 	for i := 0; i < len(sessions)-1; i++ {
 		for j := i + 1; j < len(sessions); j++ {
 			if sessions[i].LastActiveAt.After(sessions[j].LastActiveAt) {
@@ -299,7 +299,7 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 		}
 	}
 
-	// 删除多余的旧会话
+	// Revoke excess old sessions
 	toRemove := len(sessions) - s.maxSessions
 	for i := 0; i < toRemove; i++ {
 		s.logger.Info("Revoking old session due to limit",
@@ -309,7 +309,7 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 	}
 }
 
-// 错误定义
+// Error definitions
 var (
 	ErrSessionNotFound = fmt.Errorf("session not found")
 	ErrSessionExpired  = fmt.Errorf("session expired")

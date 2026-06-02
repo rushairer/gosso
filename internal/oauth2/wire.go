@@ -11,7 +11,7 @@ import (
 	"github.com/rushairer/gosso/internal/oauth2/service"
 )
 
-// InitializeOAuth2Module 初始化 OAuth2 模块
+// InitializeOAuth2Module initializes the OAuth2 module
 func InitializeOAuth2Module(
 	db *sql.DB,
 	redis *cache.RedisClient,

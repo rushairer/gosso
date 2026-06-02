@@ -24,7 +24,7 @@ import (
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
 
-// OAuthProviderConfig 单个 OAuth 提供商配置
+// OAuthProviderConfig single OAuth provider configuration
 type OAuthProviderConfig struct {
 	ClientID     string
 	ClientSecret string
@@ -34,7 +34,7 @@ type OAuthProviderConfig struct {
 	UserInfoURL  string
 }
 
-// SocialLoginService 社交登录服务
+// SocialLoginService social login service
 type SocialLoginService struct {
 	db                    *sql.DB
 	accountSvc            accountService.AccountService
@@ -48,7 +48,7 @@ type SocialLoginService struct {
 	logger                *zap.Logger
 }
 
-// NewSocialLoginService 创建社交登录服务
+// NewSocialLoginService creates a social login service
 func NewSocialLoginService(
 	db *sql.DB,
 	accountSvc accountService.AccountService,
@@ -77,7 +77,7 @@ func NewSocialLoginService(
 	}
 }
 
-// GetAuthURL 获取第三方授权 URL
+// GetAuthURL gets the third-party authorization URL
 func (s *SocialLoginService) GetAuthURL(ctx context.Context, provider, state string) (string, error) {
 	p, ok := s.providers[provider]
 	if !ok {
@@ -106,33 +106,33 @@ func (s *SocialLoginService) GetAuthURL(ctx context.Context, provider, state str
 	return authURL + "?" + params.Encode(), nil
 }
 
-// HandleCallback 处理第三方回调
+// HandleCallback handles the third-party callback
 func (s *SocialLoginService) HandleCallback(ctx context.Context, provider, code, ip, userAgent string) (*LoginResult, error) {
 	p, ok := s.providers[provider]
 	if !ok {
 		return nil, fmt.Errorf("unsupported provider: %s", provider)
 	}
 
-	// 1. 用 code 换取 access_token
+	// 1. Exchange code for access_token
 	accessToken, err := s.exchangeCode(ctx, p, code)
 	if err != nil {
 		return nil, fmt.Errorf("exchange code: %w", err)
 	}
 
-	// 2. 获取用户信息
+	// 2. Fetch user info
 	providerUserID, email, name, err := s.fetchUserInfo(ctx, provider, p, accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("fetch user info: %w", err)
 	}
 
-	// 3. 查找已有联邦身份
+	// 3. Find existing federated identity
 	identity, err := s.federatedIdentityRepo.FindByProvider(ctx, accountDomain.Provider(provider), providerUserID)
 	if err == nil && identity != nil {
-		// 已有身份 → 直接登录
+		// Existing identity -> login directly
 		return s.loginExistingUser(ctx, identity.AccountID, ip, userAgent)
 	}
 
-	// 4. 新用户 → 创建账号 + 绑定身份
+	// 4. New user -> create account + bind identity
 	return s.createNewUser(ctx, provider, providerUserID, email, name, ip, userAgent)
 }
 
@@ -246,7 +246,7 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 	now := time.Now()
 	accountID := uuid.New().String()
 
-	// 创建账号
+	// Create account
 	account := &accountDomain.Account{
 		ID:          accountID,
 		DisplayName: name,
@@ -264,7 +264,7 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// 插入账号
+	// Insert account
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO accounts (id, display_name, status, locale, timezone, metadata, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
@@ -275,7 +275,7 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 		return nil, fmt.Errorf("insert account: %w", err)
 	}
 
-	// 创建邮箱凭证
+	// Create email credential
 	if email != "" {
 		emailCred := accountDomain.NewEmailCredential(accountID, email)
 		emailCred.Verify()
@@ -290,7 +290,7 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 		}
 	}
 
-	// 创建联邦身份
+	// Create federated identity
 	identity := accountDomain.NewFederatedIdentity(accountID, accountDomain.Provider(provider), providerUserID, nil)
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO federated_identities (id, account_id, provider, provider_user_id, profile, created_at, updated_at)

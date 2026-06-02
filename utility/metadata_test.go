@@ -14,13 +14,13 @@ func TestMetadataHelper_GetString(t *testing.T) {
 	}
 	helper := NewMetadataHelper(data)
 
-	// 存在的字符串
+	// Existing string
 	assert.Equal(t, "John Doe", helper.GetString("name", "default"))
 
-	// 不存在的键
+	// Non-existent key
 	assert.Equal(t, "default", helper.GetString("email", "default"))
 
-	// 类型不匹配
+	// Type mismatch
 	assert.Equal(t, "default", helper.GetString("age", "default"))
 }
 
@@ -35,7 +35,7 @@ func TestMetadataHelper_GetInt(t *testing.T) {
 
 	assert.Equal(t, 30, helper.GetInt("age", 0))
 	assert.Equal(t, 5, helper.GetInt("level", 0))
-	assert.Equal(t, 95, helper.GetInt("score", 0)) // float64 转 int
+	assert.Equal(t, 95, helper.GetInt("score", 0)) // float64 to int
 	assert.Equal(t, 0, helper.GetInt("invalid", 0))
 	assert.Equal(t, 100, helper.GetInt("missing", 100))
 }
@@ -60,15 +60,15 @@ func TestMetadataHelper_GetStringSlice(t *testing.T) {
 	}
 	helper := NewMetadataHelper(data)
 
-	// 直接的 []string
+	// Direct []string
 	tags := helper.GetStringSlice("tags", nil)
 	assert.Equal(t, []string{"go", "backend", "api"}, tags)
 
-	// []interface{} 转换
+	// []interface{} conversion
 	numbers := helper.GetStringSlice("numbers", nil)
 	assert.Equal(t, []string{"one", "two", "three"}, numbers)
 
-	// 类型不匹配
+	// Type mismatch
 	defaultSlice := []string{"default"}
 	invalid := helper.GetStringSlice("invalid", defaultSlice)
 	assert.Equal(t, defaultSlice, invalid)
@@ -171,12 +171,12 @@ func TestSetIfNotZero(t *testing.T) {
 func TestMetadataHelper_NilData(t *testing.T) {
 	helper := NewMetadataHelper(nil)
 
-	// 应该不会 panic
+	// Should not panic
 	assert.Equal(t, "default", helper.GetString("key", "default"))
 	assert.Equal(t, 0, helper.GetInt("key", 0))
 	assert.False(t, helper.Has("key"))
 
-	// 应该可以设置值
+	// Should be able to set value
 	helper.Set("name", "test")
 	assert.Equal(t, "test", helper.GetString("name", ""))
 }

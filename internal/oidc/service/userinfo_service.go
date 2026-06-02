@@ -14,14 +14,14 @@ import (
 // ErrAccountNotActive is returned when the account is not in active status.
 var ErrAccountNotActive = fmt.Errorf("account is not active")
 
-// UserInfoService OIDC UserInfo 服务
+// UserInfoService OIDC UserInfo service
 type UserInfoService struct {
 	accountSvc     accountService.AccountService
 	credentialRepo accountRepo.CredentialRepository
 	logger         *zap.Logger
 }
 
-// NewUserInfoService 创建 UserInfo 服务实例
+// NewUserInfoService creates a new instance of UserInfoService
 func NewUserInfoService(
 	accountSvc accountService.AccountService,
 	credentialRepo accountRepo.CredentialRepository,
@@ -37,7 +37,7 @@ func NewUserInfoService(
 	}
 }
 
-// GetUserInfo 根据 scope 返回用户信息
+// GetUserInfo returns user information based on scope
 func (s *UserInfoService) GetUserInfo(ctx context.Context, accountID string, scopes []string) (map[string]any, error) {
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {

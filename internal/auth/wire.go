@@ -18,7 +18,7 @@ import (
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
 
-// InitializeAuthModule 初始化认证模块
+// InitializeAuthModule initializes the authentication module
 func InitializeAuthModule(
 	db *sql.DB,
 	redis *cache.RedisClient,
@@ -38,7 +38,7 @@ func InitializeAuthModule(
 	roleRepo := accountRepo.NewRoleRepository(db)
 	federatedIdentityRepo := accountRepo.NewFederatedIdentityRepository(db)
 
-	// PasskeyService（如果 WebAuthn 配置存在）
+	// PasskeyService (if WebAuthn is configured)
 	var passkeySvc *service.PasskeyService
 	if authConfig.WebAuthnRPID != "" {
 		web, err := wa.New(&wa.Config{

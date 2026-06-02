@@ -21,7 +21,7 @@ import (
 	"github.com/rushairer/gosso/middleware"
 )
 
-// RegisterWebRouter 注册所有路由
+// RegisterWebRouter registers all routes
 func RegisterWebRouter(
 	server *gin.Engine,
 	db *sql.DB,
@@ -35,42 +35,42 @@ func RegisterWebRouter(
 	redis *cache.RedisClient,
 	rateLimits config.RateLimitsConfig,
 ) {
-	// 健康检查（无认证，无限流）
+	// Health check (no auth, no rate limiting)
 	registerHealthRoutes(server, db, redis)
 
-	// 测试路由
+	// Test routes
 	registerWebTestRouter(server)
 	registerWebIndexRouter(server)
 
 	// Swagger UI
 	registerSwaggerRouter(server)
 
-	// JWT 认证中间件
+	// JWT auth middleware
 	jwtAuth := authMiddleware.JWTAuthMiddleware(tokenSvc)
 
-	// Per-endpoint 限流中间件
+	// Per-endpoint rate limiting middleware
 	loginLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Login, time.Minute)
 	mfaLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute)
 	passwordLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute)
 	passkeyLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Passkey, time.Minute)
 
-	// /api/* 路由
+	// /api/* routes
 	api := server.Group("/api")
 	{
-		// 认证路由（审计中间件注入 IP/UserAgent）
+		// Auth routes (audit middleware injects IP/UserAgent)
 		api.Use(authMiddleware.AuditMetadataMiddleware())
 		authCtrl.RegisterRoutes(api, loginLimit, mfaLimit, passwordLimit)
 
-		// 客户端管理路由（需要 JWT 认证）
+		// Client management routes (require JWT authentication)
 		clientCtrl.RegisterRoutes(api, jwtAuth)
 
-		// 管理员路由（需要 JWT 认证 + admin 角色 + 限流）
+		// Admin routes (require JWT authentication + admin role + rate limiting)
 		admin := api.Group("/admin")
 		adminLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute)
 		admin.Use(adminLimit, jwtAuth, authMiddleware.AdminRequiredMiddleware())
 		adminCtrl.RegisterRoutes(admin)
 
-		// Passkey 路由（带限流）
+		// Passkey routes (with rate limiting)
 		if passkeyCtrl != nil {
 			passkeyGroup := api.Group("")
 			passkeyGroup.Use(passkeyLimit)
@@ -78,10 +78,10 @@ func RegisterWebRouter(
 		}
 	}
 
-	// OAuth2 协议路由
+	// OAuth2 protocol routes
 	oauth2Ctrl.RegisterRoutes(server, jwtAuth)
 
-	// OIDC 路由
+	// OIDC routes
 	oidcCtrl.RegisterRoutes(server, jwtAuth)
 }
 

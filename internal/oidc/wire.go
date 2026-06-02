@@ -12,7 +12,7 @@ import (
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
 
-// InitializeOIDCModule 初始化 OIDC 模块
+// InitializeOIDCModule initializes the OIDC module
 func InitializeOIDCModule(
 	db *sql.DB,
 	tokenSvc *tokenService.TokenService,

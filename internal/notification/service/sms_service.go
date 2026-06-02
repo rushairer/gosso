@@ -5,15 +5,15 @@ import (
 	"fmt"
 )
 
-// SMSService 短信发送服务接口
+// SMSService SMS sending service interface
 type SMSService interface {
 	SendVerificationCode(ctx context.Context, phone, code string) error
 }
 
-// StubSMSService 短信服务桩实现（生产环境替换为实际 SMS 网关）
+// StubSMSService stub implementation of the SMS service (replace with actual SMS gateway in production)
 type StubSMSService struct{}
 
-// NewStubSMSService 创建 SMS 桩服务
+// NewStubSMSService creates a stub SMS service
 func NewStubSMSService() *StubSMSService {
 	return &StubSMSService{}
 }

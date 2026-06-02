@@ -16,11 +16,11 @@ const (
 	csrfTokenLen   = 32
 )
 
-// CSRFMiddleware 双提交 Cookie CSRF 防护中间件
-// 跳过条件：Bearer auth、GET/HEAD/OPTIONS、skipPaths 前缀匹配
+// CSRFMiddleware double-submit cookie CSRF protection middleware.
+// Skips: Bearer auth, GET/HEAD/OPTIONS, skipPaths prefix match.
 func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		// 跳过幂等方法
+		// Skip idempotent methods
 		method := ctx.Request.Method
 		if method == "GET" || method == "HEAD" || method == "OPTIONS" {
 			setCSRFCookie(ctx, secure)
@@ -28,14 +28,14 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 			return
 		}
 
-		// 跳过 Bearer auth（JWT 不受 CSRF 影响）
+		// Skip Bearer auth (JWT is not affected by CSRF)
 		if strings.HasPrefix(ctx.GetHeader("Authorization"), "Bearer ") {
 			setCSRFCookie(ctx, secure)
 			ctx.Next()
 			return
 		}
 
-		// 跳过指定路径
+		// Skip specified paths
 		path := ctx.Request.URL.Path
 		for _, sp := range skipPaths {
 			if strings.HasPrefix(path, sp) {
@@ -45,7 +45,7 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 			}
 		}
 
-		// 验证 CSRF token
+		// Validate CSRF token
 		cookie, err := ctx.Cookie(csrfCookieName)
 		if err != nil || cookie == "" {
 			ctx.JSON(http.StatusForbidden, gin.H{
@@ -71,7 +71,7 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 	}
 }
 
-// setCSRFCookie 设置 CSRF token cookie（如不存在则生成）
+// setCSRFCookie sets the CSRF token cookie (generates one if absent).
 func setCSRFCookie(ctx *gin.Context, secure bool) {
 	cookie, _ := ctx.Cookie(csrfCookieName)
 	if cookie == "" {
@@ -88,11 +88,11 @@ func setCSRFCookie(ctx *gin.Context, secure bool) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	// 同时在 response header 中返回，方便 SPA 读取
+	// Also return in response header for SPA consumption
 	ctx.Header(csrfHeaderName, cookie)
 }
 
-// generateCSRFToken 生成加密安全的随机 CSRF token
+// generateCSRFToken generates a cryptographically secure random CSRF token.
 func generateCSRFToken() string {
 	b := make([]byte, csrfTokenLen)
 	_, _ = rand.Read(b)

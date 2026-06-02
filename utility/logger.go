@@ -9,10 +9,10 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// InitLogger 初始化全局 logger
+// NewLogger initializes the global logger
 func NewLogger(level zap.AtomicLevel) *zap.Logger {
 
-	// 创建自定义编码器配置
+	// Create custom encoder configuration
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:        "time",
 		LevelKey:       "level",
@@ -27,7 +27,7 @@ func NewLogger(level zap.AtomicLevel) *zap.Logger {
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
 
-	// 创建彩色输出写入器
+	// Create color output writer
 	var writeSyncer zapcore.WriteSyncer
 	if supportsColor() {
 		writeSyncer = &ColorWriteSyncer{Writer: os.Stdout}
@@ -44,7 +44,7 @@ func NewLogger(level zap.AtomicLevel) *zap.Logger {
 	return zap.New(core, zap.AddCaller())
 }
 
-// encodeLevel 为不同级别的日志添加颜色
+// encodeLevel adds color for different log levels
 func encodeLevel(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
 	switch level {
 	case zapcore.DebugLevel:
@@ -66,14 +66,14 @@ func encodeLevel(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
 	}
 }
 
-// ColorWriteSyncer 彩色写入同步器
+// ColorWriteSyncer color write syncer
 type ColorWriteSyncer struct {
 	Writer *os.File
 }
 
-// Write 写入数据，添加颜色
+// Write writes data and adds color
 func (w *ColorWriteSyncer) Write(p []byte) (n int, err error) {
-	// 如果是日志输出并且支持颜色，则为整行添加颜色
+	// If it is a log output and color is supported, add color to the entire line
 	if supportsColor() && len(p) > 0 {
 		line := string(p)
 		coloredLine := colorizeLine(line)
@@ -83,13 +83,13 @@ func (w *ColorWriteSyncer) Write(p []byte) (n int, err error) {
 	return w.Writer.Write(p)
 }
 
-// Sync 同步写入
+// Sync syncs written data
 func (w *ColorWriteSyncer) Sync() error {
-	// os.File 不需要特殊同步处理
+	// os.File doesn't need special synchronization handling
 	return nil
 }
 
-// colorizeLine 为整行日志添加颜色
+// colorizeLine adds color to the entire log line
 func colorizeLine(line string) string {
 	var color string
 
@@ -108,20 +108,20 @@ func colorizeLine(line string) string {
 	return fmt.Sprintf("%s%s\033[0m", color, line)
 }
 
-// supportsColor 检测终端是否支持颜色
+// supportsColor detects if the terminal supports color
 func supportsColor() bool {
-	// 检查 NO_COLOR 环境变量
+	// Check NO_COLOR environment variable
 	if os.Getenv("NO_COLOR") != "" {
 		return false
 	}
 
-	// 检查 TERM 环境变量
+	// Check TERM environment variable
 	term := os.Getenv("TERM")
 	if strings.Contains(term, "color") || strings.Contains(term, "256") {
 		return true
 	}
 
-	// 常见的支持颜色的终端
+	// Common color-supporting terminals
 	colorTerms := []string{"xterm", "screen", "tmux", "vt100"}
 	for _, t := range colorTerms {
 		if strings.Contains(term, t) {
@@ -129,7 +129,7 @@ func supportsColor() bool {
 		}
 	}
 
-	// 检查是否输出到终端
+	// Check if outputting to a terminal
 	if fileInfo, _ := os.Stdout.Stat(); (fileInfo.Mode() & os.ModeCharDevice) != 0 {
 		return true
 	}

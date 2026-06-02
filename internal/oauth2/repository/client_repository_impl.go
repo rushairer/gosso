@@ -14,7 +14,7 @@ type oauth2ClientRepositoryImpl struct {
 	db *sql.DB
 }
 
-// NewOAuth2ClientRepository 创建 OAuth2 客户端仓储实例
+// NewOAuth2ClientRepository creates a new OAuth2 client repository instance
 func NewOAuth2ClientRepository(db *sql.DB) OAuth2ClientRepository {
 	return &oauth2ClientRepositoryImpl{db: db}
 }

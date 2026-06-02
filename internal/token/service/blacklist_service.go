@@ -13,17 +13,17 @@ import (
 )
 
 const (
-	// BlacklistKeyPrefix Redis Token 黑名单键前缀
+	// BlacklistKeyPrefix is the Redis key prefix for token blacklist
 	BlacklistKeyPrefix = "blacklist:token:"
 )
 
-// BlacklistService Token 黑名单服务
+// BlacklistService handles token blacklist operations
 type BlacklistService struct {
 	redis  *cache.RedisClient
 	logger *zap.Logger
 }
 
-// NewBlacklistService 创建 Token 黑名单服务实例
+// NewBlacklistService creates a new token blacklist service instance
 func NewBlacklistService(redis *cache.RedisClient, logger *zap.Logger) *BlacklistService {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -35,7 +35,7 @@ func NewBlacklistService(redis *cache.RedisClient, logger *zap.Logger) *Blacklis
 	}
 }
 
-// RevokeToken 撤销 Token（加入黑名单）
+// RevokeToken revokes a token (adds it to the blacklist)
 func (s *BlacklistService) RevokeToken(ctx context.Context, jti string, reason string, expiresAt time.Time) error {
 	blacklist := &domain.TokenBlacklist{
 		JTI:       jti,
@@ -50,10 +50,10 @@ func (s *BlacklistService) RevokeToken(ctx context.Context, jti string, reason s
 		return fmt.Errorf("marshal token blacklist: %w", err)
 	}
 
-	// 计算 TTL：从现在到 Token 过期的时间
+	// Calculate TTL: time from now until token expiration
 	ttl := time.Until(expiresAt)
 	if ttl <= 0 {
-		// Token 已经过期，不需要加入黑名单
+		// Token has already expired, no need to add to blacklist
 		s.logger.Warn("Token already expired, skip blacklist", zap.String("jti", jti))
 		return nil
 	}
@@ -72,7 +72,7 @@ func (s *BlacklistService) RevokeToken(ctx context.Context, jti string, reason s
 	return nil
 }
 
-// IsTokenRevoked 检查 Token 是否已被撤销
+// IsTokenRevoked checks whether a token has been revoked
 func (s *BlacklistService) IsTokenRevoked(ctx context.Context, jti string) (bool, error) {
 	key := s.buildBlacklistKey(jti)
 	exists, err := s.redis.Exists(ctx, key)
@@ -84,7 +84,7 @@ func (s *BlacklistService) IsTokenRevoked(ctx context.Context, jti string) (bool
 	return exists, nil
 }
 
-// GetRevokeInfo 获取 Token 撤销信息
+// GetRevokeInfo retrieves the revocation information for a token
 func (s *BlacklistService) GetRevokeInfo(ctx context.Context, jti string) (*domain.TokenBlacklist, error) {
 	key := s.buildBlacklistKey(jti)
 	data, err := s.redis.Get(ctx, key)
@@ -105,7 +105,7 @@ func (s *BlacklistService) GetRevokeInfo(ctx context.Context, jti string) (*doma
 	return &blacklist, nil
 }
 
-// RemoveFromBlacklist 从黑名单中移除 Token（慎用，通常仅用于测试或特殊场景）
+// RemoveFromBlacklist removes a token from the blacklist (use with caution, typically for testing or special scenarios only)
 func (s *BlacklistService) RemoveFromBlacklist(ctx context.Context, jti string) error {
 	key := s.buildBlacklistKey(jti)
 	if err := s.redis.Del(ctx, key); err != nil {
@@ -117,12 +117,12 @@ func (s *BlacklistService) RemoveFromBlacklist(ctx context.Context, jti string) 
 	return nil
 }
 
-// buildBlacklistKey 构建 Redis 键
+// buildBlacklistKey constructs the Redis key
 func (s *BlacklistService) buildBlacklistKey(jti string) string {
 	return fmt.Sprintf("%s%s", BlacklistKeyPrefix, jti)
 }
 
-// 错误定义
+// Error definitions
 var (
 	ErrTokenNotRevoked = fmt.Errorf("token not revoked")
 )

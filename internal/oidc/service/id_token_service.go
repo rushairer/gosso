@@ -14,7 +14,7 @@ import (
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
 
-// IDTokenClaims OIDC ID Token 声明
+// IDTokenClaims OIDC ID Token claims
 type IDTokenClaims struct {
 	jwt.RegisteredClaims
 	Sub               string `json:"sub"`
@@ -30,7 +30,7 @@ type IDTokenClaims struct {
 	AuthTime          *int64 `json:"auth_time,omitempty"`
 }
 
-// IDTokenService OIDC ID Token 服务
+// IDTokenService OIDC ID Token service
 type IDTokenService struct {
 	tokenSvc       *tokenService.TokenService
 	issuer         string
@@ -39,7 +39,7 @@ type IDTokenService struct {
 	logger         *zap.Logger
 }
 
-// NewIDTokenService 创建 ID Token 服务实例
+// NewIDTokenService creates a new instance of IDTokenService
 func NewIDTokenService(
 	tokenSvc *tokenService.TokenService,
 	issuer string,
@@ -59,7 +59,7 @@ func NewIDTokenService(
 	}
 }
 
-// GenerateIDToken 生成 OIDC ID Token
+// GenerateIDToken generates an OIDC ID Token
 func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time) (string, error) {
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
@@ -81,7 +81,7 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 		AuthTime: ptrInt64(authTime.Unix()),
 	}
 
-	// 根据 scope 添加声明
+	// Add claims based on scope
 	for _, scope := range scopes {
 		switch scope {
 		case "profile":
@@ -96,7 +96,7 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 		}
 	}
 
-	// 使用 TokenService 的 RSA 私钥签发 ID Token
+	// Sign the ID Token using TokenService's RSA private key
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = s.tokenSvc.KeyService().KeyID()
 	tokenString, err := token.SignedString(s.tokenSvc.KeyService().PrivateKey())

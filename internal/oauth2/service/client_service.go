@@ -14,7 +14,7 @@ import (
 	"github.com/rushairer/gosso/internal/oauth2/repository"
 )
 
-// RegisterClientRequest 注册 OAuth2 客户端请求
+// RegisterClientRequest represents a request to register an OAuth2 client
 type RegisterClientRequest struct {
 	AccountID      string
 	Name           string
@@ -26,7 +26,7 @@ type RegisterClientRequest struct {
 	Metadata       map[string]any
 }
 
-// OAuth2ClientService OAuth2 客户端服务接口
+// OAuth2ClientService is the OAuth2 client service interface
 type OAuth2ClientService interface {
 	RegisterClient(ctx context.Context, req *RegisterClientRequest) (*domain.OAuth2Client, string, error)
 	FindByClientID(ctx context.Context, clientID string) (*domain.OAuth2Client, error)
@@ -40,7 +40,7 @@ type oauth2ClientServiceImpl struct {
 	clientRepo repository.OAuth2ClientRepository
 }
 
-// NewOAuth2ClientService 创建 OAuth2 客户端服务实例
+// NewOAuth2ClientService creates a new OAuth2 client service instance
 func NewOAuth2ClientService(db *sql.DB, clientRepo repository.OAuth2ClientRepository) OAuth2ClientService {
 	return &oauth2ClientServiceImpl{
 		db:         db,
@@ -137,14 +137,14 @@ func (s *oauth2ClientServiceImpl) DeleteClient(ctx context.Context, id string) e
 	return tx.Commit()
 }
 
-// generateClientID 生成 24 字节的 client_id（48 字符 hex）
+// generateClientID generates a 24-byte client_id (48 hex characters)
 func generateClientID() string {
 	bytes := make([]byte, 24)
 	_, _ = rand.Read(bytes)
 	return hex.EncodeToString(bytes)
 }
 
-// generateClientSecret 生成 32 字节的 client_secret（64 字符 hex）
+// generateClientSecret generates a 32-byte client_secret (64 hex characters)
 func generateClientSecret() string {
 	bytes := make([]byte, 32)
 	_, _ = rand.Read(bytes)

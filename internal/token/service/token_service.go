@@ -21,7 +21,7 @@ const (
 	RefreshTokenLength     = 32 // 32 bytes = 64 hex chars
 )
 
-// TokenService JWT 和刷新令牌服务
+// TokenService JWT and refresh token service
 type TokenService struct {
 	secret        []byte
 	keySvc        *KeyService
@@ -33,7 +33,7 @@ type TokenService struct {
 	logger        *zap.Logger
 }
 
-// NewTokenService 创建 Token 服务实例
+// NewTokenService creates a new token service instance
 func NewTokenService(
 	secret []byte,
 	keySvc *KeyService,
@@ -59,7 +59,7 @@ func NewTokenService(
 	}
 }
 
-// GenerateAccessToken 生成 JWT Access Token (RS256)
+// GenerateAccessToken generates a JWT access token (RS256)
 func (s *TokenService) GenerateAccessToken(claims *domain.AccessTokenClaims) (string, error) {
 	now := time.Now()
 	claims.Issuer = s.issuer
@@ -77,17 +77,17 @@ func (s *TokenService) GenerateAccessToken(claims *domain.AccessTokenClaims) (st
 	return tokenString, nil
 }
 
-// AccessExpiry 返回 access token 过期时间
+// AccessExpiry returns the access token expiration duration
 func (s *TokenService) AccessExpiry() time.Duration {
 	return s.accessExpiry
 }
 
-// ValidateAccessToken 验证 JWT Access Token（含黑名单检查，支持 RS256 + HS256 回退）
+// ValidateAccessToken validates a JWT access token (with blacklist check, supports RS256 + HS256 fallback)
 func (s *TokenService) ValidateAccessToken(tokenString string) (*domain.AccessTokenClaims, error) {
 	return s.ValidateAccessTokenWithContext(context.Background(), tokenString)
 }
 
-// ValidateAccessTokenWithContext 使用请求 context 验证 JWT Access Token
+// ValidateAccessTokenWithContext validates a JWT access token using the request context
 func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*domain.AccessTokenClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &domain.AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		switch token.Method.(type) {
@@ -111,7 +111,7 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 		return nil, ErrInvalidToken
 	}
 
-	// 黑名单检查
+	// Blacklist check
 	if claims.ID != "" {
 		revoked, err := s.blacklist.IsTokenRevoked(ctx, claims.ID)
 		if err != nil {
@@ -125,7 +125,7 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 	return claims, nil
 }
 
-// GenerateRefreshToken 生成随机刷新令牌并存储到 Redis
+// GenerateRefreshToken generates a random refresh token and stores it in Redis
 func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clientID, sessionID, scope string) (*domain.RefreshToken, error) {
 	bytes := make([]byte, RefreshTokenLength)
 	if _, err := rand.Read(bytes); err != nil {
@@ -154,7 +154,7 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 		return nil, fmt.Errorf("store refresh token: %w", err)
 	}
 
-	// 维护 session → tokens 索引
+	// Maintain session -> tokens index
 	if sessionID != "" {
 		sessionKey := s.buildSessionTokensKey(sessionID)
 		tokenHash := domain.HashToken(tokenString)
@@ -167,7 +167,7 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 	return rt, nil
 }
 
-// ValidateRefreshToken 验证刷新令牌
+// ValidateRefreshToken validates a refresh token
 func (s *TokenService) ValidateRefreshToken(ctx context.Context, token string) (*domain.RefreshToken, error) {
 	key := s.buildRefreshTokenKey(token)
 	data, err := s.redis.Get(ctx, key)
@@ -186,20 +186,20 @@ func (s *TokenService) ValidateRefreshToken(ctx context.Context, token string) (
 	return &rt, nil
 }
 
-// RotateRefreshToken 刷新令牌轮转：删除旧令牌，生成新令牌
+// RotateRefreshToken rotates refresh tokens: deletes the old token and generates a new one
 func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) (*domain.RefreshToken, error) {
 	rt, err := s.ValidateRefreshToken(ctx, oldToken)
 	if err != nil {
 		return nil, err
 	}
 
-	// 删除旧令牌
+	// Delete the old token
 	oldKey := s.buildRefreshTokenKey(oldToken)
 	if err := s.redis.Del(ctx, oldKey); err != nil {
 		s.logger.Warn("Failed to delete old refresh token", zap.Error(err))
 	}
 
-	// 从 session 索引中移除旧 hash
+	// Remove old hash from the session index
 	if rt.SessionID != "" {
 		sessionKey := s.buildSessionTokensKey(rt.SessionID)
 		oldHash := domain.HashToken(oldToken)
@@ -208,7 +208,7 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 		}
 	}
 
-	// 生成新令牌（GenerateRefreshToken 会自动加入 session 索引）
+	// Generate new token (GenerateRefreshToken automatically adds to the session index)
 	newRT, err := s.GenerateRefreshToken(ctx, rt.AccountID, rt.ClientID, rt.SessionID, rt.Scope)
 	if err != nil {
 		return nil, err
@@ -217,7 +217,7 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	return newRT, nil
 }
 
-// RevokeRefreshToken 撤销刷新令牌
+// RevokeRefreshToken revokes a refresh token
 func (s *TokenService) RevokeRefreshToken(ctx context.Context, token string) error {
 	key := s.buildRefreshTokenKey(token)
 	if err := s.redis.Del(ctx, key); err != nil {
@@ -226,7 +226,7 @@ func (s *TokenService) RevokeRefreshToken(ctx context.Context, token string) err
 	return nil
 }
 
-// RevokeAllForSession 撤销某个会话下的所有刷新令牌
+// RevokeAllForSession revokes all refresh tokens under a given session
 func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string) error {
 	sessionKey := s.buildSessionTokensKey(sessionID)
 
@@ -235,7 +235,7 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 		return fmt.Errorf("get session tokens: %w", err)
 	}
 
-	// 删除每个 refresh token
+	// Delete each refresh token
 	for _, hash := range hashes {
 		tokenKey := RefreshTokenKeyPrefix + hash
 		if err := s.redis.Del(ctx, tokenKey); err != nil {
@@ -244,7 +244,7 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 		}
 	}
 
-	// 删除 session 索引
+	// Delete the session index
 	if err := s.redis.Del(ctx, sessionKey); err != nil {
 		s.logger.Warn("Failed to delete session tokens set", zap.String("session_id", sessionID), zap.Error(err))
 	}
@@ -262,7 +262,7 @@ func (s *TokenService) buildSessionTokensKey(sessionID string) string {
 	return fmt.Sprintf("%s%s", SessionTokensKeyPrefix, sessionID)
 }
 
-// IntrospectToken 验证 token 并返回活跃状态（RFC 7662）
+// IntrospectToken validates a token and returns its active status (RFC 7662)
 func (s *TokenService) IntrospectToken(ctx context.Context, tokenString string) (map[string]any, error) {
 	claims, err := s.ValidateAccessToken(tokenString)
 	if err != nil {
@@ -294,7 +294,7 @@ func (s *TokenService) IntrospectToken(ctx context.Context, tokenString string) 
 	return result, nil
 }
 
-// KeyService 返回密钥服务（供 ID Token 等签发使用）
+// KeyService returns the key service (used for ID token signing, etc.)
 func (s *TokenService) KeyService() *KeyService {
 	return s.keySvc
 }

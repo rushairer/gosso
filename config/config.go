@@ -32,12 +32,12 @@ type WebServerConfig struct {
 	RateLimits         RateLimitsConfig `mapstructure:"rate_limits"`
 }
 
-// RateLimitsConfig per-endpoint 速率限制配置（每分钟请求数）
+// RateLimitsConfig per-endpoint rate limit configuration (requests per minute)
 type RateLimitsConfig struct {
-	Login   int `mapstructure:"login"`   // 登录端点，默认 5
-	Token   int `mapstructure:"token"`   // Token 端点，默认 10
-	Passkey int `mapstructure:"passkey"` // Passkey 端点，默认 10
-	API     int `mapstructure:"api"`     // 通用 API，默认 60
+	Login   int `mapstructure:"login"`   // Login endpoint, default 5
+	Token   int `mapstructure:"token"`   // Token endpoint, default 10
+	Passkey int `mapstructure:"passkey"` // Passkey endpoint, default 10
+	API     int `mapstructure:"api"`     // General API, default 60
 }
 
 type DatabaseConfigDriverName string
@@ -81,11 +81,11 @@ type RedisConfig struct {
 }
 
 type TaskPipelineConfig struct {
-	// FlushSize 批处理数据的最大容量
+	// FlushSize is the maximum capacity for batch processing
 	FlushSize uint32 `mapstructure:"flush_size"`
-	// BufferSize 缓冲通道的容量
+	// BufferSize is the capacity of the buffered channel
 	BufferSize uint32 `mapstructure:"buffer_size"`
-	// FlushInterval 定时刷新的时间间隔
+	// FlushInterval is the time interval for periodic flushing
 	FlushInterval time.Duration `mapstructure:"flush_interval"`
 }
 
@@ -102,7 +102,7 @@ type CaptchaConfig struct {
 }
 
 type LogConfig struct {
-	// 日志级别: -1: debug, 0: info, 1: warn, 2: error, 3: fatal, 4: panic 5: fatal
+	// Log level: -1: debug, 0: info, 1: warn, 2: error, 3: fatal, 4: panic, 5: fatal
 	Level int `mapstructure:"level"`
 }
 

@@ -24,10 +24,57 @@ func setupTestSessionService(t *testing.T) *SessionService {
 	}
 
 	service := NewSessionService(redisClient, logger)
-	service.SetSessionTTL(10 * time.Second) // 测试用短过期时间
+	service.SetSessionTTL(10 * time.Second) // short TTL for tests
 
 	return service
 }
+
+// ──────────────────────────────────────────────
+// Constructor and config (no Redis needed)
+// ──────────────────────────────────────────────
+
+func TestNewSessionService_NilLogger(t *testing.T) {
+	svc := NewSessionService(nil, nil)
+	assert.NotNil(t, svc)
+	assert.NotNil(t, svc.logger)
+	assert.Equal(t, DefaultSessionTTL, svc.sessionTTL)
+	assert.Equal(t, DefaultMaxSessions, svc.maxSessions)
+}
+
+func TestNewSessionService_WithLogger(t *testing.T) {
+	logger := zap.NewNop()
+	svc := NewSessionService(nil, logger)
+	assert.NotNil(t, svc)
+}
+
+func TestSessionService_SetMaxSessions(t *testing.T) {
+	svc := NewSessionService(nil, nil)
+	svc.SetMaxSessions(5)
+	assert.Equal(t, 5, svc.maxSessions)
+}
+
+func TestSessionService_SetSessionTTL(t *testing.T) {
+	svc := NewSessionService(nil, nil)
+	svc.SetSessionTTL(1 * time.Hour)
+	assert.Equal(t, 1*time.Hour, svc.sessionTTL)
+}
+
+func TestSessionService_BuildSessionKey(t *testing.T) {
+	svc := NewSessionService(nil, nil)
+	id := uuid.New()
+	key := svc.buildSessionKey(id)
+	assert.Equal(t, SessionKeyPrefix+id.String(), key)
+}
+
+func TestSessionService_BuildAccountSessionsKey(t *testing.T) {
+	svc := NewSessionService(nil, nil)
+	key := svc.buildAccountSessionsKey("account-001")
+	assert.Equal(t, AccountSessionsPrefix+"account-001", key)
+}
+
+// ──────────────────────────────────────────────
+// Redis integration tests (skipped without Redis)
+// ──────────────────────────────────────────────
 
 func TestSessionService_CreateAndGetSession(t *testing.T) {
 	service := setupTestSessionService(t)
@@ -43,19 +90,19 @@ func TestSessionService_CreateAndGetSession(t *testing.T) {
 		UserAgent: "test-agent",
 	}
 
-	// 创建会话
+	// Create session
 	err := service.CreateSession(ctx, session)
 	require.NoError(t, err)
 	assert.NotEqual(t, uuid.Nil, session.ID)
 
-	// 获取会话
+	// Retrieve session
 	retrieved, err := service.GetSession(ctx, session.ID)
 	require.NoError(t, err)
 	assert.Equal(t, session.ID, retrieved.ID)
 	assert.Equal(t, accountID, retrieved.AccountID)
 	assert.Equal(t, "testuser", retrieved.Username)
 
-	// 清理
+	// Clean up
 	_ = service.DeleteSession(ctx, session.ID)
 }
 
@@ -72,27 +119,27 @@ func TestSessionService_UpdateSession(t *testing.T) {
 		UserAgent: "test-agent",
 	}
 
-	// 创建会话
+	// Create session
 	err := service.CreateSession(ctx, session)
 	require.NoError(t, err)
 
-	// 等待一小段时间
+	// Wait briefly
 	time.Sleep(100 * time.Millisecond)
 
 	oldLastActive := session.LastActiveAt
 
-	// 更新会话
+	// Update session
 	session.MFAVerified = true
 	err = service.UpdateSession(ctx, session)
 	require.NoError(t, err)
 
-	// 获取更新后的会话
+	// Retrieve updated session
 	retrieved, err := service.GetSession(ctx, session.ID)
 	require.NoError(t, err)
 	assert.True(t, retrieved.MFAVerified)
 	assert.True(t, retrieved.LastActiveAt.After(oldLastActive))
 
-	// 清理
+	// Clean up
 	_ = service.DeleteSession(ctx, session.ID)
 }
 
@@ -109,15 +156,15 @@ func TestSessionService_DeleteSession(t *testing.T) {
 		UserAgent: "test-agent",
 	}
 
-	// 创建会话
+	// Create session
 	err := service.CreateSession(ctx, session)
 	require.NoError(t, err)
 
-	// 删除会话
+	// Delete session
 	err = service.DeleteSession(ctx, session.ID)
 	require.NoError(t, err)
 
-	// 获取会话应该失败
+	// Retrieve should fail
 	_, err = service.GetSession(ctx, session.ID)
 	assert.Equal(t, ErrSessionNotFound, err)
 }
@@ -135,16 +182,16 @@ func TestSessionService_ValidateSession(t *testing.T) {
 		UserAgent: "test-agent",
 	}
 
-	// 创建会话
+	// Create session
 	err := service.CreateSession(ctx, session)
 	require.NoError(t, err)
 
-	// 验证会话（应该有效）
+	// Validate session (should be active)
 	validated, err := service.ValidateSession(ctx, session.ID)
 	require.NoError(t, err)
 	assert.NotNil(t, validated)
 
-	// 清理
+	// Clean up
 	_ = service.DeleteSession(ctx, session.ID)
 }
 
@@ -161,22 +208,52 @@ func TestSessionService_RefreshSession(t *testing.T) {
 		UserAgent: "test-agent",
 	}
 
-	// 创建会话
+	// Create session
 	err := service.CreateSession(ctx, session)
 	require.NoError(t, err)
 
 	oldLastActive := session.LastActiveAt
 	time.Sleep(100 * time.Millisecond)
 
-	// 刷新会话
+	// Refresh session
 	err = service.RefreshSession(ctx, session.ID)
 	require.NoError(t, err)
 
-	// 获取会话，检查活跃时间是否更新
+	// Verify activity time was updated
 	retrieved, err := service.GetSession(ctx, session.ID)
 	require.NoError(t, err)
 	assert.True(t, retrieved.LastActiveAt.After(oldLastActive))
 
-	// 清理
+	// Clean up
 	_ = service.DeleteSession(ctx, session.ID)
+}
+
+func TestSessionService_RevokeSession_NotFound(t *testing.T) {
+	service := setupTestSessionService(t)
+	defer service.redis.Close()
+
+	err := service.RevokeSession(context.Background(), "account-001", uuid.New())
+	assert.Equal(t, ErrSessionNotFound, err)
+}
+
+func TestSessionService_ListSessionsByAccount_Empty(t *testing.T) {
+	service := setupTestSessionService(t)
+	defer service.redis.Close()
+
+	sessions, err := service.ListSessionsByAccount(context.Background(), "nonexistent-account")
+	require.NoError(t, err)
+	assert.Len(t, sessions, 0)
+}
+
+func TestSessionService_RevokeAllForAccount_Empty(t *testing.T) {
+	service := setupTestSessionService(t)
+	defer service.redis.Close()
+
+	err := service.RevokeAllForAccount(context.Background(), "nonexistent-account")
+	require.NoError(t, err)
+}
+
+func TestSessionService_ErrorDefinitions(t *testing.T) {
+	assert.Equal(t, "session not found", ErrSessionNotFound.Error())
+	assert.Equal(t, "session expired", ErrSessionExpired.Error())
 }

@@ -13,18 +13,18 @@ import (
 )
 
 const (
-	// ContextKeyAccountID 存储在 gin.Context 中的账号 ID
+	// ContextKeyAccountID stores the account ID in gin.Context
 	ContextKeyAccountID = "account_id"
-	// ContextKeyClaims 存储在 gin.Context 中的 JWT Claims
+	// ContextKeyClaims stores the JWT claims in gin.Context
 	ContextKeyClaims = "jwt_claims"
 )
 
-// JWTAuthMiddleware JWT 认证中间件
+// JWTAuthMiddleware is the JWT authentication middleware
 func JWTAuthMiddleware(tokenSvc *tokenService.TokenService) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		tokenString := extractBearerToken(ctx)
 		if tokenString == "" {
-			// 回退到 query/form 参数（支持 HTML 表单提交）
+			// Fallback to query/form parameters (supports HTML form submissions)
 			tokenString = ctx.Query("access_token")
 			if tokenString == "" {
 				tokenString = ctx.PostForm("access_token")
@@ -59,7 +59,7 @@ func extractBearerToken(ctx *gin.Context) string {
 	return parts[1]
 }
 
-// AdminRequiredMiddleware 管理员角色检查中间件（需在 JWTAuthMiddleware 之后使用）
+// AdminRequiredMiddleware checks for admin role (must be used after JWTAuthMiddleware)
 func AdminRequiredMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		claimsRaw, exists := ctx.Get(ContextKeyClaims)

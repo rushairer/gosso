@@ -27,15 +27,15 @@ func TestNewKeyService_CreateFile(t *testing.T) {
 	svc, err := NewKeyService(path, "", zap.NewNop())
 	require.NoError(t, err)
 
-	// 文件应已创建
+	// The file should have been created
 	_, err = os.Stat(path)
 	assert.NoError(t, err)
 
-	// 从同一文件加载应成功
+	// Loading from the same file should succeed
 	svc2, err := NewKeyService(path, "", zap.NewNop())
 	require.NoError(t, err)
 
-	// 两个实例的 kid 应相同（同一密钥）
+	// The kid of both instances should be the same (the same key)
 	assert.Equal(t, svc.KeyID(), svc2.KeyID())
 }
 
@@ -43,11 +43,11 @@ func TestNewKeyService_LoadFromFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "private.pem")
 
-	// 第一次创建
+	// First creation
 	svc1, err := NewKeyService(path, "", zap.NewNop())
 	require.NoError(t, err)
 
-	// 第二次加载
+	// Second loading
 	svc2, err := NewKeyService(path, "", zap.NewNop())
 	require.NoError(t, err)
 

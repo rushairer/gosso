@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Role 角色领域模型
+// Role is the role domain model.
 type Role struct {
 	ID          string         `json:"id"`
 	Name        string         `json:"name"`
@@ -18,7 +18,7 @@ type Role struct {
 	DeletedAt   *time.Time     `json:"deleted_at,omitempty"`
 }
 
-// NewRole 创建新角色
+// NewRole creates a new role.
 func NewRole(name string, description *string) *Role {
 	return &Role{
 		ID:          uuid.New().String(),
@@ -31,21 +31,21 @@ func NewRole(name string, description *string) *Role {
 	}
 }
 
-// IsDeleted 是否已软删除
+// IsDeleted reports whether the role has been soft-deleted.
 func (r *Role) IsDeleted() bool {
 	return r.DeletedAt != nil
 }
 
-// SoftDelete 软删除角色
+// SoftDelete soft-deletes the role.
 func (r *Role) SoftDelete() {
 	now := time.Now()
 	r.DeletedAt = &now
 	r.UpdatedAt = now
 }
 
-// AddPermission 添加权限
+// AddPermission adds a permission to the role.
 func (r *Role) AddPermission(permission string) {
-	// 检查是否已存在
+	// check if already present
 	for _, p := range r.Permissions {
 		if p == permission {
 			return
@@ -55,7 +55,7 @@ func (r *Role) AddPermission(permission string) {
 	r.UpdatedAt = time.Now()
 }
 
-// RemovePermission 移除权限
+// RemovePermission removes a permission from the role.
 func (r *Role) RemovePermission(permission string) {
 	for i, p := range r.Permissions {
 		if p == permission {
@@ -66,7 +66,7 @@ func (r *Role) RemovePermission(permission string) {
 	}
 }
 
-// HasPermission 检查是否有某个权限
+// HasPermission reports whether the role has the given permission.
 func (r *Role) HasPermission(permission string) bool {
 	for _, p := range r.Permissions {
 		if p == permission {
@@ -76,7 +76,7 @@ func (r *Role) HasPermission(permission string) bool {
 	return false
 }
 
-// Group 群组领域模型
+// Group is the group domain model.
 type Group struct {
 	ID          string         `json:"id"`
 	Name        string         `json:"name"`
@@ -88,7 +88,7 @@ type Group struct {
 	DeletedAt   *time.Time     `json:"deleted_at,omitempty"`
 }
 
-// NewGroup 创建新群组
+// NewGroup creates a new group.
 func NewGroup(name string, description *string, parentID *string) *Group {
 	return &Group{
 		ID:          uuid.New().String(),
@@ -101,12 +101,12 @@ func NewGroup(name string, description *string, parentID *string) *Group {
 	}
 }
 
-// IsDeleted 是否已软删除
+// IsDeleted reports whether the group has been soft-deleted.
 func (g *Group) IsDeleted() bool {
 	return g.DeletedAt != nil
 }
 
-// SoftDelete 软删除群组
+// SoftDelete soft-deletes the group.
 func (g *Group) SoftDelete() {
 	now := time.Now()
 	g.DeletedAt = &now

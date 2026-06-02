@@ -8,7 +8,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// AccessTokenClaims JWT Access Token 声明
+// AccessTokenClaims JWT access token claims
 type AccessTokenClaims struct {
 	jwt.RegisteredClaims
 	AccountID   string   `json:"account_id"`
@@ -21,7 +21,7 @@ type AccessTokenClaims struct {
 	SessionID   string   `json:"sid,omitempty"`
 }
 
-// RefreshToken 刷新令牌
+// RefreshToken refresh token
 type RefreshToken struct {
 	Token     string    `json:"token"`
 	AccountID string    `json:"account_id"`
@@ -31,7 +31,7 @@ type RefreshToken struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// HashToken 计算 Token 的 SHA256 哈希值（用于 Redis 存储键）
+// HashToken computes the SHA256 hash of a token (used as Redis storage key)
 func HashToken(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])

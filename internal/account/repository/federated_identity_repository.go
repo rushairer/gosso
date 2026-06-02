@@ -10,21 +10,21 @@ import (
 	"github.com/rushairer/gosso/internal/account/domain"
 )
 
-// FederatedIdentityRepository 第三方身份仓储接口
+// FederatedIdentityRepository defines the interface for federated identity repository
 type FederatedIdentityRepository interface {
-	// CreateFederatedIdentity 创建第三方身份（需要事务）
+	// CreateFederatedIdentity creates a federated identity (requires transaction)
 	CreateFederatedIdentity(ctx context.Context, tx *sql.Tx, identity *domain.FederatedIdentity) error
 
-	// FindByProvider 根据提供商和提供商用户 ID 查找
+	// FindByProvider finds a federated identity by provider and provider user ID
 	FindByProvider(ctx context.Context, provider domain.Provider, providerUserID string) (*domain.FederatedIdentity, error)
 
-	// FindByAccountID 根据账号 ID 查找所有第三方身份
+	// FindByAccountID finds all federated identities by account ID
 	FindByAccountID(ctx context.Context, accountID string) ([]*domain.FederatedIdentity, error)
 
-	// SoftDeleteByAccountID 软删除账号的所有第三方身份（需要事务）
+	// SoftDeleteByAccountID soft deletes all federated identities of an account (requires transaction)
 	SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
 
-	// SoftDeleteByID 软删除单个第三方身份（需要事务）
+	// SoftDeleteByID soft deletes a single federated identity (requires transaction)
 	SoftDeleteByID(ctx context.Context, tx *sql.Tx, identityID string, deletedAt time.Time) error
 }
 
@@ -32,12 +32,12 @@ type federatedIdentityRepositoryImpl struct {
 	db *sql.DB
 }
 
-// NewFederatedIdentityRepository 创建第三方身份仓储
+// NewFederatedIdentityRepository creates a new federated identity repository
 func NewFederatedIdentityRepository(db *sql.DB) FederatedIdentityRepository {
 	return &federatedIdentityRepositoryImpl{db: db}
 }
 
-// CreateFederatedIdentity 创建第三方身份
+// CreateFederatedIdentity creates a federated identity
 func (r *federatedIdentityRepositoryImpl) CreateFederatedIdentity(ctx context.Context, tx *sql.Tx, identity *domain.FederatedIdentity) error {
 	query := `
 		INSERT INTO federated_identities (id, account_id, provider, provider_user_id, profile, created_at, updated_at)
@@ -65,7 +65,7 @@ func (r *federatedIdentityRepositoryImpl) CreateFederatedIdentity(ctx context.Co
 	return nil
 }
 
-// FindByProvider 根据提供商和提供商用户 ID 查找
+// FindByProvider finds a federated identity by provider and provider user ID
 func (r *federatedIdentityRepositoryImpl) FindByProvider(ctx context.Context, provider domain.Provider, providerUserID string) (*domain.FederatedIdentity, error) {
 	query := `
 		SELECT id, account_id, provider, provider_user_id, profile, created_at, updated_at, deleted_at
@@ -102,7 +102,7 @@ func (r *federatedIdentityRepositoryImpl) FindByProvider(ctx context.Context, pr
 	return identity, nil
 }
 
-// FindByAccountID 根据账号 ID 查找所有第三方身份
+// FindByAccountID finds all federated identities by account ID
 func (r *federatedIdentityRepositoryImpl) FindByAccountID(ctx context.Context, accountID string) ([]*domain.FederatedIdentity, error) {
 	query := `
 		SELECT id, account_id, provider, provider_user_id, profile, created_at, updated_at, deleted_at
@@ -146,7 +146,7 @@ func (r *federatedIdentityRepositoryImpl) FindByAccountID(ctx context.Context, a
 	return identities, nil
 }
 
-// SoftDeleteByAccountID 软删除账号的所有第三方身份
+// SoftDeleteByAccountID soft deletes all federated identities of an account
 func (r *federatedIdentityRepositoryImpl) SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `
 		UPDATE federated_identities
@@ -162,7 +162,7 @@ func (r *federatedIdentityRepositoryImpl) SoftDeleteByAccountID(ctx context.Cont
 	return nil
 }
 
-// SoftDeleteByID 软删除单个第三方身份
+// SoftDeleteByID soft deletes a single federated identity
 func (r *federatedIdentityRepositoryImpl) SoftDeleteByID(ctx context.Context, tx *sql.Tx, identityID string, deletedAt time.Time) error {
 	query := `
 		UPDATE federated_identities

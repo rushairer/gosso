@@ -1,6 +1,6 @@
 package service
 
-// DiscoveryService OIDC Discovery 服务
+// DiscoveryService OIDC Discovery service
 type DiscoveryService struct {
 	issuer           string
 	authEndpoint     string
@@ -9,7 +9,7 @@ type DiscoveryService struct {
 	userInfoEndpoint string
 }
 
-// NewDiscoveryService 创建 Discovery 服务实例
+// NewDiscoveryService creates a new instance of DiscoveryService
 func NewDiscoveryService(issuer string) *DiscoveryService {
 	return &DiscoveryService{
 		issuer:           issuer,
@@ -20,7 +20,7 @@ func NewDiscoveryService(issuer string) *DiscoveryService {
 	}
 }
 
-// GetDiscoveryDocument 返回 OIDC Discovery 文档
+// GetDiscoveryDocument returns the OIDC Discovery document
 func (s *DiscoveryService) GetDiscoveryDocument() map[string]any {
 	return map[string]any{
 		"issuer":                 s.issuer,

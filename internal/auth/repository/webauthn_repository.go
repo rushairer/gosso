@@ -10,7 +10,7 @@ import (
 	"github.com/rushairer/gosso/internal/auth/domain"
 )
 
-// WebAuthnCredentialRepository WebAuthn 凭证仓储接口
+// WebAuthnCredentialRepository defines the webauthn credential repository interface
 type WebAuthnCredentialRepository interface {
 	CreateCredential(ctx context.Context, tx *sql.Tx, cred *domain.WebAuthnCredential) error
 	FindByCredentialID(ctx context.Context, credentialID string) (*domain.WebAuthnCredential, error)
@@ -24,7 +24,7 @@ type webAuthnCredentialRepositoryImpl struct {
 	db *sql.DB
 }
 
-// NewWebAuthnCredentialRepository 创建 WebAuthn 凭证仓储
+// NewWebAuthnCredentialRepository creates a new WebAuthn credential repository
 func NewWebAuthnCredentialRepository(db *sql.DB) WebAuthnCredentialRepository {
 	return &webAuthnCredentialRepositoryImpl{db: db}
 }
