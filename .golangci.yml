@@ -29,18 +29,6 @@ linters:
         - rangeValCopy
     misspell:
       locale: US
-
-formatters:
-  enable:
-    - gofmt
-    - goimports
-  settings:
-    goimports:
-      local-prefixes: github.com/rushairer/gosso
-
-issues:
-  max-issues-per-linter: 50
-  max-same-issues: 5
   exclusions:
     rules:
       # Test files can be more relaxed
@@ -94,6 +82,19 @@ issues:
       - linters:
           - gocritic
         text: "commentedOutCode"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/rushairer/gosso
+
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 5
 
 output:
   formats:
