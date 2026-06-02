@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Add unit tests for middleware: RequestIDMiddleware, ZapLoggerMiddleware, CSRFMiddleware, generateCSRFToken (`middleware/middleware_test.go`).
+- Add unit tests for audit domain: NewRecord, action constants, UUID generation (`internal/audit/domain/audit_test.go`).
+- Add unit tests for audit context: SetMetadata, IPFromContext, UserAgentFromContext, RequestIDFromContext (`internal/audit/context_test.go`).
+- Add unit tests for DB transaction helpers: WithTransaction, WithTransactionIsolation, panic recovery (`internal/db/transaction_test.go`).
 - Add `AuthConfig` to configuration (JWT secret, issuer, token expiry, scopes).
 - Add `golang-jwt/jwt/v5` dependency for JWT token signing and verification.
 - Add `internal/token/domain/token.go` — AccessTokenClaims and RefreshToken value objects.
@@ -98,6 +102,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Normalize sentinel errors to use `errors.New()` instead of static `fmt.Errorf()` across auth, account, and verification services.
+- Translate all Chinese error messages to English in account service, auth services, and DB transaction helpers.
+- Add rollback error logging in `WithTransaction` and `WithTransactionIsolation` (previously silently discarded).
 - Upgrade gouno dependency from v0.3.1 to v1.0.0.
 - Upgrade bytedance/sonic from v1.14.0 to v1.15.1 for Go version compatibility.
 - Router now registers all auth/OAuth2/OIDC routes.

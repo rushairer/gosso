@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -176,7 +177,7 @@ func (s *MFAService) ActivateTOTP(ctx context.Context, accountID, code string) e
 		return err
 	}
 	if !valid {
-		return fmt.Errorf("invalid TOTP code")
+		return errors.New("invalid TOTP code")
 	}
 
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
@@ -200,7 +201,7 @@ func (s *MFAService) ActivateTOTP(ctx context.Context, accountID, code string) e
 		}
 	}
 
-	return fmt.Errorf("no pending TOTP enrollment found")
+	return errors.New("no pending TOTP enrollment found")
 }
 
 // DisableTOTP 禁用 TOTP

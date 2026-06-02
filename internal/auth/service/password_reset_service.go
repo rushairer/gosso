@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -87,7 +88,7 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 		s.logger.Warn("Failed to check reset cooldown", zap.Error(err))
 	}
 	if exists {
-		return fmt.Errorf("please wait before requesting another reset")
+		return errors.New("please wait before requesting another reset")
 	}
 
 	// 查找邮箱凭证
@@ -148,7 +149,7 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 // VerifyAndReset 验证重置 token 并设置新密码
 func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPassword string) error {
 	if len(newPassword) < 8 {
-		return fmt.Errorf("password must be at least 8 characters")
+		return errors.New("password must be at least 8 characters")
 	}
 
 	// 查找 token
@@ -157,7 +158,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 
 	raw, err := s.redis.Get(ctx, tokenKey)
 	if err == cache.ErrKeyNotFound {
-		return fmt.Errorf("invalid or expired reset token")
+		return errors.New("invalid or expired reset token")
 	}
 	if err != nil {
 		return fmt.Errorf("get reset token: %w", err)
@@ -171,7 +172,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	// 检查尝试次数
 	if data.Attempts >= PasswordResetMaxAttempts {
 		_ = s.redis.Del(ctx, tokenKey)
-		return fmt.Errorf("reset token exhausted, please request a new one")
+		return errors.New("reset token exhausted, please request a new one")
 	}
 
 	// 一次性使用：立即删除

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -100,7 +101,7 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, accountID, us
 	key := fmt.Sprintf(redisKeyRegChallenge, accountID)
 	data, err := s.redis.Get(ctx, key)
 	if err != nil {
-		return nil, fmt.Errorf("challenge not found or expired")
+		return nil, errors.New("challenge not found or expired")
 	}
 	_ = s.redis.Del(ctx, key)
 
@@ -163,7 +164,7 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, accountID, us
 func (s *PasskeyService) BeginLogin(ctx context.Context, accountID string) (*protocol.CredentialAssertion, string, error) {
 	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil || len(creds) == 0 {
-		return nil, "", fmt.Errorf("no passkey found for account")
+		return nil, "", errors.New("no passkey found for account")
 	}
 
 	user := domain.NewWebAuthnUser(accountID, "", "", toCredentialSlice(creds))
@@ -215,7 +216,7 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 	key := fmt.Sprintf(redisKeyLoginChallenge, requestID)
 	data, err := s.redis.Get(ctx, key)
 	if err != nil {
-		return "", nil, fmt.Errorf("challenge not found or expired")
+		return "", nil, errors.New("challenge not found or expired")
 	}
 	_ = s.redis.Del(ctx, key)
 
@@ -233,7 +234,7 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 	credID := parsedResponse.RawID
 	cred, err := s.credRepo.FindByCredentialID(ctx, string(credID))
 	if err != nil {
-		return "", nil, fmt.Errorf("credential not found")
+		return "", nil, errors.New("credential not found")
 	}
 
 	// 查找该账号的所有 credentials
@@ -274,7 +275,7 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 func (s *PasskeyService) BeginMFALogin(ctx context.Context, accountID string) (*protocol.CredentialAssertion, error) {
 	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil || len(creds) == 0 {
-		return nil, fmt.Errorf("no passkey found for account")
+		return nil, errors.New("no passkey found for account")
 	}
 
 	user := domain.NewWebAuthnUser(accountID, "", "", toCredentialSlice(creds))
@@ -302,7 +303,7 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, accountID string,
 	key := fmt.Sprintf(redisKeyMFAChallenge, accountID)
 	data, err := s.redis.Get(ctx, key)
 	if err != nil {
-		return fmt.Errorf("challenge not found or expired")
+		return errors.New("challenge not found or expired")
 	}
 	_ = s.redis.Del(ctx, key)
 
@@ -319,11 +320,11 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, accountID string,
 	credID := parsedResponse.RawID
 	cred, err := s.credRepo.FindByCredentialID(ctx, string(credID))
 	if err != nil {
-		return fmt.Errorf("credential not found")
+		return errors.New("credential not found")
 	}
 
 	if cred.AccountID != accountID {
-		return fmt.Errorf("credential does not belong to account")
+		return errors.New("credential does not belong to account")
 	}
 
 	allCreds, err := s.credRepo.FindByAccountID(ctx, accountID)
@@ -388,11 +389,11 @@ func (s *PasskeyService) ListCredentials(ctx context.Context, accountID string) 
 func (s *PasskeyService) DeleteCredential(ctx context.Context, accountID, credentialID string) error {
 	cred, err := s.credRepo.FindByCredentialID(ctx, credentialID)
 	if err != nil {
-		return fmt.Errorf("credential not found")
+		return errors.New("credential not found")
 	}
 
 	if cred.AccountID != accountID {
-		return fmt.Errorf("credential does not belong to account")
+		return errors.New("credential does not belong to account")
 	}
 
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})

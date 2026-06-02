@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -73,7 +74,7 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 		s.logger.Warn("Failed to check cooldown", zap.Error(err))
 	}
 	if exists {
-		return fmt.Errorf("please wait before requesting another code")
+		return errors.New("please wait before requesting another code")
 	}
 
 	// 生成 6 位随机数字码
@@ -129,7 +130,7 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 
 	raw, err := s.redis.Get(ctx, codeKey)
 	if err == cache.ErrKeyNotFound {
-		return "", fmt.Errorf("verification code expired or not found")
+		return "", errors.New("verification code expired or not found")
 	}
 	if err != nil {
 		return "", fmt.Errorf("get code: %w", err)
@@ -143,7 +144,7 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 	// 检查尝试次数
 	if data.Attempts >= VerifyCodeAttempts {
 		_ = s.redis.Del(ctx, codeKey)
-		return "", fmt.Errorf("verification code exhausted, please request a new one")
+		return "", errors.New("verification code exhausted, please request a new one")
 	}
 
 	// 比对码
@@ -151,7 +152,7 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 		data.Attempts++
 		updatedData, _ := json.Marshal(data)
 		_ = s.redis.Set(ctx, codeKey, updatedData, VerifyCodeTTL)
-		return "", fmt.Errorf("invalid verification code")
+		return "", errors.New("invalid verification code")
 	}
 
 	// 成功 → 删除 Redis key

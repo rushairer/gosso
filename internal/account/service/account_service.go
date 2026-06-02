@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/mail"
 	"regexp"
@@ -112,7 +113,7 @@ func NewAccountService(
 func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterAccountRequest) (*domain.Account, error) {
 	// 1. 业务验证
 	if err := s.validateRegistration(req); err != nil {
-		return nil, fmt.Errorf("验证失败: %w", err)
+		return nil, fmt.Errorf("validation failed: %w", err)
 	}
 
 	// 2. 检查凭证是否已存在
@@ -132,7 +133,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		Isolation: sql.LevelReadCommitted,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("开始事务失败: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		_ = tx.Rollback() // 忽略 Rollback 错误（Commit 后 Rollback 会失败，这是预期行为）
@@ -168,7 +169,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	// 5.1 创建密码凭证
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, fmt.Errorf("哈希密码失败: %w", err)
+		return nil, fmt.Errorf("hash password: %w", err)
 	}
 
 	passwordCred := &domain.Credential{
@@ -220,7 +221,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 
 	// 7. 提交事务
 	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("提交事务失败: %w", err)
+		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
 	// 8. 审计日志
@@ -251,7 +252,7 @@ func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.
 		Isolation: sql.LevelReadCommitted,
 	})
 	if err != nil {
-		return fmt.Errorf("开始事务失败: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		_ = tx.Rollback()
@@ -264,7 +265,7 @@ func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("提交事务失败: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return nil
@@ -274,7 +275,7 @@ func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.
 func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID string) error {
 	// 1. 业务验证
 	if accountID == "" {
-		return fmt.Errorf("账号 ID 不能为空")
+		return errors.New("account ID is required")
 	}
 
 	// 2. 开始事务
@@ -282,7 +283,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		Isolation: sql.LevelReadCommitted,
 	})
 	if err != nil {
-		return fmt.Errorf("开始事务失败: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		_ = tx.Rollback()
@@ -310,7 +311,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 
 	// 5. 提交事务
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("提交事务失败: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	// 6. 审计日志
@@ -333,7 +334,7 @@ func (s *accountServiceImpl) VerifyCredential(ctx context.Context, credentialID 
 		// 尝试查找手机凭证
 		credentials, err = s.credentialRepo.FindByAccountAndType(ctx, credentialID, domain.CredentialTypePhone)
 		if err != nil || len(credentials) == 0 {
-			return fmt.Errorf("凭证不存在")
+			return errors.New("credential not found")
 		}
 	}
 
@@ -344,7 +345,7 @@ func (s *accountServiceImpl) VerifyCredential(ctx context.Context, credentialID 
 		Isolation: sql.LevelReadCommitted,
 	})
 	if err != nil {
-		return fmt.Errorf("开始事务失败: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		_ = tx.Rollback()
@@ -357,7 +358,7 @@ func (s *accountServiceImpl) VerifyCredential(ctx context.Context, credentialID 
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("提交事务失败: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return nil
@@ -368,18 +369,18 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	// 1. 查找密码凭证
 	passwordCred, err := s.credentialRepo.FindPasswordCredential(ctx, accountID)
 	if err != nil {
-		return fmt.Errorf("查找密码凭证失败: %w", err)
+		return fmt.Errorf("find password credential: %w", err)
 	}
 
 	// 2. 验证旧密码
 	if !passwordCred.VerifyPassword(oldPassword) {
-		return fmt.Errorf("旧密码错误")
+		return errors.New("incorrect old password")
 	}
 
 	// 3. 生成新密码哈希
 	newPasswordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
-		return fmt.Errorf("哈希新密码失败: %w", err)
+		return fmt.Errorf("hash new password: %w", err)
 	}
 
 	// 4. 更新密码
@@ -387,7 +388,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 		Isolation: sql.LevelReadCommitted,
 	})
 	if err != nil {
-		return fmt.Errorf("开始事务失败: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		_ = tx.Rollback()
@@ -400,7 +401,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("提交事务失败: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	// 5. 审计日志
@@ -420,7 +421,7 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 	// 1. 检查是否已绑定
 	existing, err := s.federatedIdentityRepo.FindByProvider(ctx, provider, providerUserID)
 	if err == nil && existing != nil {
-		return fmt.Errorf("该第三方账号已被绑定")
+		return errors.New("federated identity already bound")
 	}
 
 	// 2. 创建绑定
@@ -428,7 +429,7 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 		Isolation: sql.LevelReadCommitted,
 	})
 	if err != nil {
-		return fmt.Errorf("开始事务失败: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		_ = tx.Rollback()
@@ -450,7 +451,7 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("提交事务失败: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return nil
@@ -462,7 +463,7 @@ func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, identi
 		Isolation: sql.LevelReadCommitted,
 	})
 	if err != nil {
-		return fmt.Errorf("开始事务失败: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		_ = tx.Rollback()
@@ -475,7 +476,7 @@ func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, identi
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("提交事务失败: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return nil
@@ -487,7 +488,7 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 		Isolation: sql.LevelReadCommitted,
 	})
 	if err != nil {
-		return fmt.Errorf("开始事务失败: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		_ = tx.Rollback()
@@ -498,7 +499,7 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("提交事务失败: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	s.auditLog(ctx, auditDomain.NewRecord(
@@ -517,7 +518,7 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 		Isolation: sql.LevelReadCommitted,
 	})
 	if err != nil {
-		return fmt.Errorf("开始事务失败: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		_ = tx.Rollback()
@@ -530,7 +531,7 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("提交事务失败: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	s.auditLog(ctx, auditDomain.NewRecord(
@@ -552,11 +553,11 @@ func (s *accountServiceImpl) ListAccounts(ctx context.Context, page, pageSize in
 func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID string) error {
 	account, err := s.accountRepo.FindByID(ctx, accountID)
 	if err != nil {
-		return fmt.Errorf("查找账号失败: %w", err)
+		return fmt.Errorf("find account: %w", err)
 	}
 
 	if !account.IsActive() {
-		return fmt.Errorf("账号状态不允许禁用: %s", account.Status)
+		return fmt.Errorf("account status does not allow suspension: %s", account.Status)
 	}
 
 	account.Suspend()
@@ -578,11 +579,11 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID string) error {
 	account, err := s.accountRepo.FindByID(ctx, accountID)
 	if err != nil {
-		return fmt.Errorf("查找账号失败: %w", err)
+		return fmt.Errorf("find account: %w", err)
 	}
 
 	if !account.IsSuspended() {
-		return fmt.Errorf("账号状态不允许启用: %s", account.Status)
+		return fmt.Errorf("account status does not allow activation: %s", account.Status)
 	}
 
 	account.Activate()
@@ -610,11 +611,11 @@ var phoneRegex = regexp.MustCompile(`^\+?[1-9]\d{6,14}$`)
 
 func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) error {
 	if req.Password == "" {
-		return fmt.Errorf("密码不能为空")
+		return errors.New("password is required")
 	}
 
 	if len(req.Password) < 8 {
-		return fmt.Errorf("密码长度不能少于 8 位")
+		return errors.New("password must be at least 8 characters")
 	}
 
 	// 密码强度检查：至少包含大写、小写、数字各一个
@@ -630,28 +631,28 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 		}
 	}
 	if !hasUpper || !hasLower || !hasDigit {
-		return fmt.Errorf("密码必须包含大写字母、小写字母和数字")
+		return errors.New("password must contain uppercase, lowercase, and digit")
 	}
 
 	if req.Email == "" && req.Phone == "" {
-		return fmt.Errorf("邮箱和手机号至少提供一个")
+		return errors.New("at least one of email or phone is required")
 	}
 
 	if req.DisplayName == "" {
-		return fmt.Errorf("显示名称不能为空")
+		return errors.New("display name is required")
 	}
 
 	// 邮箱格式验证
 	if req.Email != "" {
 		if _, err := mail.ParseAddress(req.Email); err != nil {
-			return fmt.Errorf("邮箱格式不正确")
+			return errors.New("invalid email format")
 		}
 	}
 
 	// 手机号格式验证
 	if req.Phone != "" {
 		if !phoneRegex.MatchString(req.Phone) {
-			return fmt.Errorf("手机号格式不正确")
+			return errors.New("invalid phone format")
 		}
 	}
 
@@ -664,9 +665,9 @@ func (s *accountServiceImpl) checkCredentialExists(ctx context.Context, credType
 	if err == nil && cred != nil {
 		switch credType {
 		case domain.CredentialTypeEmail:
-			return fmt.Errorf("邮箱已被注册")
+			return errors.New("email already registered")
 		case domain.CredentialTypePhone:
-			return fmt.Errorf("手机号已被注册")
+			return errors.New("phone already registered")
 		}
 	}
 	return nil

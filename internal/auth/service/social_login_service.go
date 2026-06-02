@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -173,7 +174,7 @@ func (s *SocialLoginService) exchangeCode(ctx context.Context, p *OAuthProviderC
 	}
 
 	if tokenResp.AccessToken == "" {
-		return "", fmt.Errorf("no access_token in response")
+		return "", errors.New("no access_token in response")
 	}
 
 	return tokenResp.AccessToken, nil
@@ -231,7 +232,7 @@ func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, i
 	}
 
 	if account.Status != accountDomain.AccountStatusActive {
-		return nil, fmt.Errorf("account is not active")
+		return nil, errors.New("account is not active")
 	}
 
 	return s.createSessionAndTokens(ctx, account, ip, userAgent)
