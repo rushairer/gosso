@@ -19,7 +19,7 @@ import (
 func main() {
 	// 初始化 Logger
 	logger, _ := zap.NewDevelopment()
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	// 初始化 Redis 客户端
 	redisClient, err := cache.NewRedisClient(
@@ -31,7 +31,7 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to initialize Redis client", zap.Error(err))
 	}
-	defer redisClient.Close()
+	defer func() { _ = redisClient.Close() }()
 
 	logger.Info("Redis client initialized successfully")
 

@@ -151,7 +151,7 @@ func (s *SocialLoginService) exchangeCode(ctx context.Context, p *OAuthProviderC
 	if err != nil {
 		return "", fmt.Errorf("token request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
@@ -187,7 +187,7 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 	if err != nil {
 		return "", "", "", fmt.Errorf("userinfo request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {

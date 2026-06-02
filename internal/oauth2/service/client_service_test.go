@@ -103,16 +103,17 @@ func TestFindByClientID(t *testing.T) {
 	now := time.Now()
 
 	redirectURIs, _ := json.Marshal([]string{"http://localhost/callback"})
+	postLogoutURIs, _ := json.Marshal([]string{})
 	grantTypes, _ := json.Marshal([]string{domain.GrantTypeAuthorizationCode})
 	scopes, _ := json.Marshal([]string{"openid"})
 
 	rows := sqlmock.NewRows([]string{
 		"id", "account_id", "client_id", "client_secret_hash",
-		"name", "description", "redirect_uris", "grant_types", "scopes",
+		"name", "description", "redirect_uris", "post_logout_redirect_uris", "grant_types", "scopes",
 		"is_confidential", "metadata", "created_at", "updated_at",
 	}).AddRow(
 		"uuid-001", "account-001", "abc123", "$2a$10$hash",
-		"Test App", "desc", redirectURIs, grantTypes, scopes,
+		"Test App", "desc", redirectURIs, postLogoutURIs, grantTypes, scopes,
 		true, nil, now, now,
 	)
 

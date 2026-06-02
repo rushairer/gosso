@@ -98,13 +98,13 @@ func (m *mockTokenMgr) IntrospectToken(_ context.Context, _ string) (map[string]
 func (m *mockTokenMgr) AccessExpiry() time.Duration { return 15 * time.Minute }
 
 type mockDeviceCodeMgr struct {
-	createFn           func() (*oauth2Domain.DeviceCode, error)
-	getFn              func() (*oauth2Domain.DeviceCode, error)
-	getByUserCodeFn    func() (*oauth2Domain.DeviceCode, error)
-	authorizeFn        func() error
-	denyFn             func() error
-	checkPollFn        func() error
-	markUsedFn         func() error
+	createFn        func() (*oauth2Domain.DeviceCode, error)
+	getFn           func() (*oauth2Domain.DeviceCode, error)
+	getByUserCodeFn func() (*oauth2Domain.DeviceCode, error)
+	authorizeFn     func() error
+	denyFn          func() error
+	checkPollFn     func() error
+	markUsedFn      func() error
 }
 
 func (m *mockDeviceCodeMgr) CreateDeviceCode(_ context.Context, _ string, _ []string) (*oauth2Domain.DeviceCode, error) {

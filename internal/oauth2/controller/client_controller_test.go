@@ -26,11 +26,11 @@ import (
 // ──────────────────────────────────────────────
 
 type mockOAuth2ClientService struct {
-	registerFn    func() (*oauth2Domain.OAuth2Client, string, error)
-	findByIDFn    func() (*oauth2Domain.OAuth2Client, error)
-	findByAcctFn  func() ([]*oauth2Domain.OAuth2Client, error)
-	updateFn      func() error
-	deleteFn      func() error
+	registerFn   func() (*oauth2Domain.OAuth2Client, string, error)
+	findByIDFn   func() (*oauth2Domain.OAuth2Client, error)
+	findByAcctFn func() ([]*oauth2Domain.OAuth2Client, error)
+	updateFn     func() error
+	deleteFn     func() error
 }
 
 func (m *mockOAuth2ClientService) RegisterClient(_ context.Context, _ *oauth2Service.RegisterClientRequest) (*oauth2Domain.OAuth2Client, string, error) {

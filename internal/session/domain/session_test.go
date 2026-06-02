@@ -25,7 +25,7 @@ func TestSession_IsExpired_Active(t *testing.T) {
 		ID:           uuid.New(),
 		LastActiveAt: time.Now().Add(-5 * time.Minute),
 	}
-	assert.False(t, s.IsExpired(1 * time.Hour))
+	assert.False(t, s.IsExpired(1*time.Hour))
 }
 
 func TestSession_IsExpired_Exact(t *testing.T) {
@@ -33,7 +33,7 @@ func TestSession_IsExpired_Exact(t *testing.T) {
 		ID:           uuid.New(),
 		LastActiveAt: time.Now().Add(-1*time.Hour - 1*time.Second),
 	}
-	assert.True(t, s.IsExpired(1 * time.Hour))
+	assert.True(t, s.IsExpired(1*time.Hour))
 }
 
 // ──────────────────────────────────────────────

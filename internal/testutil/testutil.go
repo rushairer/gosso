@@ -56,21 +56,21 @@ func SetupTestEnv(ctx context.Context) (*TestEnv, error) {
 	db.SetConnMaxLifetime(5 * time.Minute)
 
 	if err := db.PingContext(ctx); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("ping database: %w (is docker-compose.test.yml running?)", err)
 	}
 
 	// Run migrations
 	migrationsPath := filepath.Join(projectRoot, "db", "migrations")
 	if err := runMigrations(db, migrationsPath); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
 
 	// Connect to Redis
 	redis, err := cache.NewRedisClient(cfg.RedisConfig.DSN, 10, 10*time.Second, logger)
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("connect redis: %w (is docker-compose.test.yml running?)", err)
 	}
 
@@ -81,8 +81,8 @@ func SetupTestEnv(ctx context.Context) (*TestEnv, error) {
 		Logger: logger,
 	}
 	env.cleanups = append(env.cleanups,
-		func() { db.Close() },
-		func() { redis.Close() },
+		func() { _ = db.Close() },
+		func() { _ = redis.Close() },
 	)
 
 	return env, nil

@@ -23,14 +23,14 @@ import (
 // ──────────────────────────────────────────────
 
 type mockAccountService struct {
-	findByIDFn      func() (*accountDomain.Account, error)
-	listAccountsFn  func() ([]*accountDomain.Account, int, error)
-	deleteFn        func() error
-	suspendFn       func() error
-	activateFn      func() error
-	getRolesFn      func() ([]*accountDomain.Role, error)
-	assignRoleFn    func() error
-	removeRoleFn    func() error
+	findByIDFn     func() (*accountDomain.Account, error)
+	listAccountsFn func() ([]*accountDomain.Account, int, error)
+	deleteFn       func() error
+	suspendFn      func() error
+	activateFn     func() error
+	getRolesFn     func() ([]*accountDomain.Role, error)
+	assignRoleFn   func() error
+	removeRoleFn   func() error
 }
 
 func (m *mockAccountService) RegisterAccount(_ context.Context, _ *accountService.RegisterAccountRequest) (*accountDomain.Account, error) {
@@ -54,7 +54,7 @@ func (m *mockAccountService) SoftDeleteAccount(_ context.Context, _ string) erro
 	}
 	return nil
 }
-func (m *mockAccountService) VerifyCredential(_ context.Context, _ string) error    { return nil }
+func (m *mockAccountService) VerifyCredential(_ context.Context, _ string) error     { return nil }
 func (m *mockAccountService) ChangePassword(_ context.Context, _, _, _ string) error { return nil }
 func (m *mockAccountService) BindFederatedIdentity(_ context.Context, _ string, _ accountDomain.Provider, _ string, _ map[string]interface{}) error {
 	return nil
@@ -335,7 +335,7 @@ func TestAddRole_Success(t *testing.T) {
 	}
 	engine := setupAdminController(accountSvc)
 
-	body := fmt.Sprintf(`{"role_id":"%s"}`, validUUID)
+	body := fmt.Sprintf(`{"role_id":%q}`, validUUID)
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/roles", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

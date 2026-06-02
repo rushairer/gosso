@@ -275,7 +275,7 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 	if err != nil {
 		return nil, 0, fmt.Errorf("query accounts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var accounts []*domain.Account
 	for rows.Next() {

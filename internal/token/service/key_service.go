@@ -113,7 +113,7 @@ func savePrivateKeyToPEM(path string, key *rsa.PrivateKey) error {
 	if err != nil {
 		return fmt.Errorf("open file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if err := pem.Encode(f, &pem.Block{
 		Type:  "PRIVATE KEY",

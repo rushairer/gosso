@@ -49,16 +49,16 @@ var deviceTemplateFS embed.FS
 
 // OAuth2Controller handles OAuth2 protocol endpoints.
 type OAuth2Controller struct {
-	clientSvc    oauth2Service.OAuth2ClientService
-	authCodeSvc  *oauth2Service.AuthCodeService
-	consentSvc   *oauth2Service.ConsentService
-	tokenSvc     TokenManager
-	idTokenSvc   *oidcService.IDTokenService
+	clientSvc     oauth2Service.OAuth2ClientService
+	authCodeSvc   *oauth2Service.AuthCodeService
+	consentSvc    *oauth2Service.ConsentService
+	tokenSvc      TokenManager
+	idTokenSvc    *oidcService.IDTokenService
 	deviceCodeSvc DeviceCodeManager
-	issuer       string
-	consentTmpl  *template.Template
-	deviceTmpl   *template.Template
-	logger       *zap.Logger
+	issuer        string
+	consentTmpl   *template.Template
+	deviceTmpl    *template.Template
+	logger        *zap.Logger
 }
 
 // NewOAuth2Controller creates a new OAuth2 controller instance.

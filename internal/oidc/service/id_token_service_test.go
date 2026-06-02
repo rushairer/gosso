@@ -63,8 +63,8 @@ func (m *mockAccountService) GetAccountRoles(_ context.Context, _ string) ([]*ac
 
 // mockCredentialRepo implements accountRepo.CredentialRepository for testing
 type mockCredentialRepo struct {
-	credentials              map[string][]*accountDomain.Credential // key: accountID:credType
-	findByAccountAndTypeErr  error
+	credentials             map[string][]*accountDomain.Credential // key: accountID:credType
+	findByAccountAndTypeErr error
 }
 
 func (m *mockCredentialRepo) FindByAccountAndType(_ context.Context, accountID string, credType accountDomain.CredentialType) ([]*accountDomain.Credential, error) {

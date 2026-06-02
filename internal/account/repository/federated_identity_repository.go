@@ -121,7 +121,7 @@ func (r *federatedIdentityRepositoryImpl) FindByAccountID(ctx context.Context, a
 	if err != nil {
 		return nil, fmt.Errorf("query federated identities: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var identities []*domain.FederatedIdentity
 	for rows.Next() {

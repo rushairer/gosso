@@ -34,7 +34,7 @@ func main() {
 	}
 
 	database := db.NewDB(sqlDB)
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	// 2. Initialize the account service
 	accountService := account.InitializeAccountModule(database.DB, nil)

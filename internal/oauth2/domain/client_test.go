@@ -8,11 +8,11 @@ import (
 
 func newTestClient() *OAuth2Client {
 	return &OAuth2Client{
-		ClientID:       "test-client",
-		RedirectURIs:   []string{"https://app.example.com/callback", "https://app.example.com/oauth2/callback"},
-		GrantTypes:     []string{"authorization_code", "refresh_token"},
-		Scopes:         []string{"openid", "profile", "email"},
-		IsConfidential: true,
+		ClientID:         "test-client",
+		RedirectURIs:     []string{"https://app.example.com/callback", "https://app.example.com/oauth2/callback"},
+		GrantTypes:       []string{"authorization_code", "refresh_token"},
+		Scopes:           []string{"openid", "profile", "email"},
+		IsConfidential:   true,
 		ClientSecretHash: "$2a$10$fakehash",
 	}
 }

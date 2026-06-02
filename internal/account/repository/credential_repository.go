@@ -98,7 +98,7 @@ func (r *credentialRepositoryImpl) FindByAccountAndType(ctx context.Context, acc
 	if err != nil {
 		return nil, fmt.Errorf("query credentials: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var credentials []*domain.Credential
 	for rows.Next() {

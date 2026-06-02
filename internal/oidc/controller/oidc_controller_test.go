@@ -16,9 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/internal/auth/middleware"
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountService "github.com/rushairer/gosso/internal/account/service"
+	"github.com/rushairer/gosso/internal/auth/middleware"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Repo "github.com/rushairer/gosso/internal/oauth2/repository"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
@@ -49,20 +49,20 @@ func (m *mockAccountService) FindAccountByUsername(_ context.Context, _ string) 
 func (m *mockAccountService) UpdateAccount(_ context.Context, _ *accountDomain.Account) error {
 	return nil
 }
-func (m *mockAccountService) SoftDeleteAccount(_ context.Context, _ string) error     { return nil }
-func (m *mockAccountService) VerifyCredential(_ context.Context, _ string) error       { return nil }
-func (m *mockAccountService) ChangePassword(_ context.Context, _, _, _ string) error    { return nil }
+func (m *mockAccountService) SoftDeleteAccount(_ context.Context, _ string) error    { return nil }
+func (m *mockAccountService) VerifyCredential(_ context.Context, _ string) error     { return nil }
+func (m *mockAccountService) ChangePassword(_ context.Context, _, _, _ string) error { return nil }
 func (m *mockAccountService) BindFederatedIdentity(_ context.Context, _ string, _ accountDomain.Provider, _ string, _ map[string]interface{}) error {
 	return nil
 }
-func (m *mockAccountService) UnbindFederatedIdentity(_ context.Context, _ string) error  { return nil }
-func (m *mockAccountService) AssignRole(_ context.Context, _, _ string) error            { return nil }
-func (m *mockAccountService) RemoveRole(_ context.Context, _, _ string) error            { return nil }
+func (m *mockAccountService) UnbindFederatedIdentity(_ context.Context, _ string) error { return nil }
+func (m *mockAccountService) AssignRole(_ context.Context, _, _ string) error           { return nil }
+func (m *mockAccountService) RemoveRole(_ context.Context, _, _ string) error           { return nil }
 func (m *mockAccountService) ListAccounts(_ context.Context, _, _ int, _ string) ([]*accountDomain.Account, int, error) {
 	return nil, 0, nil
 }
-func (m *mockAccountService) SuspendAccount(_ context.Context, _ string) error   { return nil }
-func (m *mockAccountService) ActivateAccount(_ context.Context, _ string) error  { return nil }
+func (m *mockAccountService) SuspendAccount(_ context.Context, _ string) error  { return nil }
+func (m *mockAccountService) ActivateAccount(_ context.Context, _ string) error { return nil }
 func (m *mockAccountService) GetAccountRoles(_ context.Context, _ string) ([]*accountDomain.Role, error) {
 	return nil, nil
 }

@@ -76,13 +76,13 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	if err != nil {
 		logger.Fatal("database init failed", zap.Error(err))
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	redis, err := initRedis(globalConfig, logger)
 	if err != nil {
 		logger.Fatal("redis init failed", zap.Error(err))
 	}
-	defer redis.Close()
+	defer func() { _ = redis.Close() }()
 
 	auditAuditor := auditService.NewAuditor(ctx, db)
 	defer auditAuditor.Close()
@@ -256,8 +256,8 @@ func buildOAuthProviders(cfg config.GoUnoConfig) map[string]*authService.OAuthPr
 		p := cfg.OAuthProviders.Google
 		providers["google"] = &authService.OAuthProviderConfig{
 			ClientID: p.ClientID, ClientSecret: p.ClientSecret, RedirectURI: p.RedirectURI, Scopes: p.Scopes,
-			AuthURL: defaultIfEmpty(p.AuthURL, "https://accounts.google.com/o/oauth2/v2/auth"),
-			TokenURL: defaultIfEmpty(p.TokenURL, "https://oauth2.googleapis.com/token"),
+			AuthURL:     defaultIfEmpty(p.AuthURL, "https://accounts.google.com/o/oauth2/v2/auth"),
+			TokenURL:    defaultIfEmpty(p.TokenURL, "https://oauth2.googleapis.com/token"),
 			UserInfoURL: defaultIfEmpty(p.UserInfoURL, "https://www.googleapis.com/oauth2/v2/userinfo"),
 		}
 	}
@@ -265,8 +265,8 @@ func buildOAuthProviders(cfg config.GoUnoConfig) map[string]*authService.OAuthPr
 		p := cfg.OAuthProviders.GitHub
 		providers["github"] = &authService.OAuthProviderConfig{
 			ClientID: p.ClientID, ClientSecret: p.ClientSecret, RedirectURI: p.RedirectURI, Scopes: p.Scopes,
-			AuthURL: defaultIfEmpty(p.AuthURL, "https://github.com/login/oauth/authorize"),
-			TokenURL: defaultIfEmpty(p.TokenURL, "https://github.com/login/oauth/access_token"),
+			AuthURL:     defaultIfEmpty(p.AuthURL, "https://github.com/login/oauth/authorize"),
+			TokenURL:    defaultIfEmpty(p.TokenURL, "https://github.com/login/oauth/access_token"),
 			UserInfoURL: defaultIfEmpty(p.UserInfoURL, "https://api.github.com/user"),
 		}
 	}
@@ -274,8 +274,8 @@ func buildOAuthProviders(cfg config.GoUnoConfig) map[string]*authService.OAuthPr
 		p := cfg.OAuthProviders.WeChat
 		providers["wechat"] = &authService.OAuthProviderConfig{
 			ClientID: p.ClientID, ClientSecret: p.ClientSecret, RedirectURI: p.RedirectURI, Scopes: p.Scopes,
-			AuthURL: defaultIfEmpty(p.AuthURL, "https://open.weixin.qq.com/connect/qrconnect"),
-			TokenURL: defaultIfEmpty(p.TokenURL, "https://api.weixin.qq.com/sns/oauth2/access_token"),
+			AuthURL:     defaultIfEmpty(p.AuthURL, "https://open.weixin.qq.com/connect/qrconnect"),
+			TokenURL:    defaultIfEmpty(p.TokenURL, "https://api.weixin.qq.com/sns/oauth2/access_token"),
 			UserInfoURL: defaultIfEmpty(p.UserInfoURL, "https://api.weixin.qq.com/sns/userinfo"),
 		}
 	}

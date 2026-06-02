@@ -28,9 +28,9 @@ import (
 // ──────────────────────────────────────────────
 
 type mockAuthOrchForPasskey struct {
-	loginByPasskeyFn     func() (*service.LoginResult, error)
-	validateMFATokenFn   func() (*tokenDomain.AccessTokenClaims, error)
-	markPasskeyMFAFn     func() error
+	loginByPasskeyFn   func() (*service.LoginResult, error)
+	validateMFATokenFn func() (*tokenDomain.AccessTokenClaims, error)
+	markPasskeyMFAFn   func() error
 }
 
 func (m *mockAuthOrchForPasskey) LoginByUsernamePassword(_ context.Context, _ *service.LoginRequest) (*service.LoginResult, error) {
@@ -48,7 +48,9 @@ func (m *mockAuthOrchForPasskey) VerifyMFALogin(_ context.Context, _, _, _, _, _
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (m *mockAuthOrchForPasskey) Logout(_ context.Context, _, _, _ string, _ time.Time) error { return nil }
+func (m *mockAuthOrchForPasskey) Logout(_ context.Context, _, _, _ string, _ time.Time) error {
+	return nil
+}
 func (m *mockAuthOrchForPasskey) RefreshTokens(_ context.Context, _ string) (*service.RefreshResult, error) {
 	return nil, fmt.Errorf("not implemented")
 }

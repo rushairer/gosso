@@ -227,7 +227,7 @@ func (r *roleRepositoryImpl) FindAll(ctx context.Context) ([]*domain.Role, error
 	if err != nil {
 		return nil, fmt.Errorf("query roles: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var roles []*domain.Role
 	for rows.Next() {
@@ -340,7 +340,7 @@ func (r *roleRepositoryImpl) FindRolesByAccountID(ctx context.Context, accountID
 	if err != nil {
 		return nil, fmt.Errorf("query account roles: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var roles []*domain.Role
 	for rows.Next() {

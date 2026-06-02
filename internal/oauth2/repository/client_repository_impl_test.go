@@ -16,26 +16,27 @@ import (
 
 func newTestOAuth2Client() *domain.OAuth2Client {
 	return &domain.OAuth2Client{
-		ID:             "client-uuid-001",
-		AccountID:      "account-001",
-		ClientID:       "cid-abc123",
+		ID:               "client-uuid-001",
+		AccountID:        "account-001",
+		ClientID:         "cid-abc123",
 		ClientSecretHash: "$2a$10$hash",
-		Name:           "Test App",
-		Description:    "A test app",
-		RedirectURIs:   []string{"https://app.example.com/callback"},
-		GrantTypes:     []string{"authorization_code"},
-		Scopes:         []string{"openid", "profile"},
-		IsConfidential: true,
+		Name:             "Test App",
+		Description:      "A test app",
+		RedirectURIs:     []string{"https://app.example.com/callback"},
+		GrantTypes:       []string{"authorization_code"},
+		Scopes:           []string{"openid", "profile"},
+		IsConfidential:   true,
 	}
 }
 
 func clientColumns() []string {
 	return []string{"id", "account_id", "client_id", "client_secret_hash", "name", "description",
-		"redirect_uris", "grant_types", "scopes", "is_confidential", "metadata", "created_at", "updated_at"}
+		"redirect_uris", "post_logout_redirect_uris", "grant_types", "scopes", "is_confidential", "metadata", "created_at", "updated_at"}
 }
 
 func clientRowValues(c *domain.OAuth2Client) []driver.Value {
 	ru, _ := json.Marshal(c.RedirectURIs)
+	plu, _ := json.Marshal(c.PostLogoutRedirectURIs)
 	gt, _ := json.Marshal(c.GrantTypes)
 	sc, _ := json.Marshal(c.Scopes)
 	var md []byte
@@ -43,7 +44,7 @@ func clientRowValues(c *domain.OAuth2Client) []driver.Value {
 		md, _ = json.Marshal(c.Metadata)
 	}
 	return []driver.Value{c.ID, c.AccountID, c.ClientID, c.ClientSecretHash, c.Name, c.Description,
-		ru, gt, sc, c.IsConfidential, md, time.Now(), time.Now()}
+		ru, plu, gt, sc, c.IsConfidential, md, time.Now(), time.Now()}
 }
 
 // ──────────────────────────────────────────────
@@ -138,7 +139,7 @@ func TestCreate_Success(t *testing.T) {
 	c := newTestOAuth2Client()
 	mock.ExpectQuery("INSERT INTO oauth2_clients").
 		WithArgs(c.AccountID, c.ClientID, c.ClientSecretHash, c.Name, c.Description,
-			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), c.IsConfidential, sqlmock.AnyArg()).
+			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), c.IsConfidential, sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at"}).AddRow(c.ID, time.Now(), time.Now()))
 
 	repo := NewOAuth2ClientRepository(db)
@@ -163,7 +164,7 @@ func TestUpdate_Success(t *testing.T) {
 	c := newTestOAuth2Client()
 	c.Name = "Updated App"
 	mock.ExpectQuery("UPDATE oauth2_clients").
-		WithArgs(c.Name, c.Description, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), c.ID).
+		WithArgs(c.Name, c.Description, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), c.ID).
 		WillReturnRows(sqlmock.NewRows([]string{"updated_at"}).AddRow(time.Now()))
 
 	repo := NewOAuth2ClientRepository(db)

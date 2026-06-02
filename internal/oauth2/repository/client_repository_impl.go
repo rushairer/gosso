@@ -123,7 +123,7 @@ func (r *oauth2ClientRepositoryImpl) FindByAccountID(ctx context.Context, accoun
 	if err != nil {
 		return nil, fmt.Errorf("find oauth2_clients by account_id: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var clients []*domain.OAuth2Client
 	for rows.Next() {
