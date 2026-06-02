@@ -5,10 +5,11 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rushairer/gouno"
+
 	"github.com/rushairer/gosso/internal/audit"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
-	"github.com/rushairer/gouno"
 )
 
 const (
@@ -34,7 +35,7 @@ func JWTAuthMiddleware(tokenSvc *tokenService.TokenService) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := tokenSvc.ValidateAccessToken(tokenString)
+		claims, err := tokenSvc.ValidateAccessTokenWithContext(ctx.Request.Context(), tokenString)
 		if err != nil {
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid or expired token"))
 			return
@@ -84,11 +85,13 @@ func AdminRequiredMiddleware() gin.HandlerFunc {
 	}
 }
 
-// AuditMetadataMiddleware stores client IP and user agent in request context for audit logging.
+// AuditMetadataMiddleware stores client IP, user agent, and request ID in request context for audit logging.
 func AuditMetadataMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		requestID, _ := ctx.Get("request_id")
+		requestIDStr, _ := requestID.(string)
 		ctx.Request = ctx.Request.WithContext(
-			audit.SetMetadata(ctx.Request.Context(), ctx.ClientIP(), ctx.Request.UserAgent()),
+			audit.SetMetadata(ctx.Request.Context(), ctx.ClientIP(), ctx.Request.UserAgent(), requestIDStr),
 		)
 		ctx.Next()
 	}

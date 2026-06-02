@@ -5,11 +5,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rushairer/gouno"
+	"go.uber.org/zap"
+
 	"github.com/rushairer/gosso/internal/auth/middleware"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
-	"github.com/rushairer/gouno"
-	"go.uber.org/zap"
 )
 
 // ClientController OAuth2 客户端管理控制器
@@ -61,10 +62,19 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 		return
 	}
 
-	accountID, _ := ctx.Get(middleware.ContextKeyAccountID)
+	accountIDRaw, exists := ctx.Get(middleware.ContextKeyAccountID)
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+		return
+	}
+	accountID, ok := accountIDRaw.(string)
+	if !ok || accountID == "" {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+		return
+	}
 
 	client, secret, err := c.clientSvc.RegisterClient(ctx, &oauth2Service.RegisterClientRequest{
-		AccountID:      accountID.(string),
+		AccountID:      accountID,
 		Name:           req.Name,
 		Description:    req.Description,
 		RedirectURIs:   req.RedirectURIs,
@@ -86,9 +96,18 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 
 // ListClients GET /api/oauth2/clients
 func (c *ClientController) ListClients(ctx *gin.Context) {
-	accountID, _ := ctx.Get(middleware.ContextKeyAccountID)
+	accountIDRaw, exists := ctx.Get(middleware.ContextKeyAccountID)
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+		return
+	}
+	accountID, ok := accountIDRaw.(string)
+	if !ok || accountID == "" {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+		return
+	}
 
-	clients, err := c.clientSvc.FindByAccountID(ctx, accountID.(string))
+	clients, err := c.clientSvc.FindByAccountID(ctx, accountID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to list clients"))
 		return
@@ -105,31 +124,42 @@ func (c *ClientController) ListClients(ctx *gin.Context) {
 func (c *ClientController) GetClient(ctx *gin.Context) {
 	clientID := ctx.Param("client_id")
 
+	accountID, ok := getAccountID(ctx)
+	if !ok {
+		return
+	}
+
 	client, err := c.clientSvc.FindByClientID(ctx, clientID)
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "client not found"))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(client))
-}
+	if client.AccountID != accountID {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "access denied"))
+		return
+	}
 
-// UpdateClientRequest 更新客户端请求体
-type UpdateClientRequest struct {
-	Name         string   `json:"name"`
-	Description  string   `json:"description"`
-	RedirectURIs []string `json:"redirect_uris"`
-	GrantTypes   []string `json:"grant_types"`
-	Scopes       []string `json:"scopes"`
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(client))
 }
 
 // UpdateClient PUT /api/oauth2/clients/:client_id
 func (c *ClientController) UpdateClient(ctx *gin.Context) {
 	clientID := ctx.Param("client_id")
 
+	accountID, ok := getAccountID(ctx)
+	if !ok {
+		return
+	}
+
 	client, err := c.clientSvc.FindByClientID(ctx, clientID)
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "client not found"))
+		return
+	}
+
+	if client.AccountID != accountID {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "access denied"))
 		return
 	}
 
@@ -164,13 +194,32 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(client))
 }
 
+// UpdateClientRequest 更新客户端请求体
+type UpdateClientRequest struct {
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	RedirectURIs []string `json:"redirect_uris"`
+	GrantTypes   []string `json:"grant_types"`
+	Scopes       []string `json:"scopes"`
+}
+
 // DeleteClient DELETE /api/oauth2/clients/:client_id
 func (c *ClientController) DeleteClient(ctx *gin.Context) {
 	clientID := ctx.Param("client_id")
 
+	accountID, ok := getAccountID(ctx)
+	if !ok {
+		return
+	}
+
 	client, err := c.clientSvc.FindByClientID(ctx, clientID)
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "client not found"))
+		return
+	}
+
+	if client.AccountID != accountID {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "access denied"))
 		return
 	}
 
@@ -180,4 +229,19 @@ func (c *ClientController) DeleteClient(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("client deleted"))
+}
+
+// getAccountID extracts the account ID from the gin context with safe type assertion.
+func getAccountID(ctx *gin.Context) (string, bool) {
+	raw, exists := ctx.Get(middleware.ContextKeyAccountID)
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+		return "", false
+	}
+	accountID, ok := raw.(string)
+	if !ok || accountID == "" {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+		return "", false
+	}
+	return accountID, true
 }

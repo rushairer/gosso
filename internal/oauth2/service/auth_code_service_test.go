@@ -5,11 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rushairer/gosso/internal/cache"
-	"github.com/rushairer/gosso/internal/oauth2/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/oauth2/domain"
 )
 
 func setupTestAuthCodeService(t *testing.T) *AuthCodeService {

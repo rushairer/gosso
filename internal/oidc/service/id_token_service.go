@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"go.uber.org/zap"
+
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
-	"go.uber.org/zap"
 )
 
 // IDTokenClaims OIDC ID Token 声明
@@ -31,11 +32,11 @@ type IDTokenClaims struct {
 
 // IDTokenService OIDC ID Token 服务
 type IDTokenService struct {
-	tokenSvc      *tokenService.TokenService
-	issuer        string
-	accountSvc    accountService.AccountService
+	tokenSvc       *tokenService.TokenService
+	issuer         string
+	accountSvc     accountService.AccountService
 	credentialRepo accountRepo.CredentialRepository
-	logger        *zap.Logger
+	logger         *zap.Logger
 }
 
 // NewIDTokenService 创建 ID Token 服务实例
@@ -50,11 +51,11 @@ func NewIDTokenService(
 		logger = zap.NewNop()
 	}
 	return &IDTokenService{
-		tokenSvc:      tokenSvc,
-		issuer:        issuer,
-		accountSvc:    accountSvc,
+		tokenSvc:       tokenSvc,
+		issuer:         issuer,
+		accountSvc:     accountSvc,
 		credentialRepo: credentialRepo,
-		logger:        logger,
+		logger:         logger,
 	}
 }
 

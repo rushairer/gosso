@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/rushairer/gosso/internal/account/domain"
-	"github.com/rushairer/gosso/internal/account/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/rushairer/gosso/internal/account/domain"
+	"github.com/rushairer/gosso/internal/account/repository"
 )
 
 // TestRegisterAccount 测试账号注册
@@ -30,7 +31,7 @@ func TestRegisterAccount(t *testing.T) {
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil)
 
 	// 设置 mock 期望（按实际执行顺序）
-	
+
 	// 1. 期望查询邮箱是否已存在（在事务外执行）
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
 		WithArgs(domain.CredentialTypeEmail, "test@example.com").
@@ -47,7 +48,7 @@ func TestRegisterAccount(t *testing.T) {
 	// CreateCredentials 使用循环插入，所以需要 2 个 ExpectExec
 	mock.ExpectExec("INSERT INTO account_credentials").
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	
+
 	mock.ExpectExec("INSERT INTO account_credentials").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -95,7 +96,7 @@ func TestRegisterAccount_DuplicateEmail(t *testing.T) {
 	// 设置 mock：邮箱已存在（在事务外查询）
 	// 注意：需要返回所有列，与 FindByTypeAndIdentifier 的 Scan 匹配
 	rows := sqlmock.NewRows([]string{
-		"id", "account_id", "credential_type", "identifier", 
+		"id", "account_id", "credential_type", "identifier",
 		"credential_value", "verified", "primary_credential", "metadata",
 		"created_at", "verified_at", "last_used_at", "deleted_at",
 	}).AddRow(

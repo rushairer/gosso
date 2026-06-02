@@ -5,23 +5,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rushairer/gosso/internal/cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/internal/cache"
 )
 
 func setupTestBlacklistService(t *testing.T) *BlacklistService {
 	logger := zap.NewNop()
 	dsn := "redis://localhost:6379/15"
-	
+
 	redisClient, err := cache.NewRedisClient(dsn, 10, 5*time.Second, logger)
 	if err != nil {
 		t.Skip("Redis not available, skipping test:", err)
 	}
-	
+
 	service := NewBlacklistService(redisClient, logger)
-	
+
 	return service
 }
 

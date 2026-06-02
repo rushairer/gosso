@@ -1,13 +1,42 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"html/template"
 	"net/smtp"
 	"strings"
 
-	"github.com/rushairer/gosso/config"
 	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/config"
+)
+
+var (
+	verificationTmpl = template.Must(template.New("verification").Parse(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<p>Hello,</p>
+<p>Your verification code is:</p>
+<h2 style="font-size:32px;letter-spacing:8px;text-align:center;padding:20px;background:#f4f4f4;border-radius:8px;">{{.Code}}</h2>
+<p>This code expires in 10 minutes.</p>
+<p>If you did not request this, please ignore this email.</p>
+</body>
+</html>`))
+
+	passwordResetTmpl = template.Must(template.New("password_reset").Parse(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<p>Hello,</p>
+<p>You requested to reset your password. Click the link below:</p>
+<p><a href="{{.ResetLink}}" style="display:inline-block;padding:12px 24px;background:#007bff;color:#fff;text-decoration:none;border-radius:6px;">Reset Password</a></p>
+<p>This link expires in 30 minutes.</p>
+<p>If you did not request this, please ignore this email. Your password will remain unchanged.</p>
+</body>
+</html>`))
 )
 
 // EmailService 邮件发送服务
@@ -38,38 +67,24 @@ func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) *EmailService {
 // SendVerificationCode 发送验证码邮件
 func (s *EmailService) SendVerificationCode(ctx context.Context, to, code string) error {
 	subject := "Your Verification Code"
-	body := fmt.Sprintf(`<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body>
-<p>Hello,</p>
-<p>Your verification code is:</p>
-<h2 style="font-size:32px;letter-spacing:8px;text-align:center;padding:20px;background:#f4f4f4;border-radius:8px;">%s</h2>
-<p>This code expires in 10 minutes.</p>
-<p>If you did not request this, please ignore this email.</p>
-</body>
-</html>`, code)
+	var body bytes.Buffer
+	if err := verificationTmpl.Execute(&body, struct{ Code string }{Code: code}); err != nil {
+		return fmt.Errorf("render verification template: %w", err)
+	}
 
-	msg := s.buildMessage(to, subject, body)
+	msg := s.buildMessage(to, subject, body.String())
 	return s.send(to, msg)
 }
 
 // SendPasswordResetLink 发送密码重置邮件
 func (s *EmailService) SendPasswordResetLink(ctx context.Context, to, resetLink string) error {
 	subject := "Reset Your Password"
-	body := fmt.Sprintf(`<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body>
-<p>Hello,</p>
-<p>You requested to reset your password. Click the link below:</p>
-<p><a href="%s" style="display:inline-block;padding:12px 24px;background:#007bff;color:#fff;text-decoration:none;border-radius:6px;">Reset Password</a></p>
-<p>This link expires in 30 minutes.</p>
-<p>If you did not request this, please ignore this email. Your password will remain unchanged.</p>
-</body>
-</html>`, resetLink)
+	var body bytes.Buffer
+	if err := passwordResetTmpl.Execute(&body, struct{ ResetLink string }{ResetLink: resetLink}); err != nil {
+		return fmt.Errorf("render password reset template: %w", err)
+	}
 
-	msg := s.buildMessage(to, subject, body)
+	msg := s.buildMessage(to, subject, body.String())
 	return s.send(to, msg)
 }
 

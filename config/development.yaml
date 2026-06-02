@@ -1,3 +1,6 @@
+# Development configuration
+# Sensitive values can be overridden with GOUNO_ prefixed env vars.
+# Example: GOUNO_AUTH_JWT_SECRET=my-secret GOUNO_DATABASE_DRIVERS_POSTGRES_DSN=host=...
 web_server:
     address: 0.0.0.0
     port: 8080

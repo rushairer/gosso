@@ -40,6 +40,46 @@ tags:
     description: Health check and test endpoints
 
 paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      description: Returns 200 if the server process is running. Does not check dependencies.
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Server is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /readiness:
+    get:
+      tags: [Health]
+      summary: Readiness check
+      description: |
+        Returns 200 if the server and its dependencies (database, Redis) are reachable.
+        Returns 503 if any dependency is unhealthy.
+      operationId: readinessCheck
+      responses:
+        "200":
+          description: Server is ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+        "503":
+          description: Server is not ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+
   /:
     get:
       tags: [Health]
@@ -165,6 +205,68 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Response"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/sessions:
+    get:
+      tags: [Auth]
+      summary: List all sessions
+      description: Returns all active sessions for the authenticated account. Requires a valid JWT.
+      operationId: listSessions
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Session"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/sessions/{id}:
+    delete:
+      tags: [Auth]
+      summary: Revoke a session
+      description: Revokes a specific session by ID. Cannot revoke the current session (use /logout instead).
+      operationId: revokeSession
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Session ID to revoke
+      responses:
+        "200":
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data:
+                  revoked: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
 
@@ -334,7 +436,10 @@ paths:
     get:
       tags: [Auth]
       summary: Social login callback
-      description: Handles the OAuth2 callback from the social login provider. Exchanges the authorization code for tokens.
+      description: |
+        Handles the OAuth2 callback from the social login provider.
+        Validates the `state` parameter against the `oauth_state` cookie (CSRF protection),
+        then exchanges the authorization code for tokens.
       operationId: socialCallback
       parameters:
         - $ref: "#/components/parameters/SocialProvider"
@@ -344,6 +449,12 @@ paths:
           schema:
             type: string
           description: OAuth2 authorization code from the provider
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+          description: State parameter for CSRF validation (must match oauth_state cookie)
       responses:
         "200":
           description: Social login successful
@@ -1536,6 +1647,52 @@ components:
         data:
           description: Response data (type varies by endpoint)
 
+    ReadinessResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 200
+        ready:
+          type: boolean
+          example: true
+        checks:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [ok, unavailable]
+            redis:
+              type: string
+              enum: [ok, unavailable]
+
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        client_id:
+          type: string
+          nullable: true
+        ip:
+          type: string
+          example: 192.168.1.1
+        user_agent:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_active_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+
     ErrorResponse:
       type: object
       properties:
@@ -1587,15 +1744,20 @@ components:
 
     MFAVerifyRequest:
       type: object
-      required: [mfa_token, code]
+      required: [mfa_token]
       properties:
         mfa_token:
           type: string
           description: MFA token received from login response when MFA is required
         code:
           type: string
-          description: TOTP code or backup code
+          description: TOTP code or backup code (required for TOTP type, not for passkey)
           example: "123456"
+        type:
+          type: string
+          enum: [totp, passkey]
+          default: totp
+          description: MFA verification type. Use "passkey" for WebAuthn-based MFA.
 
     MFAEnrollRequest:
       type: object

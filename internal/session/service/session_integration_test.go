@@ -9,12 +9,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/rushairer/gosso/internal/session/domain"
-	"github.com/rushairer/gosso/internal/session/service"
-	"github.com/rushairer/gosso/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/internal/session/domain"
+	"github.com/rushairer/gosso/internal/session/service"
+	"github.com/rushairer/gosso/internal/testutil"
 )
 
 var env *testutil.TestEnv

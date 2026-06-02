@@ -3,8 +3,8 @@ package domain
 import (
 	"time"
 
-	wa "github.com/go-webauthn/webauthn/webauthn"
 	"github.com/go-webauthn/webauthn/protocol"
+	wa "github.com/go-webauthn/webauthn/webauthn"
 )
 
 // WebAuthnCredential represents a stored WebAuthn passkey credential.
@@ -12,7 +12,7 @@ type WebAuthnCredential struct {
 	ID              string
 	AccountID       string
 	CredentialID    []byte
-	PublicKey        []byte
+	PublicKey       []byte
 	SignCount       uint32
 	AAGUID          []byte
 	Transports      []string
@@ -44,7 +44,7 @@ func (c *WebAuthnCredential) IsDeleted() bool {
 func (c *WebAuthnCredential) ToWebAuthnCredential() wa.Credential {
 	return wa.Credential{
 		ID:              c.CredentialID,
-		PublicKey:        c.PublicKey,
+		PublicKey:       c.PublicKey,
 		AttestationType: c.AttestationType,
 		Authenticator: wa.Authenticator{
 			AAGUID:    c.AAGUID,

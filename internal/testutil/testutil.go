@@ -13,19 +13,20 @@ import (
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/rushairer/gosso/config"
-	"github.com/rushairer/gosso/internal/cache"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/rushairer/gosso/config"
+	"github.com/rushairer/gosso/internal/cache"
 )
 
 // TestEnv holds shared test infrastructure connections.
 type TestEnv struct {
-	DB        *sql.DB
-	Redis     *cache.RedisClient
-	Config    config.GoUnoConfig
-	Logger    *zap.Logger
-	cleanups  []func()
+	DB       *sql.DB
+	Redis    *cache.RedisClient
+	Config   config.GoUnoConfig
+	Logger   *zap.Logger
+	cleanups []func()
 }
 
 // SetupTestEnv loads test config, connects to Postgres + Redis, runs migrations.
@@ -80,8 +81,10 @@ func SetupTestEnv(ctx context.Context) (*TestEnv, error) {
 		Config: cfg,
 		Logger: logger,
 	}
-	env.cleanups = append(env.cleanups, func() { db.Close() })
-	env.cleanups = append(env.cleanups, func() { redis.Close() })
+	env.cleanups = append(env.cleanups,
+		func() { db.Close() },
+		func() { redis.Close() },
+	)
 
 	return env, nil
 }

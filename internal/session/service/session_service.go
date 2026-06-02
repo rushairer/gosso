@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
+
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/session/domain"
-	"go.uber.org/zap"
 )
 
 const (
@@ -25,9 +26,9 @@ const (
 
 // SessionService 会话管理服务
 type SessionService struct {
-	redis      *cache.RedisClient
-	logger     *zap.Logger
-	sessionTTL time.Duration
+	redis       *cache.RedisClient
+	logger      *zap.Logger
+	sessionTTL  time.Duration
 	maxSessions int
 }
 
@@ -83,6 +84,10 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 	if err := s.redis.SAdd(ctx, indexKey, session.ID.String()); err != nil {
 		s.logger.Warn("Failed to index session by account", zap.Error(err), zap.String("session_id", session.ID.String()))
 	}
+	_ = s.redis.Expire(ctx, indexKey, s.sessionTTL)
+
+	// 强制执行最大并发会话数限制
+	s.EnforceSessionLimit(ctx, session.AccountID.String())
 
 	s.logger.Info("Session created",
 		zap.String("session_id", session.ID.String()),

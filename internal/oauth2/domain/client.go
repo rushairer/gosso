@@ -22,6 +22,7 @@ type OAuth2Client struct {
 	Metadata         map[string]any `json:"metadata,omitempty"`
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
+	DeletedAt        *time.Time     `json:"deleted_at,omitempty"`
 }
 
 // ValidateRedirectURI 验证重定向 URI 是否在注册列表中
@@ -67,9 +68,9 @@ const (
 
 // 错误定义
 var (
-	ErrClientNotFound      = fmt.Errorf("oauth2 client not found")
-	ErrInvalidRedirectURI  = fmt.Errorf("invalid redirect_uri")
+	ErrClientNotFound       = fmt.Errorf("oauth2 client not found")
+	ErrInvalidRedirectURI   = fmt.Errorf("invalid redirect_uri")
 	ErrUnsupportedGrantType = fmt.Errorf("unsupported grant type")
-	ErrInvalidScope        = fmt.Errorf("invalid scope")
+	ErrInvalidScope         = fmt.Errorf("invalid scope")
 	ErrClientSecretMismatch = fmt.Errorf("client secret mismatch")
 )

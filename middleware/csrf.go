@@ -78,15 +78,15 @@ func setCSRFCookie(ctx *gin.Context, secure bool) {
 		cookie = generateCSRFToken()
 	}
 
-	ctx.SetCookie(
-		csrfCookieName,
-		cookie,
-		int((4 * time.Hour).Seconds()), // 4 hours
-		"/",
-		"",
-		secure,
-		false, // HttpOnly=false so JS can read it
-	)
+	http.SetCookie(ctx.Writer, &http.Cookie{
+		Name:     csrfCookieName,
+		Value:    cookie,
+		Path:     "/",
+		MaxAge:   int((4 * time.Hour).Seconds()),
+		HttpOnly: false, // JS needs to read it
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
 
 	// 同时在 response header 中返回，方便 SPA 读取
 	ctx.Header(csrfHeaderName, cookie)

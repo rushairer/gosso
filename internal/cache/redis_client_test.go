@@ -16,12 +16,12 @@ import (
 func setupTestRedisClient(t *testing.T) *RedisClient {
 	logger := zap.NewNop()
 	dsn := "redis://localhost:6379/15" // 使用 DB 15 用于测试
-	
+
 	client, err := NewRedisClient(dsn, 10, 5*time.Second, logger)
 	if err != nil {
 		t.Skip("Redis not available, skipping test:", err)
 	}
-	
+
 	return client
 }
 

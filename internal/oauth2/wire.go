@@ -3,11 +3,12 @@ package oauth2
 import (
 	"database/sql"
 
+	"go.uber.org/zap"
+
 	"github.com/rushairer/gosso/config"
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/oauth2/repository"
 	"github.com/rushairer/gosso/internal/oauth2/service"
-	"go.uber.org/zap"
 )
 
 // InitializeOAuth2Module 初始化 OAuth2 模块

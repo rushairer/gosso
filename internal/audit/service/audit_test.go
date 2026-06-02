@@ -1,3 +1,5 @@
+//go:build integration
+
 package service_test
 
 import (
@@ -10,6 +12,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
+
 	"github.com/rushairer/gosso/internal/audit/domain"
 	"github.com/rushairer/gosso/internal/audit/service"
 	"github.com/rushairer/gosso/tests"

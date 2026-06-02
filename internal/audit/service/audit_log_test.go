@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/rushairer/gosso/internal/audit/domain"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/rushairer/gosso/internal/audit/domain"
 )
 
 func TestLogNilReceiver(t *testing.T) {

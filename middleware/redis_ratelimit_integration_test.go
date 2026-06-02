@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rushairer/gosso/internal/testutil"
-	"github.com/rushairer/gosso/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/rushairer/gosso/internal/testutil"
+	"github.com/rushairer/gosso/middleware"
 )
 
 var env *testutil.TestEnv

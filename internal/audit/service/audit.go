@@ -3,9 +3,12 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/rushairer/batchflow"
+
+	"github.com/rushairer/gosso/internal/audit"
 	"github.com/rushairer/gosso/internal/audit/domain"
 )
 
@@ -13,11 +16,13 @@ type Auditor struct {
 	db           *sql.DB
 	batchflow    *batchflow.BatchFlow
 	recordSchema *batchflow.SQLSchema
+	cancel       context.CancelFunc
 }
 
-func NewAuditor(ctx context.Context, db *sql.DB) *Auditor {
-	auditor := Auditor{db: db}
-	auditor.batchflow = batchflow.NewPostgreSQLBatchFlow(ctx, db, batchflow.PipelineConfig{
+func NewAuditor(_ context.Context, db *sql.DB) *Auditor {
+	auditorCtx, cancel := context.WithCancel(context.Background())
+	auditor := Auditor{db: db, cancel: cancel}
+	auditor.batchflow = batchflow.NewPostgreSQLBatchFlow(auditorCtx, db, batchflow.PipelineConfig{
 		BufferSize:    100,                    // 缓冲区大小
 		FlushSize:     50,                     // 批量刷新大小
 		FlushInterval: 5 * time.Second,        // 刷新间隔
@@ -32,7 +37,7 @@ func NewAuditor(ctx context.Context, db *sql.DB) *Auditor {
 		ConcurrencyLimit: 100, // 批量并发限制
 	})
 	auditor.recordSchema = batchflow.NewSQLSchema(
-		"audit_record",                                                                                      // 表名
+		"audit_record",                                                                                       // 表名
 		batchflow.ConflictIgnoreOperationConfig,                                                              // 冲突策略
 		"id", "tx_id", "account_id", "action", "actor", "resource", "old", "new", "meta", "dd", "created_at", // 列名
 	)
@@ -42,6 +47,14 @@ func NewAuditor(ctx context.Context, db *sql.DB) *Auditor {
 
 func (a *Auditor) ErrorChan() <-chan error {
 	return a.batchflow.ErrorChan(1024)
+}
+
+// Close stops the batchflow pipeline, allowing in-flight batches to complete.
+// Call this during application shutdown after the HTTP server has stopped.
+func (a *Auditor) Close() {
+	if a.cancel != nil {
+		a.cancel()
+	}
 }
 
 func (a *Auditor) Do(
@@ -79,9 +92,23 @@ func (a *Auditor) Do(
 }
 
 // Log submits an audit record for async batch write. Safe for nil receiver (no-op).
+// It enriches the record's Meta with the request ID from context when available.
 func (a *Auditor) Log(ctx context.Context, record *domain.AuditRecord) error {
 	if a == nil {
 		return nil
+	}
+
+	// Inject request_id into meta
+	if requestID := audit.RequestIDFromContext(ctx); requestID != "" {
+		var meta map[string]any
+		if record.Meta != nil {
+			_ = json.Unmarshal(record.Meta, &meta)
+		}
+		if meta == nil {
+			meta = make(map[string]any)
+		}
+		meta["request_id"] = requestID
+		record.Meta, _ = json.Marshal(meta)
 	}
 
 	request := batchflow.NewRequest(a.recordSchema).

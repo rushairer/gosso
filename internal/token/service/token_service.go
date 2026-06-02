@@ -9,15 +9,16 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"go.uber.org/zap"
+
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/token/domain"
-	"go.uber.org/zap"
 )
 
 const (
-	RefreshTokenKeyPrefix    = "refresh_token:"
-	SessionTokensKeyPrefix   = "session_tokens:"
-	RefreshTokenLength       = 32 // 32 bytes = 64 hex chars
+	RefreshTokenKeyPrefix  = "refresh_token:"
+	SessionTokensKeyPrefix = "session_tokens:"
+	RefreshTokenLength     = 32 // 32 bytes = 64 hex chars
 )
 
 // TokenService JWT 和刷新令牌服务
@@ -76,8 +77,18 @@ func (s *TokenService) GenerateAccessToken(claims *domain.AccessTokenClaims) (st
 	return tokenString, nil
 }
 
+// AccessExpiry 返回 access token 过期时间
+func (s *TokenService) AccessExpiry() time.Duration {
+	return s.accessExpiry
+}
+
 // ValidateAccessToken 验证 JWT Access Token（含黑名单检查，支持 RS256 + HS256 回退）
 func (s *TokenService) ValidateAccessToken(tokenString string) (*domain.AccessTokenClaims, error) {
+	return s.ValidateAccessTokenWithContext(context.Background(), tokenString)
+}
+
+// ValidateAccessTokenWithContext 使用请求 context 验证 JWT Access Token
+func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*domain.AccessTokenClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &domain.AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		switch token.Method.(type) {
 		case *jwt.SigningMethodRSA:
@@ -97,17 +108,17 @@ func (s *TokenService) ValidateAccessToken(tokenString string) (*domain.AccessTo
 
 	claims, ok := token.Claims.(*domain.AccessTokenClaims)
 	if !ok || !token.Valid {
-		return nil, fmt.Errorf("invalid token claims")
+		return nil, ErrInvalidToken
 	}
 
 	// 黑名单检查
 	if claims.ID != "" {
-		revoked, err := s.blacklist.IsTokenRevoked(context.Background(), claims.ID)
+		revoked, err := s.blacklist.IsTokenRevoked(ctx, claims.ID)
 		if err != nil {
 			s.logger.Warn("Failed to check token blacklist", zap.Error(err), zap.String("jti", claims.ID))
 		}
 		if revoked {
-			return nil, fmt.Errorf("token has been revoked")
+			return nil, ErrTokenRevoked
 		}
 	}
 
@@ -259,10 +270,10 @@ func (s *TokenService) IntrospectToken(ctx context.Context, tokenString string) 
 	}
 
 	result := map[string]any{
-		"active":    true,
-		"sub":       claims.AccountID,
-		"client_id": claims.ClientID,
-		"scope":     claims.Scope,
+		"active":     true,
+		"sub":        claims.AccountID,
+		"client_id":  claims.ClientID,
+		"scope":      claims.Scope,
 		"token_type": "Bearer",
 	}
 	if claims.ExpiresAt != nil {

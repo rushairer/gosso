@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/rushairer/gosso/internal/oauth2/domain"
-	"github.com/rushairer/gosso/internal/oauth2/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/rushairer/gosso/internal/oauth2/domain"
+	"github.com/rushairer/gosso/internal/oauth2/repository"
 )
 
 func setupTestClientService(t *testing.T) (*sql.DB, sqlmock.Sqlmock, OAuth2ClientService) {

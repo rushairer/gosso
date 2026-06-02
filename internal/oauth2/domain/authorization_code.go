@@ -54,10 +54,10 @@ func HashPKCEVerifier(verifier string) string {
 
 // 错误定义
 var (
-	ErrCodeNotFound      = fmt.Errorf("authorization code not found")
-	ErrCodeExpired       = fmt.Errorf("authorization code expired")
-	ErrCodeAlreadyUsed   = fmt.Errorf("authorization code already used")
-	ErrCodeClientMismatch = fmt.Errorf("authorization code client mismatch")
-	ErrCodeURIMismatch   = fmt.Errorf("authorization code redirect_uri mismatch")
+	ErrCodeNotFound           = fmt.Errorf("authorization code not found")
+	ErrCodeExpired            = fmt.Errorf("authorization code expired")
+	ErrCodeAlreadyUsed        = fmt.Errorf("authorization code already used")
+	ErrCodeClientMismatch     = fmt.Errorf("authorization code client mismatch")
+	ErrCodeURIMismatch        = fmt.Errorf("authorization code redirect_uri mismatch")
 	ErrPKCEVerificationFailed = fmt.Errorf("PKCE verification failed")
 )

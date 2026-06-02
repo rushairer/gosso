@@ -99,7 +99,7 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, error) {
 	// 连接数据库
 	db, err := sql.Open("pgx", defaultDriver.DSN)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %v", err)
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	// 获取 schema 参数
@@ -112,14 +112,14 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, error) {
 		SchemaName:      schemaName, // 使用参数指定的 schema
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create postgres driver: %v", err)
+		return nil, fmt.Errorf("failed to create postgres driver: %w", err)
 	}
 
 	// 获取迁移文件路径
 	migrationsPath := cmd.Flag("migrations_path").Value.String()
 	absPath, err := filepath.Abs(migrationsPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get absolute path: %v", err)
+		return nil, fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
 	// 创建迁移实例
@@ -129,7 +129,7 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, error) {
 		driver,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create migrate instance: %v", err)
+		return nil, fmt.Errorf("failed to create migrate instance: %w", err)
 	}
 
 	return m, nil

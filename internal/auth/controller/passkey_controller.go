@@ -4,31 +4,35 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rushairer/gosso/internal/auth/middleware"
-	authService "github.com/rushairer/gosso/internal/auth/service"
-	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
+
+	accountService "github.com/rushairer/gosso/internal/account/service"
+	"github.com/rushairer/gosso/internal/auth/middleware"
+	authService "github.com/rushairer/gosso/internal/auth/service"
 )
 
 // PasskeyController Passkey 控制器
 type PasskeyController struct {
-	passkeySvc  *authService.PasskeyService
-	authSvc     *authService.AuthService
-	accountSvc  accountService.AccountService
-	logger      *zap.Logger
+	passkeySvc *authService.PasskeyService
+	authSvc    authService.AuthOrchestrator
+	tokenMgr   authService.TokenManager
+	accountSvc accountService.AccountService
+	logger     *zap.Logger
 }
 
 // NewPasskeyController 创建 Passkey 控制器实例
 func NewPasskeyController(
 	passkeySvc *authService.PasskeyService,
-	authSvc *authService.AuthService,
+	authSvc authService.AuthOrchestrator,
+	tokenMgr authService.TokenManager,
 	accountSvc accountService.AccountService,
 	logger *zap.Logger,
 ) *PasskeyController {
 	return &PasskeyController{
 		passkeySvc: passkeySvc,
 		authSvc:    authSvc,
+		tokenMgr:   tokenMgr,
 		accountSvc: accountSvc,
 		logger:     logger,
 	}
@@ -126,8 +130,8 @@ func (c *PasskeyController) RegisterComplete(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-		"id":    cred.ID,
-		"name":  cred.Name,
+		"id":   cred.ID,
+		"name": cred.Name,
 	}))
 }
 
@@ -189,27 +193,10 @@ func (c *PasskeyController) LoginComplete(ctx *gin.Context) {
 	}
 
 	// 使用 accountID 完成完整登录流程（创建会话、生成 tokens）
-	account, err := c.accountSvc.FindAccountByID(ctx, accountID)
+	loginResult, err := c.authSvc.LoginByPasskey(ctx, accountID, ctx.ClientIP(), ctx.Request.UserAgent())
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "account not found"))
-		return
-	}
-
-	loginResult, err := c.authSvc.LoginByUsernamePassword(ctx, &authService.LoginRequest{
-		Username:  accountID, // passkey 已验证身份，直接登录
-		Password:  "",        // 跳过密码验证
-		IP:        ctx.ClientIP(),
-		UserAgent: ctx.Request.UserAgent(),
-	})
-	if err != nil {
-		// passkey 登录不走密码验证，直接创建 session
-		c.logger.Warn("Passkey login orchestration failed, account may need password",
-			zap.String("account_id", accountID), zap.Error(err))
-		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-			"account_id":  accountID,
-			"username":    account.Username,
-			"message":     "Passkey verified. Please complete login with password or MFA.",
-		}))
+		c.logger.Error("Passkey login failed", zap.String("account_id", accountID), zap.Error(err))
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, err.Error()))
 		return
 	}
 
@@ -217,7 +204,7 @@ func (c *PasskeyController) LoginComplete(ctx *gin.Context) {
 		"access_token":  loginResult.AccessToken,
 		"refresh_token": loginResult.RefreshToken,
 		"token_type":    "Bearer",
-		"expires_in":    900,
+		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
 		"session_id":    loginResult.Session.ID.String(),
 	}))
 }
@@ -235,9 +222,7 @@ func (c *PasskeyController) MFABegin(ctx *gin.Context) {
 		return
 	}
 
-	// 验证 mfa_token 获取 accountID
-	tokenSvc := c.authSvc.PasskeyService()
-	if tokenSvc == nil {
+	if c.passkeySvc == nil {
 		ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "passkey not available"))
 		return
 	}

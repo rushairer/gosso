@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/rushairer/gosso/internal/account/domain"
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
@@ -16,7 +18,6 @@ import (
 	"github.com/rushairer/gosso/internal/cache"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
-	"go.uber.org/zap"
 )
 
 const (
@@ -188,7 +189,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		return fmt.Errorf("find password credential: %w", err)
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
@@ -205,7 +206,8 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 
 	// 异步撤销所有旧会话
 	go func() {
-		bgCtx := context.Background()
+		bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 		if err := s.sessionSvc.RevokeAllForAccount(bgCtx, data.AccountID); err != nil {
 			s.logger.Error("Failed to revoke sessions after password reset",
 				zap.String("account_id", data.AccountID), zap.Error(err))

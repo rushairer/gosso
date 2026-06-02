@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
+
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
@@ -19,7 +21,6 @@ import (
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
-	"go.uber.org/zap"
 )
 
 // OAuthProviderConfig 单个 OAuth 提供商配置
@@ -34,15 +35,16 @@ type OAuthProviderConfig struct {
 
 // SocialLoginService 社交登录服务
 type SocialLoginService struct {
-	db                *sql.DB
-	accountSvc        accountService.AccountService
-	sessionSvc        *sessionService.SessionService
-	tokenSvc          *tokenService.TokenService
-	credentialRepo    accountRepo.CredentialRepository
-	roleRepo          accountRepo.RoleRepository
+	db                    *sql.DB
+	accountSvc            accountService.AccountService
+	sessionSvc            *sessionService.SessionService
+	tokenSvc              *tokenService.TokenService
+	credentialRepo        accountRepo.CredentialRepository
+	roleRepo              accountRepo.RoleRepository
 	federatedIdentityRepo accountRepo.FederatedIdentityRepository
-	providers         map[string]*OAuthProviderConfig
-	logger            *zap.Logger
+	providers             map[string]*OAuthProviderConfig
+	httpClient            *http.Client
+	logger                *zap.Logger
 }
 
 // NewSocialLoginService 创建社交登录服务
@@ -69,6 +71,7 @@ func NewSocialLoginService(
 		roleRepo:              roleRepo,
 		federatedIdentityRepo: federatedIdentityRepo,
 		providers:             providers,
+		httpClient:            &http.Client{Timeout: 10 * time.Second},
 		logger:                logger,
 	}
 }
@@ -147,13 +150,13 @@ func (s *SocialLoginService) exchangeCode(ctx context.Context, p *OAuthProviderC
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("token request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return "", fmt.Errorf("read token response: %w", err)
 	}
@@ -183,13 +186,13 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return "", "", "", fmt.Errorf("userinfo request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return "", "", "", fmt.Errorf("read userinfo: %w", err)
 	}
@@ -225,6 +228,10 @@ func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, i
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("find account: %w", err)
+	}
+
+	if account.Status != accountDomain.AccountStatusActive {
+		return nil, fmt.Errorf("account is not active")
 	}
 
 	return s.createSessionAndTokens(ctx, account, ip, userAgent)

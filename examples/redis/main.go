@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
+
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/captcha/service"
 	"github.com/rushairer/gosso/internal/session/domain"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
-	"go.uber.org/zap"
 )
 
 // Redis 缓存与会话存储使用示例
@@ -75,14 +76,14 @@ func basicRedisExample(ctx context.Context, redisClient *cache.RedisClient, logg
 	// 3. 哈希操作
 	hashKey := "example:user:profile:1000"
 	_ = redisClient.HSet(ctx, hashKey, "name", "John", "email", "john@example.com", "age", "30")
-	
+
 	profile, _ := redisClient.HGetAll(ctx, hashKey)
 	logger.Info("User profile", zap.Any("profile", profile))
 
 	// 4. 集合操作
 	setKey := "example:user:permissions:1000"
 	_ = redisClient.SAdd(ctx, setKey, "read", "write", "delete")
-	
+
 	hasWrite, _ := redisClient.SIsMember(ctx, setKey, "write")
 	logger.Info("Permission check", zap.Bool("has_write", hasWrite))
 

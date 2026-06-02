@@ -8,8 +8,9 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/rushairer/gosso/internal/cache"
 	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/internal/cache"
 )
 
 const (

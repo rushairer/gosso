@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -19,15 +20,15 @@ type GoUnoConfig struct {
 }
 
 type WebServerConfig struct {
-	Debug              bool            `mapstructure:"debug"`
-	Address            string          `mapstructure:"address"`
-	Port               string          `mapstructure:"port"`
-	IdleTimeout        time.Duration   `mapstructure:"idle_timeout"`
-	ReadTimeout        time.Duration   `mapstructure:"read_timeout"`
-	ReadHeaderTimeout  time.Duration   `mapstructure:"read_header_timeout"`
-	WriteTimeout       time.Duration   `mapstructure:"write_timeout"`
-	RequestTimeout     time.Duration   `mapstructure:"request_timeout"`
-	RateLimitPerMinute int             `mapstructure:"rate_limit_per_minute"`
+	Debug              bool             `mapstructure:"debug"`
+	Address            string           `mapstructure:"address"`
+	Port               string           `mapstructure:"port"`
+	IdleTimeout        time.Duration    `mapstructure:"idle_timeout"`
+	ReadTimeout        time.Duration    `mapstructure:"read_timeout"`
+	ReadHeaderTimeout  time.Duration    `mapstructure:"read_header_timeout"`
+	WriteTimeout       time.Duration    `mapstructure:"write_timeout"`
+	RequestTimeout     time.Duration    `mapstructure:"request_timeout"`
+	RateLimitPerMinute int              `mapstructure:"rate_limit_per_minute"`
 	RateLimits         RateLimitsConfig `mapstructure:"rate_limits"`
 }
 
@@ -139,4 +140,27 @@ type OAuthProvidersConfig struct {
 	Google OAuthProviderConfig `mapstructure:"google"`
 	GitHub OAuthProviderConfig `mapstructure:"github"`
 	WeChat OAuthProviderConfig `mapstructure:"wechat"`
+}
+
+// Validate checks that critical configuration values are present and valid.
+func (c *GoUnoConfig) Validate() error {
+	if c.DatabaseConfig.GetDefaultDriver() == nil {
+		return fmt.Errorf("database: no default driver configured")
+	}
+	if c.DatabaseConfig.GetDefaultDriver().DSN == "" {
+		return fmt.Errorf("database: default driver DSN is empty")
+	}
+	if c.RedisConfig.DSN == "" {
+		return fmt.Errorf("redis: DSN is empty")
+	}
+	if c.AuthConfig.Issuer == "" {
+		return fmt.Errorf("auth: issuer is empty")
+	}
+	if c.AuthConfig.AccessTokenExpiry <= 0 {
+		return fmt.Errorf("auth: access_token_expiry must be positive")
+	}
+	if c.AuthConfig.RefreshTokenExpiry <= 0 {
+		return fmt.Errorf("auth: refresh_token_expiry must be positive")
+	}
+	return nil
 }

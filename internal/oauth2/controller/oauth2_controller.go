@@ -1,34 +1,46 @@
 package controller
 
 import (
+	"context"
 	"embed"
 	"html/template"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/rushairer/gosso/internal/auth/middleware"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
-	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
-	tokenService "github.com/rushairer/gosso/internal/token/service"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
-	"golang.org/x/crypto/bcrypt"
-	"go.uber.org/zap"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
+
+// TokenManager defines the token operations needed by the OAuth2 controller.
+type TokenManager interface {
+	GenerateAccessToken(claims *tokenDomain.AccessTokenClaims) (string, error)
+	GenerateRefreshToken(ctx context.Context, accountID, clientID, sessionID, scope string) (*tokenDomain.RefreshToken, error)
+	RotateRefreshToken(ctx context.Context, oldToken string) (*tokenDomain.RefreshToken, error)
+	RevokeRefreshToken(ctx context.Context, token string) error
+	IntrospectToken(ctx context.Context, tokenString string) (map[string]any, error)
+	AccessExpiry() time.Duration
+}
 
 //go:embed template/consent.html
 var consentTemplateFS embed.FS
 
 // OAuth2Controller OAuth2 协议控制器
 type OAuth2Controller struct {
-	clientSvc    oauth2Service.OAuth2ClientService
-	authCodeSvc  *oauth2Service.AuthCodeService
-	consentSvc   *oauth2Service.ConsentService
-	tokenSvc     *tokenService.TokenService
-	idTokenSvc   *oidcService.IDTokenService
-	consentTmpl  *template.Template
-	logger       *zap.Logger
+	clientSvc   oauth2Service.OAuth2ClientService
+	authCodeSvc *oauth2Service.AuthCodeService
+	consentSvc  *oauth2Service.ConsentService
+	tokenSvc    TokenManager
+	idTokenSvc  *oidcService.IDTokenService
+	consentTmpl *template.Template
+	logger      *zap.Logger
 }
 
 // NewOAuth2Controller 创建 OAuth2 控制器实例
@@ -36,7 +48,7 @@ func NewOAuth2Controller(
 	clientSvc oauth2Service.OAuth2ClientService,
 	authCodeSvc *oauth2Service.AuthCodeService,
 	consentSvc *oauth2Service.ConsentService,
-	tokenSvc *tokenService.TokenService,
+	tokenSvc TokenManager,
 	idTokenSvc *oidcService.IDTokenService,
 	logger *zap.Logger,
 ) *OAuth2Controller {
@@ -94,11 +106,20 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
-	accountID, _ := ctx.Get(middleware.ContextKeyAccountID)
+	accountID, exists := ctx.Get(middleware.ContextKeyAccountID)
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	accountIDStr, ok := accountID.(string)
+	if !ok || accountIDStr == "" {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
 
-	existingConsent, _ := c.consentSvc.GetConsent(ctx, accountID.(string), clientID)
+	existingConsent, _ := c.consentSvc.GetConsent(ctx, accountIDStr, clientID)
 	if existingConsent != nil {
-		code, err := c.authCodeSvc.GenerateCode(ctx, clientID, accountID.(string), redirectURI, splitScope(scope), codeChallenge, codeChallengeMethod, nonce)
+		code, err := c.authCodeSvc.GenerateCode(ctx, clientID, accountIDStr, redirectURI, splitScope(scope), codeChallenge, codeChallengeMethod, nonce)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
@@ -108,13 +129,6 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 	}
 
 	ctx.Header("Content-Type", "text/html; charset=utf-8")
-
-	// 从请求中提取 access_token 传递给表单
-	accessToken := ctx.GetHeader("Authorization")
-	accessToken = strings.TrimPrefix(accessToken, "Bearer ")
-	if accessToken == "" {
-		accessToken = ctx.Query("access_token")
-	}
 
 	_ = c.consentTmpl.Execute(ctx.Writer, gin.H{
 		"ClientName":          client.Name,
@@ -126,7 +140,6 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		"CodeChallenge":       codeChallenge,
 		"CodeChallengeMethod": codeChallengeMethod,
 		"Nonce":               nonce,
-		"AccessToken":         accessToken,
 	})
 }
 
@@ -154,7 +167,16 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	approved := ctx.PostForm("approved")
 	req.Approved = approved == "true"
 
-	accountID, _ := ctx.Get(middleware.ContextKeyAccountID)
+	accountID, exists := ctx.Get(middleware.ContextKeyAccountID)
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	accountIDStr, ok := accountID.(string)
+	if !ok || accountIDStr == "" {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
 
 	if !req.Approved {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "consent_denied"})
@@ -164,12 +186,12 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	scopes := splitScope(req.Scope)
 
 	_ = c.consentSvc.SaveConsent(ctx, &oauth2Domain.Consent{
-		AccountID: accountID.(string),
+		AccountID: accountIDStr,
 		ClientID:  req.ClientID,
 		Scopes:    scopes,
 	})
 
-	code, err := c.authCodeSvc.GenerateCode(ctx, req.ClientID, accountID.(string), req.RedirectURI, scopes, req.CodeChallenge, req.CodeChallengeMethod, req.Nonce)
+	code, err := c.authCodeSvc.GenerateCode(ctx, req.ClientID, accountIDStr, req.RedirectURI, scopes, req.CodeChallenge, req.CodeChallengeMethod, req.Nonce)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
@@ -226,6 +248,10 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "invalid client_secret"})
 			return
 		}
+	} else if req.CodeVerifier == "" {
+		// Public clients MUST use PKCE (RFC 7636)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "code_verifier required for public clients"})
+		return
 	}
 
 	var codeVerifier *string
@@ -267,7 +293,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		"access_token":  accessToken,
 		"refresh_token": refreshToken.Token,
 		"token_type":    "Bearer",
-		"expires_in":    900,
+		"expires_in":    int(c.tokenSvc.AccessExpiry().Seconds()),
 		"scope":         strings.Join(authCode.Scopes, " "),
 	}
 	if idToken != "" {
@@ -299,7 +325,7 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		"access_token":  accessToken,
 		"refresh_token": newRefreshToken.Token,
 		"token_type":    "Bearer",
-		"expires_in":    900,
+		"expires_in":    int(c.tokenSvc.AccessExpiry().Seconds()),
 	})
 }
 
@@ -347,7 +373,7 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 	ctx.JSON(http.StatusOK, gin.H{
 		"access_token": accessToken,
 		"token_type":   "Bearer",
-		"expires_in":   900,
+		"expires_in":   int(c.tokenSvc.AccessExpiry().Seconds()),
 		"scope":        strings.Join(scopes, " "),
 	})
 }
@@ -379,24 +405,27 @@ func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 		return
 	}
 
-	// 客户端认证（Basic Auth 或 client_id/client_secret）
+	// 客户端认证（Basic Auth 或 client_id/client_secret）- RFC 7662 要求必须认证
 	clientID, clientSecret, hasBasicAuth := ctx.Request.BasicAuth()
 	if !hasBasicAuth {
 		clientID = ctx.PostForm("client_id")
 		clientSecret = ctx.PostForm("client_secret")
 	}
 
-	if clientID != "" {
-		client, err := c.clientSvc.FindByClientID(ctx, clientID)
-		if err != nil {
+	if clientID == "" {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client authentication required"})
+		return
+	}
+
+	client, err := c.clientSvc.FindByClientID(ctx, clientID)
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
+		return
+	}
+	if client.IsConfidential {
+		if err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecretHash), []byte(clientSecret)); err != nil {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 			return
-		}
-		if client.IsConfidential {
-			if err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecretHash), []byte(clientSecret)); err != nil {
-				ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
-				return
-			}
 		}
 	}
 

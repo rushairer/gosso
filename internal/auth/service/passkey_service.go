@@ -10,17 +10,19 @@ import (
 
 	"github.com/go-webauthn/webauthn/protocol"
 	wa "github.com/go-webauthn/webauthn/webauthn"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+
 	"github.com/rushairer/gosso/internal/auth/domain"
 	"github.com/rushairer/gosso/internal/auth/repository"
 	"github.com/rushairer/gosso/internal/cache"
-	"go.uber.org/zap"
 )
 
 const (
-	challengeTTL          = 5 * time.Minute
-	redisKeyRegChallenge  = "webauthn:reg:%s"
+	challengeTTL           = 5 * time.Minute
+	redisKeyRegChallenge   = "webauthn:reg:%s"
 	redisKeyLoginChallenge = "webauthn:login:%s"
-	redisKeyMFAChallenge  = "webauthn:mfa:%s"
+	redisKeyMFAChallenge   = "webauthn:mfa:%s"
 )
 
 // PasskeyCredentialView passkey 列表视图（不暴露敏感数据）
@@ -123,7 +125,7 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, accountID, us
 	// 保存 credential 到数据库
 	now := time.Now()
 	cred := &domain.WebAuthnCredential{
-		ID:              newUUID(),
+		ID:              uuid.New().String(),
 		AccountID:       accountID,
 		CredentialID:    credential.ID,
 		PublicKey:       credential.PublicKey,
@@ -172,7 +174,7 @@ func (s *PasskeyService) BeginLogin(ctx context.Context, accountID string) (*pro
 	}
 
 	// 使用随机 requestID 存储 challenge
-	requestID := newUUID()
+	requestID := uuid.New().String()
 	data, err := json.Marshal(sessionData)
 	if err != nil {
 		return nil, "", fmt.Errorf("marshal session data: %w", err)
@@ -193,7 +195,7 @@ func (s *PasskeyService) BeginDiscoverableLogin(ctx context.Context) (*protocol.
 		return nil, "", fmt.Errorf("begin discoverable login: %w", err)
 	}
 
-	requestID := newUUID()
+	requestID := uuid.New().String()
 	data, err := json.Marshal(sessionData)
 	if err != nil {
 		return nil, "", fmt.Errorf("marshal session data: %w", err)

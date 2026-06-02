@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rushairer/gosso/internal/cache"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/rushairer/gosso/internal/cache"
 )
 
 // slidingWindowScript Redis Lua 滑动窗口限流脚本

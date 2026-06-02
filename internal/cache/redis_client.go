@@ -247,5 +247,23 @@ func (r *RedisClient) GetClient() *redis.Client {
 	return r.client
 }
 
+// IncrWithExpiry 原子性递增计数器并设置过期时间（仅在 key 首次创建时）
+// 避免 Incr + Expire 之间的竞态条件
+func (r *RedisClient) IncrWithExpiry(ctx context.Context, key string, expiry time.Duration) (int64, error) {
+	script := redis.NewScript(`
+		local current = redis.call('INCR', KEYS[1])
+		if current == 1 then
+			redis.call('EXPIRE', KEYS[1], ARGV[1])
+		end
+		return current
+	`)
+	result, err := script.Run(ctx, r.client, []string{key}, int(expiry.Seconds())).Int64()
+	if err != nil {
+		r.logger.Error("Redis IncrWithExpiry failed", zap.String("key", key), zap.Error(err))
+		return 0, fmt.Errorf("incrWithExpiry key %s: %w", key, err)
+	}
+	return result, nil
+}
+
 // ErrKeyNotFound Redis 键不存在错误
 var ErrKeyNotFound = fmt.Errorf("redis: key not found")

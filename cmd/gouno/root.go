@@ -9,10 +9,10 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "gouno",
-	Short: "gouno is a tool to generate go code",
-	Long: `gouno is a tool to generate go code.
-It can generate go code from proto file.`,
+	Use:   "gosso",
+	Short: "gosso - SSO authentication server with OAuth2/OIDC support",
+	Long: `gosso is a Single Sign-On (SSO) authentication server.
+It provides OAuth2, OpenID Connect, WebAuthn/Passkey, and MFA support.`,
 	CompletionOptions: cobra.CompletionOptions{
 		DisableDefaultCmd: true,
 	},

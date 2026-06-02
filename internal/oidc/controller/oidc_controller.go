@@ -5,11 +5,12 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rushairer/gouno"
+	"go.uber.org/zap"
+
 	"github.com/rushairer/gosso/internal/auth/middleware"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
-	"github.com/rushairer/gouno"
-	"go.uber.org/zap"
 )
 
 // OIDCController OIDC 协议控制器
@@ -72,6 +73,10 @@ func (c *OIDCController) UserInfo(ctx *gin.Context) {
 
 	info, err := c.userInfoSvc.GetUserInfo(ctx, claims.AccountID, scopes)
 	if err != nil {
+		if err == oidcService.ErrAccountNotActive {
+			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "account is not active"))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to get user info"))
 		return
 	}

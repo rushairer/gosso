@@ -7,14 +7,15 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	accountModule "github.com/rushairer/gosso/internal/account"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
 	authModule "github.com/rushairer/gosso/internal/auth"
 	"github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/testutil"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 var env *testutil.TestEnv

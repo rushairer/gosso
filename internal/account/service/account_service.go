@@ -3,17 +3,21 @@ package service
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
+	"net/mail"
+	"regexp"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/account/repository"
 	"github.com/rushairer/gosso/internal/audit"
 	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/rushairer/gosso/utility"
 )
 
 // AccountService 账号服务接口
@@ -224,8 +228,8 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		auditDomain.ActionAccountRegister,
 		audit.IPFromContext(ctx),
 		parseUUID(account.ID),
-		mustMarshalJSON(map[string]any{"account_id": account.ID}),
-		mustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		utility.MustMarshalJSON(map[string]any{"account_id": account.ID}),
+		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
 
 	return account, nil
@@ -314,8 +318,8 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		auditDomain.ActionAccountDelete,
 		audit.IPFromContext(ctx),
 		parseUUID(accountID),
-		mustMarshalJSON(map[string]any{"account_id": accountID}),
-		mustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
+		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
 
 	return nil
@@ -404,8 +408,8 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 		auditDomain.ActionPasswordChange,
 		audit.IPFromContext(ctx),
 		parseUUID(accountID),
-		mustMarshalJSON(map[string]any{"account_id": accountID}),
-		mustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
+		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
 
 	return nil
@@ -501,8 +505,8 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 		auditDomain.ActionRoleAssign,
 		audit.IPFromContext(ctx),
 		parseUUID(accountID),
-		mustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
-		mustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
+		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
 	return nil
 }
@@ -533,8 +537,8 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 		auditDomain.ActionRoleRemove,
 		audit.IPFromContext(ctx),
 		parseUUID(accountID),
-		mustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
-		mustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
+		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
 	return nil
 }
@@ -564,8 +568,8 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 		auditDomain.ActionAccountSuspend,
 		audit.IPFromContext(ctx),
 		parseUUID(accountID),
-		mustMarshalJSON(map[string]any{"account_id": accountID}),
-		mustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
+		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
 	return nil
 }
@@ -590,8 +594,8 @@ func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID stri
 		auditDomain.ActionAccountActivate,
 		audit.IPFromContext(ctx),
 		parseUUID(accountID),
-		mustMarshalJSON(map[string]any{"account_id": accountID}),
-		mustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
+		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
 	return nil
 }
@@ -602,6 +606,8 @@ func (s *accountServiceImpl) GetAccountRoles(ctx context.Context, accountID stri
 }
 
 // validateRegistration 验证注册请求
+var phoneRegex = regexp.MustCompile(`^\+?[1-9]\d{6,14}$`)
+
 func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) error {
 	if req.Password == "" {
 		return fmt.Errorf("密码不能为空")
@@ -609,6 +615,22 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 
 	if len(req.Password) < 8 {
 		return fmt.Errorf("密码长度不能少于 8 位")
+	}
+
+	// 密码强度检查：至少包含大写、小写、数字各一个
+	var hasUpper, hasLower, hasDigit bool
+	for _, c := range req.Password {
+		switch {
+		case unicode.IsUpper(c):
+			hasUpper = true
+		case unicode.IsLower(c):
+			hasLower = true
+		case unicode.IsDigit(c):
+			hasDigit = true
+		}
+	}
+	if !hasUpper || !hasLower || !hasDigit {
+		return fmt.Errorf("密码必须包含大写字母、小写字母和数字")
 	}
 
 	if req.Email == "" && req.Phone == "" {
@@ -619,10 +641,19 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 		return fmt.Errorf("显示名称不能为空")
 	}
 
-	// TODO: 更多验证逻辑
-	// - 密码强度检查
-	// - 邮箱格式验证
-	// - 手机号格式验证
+	// 邮箱格式验证
+	if req.Email != "" {
+		if _, err := mail.ParseAddress(req.Email); err != nil {
+			return fmt.Errorf("邮箱格式不正确")
+		}
+	}
+
+	// 手机号格式验证
+	if req.Phone != "" {
+		if !phoneRegex.MatchString(req.Phone) {
+			return fmt.Errorf("手机号格式不正确")
+		}
+	}
 
 	return nil
 }
@@ -645,11 +676,6 @@ func (s *accountServiceImpl) auditLog(ctx context.Context, record *auditDomain.A
 	if s.auditor != nil {
 		_ = s.auditor.Log(ctx, record)
 	}
-}
-
-func mustMarshalJSON(v any) json.RawMessage {
-	b, _ := json.Marshal(v)
-	return json.RawMessage(b)
 }
 
 func parseUUID(s string) *uuid.UUID {

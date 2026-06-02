@@ -4,17 +4,18 @@ import (
 	"database/sql"
 
 	wa "github.com/go-webauthn/webauthn/webauthn"
+	"go.uber.org/zap"
+
 	"github.com/rushairer/gosso/config"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
+	auditService "github.com/rushairer/gosso/internal/audit/service"
 	"github.com/rushairer/gosso/internal/auth/repository"
 	"github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/cache"
-	auditService "github.com/rushairer/gosso/internal/audit/service"
 	notificationService "github.com/rushairer/gosso/internal/notification/service"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
-	"go.uber.org/zap"
 )
 
 // InitializeAuthModule 初始化认证模块
@@ -29,19 +30,9 @@ func InitializeAuthModule(
 	keySvc *tokenService.KeyService,
 	baseURL string,
 	auditor *auditService.Auditor,
+	tokenSvc *tokenService.TokenService,
 ) (*service.AuthService, *service.SocialLoginService, *service.VerificationService, *service.PasswordResetService, accountRepo.CredentialRepository, *service.PasskeyService) {
 	sessionSvc := sessionService.NewSessionService(redis, logger)
-	blacklistSvc := tokenService.NewBlacklistService(redis, logger)
-	tokenSvc := tokenService.NewTokenService(
-		[]byte(authConfig.JWTSecret),
-		keySvc,
-		authConfig.Issuer,
-		authConfig.AccessTokenExpiry,
-		authConfig.RefreshTokenExpiry,
-		redis,
-		blacklistSvc,
-		logger,
-	)
 
 	credentialRepo := accountRepo.NewCredentialRepository(db)
 	roleRepo := accountRepo.NewRoleRepository(db)
@@ -63,7 +54,7 @@ func InitializeAuthModule(
 		}
 	}
 
-	authSvc := service.NewAuthService(db, accountSvc, sessionSvc, tokenSvc, credentialRepo, roleRepo, redis, logger, auditor, passkeySvc)
+	authSvc := service.NewAuthService(db, accountSvc, sessionSvc, tokenSvc, credentialRepo, roleRepo, redis, logger, auditor, service.NewMFAService(credentialRepo, db, authConfig.Issuer, logger, passkeySvc), passkeySvc)
 
 	var socialSvc *service.SocialLoginService
 	if len(providers) > 0 {

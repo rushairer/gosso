@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rushairer/gosso/internal/cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/internal/cache"
 )
 
 // stubEmailService captures the code instead of sending email

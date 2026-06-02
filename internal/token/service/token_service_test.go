@@ -7,11 +7,12 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/rushairer/gosso/internal/cache"
-	"github.com/rushairer/gosso/internal/token/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/token/domain"
 )
 
 func setupTestTokenService(t *testing.T) (*TokenService, *cache.RedisClient) {

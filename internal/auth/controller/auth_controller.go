@@ -5,19 +5,20 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/rushairer/gouno"
+	"go.uber.org/zap"
+
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
-	tokenService "github.com/rushairer/gosso/internal/token/service"
-	"github.com/rushairer/gouno"
-	"go.uber.org/zap"
 )
 
 // AuthController 认证控制器
 type AuthController struct {
-	authSvc          *authService.AuthService
-	tokenSvc         *tokenService.TokenService
+	authSvc          authService.AuthOrchestrator
+	tokenMgr         authService.TokenManager
 	socialSvc        *authService.SocialLoginService
 	verificationSvc  *authService.VerificationService
 	passwordResetSvc *authService.PasswordResetService
@@ -25,10 +26,25 @@ type AuthController struct {
 	logger           *zap.Logger
 }
 
+// getClaimsFromContext 从 gin.Context 中提取并校验 JWT claims
+func getClaimsFromContext(ctx *gin.Context) (*tokenDomain.AccessTokenClaims, bool) {
+	jwtClaims, exists := ctx.Get("jwt_claims")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
+		return nil, false
+	}
+	tc, ok := jwtClaims.(*tokenDomain.AccessTokenClaims)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "invalid claims type"))
+		return nil, false
+	}
+	return tc, true
+}
+
 // NewAuthController 创建认证控制器实例
 func NewAuthController(
-	authSvc *authService.AuthService,
-	tokenSvc *tokenService.TokenService,
+	authSvc authService.AuthOrchestrator,
+	tokenMgr authService.TokenManager,
 	socialSvc *authService.SocialLoginService,
 	verificationSvc *authService.VerificationService,
 	passwordResetSvc *authService.PasswordResetService,
@@ -37,7 +53,7 @@ func NewAuthController(
 ) *AuthController {
 	return &AuthController{
 		authSvc:          authSvc,
-		tokenSvc:         tokenSvc,
+		tokenMgr:         tokenMgr,
 		socialSvc:        socialSvc,
 		verificationSvc:  verificationSvc,
 		passwordResetSvc: passwordResetSvc,
@@ -122,10 +138,10 @@ func (c *AuthController) Login(ctx *gin.Context) {
 
 	if result.RequiresMFA {
 		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-			"requires_mfa":    true,
-			"mfa_token":       result.AccessToken,
-			"mfa_token_type":  "Bearer",
-			"mfa_types":       result.MFATypes,
+			"requires_mfa":   true,
+			"mfa_token":      result.AccessToken,
+			"mfa_token_type": "Bearer",
+			"mfa_types":      result.MFATypes,
 		}))
 		return
 	}
@@ -134,7 +150,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		"access_token":  result.AccessToken,
 		"refresh_token": result.RefreshToken,
 		"token_type":    "Bearer",
-		"expires_in":    900,
+		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
 		"session_id":    result.Session.ID.String(),
 	}))
 }
@@ -162,7 +178,7 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 		"access_token":  result.AccessToken,
 		"refresh_token": result.RefreshToken,
 		"token_type":    "Bearer",
-		"expires_in":    900,
+		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
 	}))
 }
 
@@ -174,16 +190,12 @@ type LogoutRequest struct {
 
 // Logout POST /api/auth/logout
 func (c *AuthController) Logout(ctx *gin.Context) {
-	sessionID, exists := ctx.Get("account_id")
-	_ = sessionID
-	_ = exists
-
 	// 尝试撤销 access token（从 header 获取）
 	authHeader := ctx.GetHeader("Authorization")
 	var accessTokenJTI string
 	var tokenExpiresAt time.Time
 	if len(authHeader) > 7 {
-		claims, err := c.tokenSvc.ValidateAccessToken(authHeader[7:])
+		claims, err := c.tokenMgr.ValidateAccessToken(authHeader[7:])
 		if err == nil {
 			accessTokenJTI = claims.ID
 			if claims.ExpiresAt != nil {
@@ -204,15 +216,8 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 
 // GetSession GET /api/auth/session
 func (c *AuthController) GetSession(ctx *gin.Context) {
-	jwtClaims, exists := ctx.Get("jwt_claims")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "no claims"))
-		return
-	}
-
-	tc, ok := jwtClaims.(*tokenDomain.AccessTokenClaims)
+	tc, ok := getClaimsFromContext(ctx)
 	if !ok {
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "invalid claims type"))
 		return
 	}
 
@@ -227,15 +232,8 @@ func (c *AuthController) GetSession(ctx *gin.Context) {
 
 // ListSessions GET /api/auth/sessions
 func (c *AuthController) ListSessions(ctx *gin.Context) {
-	jwtClaims, exists := ctx.Get("jwt_claims")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "no claims"))
-		return
-	}
-
-	tc, ok := jwtClaims.(*tokenDomain.AccessTokenClaims)
+	tc, ok := getClaimsFromContext(ctx)
 	if !ok {
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "invalid claims type"))
 		return
 	}
 
@@ -251,15 +249,8 @@ func (c *AuthController) ListSessions(ctx *gin.Context) {
 
 // RevokeSession DELETE /api/auth/sessions/:id
 func (c *AuthController) RevokeSession(ctx *gin.Context) {
-	jwtClaims, exists := ctx.Get("jwt_claims")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "no claims"))
-		return
-	}
-
-	tc, ok := jwtClaims.(*tokenDomain.AccessTokenClaims)
+	tc, ok := getClaimsFromContext(ctx)
 	if !ok {
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "invalid claims type"))
 		return
 	}
 
@@ -314,7 +305,7 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 		"access_token":  result.AccessToken,
 		"refresh_token": result.RefreshToken,
 		"token_type":    "Bearer",
-		"expires_in":    900,
+		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
 		"session_id":    result.Session.ID.String(),
 	}))
 }
@@ -333,12 +324,10 @@ func (c *AuthController) MFAEnroll(ctx *gin.Context) {
 	}
 
 	// 验证当前用户只能为自己注册 MFA
-	jwtClaims, exists := ctx.Get("jwt_claims")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
+	tc, ok := getClaimsFromContext(ctx)
+	if !ok {
 		return
 	}
-	tc := jwtClaims.(*tokenDomain.AccessTokenClaims)
 	if tc.AccountID != req.AccountID {
 		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "cannot enroll MFA for another account"))
 		return
@@ -366,12 +355,10 @@ func (c *AuthController) MFAActivate(ctx *gin.Context) {
 		return
 	}
 
-	jwtClaims, exists := ctx.Get("jwt_claims")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
+	tc, ok := getClaimsFromContext(ctx)
+	if !ok {
 		return
 	}
-	tc := jwtClaims.(*tokenDomain.AccessTokenClaims)
 
 	if err := c.authSvc.MFAService().ActivateTOTP(ctx, tc.AccountID, req.Code); err != nil {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
@@ -383,12 +370,10 @@ func (c *AuthController) MFAActivate(ctx *gin.Context) {
 
 // MFADisable DELETE /api/auth/mfa
 func (c *AuthController) MFADisable(ctx *gin.Context) {
-	jwtClaims, exists := ctx.Get("jwt_claims")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
+	tc, ok := getClaimsFromContext(ctx)
+	if !ok {
 		return
 	}
-	tc := jwtClaims.(*tokenDomain.AccessTokenClaims)
 
 	if err := c.authSvc.MFAService().DisableTOTP(ctx, tc.AccountID); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
@@ -400,12 +385,10 @@ func (c *AuthController) MFADisable(ctx *gin.Context) {
 
 // MFAGenerateBackupCodes POST /api/auth/mfa/backup-codes
 func (c *AuthController) MFAGenerateBackupCodes(ctx *gin.Context) {
-	jwtClaims, exists := ctx.Get("jwt_claims")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
+	tc, ok := getClaimsFromContext(ctx)
+	if !ok {
 		return
 	}
-	tc := jwtClaims.(*tokenDomain.AccessTokenClaims)
 
 	codes, err := c.authSvc.MFAService().GenerateBackupCodes(ctx, tc.AccountID)
 	if err != nil {
@@ -426,10 +409,10 @@ func (c *AuthController) SocialAuthURL(ctx *gin.Context) {
 	}
 
 	provider := ctx.Param("provider")
-	state := ctx.Query("state")
-	if state == "" {
-		state = "default"
-	}
+
+	// Generate cryptographic state for CSRF protection
+	state := uuid.New().String()
+	ctx.SetCookie("oauth_state", state, 600, "/api/auth/social", "", false, true)
 
 	authURL, err := c.socialSvc.GetAuthURL(ctx, provider, state)
 	if err != nil {
@@ -444,6 +427,15 @@ func (c *AuthController) SocialAuthURL(ctx *gin.Context) {
 func (c *AuthController) SocialCallback(ctx *gin.Context) {
 	if c.socialSvc == nil {
 		ctx.JSON(http.StatusNotImplemented, gouno.NewErrorResponse(http.StatusNotImplemented, "social login not configured"))
+		return
+	}
+
+	// Validate state parameter (CSRF protection)
+	state := ctx.Query("state")
+	savedState, _ := ctx.Cookie("oauth_state")
+	ctx.SetCookie("oauth_state", "", -1, "/api/auth/social", "", false, true)
+	if state == "" || savedState == "" || state != savedState {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid or missing state parameter"))
 		return
 	}
 
@@ -464,7 +456,7 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 		"access_token":  result.AccessToken,
 		"refresh_token": result.RefreshToken,
 		"token_type":    "Bearer",
-		"expires_in":    900,
+		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
 		"session_id":    result.Session.ID.String(),
 	}))
 }
@@ -488,12 +480,10 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 		return
 	}
 
-	jwtClaims, exists := ctx.Get("jwt_claims")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
+	tc, ok := getClaimsFromContext(ctx)
+	if !ok {
 		return
 	}
-	tc := jwtClaims.(*tokenDomain.AccessTokenClaims)
 
 	if err := c.verificationSvc.SendCode(ctx, req.Type, req.Identifier, tc.AccountID); err != nil {
 		ctx.JSON(http.StatusTooManyRequests, gouno.NewErrorResponse(http.StatusTooManyRequests, err.Error()))
@@ -523,12 +513,10 @@ func (c *AuthController) ConfirmVerification(ctx *gin.Context) {
 		return
 	}
 
-	jwtClaims, exists := ctx.Get("jwt_claims")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
+	tc, ok := getClaimsFromContext(ctx)
+	if !ok {
 		return
 	}
-	tc := jwtClaims.(*tokenDomain.AccessTokenClaims)
 
 	// 校验验证码
 	accountID, err := c.verificationSvc.VerifyCode(ctx, req.Type, req.Identifier, req.Code)

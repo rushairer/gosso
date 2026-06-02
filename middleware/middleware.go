@@ -2,11 +2,13 @@ package middleware
 
 import (
 	"net/http"
+	"runtime/debug"
 	"time"
 
 	"github.com/gin-contrib/timeout"
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
+	"go.uber.org/zap"
 )
 
 func TimeoutMiddleware(requestTimeout time.Duration) gin.HandlerFunc {
@@ -23,6 +25,12 @@ func TimeoutMiddleware(requestTimeout time.Duration) gin.HandlerFunc {
 func RecoveryMiddleware() gin.HandlerFunc {
 	return gin.CustomRecovery(
 		func(ctx *gin.Context, err any) {
+			zap.L().Error("panic recovered",
+				zap.Any("error", err),
+				zap.String("stack", string(debug.Stack())),
+				zap.String("path", ctx.Request.URL.Path),
+				zap.String("method", ctx.Request.Method),
+			)
 			ctx.JSON(http.StatusInternalServerError, gouno.InternalServerErrorResponse)
 		},
 	)

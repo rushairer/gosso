@@ -8,9 +8,10 @@ import (
 	"fmt"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 	"github.com/rushairer/gosso/internal/oauth2/repository"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // RegisterClientRequest 注册 OAuth2 客户端请求
@@ -35,7 +36,7 @@ type OAuth2ClientService interface {
 }
 
 type oauth2ClientServiceImpl struct {
-	db       *sql.DB
+	db         *sql.DB
 	clientRepo repository.OAuth2ClientRepository
 }
 

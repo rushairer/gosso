@@ -14,6 +14,20 @@ dev:
 		go install github.com/air-verse/air@latest; \
 	fi
 	air -c .air.toml
+
+lint:
+	@if ! command -v golangci-lint &> /dev/null; then \
+		echo "Installing golangci-lint..."; \
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
+	fi
+	golangci-lint run ./...
+
+lint-fix:
+	@if ! command -v golangci-lint &> /dev/null; then \
+		echo "Installing golangci-lint..."; \
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
+	fi
+	golangci-lint run --fix ./...
 test:
 	@if ! command -v goconvey &> /dev/null; then \
 		go install github.com/smartystreets/goconvey@latest; \
@@ -60,6 +74,20 @@ docker-test-logs:
 	@echo "📋 查看测试环境日志..."
 	@eval $$(go run script/parse-config.go test) && docker-compose -f docker-compose.test.yml logs -f
 
+docker-prod-up:
+	@echo "🚀 启动生产环境..."
+	@eval $$(go run script/parse-config.go production) && docker-compose -f docker-compose.yml up -d --build
+	@echo "✅ 生产环境已启动"
+
+docker-prod-down:
+	@echo "🛑 停止生产环境..."
+	@eval $$(go run script/parse-config.go production) && docker-compose -f docker-compose.yml down
+	@echo "✅ 生产环境已停止"
+
+docker-prod-logs:
+	@echo "📋 查看生产环境日志..."
+	@eval $$(go run script/parse-config.go production) && docker-compose -f docker-compose.yml logs -f
+
 # 环境配置生成命令
 env-dev:
 	@./script/generate-env.sh development
@@ -82,6 +110,8 @@ help:
 	@echo ""
 	@echo "🚀 Development Commands:"
 	@echo "  dev                  - Start development mode with air"
+	@echo "  lint                 - Run golangci-lint"
+	@echo "  lint-fix             - Run golangci-lint with auto-fix"
 	@echo ""
 	@echo "🧪 Testing Commands:"
 	@echo "  test                 - Run tests with goconvey"
@@ -95,6 +125,9 @@ help:
 	@echo "  docker-test-up       - Start test environment with Docker"
 	@echo "  docker-test-down     - Stop test environment"
 	@echo "  docker-test-logs     - View test environment logs"
+	@echo "  docker-prod-up       - Start production environment with Docker"
+	@echo "  docker-prod-down     - Stop production environment"
+	@echo "  docker-prod-logs     - View production environment logs"
 	@echo ""
 	@echo "⚙️  Environment Configuration Commands:"
 	@echo "  env-dev              - Generate development environment variables"
@@ -111,7 +144,7 @@ help:
 	@echo "🆘 Help Commands:"
 	@echo "  help                 - Show this help message"
 
-.PHONY: default build run dev test test-integration docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs env-dev env-test env-prod env-all help
+.PHONY: default build run dev lint lint-fix test test-integration docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs docker-prod-up docker-prod-down docker-prod-logs env-dev env-test env-prod env-all help
 # Examples - 示例程序
 .PHONY: examples example-account example-redis example-metadata
 

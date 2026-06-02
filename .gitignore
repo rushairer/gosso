@@ -35,6 +35,11 @@ Thumbs.db
 *.temp
 .cache/
 
+# 环境配置（含敏感信息）
+.env
+.env.*
+!.env.*.example
+
 # Go 相关文件
 # Test binary, built with `go test -c`
 # *.test

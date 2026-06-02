@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"net/http"
 	"os/signal"
 	"syscall"
@@ -12,14 +11,19 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	gounoMiddleware "github.com/rushairer/gouno/middleware"
+	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/rushairer/gosso/config"
 	"github.com/rushairer/gosso/internal/account"
 	adminController "github.com/rushairer/gosso/internal/admin/controller"
+	auditService "github.com/rushairer/gosso/internal/audit/service"
 	"github.com/rushairer/gosso/internal/auth"
 	authController "github.com/rushairer/gosso/internal/auth/controller"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/cache"
-	auditService "github.com/rushairer/gosso/internal/audit/service"
 	"github.com/rushairer/gosso/internal/oauth2"
 	oauth2Controller "github.com/rushairer/gosso/internal/oauth2/controller"
 	"github.com/rushairer/gosso/internal/oidc"
@@ -28,10 +32,6 @@ import (
 	"github.com/rushairer/gosso/middleware"
 	"github.com/rushairer/gosso/router"
 	"github.com/rushairer/gosso/utility"
-	gounoMiddleware "github.com/rushairer/gouno/middleware"
-	"github.com/spf13/cobra"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 var webCmd = &cobra.Command{
@@ -66,157 +66,31 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	loggerLevel := zap.NewAtomicLevelAt(zapcore.Level(globalConfig.LogConfig.Level))
 	logger := utility.NewLogger(loggerLevel)
 
+	if err := globalConfig.Validate(); err != nil {
+		logger.Fatal("invalid configuration", zap.Error(err))
+	}
+
 	logger.Sugar().Info("starting web server...")
 
-	// init database
-	defaultDriver := globalConfig.DatabaseConfig.GetDefaultDriver()
-	if defaultDriver == nil {
-		log.Fatalf("default database driver not found")
-	}
-
-	db, err := sql.Open(defaultDriver.Driver, defaultDriver.DSN)
+	db, err := initDatabase(globalConfig, logger)
 	if err != nil {
-		log.Fatalf("failed to open database: %v", err)
+		logger.Fatal("database init failed", zap.Error(err))
 	}
 	defer db.Close()
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(10 * time.Minute)
 
-	if err := db.Ping(); err != nil {
-		log.Fatalf("failed to ping database: %v", err)
-	}
-	logger.Sugar().Info("database connected")
-
-	// init redis
-	redis, err := cache.NewRedisClient(
-		globalConfig.RedisConfig.DSN,
-		globalConfig.RedisConfig.MaxActiveConns,
-		time.Duration(globalConfig.RedisConfig.PoolTimeoutSeconds)*time.Second,
-		logger,
-	)
+	redis, err := initRedis(globalConfig, logger)
 	if err != nil {
-		log.Fatalf("failed to connect to redis: %v", err)
+		logger.Fatal("redis init failed", zap.Error(err))
 	}
 	defer redis.Close()
-	logger.Sugar().Info("redis connected")
 
-	// init audit
 	auditAuditor := auditService.NewAuditor(ctx, db)
-	go func() {
-		for err := range auditAuditor.ErrorChan() {
-			logger.Error("Audit batch error", zap.Error(err))
-		}
-	}()
+	defer auditAuditor.Close()
+	go listenAuditErrors(ctx, auditAuditor, logger)
 
-	// init modules
-	accountSvc := account.InitializeAccountModule(db, auditAuditor)
+	modules := initModules(ctx, db, redis, logger, globalConfig, auditAuditor)
 
-	// init token services
-	keySvc, err := tokenService.NewKeyService(
-		globalConfig.AuthConfig.PrivateKeyPath,
-		globalConfig.AuthConfig.KeyID,
-		logger,
-	)
-	if err != nil {
-		log.Fatalf("failed to initialize key service: %v", err)
-	}
-
-	blacklistSvc := tokenService.NewBlacklistService(redis, logger)
-	tokenSvc := tokenService.NewTokenService(
-		[]byte(globalConfig.AuthConfig.JWTSecret),
-		keySvc,
-		globalConfig.AuthConfig.Issuer,
-		globalConfig.AuthConfig.AccessTokenExpiry,
-		globalConfig.AuthConfig.RefreshTokenExpiry,
-		redis,
-		blacklistSvc,
-		logger,
-	)
-
-	// build social login provider configs
-	providers := make(map[string]*authService.OAuthProviderConfig)
-	if globalConfig.OAuthProviders.Google.ClientID != "" {
-		p := globalConfig.OAuthProviders.Google
-		providers["google"] = &authService.OAuthProviderConfig{
-			ClientID: p.ClientID, ClientSecret: p.ClientSecret, RedirectURI: p.RedirectURI, Scopes: p.Scopes,
-			TokenURL: "https://oauth2.googleapis.com/token", UserInfoURL: "https://www.googleapis.com/oauth2/v2/userinfo",
-		}
-	}
-	if globalConfig.OAuthProviders.GitHub.ClientID != "" {
-		p := globalConfig.OAuthProviders.GitHub
-		providers["github"] = &authService.OAuthProviderConfig{
-			ClientID: p.ClientID, ClientSecret: p.ClientSecret, RedirectURI: p.RedirectURI, Scopes: p.Scopes,
-			TokenURL: "https://github.com/login/oauth/access_token", UserInfoURL: "https://api.github.com/user",
-		}
-	}
-	if globalConfig.OAuthProviders.WeChat.ClientID != "" {
-		p := globalConfig.OAuthProviders.WeChat
-		providers["wechat"] = &authService.OAuthProviderConfig{
-			ClientID: p.ClientID, ClientSecret: p.ClientSecret, RedirectURI: p.RedirectURI, Scopes: p.Scopes,
-			TokenURL: "https://api.weixin.qq.com/sns/oauth2/access_token", UserInfoURL: "https://api.weixin.qq.com/sns/userinfo",
-		}
-	}
-
-	// init auth module (includes social login + verification + password reset)
-	authSvc, socialSvc, verificationSvc, passwordResetSvc, credentialRepo, passkeySvc := auth.InitializeAuthModule(db, redis, logger, globalConfig.AuthConfig, globalConfig.SMTPConfig, accountSvc, providers, keySvc, globalConfig.AuthConfig.PasswordResetBaseURL, auditAuditor)
-
-	// init oauth2 module
-	oauth2ClientSvc, authCodeSvc, consentSvc := oauth2.InitializeOAuth2Module(db, redis, logger, globalConfig.AuthConfig)
-
-	// init oidc module
-	idTokenSvc, discoverySvc, jwksSvc, userInfoSvc := oidc.InitializeOIDCModule(db, tokenSvc, accountSvc, globalConfig.AuthConfig, logger)
-
-	// init controllers
-	authCtrl := authController.NewAuthController(authSvc, tokenSvc, socialSvc, verificationSvc, passwordResetSvc, credentialRepo, logger)
-	oauth2Ctrl := oauth2Controller.NewOAuth2Controller(oauth2ClientSvc, authCodeSvc, consentSvc, tokenSvc, idTokenSvc, logger)
-	clientCtrl := oauth2Controller.NewClientController(oauth2ClientSvc, logger)
-	oidcCtrl := oidcController.NewOIDCController(discoverySvc, jwksSvc, userInfoSvc, logger)
-	adminCtrl := adminController.NewAdminController(accountSvc, logger)
-
-	var passkeyCtrl *authController.PasskeyController
-	if passkeySvc != nil {
-		passkeyCtrl = authController.NewPasskeyController(passkeySvc, authSvc, accountSvc, logger)
-	}
-
-	engine := gin.New()
-
-	// CORS 配置
-	corsConfig := cors.Config{
-		AllowAllOrigins:  len(globalConfig.CORSConfig.AllowedOrigins) == 0,
-		AllowCredentials: globalConfig.CORSConfig.AllowCredentials,
-		MaxAge:           time.Duration(globalConfig.CORSConfig.MaxAge) * time.Second,
-	}
-	if len(globalConfig.CORSConfig.AllowedOrigins) > 0 {
-		corsConfig.AllowOrigins = globalConfig.CORSConfig.AllowedOrigins
-	}
-	if len(globalConfig.CORSConfig.AllowedMethods) > 0 {
-		corsConfig.AllowMethods = globalConfig.CORSConfig.AllowedMethods
-	} else {
-		corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
-	}
-	if len(globalConfig.CORSConfig.AllowedHeaders) > 0 {
-		corsConfig.AllowHeaders = globalConfig.CORSConfig.AllowedHeaders
-	} else {
-		corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
-	}
-
-	engine.Use(
-		cors.New(corsConfig),
-		gin.Logger(),
-		middleware.RecoveryMiddleware(),
-		middleware.TimeoutMiddleware(globalConfig.WebServerConfig.RequestTimeout),
-		gounoMiddleware.RateLimitMiddleware(ctx, globalConfig.WebServerConfig.RateLimitPerMinute, time.Minute),
-		middleware.CSRFMiddleware(!globalConfig.WebServerConfig.Debug,
-			"/api/auth/passkey/login",
-			"/api/auth/social",
-			"/oauth2",
-			"/.well-known",
-			"/swagger",
-		),
-	)
-	router.RegisterWebRouter(engine, authCtrl, oauth2Ctrl, clientCtrl, oidcCtrl, adminCtrl, tokenSvc, passkeyCtrl, redis, globalConfig.WebServerConfig.RateLimits)
+	engine := setupEngine(ctx, globalConfig, logger, modules, db, redis)
 
 	httpServer := &http.Server{
 		Addr:              fmt.Sprintf("%s:%s", globalConfig.WebServerConfig.Address, globalConfig.WebServerConfig.Port),
@@ -232,7 +106,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 
 	go func() {
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("listen: %s\n", err)
+			logger.Fatal("listen failed", zap.Error(err))
 		}
 	}()
 
@@ -241,11 +115,214 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	stop()
 	logger.Sugar().Info("shutting down gracefully, press Ctrl+C again to force")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := httpServer.Shutdown(ctx); err != nil {
-		log.Fatalf("server forced to shutdown: %v", err)
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		logger.Fatal("server forced to shutdown", zap.Error(err))
 	}
 
 	logger.Sugar().Info("server exiting")
+}
+
+// initDatabase 初始化数据库连接
+func initDatabase(cfg config.GoUnoConfig, logger *zap.Logger) (*sql.DB, error) {
+	defaultDriver := cfg.DatabaseConfig.GetDefaultDriver()
+	if defaultDriver == nil {
+		return nil, fmt.Errorf("default database driver not found")
+	}
+
+	db, err := sql.Open(defaultDriver.Driver, defaultDriver.DSN)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(10 * time.Minute)
+
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	logger.Sugar().Info("database connected")
+	return db, nil
+}
+
+// initRedis 初始化 Redis 连接
+func initRedis(cfg config.GoUnoConfig, logger *zap.Logger) (*cache.RedisClient, error) {
+	redis, err := cache.NewRedisClient(
+		cfg.RedisConfig.DSN,
+		cfg.RedisConfig.MaxActiveConns,
+		time.Duration(cfg.RedisConfig.PoolTimeoutSeconds)*time.Second,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to redis: %w", err)
+	}
+
+	logger.Sugar().Info("redis connected")
+	return redis, nil
+}
+
+// listenAuditErrors 监听审计错误并记录日志
+func listenAuditErrors(ctx context.Context, auditor *auditService.Auditor, logger *zap.Logger) {
+	for {
+		select {
+		case err, ok := <-auditor.ErrorChan():
+			if !ok {
+				return
+			}
+			logger.Error("Audit batch error", zap.Error(err))
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// appModules 聚合所有初始化后的模块和控制器
+type appModules struct {
+	authCtrl    *authController.AuthController
+	oauth2Ctrl  *oauth2Controller.OAuth2Controller
+	clientCtrl  *oauth2Controller.ClientController
+	oidcCtrl    *oidcController.OIDCController
+	adminCtrl   *adminController.AdminController
+	passkeyCtrl *authController.PasskeyController
+	tokenSvc    *tokenService.TokenService
+}
+
+// initModules 初始化所有业务模块和控制器
+func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logger *zap.Logger, cfg config.GoUnoConfig, auditor *auditService.Auditor) *appModules {
+	accountSvc := account.InitializeAccountModule(db, auditor)
+
+	keySvc, err := tokenService.NewKeyService(
+		cfg.AuthConfig.PrivateKeyPath,
+		cfg.AuthConfig.KeyID,
+		logger,
+	)
+	if err != nil {
+		logger.Fatal("failed to initialize key service", zap.Error(err))
+	}
+
+	blacklistSvc := tokenService.NewBlacklistService(redis, logger)
+	tokenSvc := tokenService.NewTokenService(
+		[]byte(cfg.AuthConfig.JWTSecret),
+		keySvc,
+		cfg.AuthConfig.Issuer,
+		cfg.AuthConfig.AccessTokenExpiry,
+		cfg.AuthConfig.RefreshTokenExpiry,
+		redis,
+		blacklistSvc,
+		logger,
+	)
+
+	providers := buildOAuthProviders(cfg)
+
+	authSvc, socialSvc, verificationSvc, passwordResetSvc, credentialRepo, passkeySvc := auth.InitializeAuthModule(
+		db, redis, logger, cfg.AuthConfig, cfg.SMTPConfig, accountSvc, providers, keySvc, cfg.AuthConfig.PasswordResetBaseURL, auditor, tokenSvc,
+	)
+
+	oauth2ClientSvc, authCodeSvc, consentSvc := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig)
+	idTokenSvc, discoverySvc, jwksSvc, userInfoSvc := oidc.InitializeOIDCModule(db, tokenSvc, accountSvc, cfg.AuthConfig, logger)
+
+	authCtrl := authController.NewAuthController(authSvc, tokenSvc, socialSvc, verificationSvc, passwordResetSvc, credentialRepo, logger)
+	oauth2Ctrl := oauth2Controller.NewOAuth2Controller(oauth2ClientSvc, authCodeSvc, consentSvc, tokenSvc, idTokenSvc, logger)
+	clientCtrl := oauth2Controller.NewClientController(oauth2ClientSvc, logger)
+	oidcCtrl := oidcController.NewOIDCController(discoverySvc, jwksSvc, userInfoSvc, logger)
+	adminCtrl := adminController.NewAdminController(accountSvc, logger)
+
+	var passkeyCtrl *authController.PasskeyController
+	if passkeySvc != nil {
+		passkeyCtrl = authController.NewPasskeyController(passkeySvc, authSvc, tokenSvc, accountSvc, logger)
+	}
+
+	return &appModules{
+		authCtrl:    authCtrl,
+		oauth2Ctrl:  oauth2Ctrl,
+		clientCtrl:  clientCtrl,
+		oidcCtrl:    oidcCtrl,
+		adminCtrl:   adminCtrl,
+		passkeyCtrl: passkeyCtrl,
+		tokenSvc:    tokenSvc,
+	}
+}
+
+// buildOAuthProviders 从配置构建 OAuth 提供商映射
+func buildOAuthProviders(cfg config.GoUnoConfig) map[string]*authService.OAuthProviderConfig {
+	providers := make(map[string]*authService.OAuthProviderConfig)
+	if cfg.OAuthProviders.Google.ClientID != "" {
+		p := cfg.OAuthProviders.Google
+		providers["google"] = &authService.OAuthProviderConfig{
+			ClientID: p.ClientID, ClientSecret: p.ClientSecret, RedirectURI: p.RedirectURI, Scopes: p.Scopes,
+			TokenURL: "https://oauth2.googleapis.com/token", UserInfoURL: "https://www.googleapis.com/oauth2/v2/userinfo",
+		}
+	}
+	if cfg.OAuthProviders.GitHub.ClientID != "" {
+		p := cfg.OAuthProviders.GitHub
+		providers["github"] = &authService.OAuthProviderConfig{
+			ClientID: p.ClientID, ClientSecret: p.ClientSecret, RedirectURI: p.RedirectURI, Scopes: p.Scopes,
+			TokenURL: "https://github.com/login/oauth/access_token", UserInfoURL: "https://api.github.com/user",
+		}
+	}
+	if cfg.OAuthProviders.WeChat.ClientID != "" {
+		p := cfg.OAuthProviders.WeChat
+		providers["wechat"] = &authService.OAuthProviderConfig{
+			ClientID: p.ClientID, ClientSecret: p.ClientSecret, RedirectURI: p.RedirectURI, Scopes: p.Scopes,
+			TokenURL: "https://api.weixin.qq.com/sns/oauth2/access_token", UserInfoURL: "https://api.weixin.qq.com/sns/userinfo",
+		}
+	}
+	return providers
+}
+
+// setupEngine 配置 Gin 引擎：中间件 + 路由
+func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger, m *appModules, db *sql.DB, redis *cache.RedisClient) *gin.Engine {
+	engine := gin.New()
+
+	corsConfig := buildCORSConfig(cfg)
+
+	engine.Use(
+		cors.New(corsConfig),
+		middleware.RequestIDMiddleware(),
+		middleware.ZapLoggerMiddleware(logger),
+		middleware.RecoveryMiddleware(),
+		middleware.TimeoutMiddleware(cfg.WebServerConfig.RequestTimeout),
+		gounoMiddleware.RateLimitMiddleware(ctx, cfg.WebServerConfig.RateLimitPerMinute, time.Minute),
+		middleware.CSRFMiddleware(!cfg.WebServerConfig.Debug,
+			"/api/auth/passkey/login",
+			"/api/auth/social",
+			"/oauth2",
+			"/.well-known",
+			"/swagger",
+		),
+	)
+
+	router.RegisterWebRouter(engine, db, m.authCtrl, m.oauth2Ctrl, m.clientCtrl, m.oidcCtrl, m.adminCtrl, m.tokenSvc, m.passkeyCtrl, redis, cfg.WebServerConfig.RateLimits)
+
+	return engine
+}
+
+// buildCORSConfig 从配置构建 CORS 配置
+func buildCORSConfig(cfg config.GoUnoConfig) cors.Config {
+	corsConfig := cors.Config{
+		AllowAllOrigins:  false,
+		AllowCredentials: cfg.CORSConfig.AllowCredentials,
+		MaxAge:           time.Duration(cfg.CORSConfig.MaxAge) * time.Second,
+	}
+	if len(cfg.CORSConfig.AllowedOrigins) > 0 {
+		corsConfig.AllowOrigins = cfg.CORSConfig.AllowedOrigins
+	} else {
+		corsConfig.AllowOrigins = []string{"http://localhost:8080"}
+	}
+	if len(cfg.CORSConfig.AllowedMethods) > 0 {
+		corsConfig.AllowMethods = cfg.CORSConfig.AllowedMethods
+	} else {
+		corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
+	}
+	if len(cfg.CORSConfig.AllowedHeaders) > 0 {
+		corsConfig.AllowHeaders = cfg.CORSConfig.AllowedHeaders
+	} else {
+		corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
+	}
+	return corsConfig
 }

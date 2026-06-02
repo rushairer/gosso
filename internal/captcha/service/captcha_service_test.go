@@ -6,25 +6,26 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/rushairer/gosso/internal/cache"
-	"github.com/rushairer/gosso/internal/captcha/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/captcha/domain"
 )
 
 func setupTestCaptchaService(t *testing.T) *CaptchaService {
 	logger := zap.NewNop()
 	dsn := "redis://localhost:6379/15"
-	
+
 	redisClient, err := cache.NewRedisClient(dsn, 10, 5*time.Second, logger)
 	if err != nil {
 		t.Skip("Redis not available, skipping test:", err)
 	}
-	
+
 	service := NewCaptchaService(redisClient, logger)
 	service.SetCaptchaTTL(10 * time.Second) // 测试用短过期时间
-	
+
 	return service
 }
 

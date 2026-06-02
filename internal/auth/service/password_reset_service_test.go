@@ -5,11 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rushairer/gosso/internal/cache"
-	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/internal/cache"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
 type stubPasswordResetEmailSender struct {

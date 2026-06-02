@@ -11,10 +11,11 @@ services:
     environment:
       - GIN_MODE=release
       - GOSSO_ENV=production
+    env_file:
+      - .env.production
     volumes:
       - ./config:/app/config:ro
       - ./log:/app/log
-      - ./data:/app/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -23,8 +24,13 @@ services:
     networks:
       - gosso-prod-network
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${APP_PORT:-8080}/test/alive"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${APP_PORT:-8080}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -45,9 +51,8 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-gosso}
       POSTGRES_USER: ${POSTGRES_USER:-gosso}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gosso123}
-    ports:
-      - "${POSTGRES_EXTERNAL_PORT:-5432}:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    # No external port exposure in production — access only via internal network
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
       - ./script/postgres:/docker-entrypoint-initdb.d:ro
@@ -74,8 +79,7 @@ services:
   # Redis 缓存
   redis:
     image: redis:7-alpine
-    ports:
-      - "${REDIS_EXTERNAL_PORT:-6379}:6379"
+    # No external port exposure in production — access only via internal network
     volumes:
       - redis_prod_data:/data
       - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
@@ -113,6 +117,13 @@ services:
     networks:
       - gosso-prod-network
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s

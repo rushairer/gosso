@@ -1,11 +1,16 @@
 package router
 
 import (
+	"context"
+	"database/sql"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rushairer/gouno"
+
 	"github.com/rushairer/gosso/config"
+	"github.com/rushairer/gosso/docs"
 	adminController "github.com/rushairer/gosso/internal/admin/controller"
 	authController "github.com/rushairer/gosso/internal/auth/controller"
 	authMiddleware "github.com/rushairer/gosso/internal/auth/middleware"
@@ -13,14 +18,13 @@ import (
 	oauth2Controller "github.com/rushairer/gosso/internal/oauth2/controller"
 	oidcController "github.com/rushairer/gosso/internal/oidc/controller"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
-	"github.com/rushairer/gosso/docs"
 	"github.com/rushairer/gosso/middleware"
-	"github.com/rushairer/gouno"
 )
 
 // RegisterWebRouter 注册所有路由
 func RegisterWebRouter(
 	server *gin.Engine,
+	db *sql.DB,
 	authCtrl *authController.AuthController,
 	oauth2Ctrl *oauth2Controller.OAuth2Controller,
 	clientCtrl *oauth2Controller.ClientController,
@@ -31,6 +35,9 @@ func RegisterWebRouter(
 	redis *cache.RedisClient,
 	rateLimits config.RateLimitsConfig,
 ) {
+	// 健康检查（无认证，无限流）
+	registerHealthRoutes(server, db, redis)
+
 	// 测试路由
 	registerWebTestRouter(server)
 	registerWebIndexRouter(server)
@@ -57,9 +64,10 @@ func RegisterWebRouter(
 		// 客户端管理路由（需要 JWT 认证）
 		clientCtrl.RegisterRoutes(api, jwtAuth)
 
-		// 管理员路由（需要 JWT 认证 + admin 角色）
+		// 管理员路由（需要 JWT 认证 + admin 角色 + 限流）
 		admin := api.Group("/admin")
-		admin.Use(jwtAuth, authMiddleware.AdminRequiredMiddleware())
+		adminLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute)
+		admin.Use(adminLimit, jwtAuth, authMiddleware.AdminRequiredMiddleware())
 		adminCtrl.RegisterRoutes(admin)
 
 		// Passkey 路由（带限流）
@@ -108,4 +116,43 @@ func registerSwaggerRouter(server *gin.Engine) {
 			ctx.Data(http.StatusOK, "application/yaml", docs.OpenAPISpec)
 		})
 	}
+}
+
+func registerHealthRoutes(server *gin.Engine, db *sql.DB, redis *cache.RedisClient) {
+	server.GET("/health", func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	server.GET("/readiness", func(ctx *gin.Context) {
+		checks := make(map[string]string)
+		ready := true
+
+		pingCtx, cancel := context.WithTimeout(ctx.Request.Context(), 2*time.Second)
+		defer cancel()
+
+		if err := db.PingContext(pingCtx); err != nil {
+			checks["database"] = "unavailable"
+			ready = false
+		} else {
+			checks["database"] = "ok"
+		}
+
+		if err := redis.Ping(pingCtx); err != nil {
+			checks["redis"] = "unavailable"
+			ready = false
+		} else {
+			checks["redis"] = "ok"
+		}
+
+		status := http.StatusOK
+		if !ready {
+			status = http.StatusServiceUnavailable
+		}
+
+		ctx.JSON(status, gin.H{
+			"status": status,
+			"ready":  ready,
+			"checks": checks,
+		})
+	})
 }

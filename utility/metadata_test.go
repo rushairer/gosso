@@ -26,10 +26,10 @@ func TestMetadataHelper_GetString(t *testing.T) {
 
 func TestMetadataHelper_GetInt(t *testing.T) {
 	data := map[string]any{
-		"age":      30,
-		"level":    int64(5),
-		"score":    95.5,
-		"invalid":  "not a number",
+		"age":     30,
+		"level":   int64(5),
+		"score":   95.5,
+		"invalid": "not a number",
 	}
 	helper := NewMetadataHelper(data)
 
@@ -170,12 +170,12 @@ func TestSetIfNotZero(t *testing.T) {
 
 func TestMetadataHelper_NilData(t *testing.T) {
 	helper := NewMetadataHelper(nil)
-	
+
 	// 应该不会 panic
 	assert.Equal(t, "default", helper.GetString("key", "default"))
 	assert.Equal(t, 0, helper.GetInt("key", 0))
 	assert.False(t, helper.Has("key"))
-	
+
 	// 应该可以设置值
 	helper.Set("name", "test")
 	assert.Equal(t, "test", helper.GetString("name", ""))

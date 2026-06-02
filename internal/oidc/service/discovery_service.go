@@ -2,10 +2,10 @@ package service
 
 // DiscoveryService OIDC Discovery 服务
 type DiscoveryService struct {
-	issuer        string
-	authEndpoint  string
-	tokenEndpoint string
-	jwksURI       string
+	issuer           string
+	authEndpoint     string
+	tokenEndpoint    string
+	jwksURI          string
 	userInfoEndpoint string
 }
 
@@ -41,7 +41,7 @@ func (s *DiscoveryService) GetDiscoveryDocument() map[string]any {
 			"public",
 		},
 		"id_token_signing_alg_values_supported": []string{
-			"HS256",
+			"RS256",
 		},
 		"token_endpoint_auth_methods_supported": []string{
 			"client_secret_post", "client_secret_basic",

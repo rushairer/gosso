@@ -5,9 +5,11 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	accountService "github.com/rushairer/gosso/internal/account/service"
+	"github.com/google/uuid"
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
+
+	accountService "github.com/rushairer/gosso/internal/account/service"
 )
 
 // AdminController 管理员控制器
@@ -41,8 +43,16 @@ func (c *AdminController) RegisterRoutes(rg *gin.RouterGroup) {
 
 // ListAccounts GET /api/admin/accounts
 func (c *AdminController) ListAccounts(ctx *gin.Context) {
-	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
+	page, err := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+	pageSize, err := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
+	if err != nil || pageSize < 1 {
+		pageSize = 20
+	} else if pageSize > 100 {
+		pageSize = 100
+	}
 	status := ctx.Query("status")
 
 	accounts, total, err := c.accountSvc.ListAccounts(ctx, page, pageSize, status)
@@ -60,9 +70,21 @@ func (c *AdminController) ListAccounts(ctx *gin.Context) {
 	}))
 }
 
+// validateUUID validates and returns the UUID string, or sends a 400 error.
+func validateUUID(ctx *gin.Context, value, paramName string) (string, bool) {
+	if _, err := uuid.Parse(value); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid "+paramName))
+		return "", false
+	}
+	return value, true
+}
+
 // GetAccount GET /api/admin/accounts/:account_id
 func (c *AdminController) GetAccount(ctx *gin.Context) {
-	accountID := ctx.Param("account_id")
+	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
+	if !ok {
+		return
+	}
 
 	account, err := c.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
@@ -75,11 +97,14 @@ func (c *AdminController) GetAccount(ctx *gin.Context) {
 
 // DeleteAccount DELETE /api/admin/accounts/:account_id
 func (c *AdminController) DeleteAccount(ctx *gin.Context) {
-	accountID := ctx.Param("account_id")
+	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
+	if !ok {
+		return
+	}
 
 	if err := c.accountSvc.SoftDeleteAccount(ctx, accountID); err != nil {
 		c.logger.Error("Failed to delete account", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to delete account"))
 		return
 	}
 
@@ -88,11 +113,14 @@ func (c *AdminController) DeleteAccount(ctx *gin.Context) {
 
 // DisableAccount POST /api/admin/accounts/:account_id/disable
 func (c *AdminController) DisableAccount(ctx *gin.Context) {
-	accountID := ctx.Param("account_id")
+	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
+	if !ok {
+		return
+	}
 
 	if err := c.accountSvc.SuspendAccount(ctx, accountID); err != nil {
 		c.logger.Error("Failed to disable account", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to disable account"))
 		return
 	}
 
@@ -101,11 +129,14 @@ func (c *AdminController) DisableAccount(ctx *gin.Context) {
 
 // EnableAccount POST /api/admin/accounts/:account_id/enable
 func (c *AdminController) EnableAccount(ctx *gin.Context) {
-	accountID := ctx.Param("account_id")
+	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
+	if !ok {
+		return
+	}
 
 	if err := c.accountSvc.ActivateAccount(ctx, accountID); err != nil {
 		c.logger.Error("Failed to enable account", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to enable account"))
 		return
 	}
 
@@ -114,7 +145,10 @@ func (c *AdminController) EnableAccount(ctx *gin.Context) {
 
 // GetAccountRoles GET /api/admin/accounts/:account_id/roles
 func (c *AdminController) GetAccountRoles(ctx *gin.Context) {
-	accountID := ctx.Param("account_id")
+	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
+	if !ok {
+		return
+	}
 
 	roles, err := c.accountSvc.GetAccountRoles(ctx, accountID)
 	if err != nil {
@@ -133,17 +167,23 @@ type AddRoleRequestBody struct {
 
 // AddRole POST /api/admin/accounts/:account_id/roles
 func (c *AdminController) AddRole(ctx *gin.Context) {
-	accountID := ctx.Param("account_id")
+	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
+	if !ok {
+		return
+	}
 
 	var req AddRoleRequestBody
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
 		return
 	}
+	if _, ok := validateUUID(ctx, req.RoleID, "role_id"); !ok {
+		return
+	}
 
 	if err := c.accountSvc.AssignRole(ctx, accountID, req.RoleID); err != nil {
 		c.logger.Error("Failed to assign role", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to assign role"))
 		return
 	}
 
@@ -152,12 +192,18 @@ func (c *AdminController) AddRole(ctx *gin.Context) {
 
 // RemoveRole DELETE /api/admin/accounts/:account_id/roles/:role_id
 func (c *AdminController) RemoveRole(ctx *gin.Context) {
-	accountID := ctx.Param("account_id")
-	roleID := ctx.Param("role_id")
+	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
+	if !ok {
+		return
+	}
+	roleID, ok := validateUUID(ctx, ctx.Param("role_id"), "role_id")
+	if !ok {
+		return
+	}
 
 	if err := c.accountSvc.RemoveRole(ctx, accountID, roleID); err != nil {
 		c.logger.Error("Failed to remove role", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to remove role"))
 		return
 	}
 

@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/pquerna/otp/totp"
+	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
+
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
-	"github.com/pquerna/otp/totp"
-	"golang.org/x/crypto/bcrypt"
-	"go.uber.org/zap"
 )
 
 const (
@@ -22,7 +24,7 @@ const (
 
 // TOTPEnrollment TOTP 注册结果
 type TOTPEnrollment struct {
-	Secret    string `json:"secret"`
+	Secret     string `json:"secret"`
 	OTPAuthURL string `json:"otpauth_url"`
 }
 
@@ -120,14 +122,14 @@ func (s *MFAService) EnrollTOTP(ctx context.Context, accountID string) (*TOTPEnr
 
 	// 存储为未验证的 credential
 	cred := &accountDomain.Credential{
-		ID:        newUUID(),
-		AccountID: accountID,
-		Type:      accountDomain.CredentialTypeTOTP,
+		ID:         uuid.New().String(),
+		AccountID:  accountID,
+		Type:       accountDomain.CredentialTypeTOTP,
 		Identifier: &accountID,
-		Value:     key.Secret(),
-		Verified:  false,
-		Metadata:  map[string]any{},
-		CreatedAt: time.Now(),
+		Value:      key.Secret(),
+		Verified:   false,
+		Metadata:   map[string]any{},
+		CreatedAt:  time.Now(),
 	}
 
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
@@ -252,7 +254,7 @@ func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) 
 
 		codes = append(codes, code)
 		creds = append(creds, &accountDomain.Credential{
-			ID:         newUUID(),
+			ID:         uuid.New().String(),
 			AccountID:  accountID,
 			Type:       accountDomain.CredentialTypeBackupCode,
 			Identifier: &accountID,
@@ -295,6 +297,7 @@ func (s *MFAService) VerifyBackupCode(ctx context.Context, accountID, code strin
 			// 成功，删除该码
 			tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 			if err != nil {
+				s.logger.Warn("Failed to begin tx for backup code deletion", zap.Error(err))
 				return true, nil // 验证通过但删除失败，仍返回 true
 			}
 			_ = s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now())
@@ -338,12 +341,4 @@ func generateRandomCode(length int) string {
 	b := make([]byte, length)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
-}
-
-func newUUID() string {
-	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	b[6] = (b[6] & 0x0f) | 0x40 // version 4
-	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
