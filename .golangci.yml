@@ -92,5 +92,5 @@ issues:
 
 output:
   formats:
-    - format: colored-line-number
+    format: colored-line-number
   sort-results: true
