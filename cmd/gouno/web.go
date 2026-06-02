@@ -105,7 +105,8 @@ func startWebServer(cmd *cobra.Command, args []string) {
 
 	go func() {
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Fatal("listen failed", zap.Error(err))
+			logger.Error("listen failed", zap.Error(err))
+			stop()
 		}
 	}()
 
@@ -139,6 +140,19 @@ func initDatabase(cfg config.GoUnoConfig, logger *zap.Logger) (*sql.DB, error) {
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 	db.SetConnMaxIdleTime(10 * time.Minute)
+
+	if cfg.DatabaseConfig.MaxOpenConns > 0 {
+		db.SetMaxOpenConns(cfg.DatabaseConfig.MaxOpenConns)
+	}
+	if cfg.DatabaseConfig.MaxIdleConns > 0 {
+		db.SetMaxIdleConns(cfg.DatabaseConfig.MaxIdleConns)
+	}
+	if cfg.DatabaseConfig.ConnMaxLifetimeSec > 0 {
+		db.SetConnMaxLifetime(time.Duration(cfg.DatabaseConfig.ConnMaxLifetimeSec) * time.Second)
+	}
+	if cfg.DatabaseConfig.ConnMaxIdleTimeSec > 0 {
+		db.SetConnMaxIdleTime(time.Duration(cfg.DatabaseConfig.ConnMaxIdleTimeSec) * time.Second)
+	}
 
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
@@ -298,7 +312,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		cors.New(corsConfig),
 		middleware.RequestIDMiddleware(),
 		middleware.ZapLoggerMiddleware(logger),
-		middleware.RecoveryMiddleware(),
+		middleware.RecoveryMiddleware(logger),
 		middleware.TimeoutMiddleware(cfg.WebServerConfig.RequestTimeout),
 		middleware.CSRFMiddleware(!cfg.WebServerConfig.Debug,
 			"/api/auth/passkey/login",
@@ -312,7 +326,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		),
 	)
 
-	router.RegisterWebRouter(engine, db, m.authCtrl, m.oauth2Ctrl, m.clientCtrl, m.oidcCtrl, m.adminCtrl, m.tokenSvc, m.passkeyCtrl, redis, cfg.WebServerConfig.RateLimits)
+	router.RegisterWebRouter(engine, db, m.authCtrl, m.oauth2Ctrl, m.clientCtrl, m.oidcCtrl, m.adminCtrl, m.tokenSvc, m.passkeyCtrl, redis, cfg.WebServerConfig.RateLimits, cfg.WebServerConfig.Debug)
 
 	return engine
 }
@@ -337,7 +351,7 @@ func buildCORSConfig(cfg config.GoUnoConfig) cors.Config {
 	if len(cfg.CORSConfig.AllowedHeaders) > 0 {
 		corsConfig.AllowHeaders = cfg.CORSConfig.AllowedHeaders
 	} else {
-		corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
+		corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token"}
 	}
 	return corsConfig
 }

@@ -74,6 +74,10 @@ func init() {
 	migrateCmd.PersistentFlags().StringP("migrations_path", "m", "./db/migrations", "migrations directory path")
 	migrateCmd.PersistentFlags().StringP("schema", "s", "public", "database schema name")
 
+	// Safety flag for destructive operations
+	migrateDownCmd.Flags().Bool("force", false, "required to confirm destructive down migration")
+	migrateDropCmd.Flags().Bool("force", false, "required to confirm database drop")
+
 	// Add subcommands
 	migrateCmd.AddCommand(migrateUpCmd)
 	migrateCmd.AddCommand(migrateDownCmd)
@@ -166,6 +170,11 @@ func runMigrateUp(cmd *cobra.Command, args []string) {
 }
 
 func runMigrateDown(cmd *cobra.Command, args []string) {
+	force, _ := cmd.Flags().GetBool("force")
+	if !force {
+		log.Fatal("Refusing to run destructive migration without --force flag. Use: migrate down --force")
+	}
+
 	m, err := initMigrate(cmd)
 	if err != nil {
 		log.Fatalf("Migration init failed: %v", err)
@@ -189,6 +198,11 @@ func runMigrateDown(cmd *cobra.Command, args []string) {
 }
 
 func runMigrateDrop(cmd *cobra.Command, args []string) {
+	force, _ := cmd.Flags().GetBool("force")
+	if !force {
+		log.Fatal("Refusing to drop database without --force flag. Use: migrate drop --force")
+	}
+
 	m, err := initMigrate(cmd)
 	if err != nil {
 		log.Fatalf("Migration init failed: %v", err)

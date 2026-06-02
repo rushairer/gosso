@@ -143,18 +143,23 @@ func (s *AuthService) updateCredentialLastUsed(ctx context.Context, cred *accoun
 }
 
 // buildTokenClaims fetches roles and permissions for an account and builds token claims.
-func (s *AuthService) buildTokenClaims(ctx context.Context, accountID, sessionID string) *tokenDomain.AccessTokenClaims {
+func (s *AuthService) buildTokenClaims(ctx context.Context, accountID, sessionID string) (*tokenDomain.AccessTokenClaims, error) {
 	roles, err := s.roleRepo.FindRolesByAccountID(ctx, accountID)
 	if err != nil {
-		s.logger.Warn("Failed to fetch roles for token", zap.Error(err), zap.String("account_id", accountID))
-		roles = nil
+		return nil, fmt.Errorf("fetch roles for token: %w", err)
 	}
 
 	var roleNames []string
+	permSet := make(map[string]struct{})
 	var allPermissions []string
 	for _, role := range roles {
 		roleNames = append(roleNames, role.Name)
-		allPermissions = append(allPermissions, role.Permissions...)
+		for _, p := range role.Permissions {
+			if _, exists := permSet[p]; !exists {
+				permSet[p] = struct{}{}
+				allPermissions = append(allPermissions, p)
+			}
+		}
 	}
 
 	return &tokenDomain.AccessTokenClaims{
@@ -162,15 +167,19 @@ func (s *AuthService) buildTokenClaims(ctx context.Context, accountID, sessionID
 		Roles:       roleNames,
 		Permissions: allPermissions,
 		SessionID:   sessionID,
-	}
+	}, nil
 }
 
 // createSessionAndTokens creates a session, generates access and refresh tokens.
 func (s *AuthService) createSessionAndTokens(ctx context.Context, account *accountDomain.Account, ip, userAgent string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error) {
 	now := time.Now()
+	accountID, err := uuid.Parse(account.ID)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("invalid account id: %w", err)
+	}
 	session := &sessionDomain.Session{
 		ID:           uuid.New(),
-		AccountID:    uuid.MustParse(account.ID),
+		AccountID:    accountID,
 		IP:           ip,
 		UserAgent:    userAgent,
 		CreatedAt:    now,
@@ -186,7 +195,10 @@ func (s *AuthService) createSessionAndTokens(ctx context.Context, account *accou
 
 	s.sessionSvc.EnforceSessionLimit(ctx, account.ID)
 
-	claims := s.buildTokenClaims(ctx, account.ID, session.ID.String())
+	claims, err := s.buildTokenClaims(ctx, account.ID, session.ID.String())
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("build token claims: %w", err)
+	}
 
 	accessToken, err := s.tokenSvc.GenerateAccessToken(claims)
 	if err != nil {

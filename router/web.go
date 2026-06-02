@@ -34,12 +34,15 @@ func RegisterWebRouter(
 	passkeyCtrl *authController.PasskeyController,
 	redis *cache.RedisClient,
 	rateLimits config.RateLimitsConfig,
+	debug bool,
 ) {
 	// Health check (no auth, no rate limiting)
 	registerHealthRoutes(server, db, redis)
 
-	// Test routes
-	registerWebTestRouter(server)
+	// Test routes (debug only)
+	if debug {
+		registerWebTestRouter(server)
+	}
 	registerWebIndexRouter(server)
 
 	// Swagger UI
@@ -78,7 +81,10 @@ func RegisterWebRouter(
 		}
 	}
 
-	// OAuth2 protocol routes
+	// OAuth2 protocol routes (with rate limiting for token endpoint)
+	tokenLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute)
+	oauth2 := server.Group("/oauth2")
+	oauth2.Use(tokenLimit)
 	oauth2Ctrl.RegisterRoutes(server, jwtAuth)
 
 	// OIDC routes

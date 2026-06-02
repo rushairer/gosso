@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,8 +34,9 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		}
 	}()
 
-	// 0. Check rate limit for login failures
-	attemptsKey := fmt.Sprintf("login_attempts:%s", req.Username)
+	// 0. Check rate limit for login failures (keyed on IP + normalized username)
+	normalizedUsername := strings.ToLower(req.Username)
+	attemptsKey := fmt.Sprintf("login_attempts:%s:%s", req.IP, normalizedUsername)
 	count, incrErr := s.redis.IncrWithExpiry(ctx, attemptsKey, loginRateLimitWindow)
 	if incrErr != nil {
 		s.logger.Warn("Failed to check login rate limit, proceeding anyway", zap.Error(incrErr))
@@ -65,8 +67,9 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	}
 
 	// 5. Check if MFA is required
-	if result, err := s.handleMFARequirement(ctx, account); result != nil || err != nil {
-		return result, err
+	mfaResult, mfaErr := s.handleMFARequirement(ctx, account)
+	if mfaResult != nil || mfaErr != nil {
+		return mfaResult, mfaErr
 	}
 
 	// 6. Create session and tokens
@@ -89,7 +92,10 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	_ = s.redis.Del(ctx, attemptsKey)
 
 	// 8. Audit log
-	accountUUID := uuid.MustParse(account.ID)
+	accountUUID, err := uuid.Parse(account.ID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid account id: %w", err)
+	}
 	s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, req.Username, &accountUUID,
 		map[string]any{"account_id": account.ID, "session_id": session.ID.String()},
 		map[string]any{"ip": req.IP, "user_agent": req.UserAgent},
@@ -145,11 +151,12 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	s.logger.Info("MFA login successful", zap.String("account_id", account.ID))
 
 	// 5. Audit log
-	accountUUID := uuid.MustParse(account.ID)
-	s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, "", &accountUUID,
-		map[string]any{"account_id": account.ID, "session_id": session.ID.String()},
-		map[string]any{"ip": ip, "user_agent": userAgent},
-	)
+	if accountUUID, parseErr := uuid.Parse(account.ID); parseErr == nil {
+		s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, "", &accountUUID,
+			map[string]any{"account_id": account.ID, "session_id": session.ID.String()},
+			map[string]any{"ip": ip, "user_agent": userAgent},
+		)
+	}
 
 	return &LoginResult{
 		Account:      account,
@@ -205,11 +212,12 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	s.logger.Info("Passkey MFA login successful", zap.String("account_id", account.ID))
 
 	// 5. Audit log
-	accountUUID := uuid.MustParse(account.ID)
-	s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, "", &accountUUID,
-		map[string]any{"account_id": account.ID, "session_id": session.ID.String()},
-		map[string]any{"ip": ip, "user_agent": userAgent},
-	)
+	if accountUUID, parseErr := uuid.Parse(account.ID); parseErr == nil {
+		s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, "", &accountUUID,
+			map[string]any{"account_id": account.ID, "session_id": session.ID.String()},
+			map[string]any{"ip": ip, "user_agent": userAgent},
+		)
+	}
 
 	return &LoginResult{
 		Account:      account,
@@ -258,11 +266,12 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 		zap.String("session_id", session.ID.String()))
 
 	// 5. Audit log
-	accountUUID := uuid.MustParse(account.ID)
-	s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, accountID, &accountUUID,
-		map[string]any{"method": "passkey", "account_id": account.ID, "session_id": session.ID.String()},
-		map[string]any{"ip": ip, "user_agent": userAgent},
-	)
+	if accountUUID, parseErr := uuid.Parse(account.ID); parseErr == nil {
+		s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, accountID, &accountUUID,
+			map[string]any{"method": "passkey", "account_id": account.ID, "session_id": session.ID.String()},
+			map[string]any{"ip": ip, "user_agent": userAgent},
+		)
+	}
 
 	return &LoginResult{
 		Account:      account,
@@ -330,9 +339,12 @@ func (s *AuthService) handleMFARequirement(ctx context.Context, account *account
 	}
 
 	mfaToken, err := s.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
-		RegisteredClaims: jwt.RegisteredClaims{ID: uuid.New().String()},
-		AccountID:        account.ID,
-		Scope:            "mfa",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		},
+		AccountID: account.ID,
+		Scope:     "mfa",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("generate mfa token: %w", err)

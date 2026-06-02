@@ -129,9 +129,10 @@ func (s *AuthCodeService) ValidateCode(ctx context.Context, code, clientID, redi
 		return nil, domain.ErrCodeURIMismatch
 	}
 
-	// PKCE verification
-	if codeVerifier != nil {
-		if !ac.VerifyPKCE(*codeVerifier) {
+	// PKCE verification: if a code_challenge was set during authorization,
+	// the code_verifier MUST be provided and validated (RFC 7636).
+	if ac.CodeChallenge != "" {
+		if codeVerifier == nil || !ac.VerifyPKCE(*codeVerifier) {
 			return nil, domain.ErrPKCEVerificationFailed
 		}
 	}

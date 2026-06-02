@@ -137,12 +137,15 @@ func TestZapLogger_WarnStatus(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestGenerateCSRFToken_Length(t *testing.T) {
-	token := generateCSRFToken()
+	token, err := generateCSRFToken()
+	require.NoError(t, err)
 	require.Len(t, token, 64) // 32 bytes = 64 hex chars
 }
 
 func TestGenerateCSRFToken_Unique(t *testing.T) {
-	t1 := generateCSRFToken()
-	t2 := generateCSRFToken()
+	t1, err := generateCSRFToken()
+	require.NoError(t, err)
+	t2, err := generateCSRFToken()
+	require.NoError(t, err)
 	assert.NotEqual(t, t1, t2)
 }

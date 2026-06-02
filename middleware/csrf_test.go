@@ -53,7 +53,7 @@ func TestCSRF_BearerAuth_Skipped(t *testing.T) {
 }
 
 func TestCSRF_SkipPath_Skipped(t *testing.T) {
-	r := setupCSRFTestRouter(false, "/webhook")
+	r := setupCSRFTestRouter(false, "/webhook/incoming")
 	r.POST("/webhook/incoming", func(c *gin.Context) {
 		c.String(http.StatusOK, "ok")
 	})

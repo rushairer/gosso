@@ -22,10 +22,13 @@ func TimeoutMiddleware(requestTimeout time.Duration) gin.HandlerFunc {
 	)
 }
 
-func RecoveryMiddleware() gin.HandlerFunc {
+func RecoveryMiddleware(logger *zap.Logger) gin.HandlerFunc {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return gin.CustomRecovery(
 		func(ctx *gin.Context, err any) {
-			zap.L().Error("panic recovered",
+			logger.Error("panic recovered",
 				zap.Any("error", err),
 				zap.String("stack", string(debug.Stack())),
 				zap.String("path", ctx.Request.URL.Path),

@@ -41,8 +41,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: `config.Validate()` now checks that `JWTSecret` is non-empty (`config/config.go`).
 - Replace `logger.Fatal` with `logger.Error` for graceful shutdown in web server (`cmd/gouno/web.go`).
 - Remove dead code: redundant `os.Exit(1)` after `log.Fatalf` in `cmd/gouno/root.go`.
+- **Security**: JWT algorithm confusion attack — removed HS256 HMAC fallback, only RSA signing accepted (`internal/token/service/token_service.go`).
+- **Security**: PKCE bypass — fixed condition to check `codeChallenge != ""` instead of `codeVerifier != nil` (`internal/oauth2/service/auth_code_service.go`).
+- **Security**: OAuth2 token endpoint now accepts `application/x-www-form-urlencoded` per RFC 6749 (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Device code Redis Lua script syntax error — added missing `'EX'` keyword (`internal/oauth2/service/device_code_service.go`).
+- **Security**: Device code userCode validation — added length check to prevent index out of bounds (`internal/oauth2/service/device_code_service.go`).
+- **Security**: SQL placeholder misalignment in `ListAccounts` count vs select queries (`internal/account/repository/account_repository.go`).
+- **Security**: Passkey `request.Body` double-read — buffer body before parsing and reset for `FinishLogin` (`internal/auth/service/passkey_service.go`).
+- **Security**: CSRF `rand.Read` error now propagated instead of ignored (`middleware/csrf.go`).
+- **Security**: MFA scope token bypass — tokens with non-empty scope (e.g. MFA tokens) now rejected at general endpoints (`internal/auth/middleware/auth_middleware.go`).
+- **Security**: Login rate limiting key changed to IP+normalized username to prevent cross-account brute force (`internal/auth/service/auth_login.go`).
+- **Security**: MFA token TTL shortened to explicit 5 minutes (`internal/auth/service/auth_login.go`).
+- **Security**: Token blacklist changed to fail-closed — rejects tokens when Redis check fails (`internal/token/service/token_service.go`).
+- **Security**: Tokens without JTI now rejected (`internal/token/service/token_service.go`).
+- **Security**: CSRF token comparison uses `crypto/subtle.ConstantTimeCompare` (`middleware/csrf.go`).
+- **Security**: TOTP secrets encrypted at rest with AES-256-GCM when `totp_encryption_key` is configured (`internal/auth/service/mfa_service.go`).
+- **Security**: `VerifyTOTP` now checks `c.Verified` field before validating code (`internal/auth/service/mfa_service.go`).
+- **Security**: `buildTokenClaims` now returns errors instead of swallowing them; permissions deduplicated (`internal/auth/service/auth_service.go`).
+- **Security**: Password reset attempt counter now incremented and persisted to Redis (`internal/auth/service/password_reset_service.go`).
+- **Security**: Logout now fails on session list error; per-session revocation errors collected (`internal/oidc/service/logout_service.go`).
+- **Security**: OAuth2/OIDC routes now have rate limiting middleware (`router/web.go`).
+- **Security**: `rand.Read` errors now properly handled in `generateClientID`/`generateClientSecret` (`internal/oauth2/service/client_service.go`).
+- **Security**: ID Token duplicate `sub` claim removed — uses only `RegisteredClaims.Subject` (`internal/oidc/service/id_token_service.go`).
+- **Security**: Passkey credential ID uses `base64.RawURLEncoding` instead of raw string conversion (`internal/auth/service/passkey_service.go`).
+- **Security**: `uuid.MustParse` replaced with `uuid.Parse` + error handling throughout auth services.
+- Add `rows.Err()` check after SQL row iteration (`internal/account/repository/account_repository.go`).
+- `DeleteSession` now cleans up account session index (`internal/session/service/session_service.go`).
+- Fix `VerifyCredential` parameter name from `credentialID` to `accountID` (`internal/account/service/account_service.go`).
+- Fix `PasswordResetTokenExpiry` undefined constant — use `PasswordResetTokenTTL` (`internal/auth/service/password_reset_service.go`).
+- Fix `auth_session.go` caller of `buildTokenClaims` to handle returned error (`internal/auth/service/auth_session.go`).
 
 ### Changed
+
+- CSRF skip paths changed from prefix to exact match for security (`middleware/csrf.go`).
+- `RecoveryMiddleware` now accepts injected `*zap.Logger` instead of using `zap.L()` (`middleware/middleware.go`).
+- CORS default headers now include `X-CSRF-Token` (`cmd/gouno/web.go`).
+- Test routes (`/test/alive`) only registered in debug mode (`router/web.go`).
+- Database connection pool settings now configurable via `DatabaseConfig` (`config/config.go`, `cmd/gouno/web.go`).
+- `migrate down` and `migrate drop` now require `--force` flag (`cmd/gouno/migrate.go`).
 
 - Add standalone `RunInTransaction(*sql.DB)` helper; replace 24 manual `BeginTx/defer Rollback/Commit` patterns across 6 service files (`internal/db/transaction.go`).
 - Extract inline magic numbers into named constants: `loginRateLimitWindow`, `loginMaxAttempts`, `MinPasswordLength`, `PasswordResetRevokeTimeout` (`internal/auth/service/auth_login.go`, `password_reset_service.go`, `account_service.go`).

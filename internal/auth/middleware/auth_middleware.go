@@ -34,6 +34,12 @@ func JWTAuthMiddleware(tokenSvc *tokenService.TokenService) gin.HandlerFunc {
 			return
 		}
 
+		// Reject tokens with non-empty scope (e.g. MFA tokens) from accessing general endpoints
+		if claims.Scope != "" {
+			ctx.AbortWithStatusJSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "token scope not allowed"))
+			return
+		}
+
 		ctx.Set(ContextKeyAccountID, claims.AccountID)
 		ctx.Set(ContextKeyClaims, claims)
 		ctx.Next()

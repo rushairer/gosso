@@ -249,21 +249,21 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 
 // TokenRequest is the token exchange request body.
 type TokenRequest struct {
-	GrantType    string `json:"grant_type" binding:"required"`
-	Code         string `json:"code"`
-	RedirectURI  string `json:"redirect_uri"`
-	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
-	CodeVerifier string `json:"code_verifier"`
-	RefreshToken string `json:"refresh_token"`
-	Scope        string `json:"scope"`
-	DeviceCode   string `json:"device_code"`
+	GrantType    string `json:"grant_type" form:"grant_type" binding:"required"`
+	Code         string `json:"code" form:"code"`
+	RedirectURI  string `json:"redirect_uri" form:"redirect_uri"`
+	ClientID     string `json:"client_id" form:"client_id"`
+	ClientSecret string `json:"client_secret" form:"client_secret"`
+	CodeVerifier string `json:"code_verifier" form:"code_verifier"`
+	RefreshToken string `json:"refresh_token" form:"refresh_token"`
+	Scope        string `json:"scope" form:"scope"`
+	DeviceCode   string `json:"device_code" form:"device_code"`
 }
 
 // Token POST /oauth2/token
 func (c *OAuth2Controller) Token(ctx *gin.Context) {
 	var req TokenRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
+	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
 		return
 	}

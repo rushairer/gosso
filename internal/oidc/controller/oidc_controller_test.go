@@ -357,9 +357,8 @@ func setupTestKeyService(t *testing.T) *tokenService.KeyService {
 
 func signIDToken(t *testing.T, keySvc *tokenService.KeyService, issuer string, accountID string, audience []string, expired bool) string {
 	t.Helper()
-	claims := &oidcService.IDTokenClaims{
-		Sub: accountID,
-	}
+	claims := &oidcService.IDTokenClaims{}
+	claims.Subject = accountID
 	claims.Issuer = issuer
 	claims.Audience = audience
 	now := time.Now()

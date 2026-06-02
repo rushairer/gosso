@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
@@ -32,11 +34,12 @@ type TOTPEnrollment struct {
 
 // MFAService multi-factor authentication service
 type MFAService struct {
-	credentialRepo accountRepo.CredentialRepository
-	passkeySvc     *PasskeyService
-	db             *sql.DB
-	issuer         string
-	logger         *zap.Logger
+	credentialRepo    accountRepo.CredentialRepository
+	passkeySvc        *PasskeyService
+	db                *sql.DB
+	issuer            string
+	totpEncryptionKey []byte
+	logger            *zap.Logger
 }
 
 // NewMFAService creates an MFA service instance
@@ -60,6 +63,22 @@ func NewMFAService(
 		svc.passkeySvc = passkeySvc[0]
 	}
 	return svc
+}
+
+// SetTOTPEncryptionKey sets the AES-256 key used to encrypt TOTP secrets at rest.
+func (s *MFAService) SetTOTPEncryptionKey(hexKey string) error {
+	if hexKey == "" {
+		return nil
+	}
+	key, err := hex.DecodeString(hexKey)
+	if err != nil {
+		return fmt.Errorf("invalid TOTP encryption key: %w", err)
+	}
+	if len(key) != 32 {
+		return fmt.Errorf("TOTP encryption key must be 32 bytes (got %d)", len(key))
+	}
+	s.totpEncryptionKey = key
+	return nil
 }
 
 // IsMFAEnabled checks whether the account has TOTP activated or has Passkeys
@@ -122,13 +141,23 @@ func (s *MFAService) EnrollTOTP(ctx context.Context, accountID string) (*TOTPEnr
 	// Delete existing unverified TOTP credentials
 	_ = s.deleteUnverifiedTOTP(ctx, accountID)
 
+	// Encrypt secret for storage (if encryption key is configured)
+	storedSecret := key.Secret()
+	if s.totpEncryptionKey != nil {
+		enc, err := encryptSecret(storedSecret, s.totpEncryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt totp secret: %w", err)
+		}
+		storedSecret = enc
+	}
+
 	// Save as unverified credential
 	cred := &accountDomain.Credential{
 		ID:         uuid.New().String(),
 		AccountID:  accountID,
 		Type:       accountDomain.CredentialTypeTOTP,
 		Identifier: &accountID,
-		Value:      key.Secret(),
+		Value:      storedSecret,
 		Verified:   false,
 		Metadata:   map[string]any{},
 		CreatedAt:  time.Now(),
@@ -155,8 +184,19 @@ func (s *MFAService) VerifyTOTP(ctx context.Context, accountID, code string) (bo
 	}
 
 	for _, c := range creds {
-		if !c.IsDeleted() && totp.Validate(code, c.Value) {
-			return true, nil
+		if !c.IsDeleted() && c.Verified {
+			secret := c.Value
+			if s.totpEncryptionKey != nil {
+				dec, err := decryptSecret(c.Value, s.totpEncryptionKey)
+				if err != nil {
+					s.logger.Warn("Failed to decrypt TOTP secret, skipping", zap.String("cred_id", c.ID), zap.Error(err))
+					continue
+				}
+				secret = dec
+			}
+			if totp.Validate(code, secret) {
+				return true, nil
+			}
 		}
 	}
 
@@ -231,7 +271,10 @@ func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) 
 	var creds []*accountDomain.Credential
 
 	for i := 0; i < backupCodeCount; i++ {
-		code := generateRandomCode(backupCodeLength)
+		code, err := generateRandomCode(backupCodeLength)
+		if err != nil {
+			return nil, fmt.Errorf("generate backup code: %w", err)
+		}
 		hash, err := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
 		if err != nil {
 			return nil, fmt.Errorf("hash backup code: %w", err)
@@ -320,8 +363,54 @@ func (s *MFAService) deleteUnverifiedTOTP(ctx context.Context, accountID string)
 	return nil
 }
 
-func generateRandomCode(length int) string {
+func generateRandomCode(length int) (string, error) {
 	b := make([]byte, length)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate random code: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// encryptSecret encrypts a plaintext secret using AES-256-GCM.
+// Returns hex-encoded nonce + ciphertext.
+func encryptSecret(plaintext string, key []byte) (string, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+	ciphertext := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+	return hex.EncodeToString(ciphertext), nil
+}
+
+// decryptSecret decrypts a hex-encoded nonce+ciphertext using AES-256-GCM.
+func decryptSecret(encoded string, key []byte) (string, error) {
+	data, err := hex.DecodeString(encoded)
+	if err != nil {
+		return "", fmt.Errorf("decode hex: %w", err)
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	nonceSize := gcm.NonceSize()
+	if len(data) < nonceSize {
+		return "", fmt.Errorf("ciphertext too short")
+	}
+	plaintext, err := gcm.Open(nil, data[:nonceSize], data[nonceSize:], nil)
+	if err != nil {
+		return "", err
+	}
+	return string(plaintext), nil
 }

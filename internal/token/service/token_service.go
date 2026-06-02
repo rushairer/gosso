@@ -83,7 +83,7 @@ func (s *TokenService) AccessExpiry() time.Duration {
 	return s.accessExpiry
 }
 
-// ValidateAccessToken validates a JWT access token (with blacklist check, supports RS256 + HS256 fallback)
+// ValidateAccessToken validates a JWT access token (with blacklist check, RS256 only)
 func (s *TokenService) ValidateAccessToken(tokenString string) (*domain.AccessTokenClaims, error) {
 	return s.ValidateAccessTokenWithContext(context.Background(), tokenString)
 }
@@ -91,17 +91,10 @@ func (s *TokenService) ValidateAccessToken(tokenString string) (*domain.AccessTo
 // ValidateAccessTokenWithContext validates a JWT access token using the request context
 func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*domain.AccessTokenClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &domain.AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
-		switch token.Method.(type) {
-		case *jwt.SigningMethodRSA:
-			return s.keySvc.PublicKey(), nil
-		case *jwt.SigningMethodHMAC:
-			if len(s.secret) > 0 {
-				return s.secret, nil
-			}
-			return nil, fmt.Errorf("HS256 secret not configured for fallback validation")
-		default:
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
+		return s.keySvc.PublicKey(), nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parse access token: %w", err)
@@ -112,15 +105,17 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 		return nil, ErrInvalidToken
 	}
 
-	// Blacklist check
-	if claims.ID != "" {
-		revoked, err := s.blacklist.IsTokenRevoked(ctx, claims.ID)
-		if err != nil {
-			s.logger.Warn("Failed to check token blacklist", zap.Error(err), zap.String("jti", claims.ID))
-		}
-		if revoked {
-			return nil, ErrTokenRevoked
-		}
+	// Blacklist check — require JTI for all access tokens
+	if claims.ID == "" {
+		return nil, ErrInvalidToken
+	}
+	revoked, err := s.blacklist.IsTokenRevoked(ctx, claims.ID)
+	if err != nil {
+		s.logger.Error("Failed to check token blacklist, rejecting token", zap.Error(err), zap.String("jti", claims.ID))
+		return nil, ErrInvalidToken
+	}
+	if revoked {
+		return nil, ErrTokenRevoked
 	}
 
 	return claims, nil

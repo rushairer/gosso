@@ -127,6 +127,9 @@ func (s *DeviceCodeService) GetDeviceCode(ctx context.Context, deviceCode string
 // GetDeviceCodeByUserCode resolves a user code to its device code.
 func (s *DeviceCodeService) GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*domain.DeviceCode, error) {
 	normalized := strings.ToUpper(strings.ReplaceAll(userCode, "-", ""))
+	if len(normalized) < 4 {
+		return nil, domain.ErrDeviceCodeNotFound
+	}
 	formatted := normalized[:4] + "-" + normalized[4:]
 
 	ucKey := UserCodeKeyPrefix + formatted
@@ -207,7 +210,7 @@ if dc.status ~= "authorized" then
 end
 dc.status = "used"
 local updated = cjson.encode(dc)
-redis.call('SET', KEYS[1], updated, ARGV[1])
+redis.call('SET', KEYS[1], updated, 'EX', ARGV[1])
 return data
 `)
 

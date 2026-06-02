@@ -145,12 +145,21 @@ func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Sess
 	return nil
 }
 
-// DeleteSession deletes a session.
+// DeleteSession deletes a session and removes it from the account session index.
 func (s *SessionService) DeleteSession(ctx context.Context, sessionID uuid.UUID) error {
+	// Load session to get accountID for index cleanup
+	session, getErr := s.GetSession(ctx, sessionID)
+
 	key := s.buildSessionKey(sessionID)
 	if err := s.redis.Del(ctx, key); err != nil {
 		s.logger.Error("Failed to delete session", zap.Error(err), zap.String("session_id", sessionID.String()))
 		return fmt.Errorf("delete session: %w", err)
+	}
+
+	// Clean up account session index
+	if getErr == nil && session != nil {
+		indexKey := s.buildAccountSessionsKey(session.AccountID.String())
+		_ = s.redis.SRem(ctx, indexKey, sessionID.String())
 	}
 
 	s.logger.Info("Session deleted", zap.String("session_id", sessionID.String()))

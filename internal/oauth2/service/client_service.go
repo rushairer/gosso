@@ -50,12 +50,18 @@ func NewOAuth2ClientService(db *sql.DB, clientRepo repository.OAuth2ClientReposi
 }
 
 func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *RegisterClientRequest) (*domain.OAuth2Client, string, error) {
-	clientID := generateClientID()
+	clientID, err := generateClientID()
+	if err != nil {
+		return nil, "", fmt.Errorf("generate client id: %w", err)
+	}
 	var secretPlaintext string
 	var secretHash string
 
 	if req.IsConfidential {
-		secretPlaintext = generateClientSecret()
+		secretPlaintext, err = generateClientSecret()
+		if err != nil {
+			return nil, "", fmt.Errorf("generate client secret: %w", err)
+		}
 		hash, err := bcrypt.GenerateFromPassword([]byte(secretPlaintext), bcrypt.DefaultCost)
 		if err != nil {
 			return nil, "", fmt.Errorf("hash client secret: %w", err)
@@ -85,7 +91,7 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 		Metadata:         req.Metadata,
 	}
 
-	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		return s.clientRepo.Create(ctx, tx, client)
 	})
 	if err != nil {
@@ -116,15 +122,19 @@ func (s *oauth2ClientServiceImpl) DeleteClient(ctx context.Context, id string) e
 }
 
 // generateClientID generates a 24-byte client_id (48 hex characters)
-func generateClientID() string {
+func generateClientID() (string, error) {
 	bytes := make([]byte, 24)
-	_, _ = rand.Read(bytes)
-	return hex.EncodeToString(bytes)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("generate random bytes: %w", err)
+	}
+	return hex.EncodeToString(bytes), nil
 }
 
 // generateClientSecret generates a 32-byte client_secret (64 hex characters)
-func generateClientSecret() string {
+func generateClientSecret() (string, error) {
 	bytes := make([]byte, 32)
-	_, _ = rand.Read(bytes)
-	return hex.EncodeToString(bytes)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("generate random bytes: %w", err)
+	}
+	return hex.EncodeToString(bytes), nil
 }

@@ -78,13 +78,15 @@ func (s *LogoutService) LogoutByAccountID(ctx context.Context, accountID string)
 
 	sessions, err := s.sessionSvc.ListSessionsByAccount(ctx, accountID)
 	if err != nil {
-		s.logger.Warn("Failed to list sessions during account logout", zap.String("account_id", accountID), zap.Error(err))
+		return fmt.Errorf("list sessions for account logout: %w", err)
 	}
 
+	var errs []error
 	for _, sess := range sessions {
 		if revokeErr := s.tokenSvc.RevokeAllForSession(ctx, sess.ID.String()); revokeErr != nil {
 			s.logger.Warn("Failed to revoke tokens for session during account logout",
 				zap.String("session_id", sess.ID.String()), zap.Error(revokeErr))
+			errs = append(errs, revokeErr)
 		}
 	}
 

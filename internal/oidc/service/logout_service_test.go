@@ -26,9 +26,8 @@ func setupTestLogoutService(t *testing.T) (*LogoutService, *tokenService.KeyServ
 
 func signTestIDToken(t *testing.T, keySvc *tokenService.KeyService, issuer string, accountID string, audience []string, expired bool) string {
 	t.Helper()
-	claims := &IDTokenClaims{
-		Sub: accountID,
-	}
+	claims := &IDTokenClaims{}
+	claims.Subject = accountID
 	claims.Issuer = issuer
 	claims.Audience = audience
 	now := time.Now()
@@ -53,7 +52,7 @@ func TestValidateIDTokenHint_Valid(t *testing.T) {
 
 	claims, err := svc.ValidateIDTokenHint(tokenString)
 	require.NoError(t, err)
-	assert.Equal(t, "account-001", claims.Sub)
+	assert.Equal(t, "account-001", claims.Subject)
 	assert.Equal(t, "https://sso.example.com", claims.Issuer)
 	assert.Contains(t, claims.Audience, "client-001")
 }
@@ -65,7 +64,7 @@ func TestValidateIDTokenHint_ExpiredTokenAccepted(t *testing.T) {
 
 	claims, err := svc.ValidateIDTokenHint(tokenString)
 	require.NoError(t, err)
-	assert.Equal(t, "account-001", claims.Sub)
+	assert.Equal(t, "account-001", claims.Subject)
 }
 
 func TestValidateIDTokenHint_EmptyString(t *testing.T) {
@@ -120,9 +119,8 @@ func TestValidateIDTokenHint_WrongAlgorithm(t *testing.T) {
 	svc, _ := setupTestLogoutService(t)
 
 	// Sign with HMAC instead of RSA — this should be rejected
-	claims := &IDTokenClaims{
-		Sub: "account-001",
-	}
+	claims := &IDTokenClaims{}
+	claims.Subject = "account-001"
 	claims.Issuer = "https://sso.example.com"
 	claims.Audience = []string{"client-001"}
 	claims.IssuedAt = jwt.NewNumericDate(time.Now())

@@ -234,9 +234,9 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 
 	// Build conditions
 	where := "deleted_at IS NULL"
-	args := []interface{}{}
+	var args []interface{}
 	if status != "" {
-		where += " AND status = $3"
+		where += " AND status = $1"
 		args = append(args, status)
 	}
 
@@ -251,27 +251,24 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 		return []*domain.Account{}, 0, nil
 	}
 
-	// Select
-	var selectQuery string
+	// Select — build select query with $1=LIMIT, $2=OFFSET, $3+=WHERE params
+	var selectArgs []interface{}
+	var selectWhere string
 	if status != "" {
-		selectQuery = fmt.Sprintf(`
-			SELECT id, username, display_name, avatar_url, status, locale, timezone, metadata, created_at, updated_at, deleted_at
-			FROM accounts
-			WHERE %s
-			ORDER BY created_at DESC
-			LIMIT $1 OFFSET $2`, where)
-		args = append([]interface{}{pageSize, offset}, args...)
+		selectWhere = "deleted_at IS NULL AND status = $3"
+		selectArgs = []interface{}{pageSize, offset, status}
 	} else {
-		selectQuery = fmt.Sprintf(`
+		selectWhere = "deleted_at IS NULL"
+		selectArgs = []interface{}{pageSize, offset}
+	}
+	selectQuery := fmt.Sprintf(`
 			SELECT id, username, display_name, avatar_url, status, locale, timezone, metadata, created_at, updated_at, deleted_at
 			FROM accounts
 			WHERE %s
 			ORDER BY created_at DESC
-			LIMIT $1 OFFSET $2`, where)
-		args = []interface{}{pageSize, offset}
-	}
+			LIMIT $1 OFFSET $2`, selectWhere)
 
-	rows, err := r.db.QueryContext(ctx, selectQuery, args...)
+	rows, err := r.db.QueryContext(ctx, selectQuery, selectArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query accounts: %w", err)
 	}
@@ -300,6 +297,10 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 			return nil, 0, fmt.Errorf("unmarshal metadata: %w", err)
 		}
 		accounts = append(accounts, account)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate accounts: %w", err)
 	}
 
 	return accounts, total, nil

@@ -2,7 +2,9 @@ package middleware
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -35,10 +37,10 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 			return
 		}
 
-		// Skip specified paths
+		// Skip specified paths (exact match)
 		path := ctx.Request.URL.Path
 		for _, sp := range skipPaths {
-			if strings.HasPrefix(path, sp) {
+			if path == sp {
 				setCSRFCookie(ctx, secure)
 				ctx.Next()
 				return
@@ -57,7 +59,7 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 		}
 
 		header := ctx.GetHeader(csrfHeaderName)
-		if header == "" || header != cookie {
+		if header == "" || subtle.ConstantTimeCompare([]byte(header), []byte(cookie)) != 1 {
 			ctx.JSON(http.StatusForbidden, gin.H{
 				"code":    403,
 				"message": "CSRF token mismatch",
@@ -75,7 +77,13 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 func setCSRFCookie(ctx *gin.Context, secure bool) {
 	cookie, _ := ctx.Cookie(csrfCookieName)
 	if cookie == "" {
-		cookie = generateCSRFToken()
+		var err error
+		cookie, err = generateCSRFToken()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			ctx.Abort()
+			return
+		}
 	}
 
 	http.SetCookie(ctx.Writer, &http.Cookie{
@@ -93,8 +101,10 @@ func setCSRFCookie(ctx *gin.Context, secure bool) {
 }
 
 // generateCSRFToken generates a cryptographically secure random CSRF token.
-func generateCSRFToken() string {
+func generateCSRFToken() (string, error) {
 	b := make([]byte, csrfTokenLen)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate csrf token: %w", err)
+	}
+	return hex.EncodeToString(b), nil
 }

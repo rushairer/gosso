@@ -49,8 +49,12 @@ type DatabaseConfigDriver struct {
 }
 
 type DatabaseConfig struct {
-	Default DatabaseConfigDriverName                          `mapstructure:"default"`
-	Drivers map[DatabaseConfigDriverName]DatabaseConfigDriver `mapstructure:"drivers"`
+	Default            DatabaseConfigDriverName                          `mapstructure:"default"`
+	Drivers            map[DatabaseConfigDriverName]DatabaseConfigDriver `mapstructure:"drivers"`
+	MaxOpenConns       int                                               `mapstructure:"max_open_conns"`
+	MaxIdleConns       int                                               `mapstructure:"max_idle_conns"`
+	ConnMaxLifetimeSec int                                               `mapstructure:"conn_max_lifetime_sec"`
+	ConnMaxIdleTimeSec int                                               `mapstructure:"conn_max_idle_time_sec"`
 }
 
 func (c DatabaseConfig) GetDriver(name DatabaseConfigDriverName) *DatabaseConfigDriver {
@@ -116,6 +120,7 @@ type AuthConfig struct {
 	WebAuthnRPID            string        `mapstructure:"webauthn_rp_id"`
 	WebAuthnRPName          string        `mapstructure:"webauthn_rp_name"`
 	WebAuthnRPOrigin        string        `mapstructure:"webauthn_rp_origin"`
+	TOTPEncryptionKey       string        `mapstructure:"totp_encryption_key"`
 }
 
 type CORSConfig struct {

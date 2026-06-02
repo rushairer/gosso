@@ -277,12 +277,12 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 }
 
 // VerifyCredential verifies a credential.
-func (s *accountServiceImpl) VerifyCredential(ctx context.Context, credentialID string) error {
+func (s *accountServiceImpl) VerifyCredential(ctx context.Context, accountID string) error {
 	// 1. Find credential
-	credentials, err := s.credentialRepo.FindByAccountAndType(ctx, credentialID, domain.CredentialTypeEmail)
+	credentials, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, domain.CredentialTypeEmail)
 	if err != nil || len(credentials) == 0 {
 		// Try phone credential as fallback
-		credentials, err = s.credentialRepo.FindByAccountAndType(ctx, credentialID, domain.CredentialTypePhone)
+		credentials, err = s.credentialRepo.FindByAccountAndType(ctx, accountID, domain.CredentialTypePhone)
 		if err != nil || len(credentials) == 0 {
 			return errors.New("credential not found")
 		}

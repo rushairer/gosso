@@ -28,7 +28,10 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	}
 
 	// 3. Build claims and generate new access token
-	claims := s.buildTokenClaims(ctx, newRefreshToken.AccountID, session.ID.String())
+	claims, err := s.buildTokenClaims(ctx, newRefreshToken.AccountID, session.ID.String())
+	if err != nil {
+		return nil, fmt.Errorf("build token claims: %w", err)
+	}
 
 	accessToken, err := s.tokenSvc.GenerateAccessToken(claims)
 	if err != nil {

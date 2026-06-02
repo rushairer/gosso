@@ -18,7 +18,6 @@ import (
 // IDTokenClaims OIDC ID Token claims
 type IDTokenClaims struct {
 	jwt.RegisteredClaims
-	Sub               string `json:"sub"`
 	Name              string `json:"name,omitempty"`
 	PreferredUsername string `json:"preferred_username,omitempty"`
 	Picture           string `json:"picture,omitempty"`
@@ -77,7 +76,6 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 			IssuedAt:  jwt.NewNumericDate(now),
 			ID:        uuid.New().String(),
 		},
-		Sub:      accountID,
 		Nonce:    nonce,
 		AuthTime: ptrInt64(authTime.Unix()),
 	}

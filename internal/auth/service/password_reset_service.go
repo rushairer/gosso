@@ -177,6 +177,11 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		return errors.New("reset token exhausted, please request a new one")
 	}
 
+	// Increment attempt counter
+	data.Attempts++
+	updatedData, _ := json.Marshal(data)
+	_ = s.redis.Set(ctx, tokenKey, updatedData, PasswordResetTokenTTL)
+
 	// Hash new password
 	hashedPassword, err := accountDomain.HashPassword(newPassword)
 	if err != nil {

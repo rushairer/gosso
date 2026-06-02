@@ -145,7 +145,7 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 			}
 		}
 
-		accountID = claims.Sub
+		accountID = claims.Subject
 		if len(claims.Audience) > 0 {
 			clientID = claims.Audience[0]
 		}

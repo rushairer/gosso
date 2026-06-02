@@ -1,11 +1,14 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -219,14 +222,21 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 		return "", nil, fmt.Errorf("unmarshal session data: %w", err)
 	}
 
+	// Buffer the body so it can be read twice (once for parsing, once by FinishLogin)
+	bodyBytes, err := io.ReadAll(request.Body)
+	if err != nil {
+		return "", nil, fmt.Errorf("read request body: %w", err)
+	}
+	request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
 	// Parse response to get credential ID
-	parsedResponse, err := protocol.ParseCredentialRequestResponseBody(request.Body)
+	parsedResponse, err := protocol.ParseCredentialRequestResponseBody(io.NopCloser(bytes.NewReader(bodyBytes)))
 	if err != nil {
 		return "", nil, fmt.Errorf("parse credential response: %w", err)
 	}
 
 	credID := parsedResponse.RawID
-	cred, err := s.credRepo.FindByCredentialID(ctx, string(credID))
+	cred, err := s.credRepo.FindByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credID))
 	if err != nil {
 		return "", nil, errors.New("credential not found")
 	}
@@ -299,13 +309,20 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, accountID string,
 		return fmt.Errorf("unmarshal session data: %w", err)
 	}
 
-	parsedResponse, err := protocol.ParseCredentialRequestResponseBody(request.Body)
+	// Buffer the body so it can be read twice (once for parsing, once by FinishLogin)
+	bodyBytes, err := io.ReadAll(request.Body)
+	if err != nil {
+		return fmt.Errorf("read request body: %w", err)
+	}
+	request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+	parsedResponse, err := protocol.ParseCredentialRequestResponseBody(io.NopCloser(bytes.NewReader(bodyBytes)))
 	if err != nil {
 		return fmt.Errorf("parse credential response: %w", err)
 	}
 
 	credID := parsedResponse.RawID
-	cred, err := s.credRepo.FindByCredentialID(ctx, string(credID))
+	cred, err := s.credRepo.FindByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credID))
 	if err != nil {
 		return errors.New("credential not found")
 	}

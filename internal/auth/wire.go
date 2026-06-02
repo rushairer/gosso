@@ -65,7 +65,14 @@ func InitializeAuthModule(
 		}
 	}
 
-	authSvc := service.NewAuthService(db, accountSvc, sessionSvc, tokenSvc, credentialRepo, roleRepo, redis, logger, auditor, service.NewMFAService(credentialRepo, db, authConfig.Issuer, logger, passkeySvc), passkeySvc)
+	mfaSvc := service.NewMFAService(credentialRepo, db, authConfig.Issuer, logger, passkeySvc)
+	if authConfig.TOTPEncryptionKey != "" {
+		if err := mfaSvc.SetTOTPEncryptionKey(authConfig.TOTPEncryptionKey); err != nil {
+			logger.Error("Failed to set TOTP encryption key", zap.Error(err))
+		}
+	}
+
+	authSvc := service.NewAuthService(db, accountSvc, sessionSvc, tokenSvc, credentialRepo, roleRepo, redis, logger, auditor, mfaSvc, passkeySvc)
 
 	var socialSvc *service.SocialLoginService
 	if len(providers) > 0 {
