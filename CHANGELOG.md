@@ -99,8 +99,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Add `config/postgresql.conf` — production PostgreSQL configuration.
 - Add `script/postgres/init.sh` — database extension initialization script.
 - Add GitHub Actions CI pipeline (`.github/workflows/ci.yml`) — lint, unit tests, integration tests, build, Docker image.
+- Add OIDC RP-Initiated Logout 1.0 support: `GET/POST /oidc/logout` endpoint with `id_token_hint`, `client_id`, `post_logout_redirect_uri`, and `state` parameters.
+- Add `LogoutService` to OIDC module — validates ID token hints (accepts expired tokens per spec), revokes sessions and refresh tokens by account or session.
+- Add `end_session_endpoint` to OIDC discovery document (`/.well-known/openid-configuration`).
+- Add `post_logout_redirect_uris` column to `oauth2_clients` table (migration `0007`).
+- Add `ValidatePostLogoutRedirectURI` method to `OAuth2Client` domain model.
+- Add unit tests for `ValidateIDTokenHint`: valid, expired, empty, invalid JWT, wrong issuer, no audience, bad signature, wrong algorithm.
+- Add unit tests for OIDC Logout controller: id_token_hint validation, Bearer token fallback, post-logout redirect, client ID mismatch, no session.
 
 ### Changed
+
+- `InitializeAuthModule` now returns `*sessionService.SessionService` as 7th return value.
+- `InitializeOIDCModule` now accepts `*sessionService.SessionService` parameter and returns `*oidcService.LogoutService` as 5th value.
+- `NewOIDCController` now accepts `logoutSvc`, `clientRepo`, `tokenSvc`, and `issuer` parameters for logout support.
+- CSRF middleware now exempts `/oidc/logout` endpoint.
 
 - Translate all Chinese comments, doc-comments, error messages, and log strings to English across the entire codebase (78 files).
 - Normalize sentinel errors to use `errors.New()` instead of static `fmt.Errorf()` across auth, account, and verification services.

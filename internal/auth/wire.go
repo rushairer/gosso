@@ -31,7 +31,7 @@ func InitializeAuthModule(
 	baseURL string,
 	auditor *auditService.Auditor,
 	tokenSvc *tokenService.TokenService,
-) (*service.AuthService, *service.SocialLoginService, *service.VerificationService, *service.PasswordResetService, accountRepo.CredentialRepository, *service.PasskeyService) {
+) (*service.AuthService, *service.SocialLoginService, *service.VerificationService, *service.PasswordResetService, accountRepo.CredentialRepository, *service.PasskeyService, *sessionService.SessionService) {
 	sessionSvc := sessionService.NewSessionService(redis, logger)
 
 	credentialRepo := accountRepo.NewCredentialRepository(db)
@@ -67,5 +67,5 @@ func InitializeAuthModule(
 
 	passwordResetSvc := service.NewPasswordResetService(redis, credentialRepo, emailSvc, sessionSvc, accountSvc, db, baseURL, logger)
 
-	return authSvc, socialSvc, verificationSvc, passwordResetSvc, credentialRepo, passkeySvc
+	return authSvc, socialSvc, verificationSvc, passwordResetSvc, credentialRepo, passkeySvc, sessionSvc
 }

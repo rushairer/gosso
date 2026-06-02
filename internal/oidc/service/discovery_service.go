@@ -2,21 +2,23 @@ package service
 
 // DiscoveryService OIDC Discovery service
 type DiscoveryService struct {
-	issuer           string
-	authEndpoint     string
-	tokenEndpoint    string
-	jwksURI          string
-	userInfoEndpoint string
+	issuer             string
+	authEndpoint       string
+	tokenEndpoint      string
+	jwksURI            string
+	userInfoEndpoint   string
+	endSessionEndpoint string
 }
 
 // NewDiscoveryService creates a new instance of DiscoveryService
 func NewDiscoveryService(issuer string) *DiscoveryService {
 	return &DiscoveryService{
-		issuer:           issuer,
-		authEndpoint:     issuer + "/oauth2/authorize",
-		tokenEndpoint:    issuer + "/oauth2/token",
-		jwksURI:          issuer + "/.well-known/jwks.json",
-		userInfoEndpoint: issuer + "/oidc/userinfo",
+		issuer:             issuer,
+		authEndpoint:       issuer + "/oauth2/authorize",
+		tokenEndpoint:      issuer + "/oauth2/token",
+		jwksURI:            issuer + "/.well-known/jwks.json",
+		userInfoEndpoint:   issuer + "/oidc/userinfo",
+		endSessionEndpoint: issuer + "/oidc/logout",
 	}
 }
 
@@ -28,6 +30,7 @@ func (s *DiscoveryService) GetDiscoveryDocument() map[string]any {
 		"token_endpoint":         s.tokenEndpoint,
 		"jwks_uri":               s.jwksURI,
 		"userinfo_endpoint":      s.userInfoEndpoint,
+		"end_session_endpoint":   s.endSessionEndpoint,
 		"scopes_supported": []string{
 			"openid", "profile", "email", "phone",
 		},

@@ -9,6 +9,7 @@ import (
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
+	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
 
@@ -18,14 +19,16 @@ func InitializeOIDCModule(
 	tokenSvc *tokenService.TokenService,
 	accountSvc accountService.AccountService,
 	authConfig config.AuthConfig,
+	sessionSvc *sessionService.SessionService,
 	logger *zap.Logger,
-) (*oidcService.IDTokenService, *oidcService.DiscoveryService, *oidcService.JWKSService, *oidcService.UserInfoService) {
+) (*oidcService.IDTokenService, *oidcService.DiscoveryService, *oidcService.JWKSService, *oidcService.UserInfoService, *oidcService.LogoutService) {
 	credentialRepo := accountRepo.NewCredentialRepository(db)
 
 	idTokenSvc := oidcService.NewIDTokenService(tokenSvc, authConfig.Issuer, accountSvc, credentialRepo, logger)
 	discoverySvc := oidcService.NewDiscoveryService(authConfig.Issuer)
 	jwksSvc := oidcService.NewJWKSService(tokenSvc.KeyService())
 	userInfoSvc := oidcService.NewUserInfoService(accountSvc, credentialRepo, logger)
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, authConfig.Issuer, logger)
 
-	return idTokenSvc, discoverySvc, jwksSvc, userInfoSvc
+	return idTokenSvc, discoverySvc, jwksSvc, userInfoSvc, logoutSvc
 }

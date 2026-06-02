@@ -39,10 +39,14 @@ func (r *oauth2ClientRepositoryImpl) Create(ctx context.Context, tx *sql.Tx, cli
 			return fmt.Errorf("marshal metadata: %w", err)
 		}
 	}
+	postLogoutURIs, err := json.Marshal(client.PostLogoutRedirectURIs)
+	if err != nil {
+		return fmt.Errorf("marshal post_logout_redirect_uris: %w", err)
+	}
 
 	query := `
-		INSERT INTO oauth2_clients (account_id, client_id, client_secret_hash, name, description, redirect_uris, grant_types, scopes, is_confidential, metadata)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO oauth2_clients (account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at, updated_at`
 
 	err = tx.QueryRowContext(ctx, query,
@@ -52,6 +56,7 @@ func (r *oauth2ClientRepositoryImpl) Create(ctx context.Context, tx *sql.Tx, cli
 		client.Name,
 		client.Description,
 		redirectURIs,
+		postLogoutURIs,
 		grantTypes,
 		scopes,
 		client.IsConfidential,
@@ -67,16 +72,16 @@ func (r *oauth2ClientRepositoryImpl) Create(ctx context.Context, tx *sql.Tx, cli
 
 func (r *oauth2ClientRepositoryImpl) FindByClientID(ctx context.Context, clientID string) (*domain.OAuth2Client, error) {
 	query := `
-		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at
+		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at
 		FROM oauth2_clients
 		WHERE client_id = $1 AND deleted_at IS NULL`
 
 	client := &domain.OAuth2Client{}
-	var redirectURIs, grantTypes, scopes, metadata []byte
+	var redirectURIs, postLogoutURIs, grantTypes, scopes, metadata []byte
 
 	err := r.db.QueryRowContext(ctx, query, clientID).Scan(
 		&client.ID, &client.AccountID, &client.ClientID, &client.ClientSecretHash,
-		&client.Name, &client.Description, &redirectURIs, &grantTypes, &scopes,
+		&client.Name, &client.Description, &redirectURIs, &postLogoutURIs, &grantTypes, &scopes,
 		&client.IsConfidential, &metadata, &client.CreatedAt, &client.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -88,6 +93,9 @@ func (r *oauth2ClientRepositoryImpl) FindByClientID(ctx context.Context, clientI
 
 	if err := json.Unmarshal(redirectURIs, &client.RedirectURIs); err != nil {
 		return nil, fmt.Errorf("unmarshal redirect_uris: %w", err)
+	}
+	if err := json.Unmarshal(postLogoutURIs, &client.PostLogoutRedirectURIs); err != nil {
+		return nil, fmt.Errorf("unmarshal post_logout_redirect_uris: %w", err)
 	}
 	if err := json.Unmarshal(grantTypes, &client.GrantTypes); err != nil {
 		return nil, fmt.Errorf("unmarshal grant_types: %w", err)
@@ -106,7 +114,7 @@ func (r *oauth2ClientRepositoryImpl) FindByClientID(ctx context.Context, clientI
 
 func (r *oauth2ClientRepositoryImpl) FindByAccountID(ctx context.Context, accountID string) ([]*domain.OAuth2Client, error) {
 	query := `
-		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at
+		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at
 		FROM oauth2_clients
 		WHERE account_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC`
@@ -120,11 +128,11 @@ func (r *oauth2ClientRepositoryImpl) FindByAccountID(ctx context.Context, accoun
 	var clients []*domain.OAuth2Client
 	for rows.Next() {
 		client := &domain.OAuth2Client{}
-		var redirectURIs, grantTypes, scopes, metadata []byte
+		var redirectURIs, postLogoutURIs, grantTypes, scopes, metadata []byte
 
 		if err := rows.Scan(
 			&client.ID, &client.AccountID, &client.ClientID, &client.ClientSecretHash,
-			&client.Name, &client.Description, &redirectURIs, &grantTypes, &scopes,
+			&client.Name, &client.Description, &redirectURIs, &postLogoutURIs, &grantTypes, &scopes,
 			&client.IsConfidential, &metadata, &client.CreatedAt, &client.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan oauth2_client: %w", err)
@@ -132,6 +140,9 @@ func (r *oauth2ClientRepositoryImpl) FindByAccountID(ctx context.Context, accoun
 
 		if err := json.Unmarshal(redirectURIs, &client.RedirectURIs); err != nil {
 			return nil, fmt.Errorf("unmarshal redirect_uris: %w", err)
+		}
+		if err := json.Unmarshal(postLogoutURIs, &client.PostLogoutRedirectURIs); err != nil {
+			return nil, fmt.Errorf("unmarshal post_logout_redirect_uris: %w", err)
 		}
 		if err := json.Unmarshal(grantTypes, &client.GrantTypes); err != nil {
 			return nil, fmt.Errorf("unmarshal grant_types: %w", err)
@@ -156,6 +167,10 @@ func (r *oauth2ClientRepositoryImpl) Update(ctx context.Context, tx *sql.Tx, cli
 	if err != nil {
 		return fmt.Errorf("marshal redirect_uris: %w", err)
 	}
+	postLogoutURIs, err := json.Marshal(client.PostLogoutRedirectURIs)
+	if err != nil {
+		return fmt.Errorf("marshal post_logout_redirect_uris: %w", err)
+	}
 	grantTypes, err := json.Marshal(client.GrantTypes)
 	if err != nil {
 		return fmt.Errorf("marshal grant_types: %w", err)
@@ -174,12 +189,12 @@ func (r *oauth2ClientRepositoryImpl) Update(ctx context.Context, tx *sql.Tx, cli
 
 	query := `
 		UPDATE oauth2_clients
-		SET name = $1, description = $2, redirect_uris = $3, grant_types = $4, scopes = $5, metadata = $6, updated_at = NOW()
-		WHERE id = $7 AND deleted_at IS NULL
+		SET name = $1, description = $2, redirect_uris = $3, post_logout_redirect_uris = $4, grant_types = $5, scopes = $6, metadata = $7, updated_at = NOW()
+		WHERE id = $8 AND deleted_at IS NULL
 		RETURNING updated_at`
 
 	err = tx.QueryRowContext(ctx, query,
-		client.Name, client.Description, redirectURIs, grantTypes, scopes, metadata, client.ID,
+		client.Name, client.Description, redirectURIs, postLogoutURIs, grantTypes, scopes, metadata, client.ID,
 	).Scan(&client.UpdatedAt)
 
 	if err == sql.ErrNoRows {

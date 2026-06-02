@@ -77,3 +77,17 @@ func TestGetDiscoveryDocument_DifferentIssuer(t *testing.T) {
 	assert.Equal(t, "http://localhost:8080", doc["issuer"])
 	assert.Equal(t, "http://localhost:8080/oauth2/authorize", doc["authorization_endpoint"])
 }
+
+func TestGetDiscoveryDocument_EndSessionEndpoint(t *testing.T) {
+	svc := NewDiscoveryService("https://sso.example.com")
+	doc := svc.GetDiscoveryDocument()
+
+	assert.Equal(t, "https://sso.example.com/oidc/logout", doc["end_session_endpoint"])
+}
+
+func TestGetDiscoveryDocument_EndSessionEndpoint_Localhost(t *testing.T) {
+	svc := NewDiscoveryService("http://localhost:8080")
+	doc := svc.GetDiscoveryDocument()
+
+	assert.Equal(t, "http://localhost:8080/oidc/logout", doc["end_session_endpoint"])
+}

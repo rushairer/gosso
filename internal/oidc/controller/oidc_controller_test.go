@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -18,8 +19,11 @@ import (
 	"github.com/rushairer/gosso/internal/auth/middleware"
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountService "github.com/rushairer/gosso/internal/account/service"
+	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
+	oauth2Repo "github.com/rushairer/gosso/internal/oauth2/repository"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
 
 // ──────────────────────────────────────────────
@@ -97,6 +101,35 @@ func (m *mockCredentialRepo) SoftDeleteCredential(_ context.Context, _ *sql.Tx, 
 }
 
 // ──────────────────────────────────────────────
+// Mock OAuth2ClientRepository
+// ──────────────────────────────────────────────
+
+type mockClientRepo struct {
+	findByClientIDFn func() (*oauth2Domain.OAuth2Client, error)
+}
+
+func (m *mockClientRepo) Create(_ context.Context, _ *sql.Tx, _ *oauth2Domain.OAuth2Client) error {
+	return nil
+}
+func (m *mockClientRepo) FindByClientID(_ context.Context, _ string) (*oauth2Domain.OAuth2Client, error) {
+	if m.findByClientIDFn != nil {
+		return m.findByClientIDFn()
+	}
+	return nil, oauth2Domain.ErrClientNotFound
+}
+func (m *mockClientRepo) FindByAccountID(_ context.Context, _ string) ([]*oauth2Domain.OAuth2Client, error) {
+	return nil, nil
+}
+func (m *mockClientRepo) Update(_ context.Context, _ *sql.Tx, _ *oauth2Domain.OAuth2Client) error {
+	return nil
+}
+func (m *mockClientRepo) SoftDelete(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+	return nil
+}
+
+var _ oauth2Repo.OAuth2ClientRepository = (*mockClientRepo)(nil)
+
+// ──────────────────────────────────────────────
 // Test helpers
 // ──────────────────────────────────────────────
 
@@ -114,7 +147,7 @@ func setupUserInfoEngine(accountSvc *mockAccountService, credRepo *mockCredentia
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 	userInfoSvc := oidcService.NewUserInfoService(accountSvc, credRepo, nil)
 
-	ctrl := NewOIDCController(discoverySvc, nil, userInfoSvc, zap.NewNop())
+	ctrl := NewOIDCController(discoverySvc, nil, userInfoSvc, nil, nil, nil, "https://sso.example.com", zap.NewNop())
 	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
 
 	return engine
@@ -227,7 +260,7 @@ func TestUserInfo_NoClaims(t *testing.T) {
 
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 	userInfoSvc := oidcService.NewUserInfoService(&mockAccountService{}, &mockCredentialRepo{}, nil)
-	ctrl := NewOIDCController(discoverySvc, nil, userInfoSvc, zap.NewNop())
+	ctrl := NewOIDCController(discoverySvc, nil, userInfoSvc, nil, nil, nil, "https://sso.example.com", zap.NewNop())
 	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
 
 	req := httptest.NewRequest(http.MethodGet, "/oidc/userinfo", nil)
@@ -309,4 +342,382 @@ func TestUserInfo_PhoneScope(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, "+8613800138000", resp["phone_number"])
 	assert.Equal(t, false, resp["phone_number_verified"])
+}
+
+// ──────────────────────────────────────────────
+// Logout Test Helpers
+// ──────────────────────────────────────────────
+
+func setupTestKeyService(t *testing.T) *tokenService.KeyService {
+	t.Helper()
+	keySvc, err := tokenService.NewKeyService("", "", zap.NewNop())
+	require.NoError(t, err)
+	return keySvc
+}
+
+func signIDToken(t *testing.T, keySvc *tokenService.KeyService, issuer string, accountID string, audience []string, expired bool) string {
+	t.Helper()
+	claims := &oidcService.IDTokenClaims{
+		Sub: accountID,
+	}
+	claims.Issuer = issuer
+	claims.Audience = audience
+	now := time.Now()
+	claims.IssuedAt = jwt.NewNumericDate(now)
+	if expired {
+		claims.ExpiresAt = jwt.NewNumericDate(now.Add(-1 * time.Hour))
+	} else {
+		claims.ExpiresAt = jwt.NewNumericDate(now.Add(1 * time.Hour))
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	token.Header["kid"] = keySvc.KeyID()
+	tokenString, err := token.SignedString(keySvc.PrivateKey())
+	require.NoError(t, err)
+	return tokenString
+}
+
+func signAccessToken(t *testing.T, keySvc *tokenService.KeyService, issuer, accountID, sessionID string) string {
+	t.Helper()
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: accountID,
+		SessionID: sessionID,
+	}
+	claims.Issuer = issuer
+	claims.IssuedAt = jwt.NewNumericDate(time.Now())
+	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(15 * time.Minute))
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	token.Header["kid"] = keySvc.KeyID()
+	tokenString, err := token.SignedString(keySvc.PrivateKey())
+	require.NoError(t, err)
+	return tokenString
+}
+
+func setupLogoutEngine(t *testing.T, clientRepo *mockClientRepo) (*gin.Engine, *tokenService.KeyService) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	keySvc := setupTestKeyService(t)
+	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
+
+	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, clientRepo, tokenSvc, "https://sso.example.com", zap.NewNop())
+
+	engine := gin.New()
+	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+
+	return engine, keySvc
+}
+
+// ──────────────────────────────────────────────
+// Logout Tests — id_token_hint path
+// ──────────────────────────────────────────────
+
+func TestLogout_InvalidIDTokenHint(t *testing.T) {
+	engine, _ := setupLogoutEngine(t, &mockClientRepo{})
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint=not-a-jwt", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestLogout_ExpiredIDTokenHint(t *testing.T) {
+	// Expired tokens SHOULD be accepted per OIDC RP-Initiated Logout spec.
+	// This is validated at the service layer (TestValidateIDTokenHint_ExpiredTokenAccepted).
+	// At the controller layer, the accepted token triggers LogoutByAccountID which
+	// requires a session service — tested in integration tests.
+	keySvc := setupTestKeyService(t)
+	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, "https://sso.example.com", zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+
+	expiredToken := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, true)
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+expiredToken, nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	// Token is accepted by ValidateIDTokenHint (expired OK per spec).
+	// LogoutByAccountID fails gracefully (no session service).
+	// Controller returns 200 "logged_out" since loggedOut is set true.
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "logged_out", resp["status"])
+}
+
+func TestLogout_IDTokenHint_WrongIssuer(t *testing.T) {
+	// Sign with a different issuer
+	keySvc := setupTestKeyService(t)
+	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://other-issuer.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
+
+	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, nil, tokenSvc, "https://sso.example.com", zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+
+	// Token signed by same key but issuer in claims differs from server's issuer
+	token := signIDToken(t, keySvc, "https://other-issuer.com", "account-001", []string{"client-001"}, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+token, nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestLogout_IDTokenHint_NoAudience(t *testing.T) {
+	keySvc := setupTestKeyService(t)
+	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
+
+	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, nil, tokenSvc, "https://sso.example.com", zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+
+	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", nil, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+token, nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestLogout_IDTokenHint_WrongSignature(t *testing.T) {
+	keySvc := setupTestKeyService(t)
+	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+
+	// Sign with a DIFFERENT key service
+	otherKeySvc, err := tokenService.NewKeyService("", "", zap.NewNop())
+	require.NoError(t, err)
+
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, "https://sso.example.com", zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+
+	token := signIDToken(t, otherKeySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+token, nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// ──────────────────────────────────────────────
+// Logout Tests — Bearer token fallback
+// ──────────────────────────────────────────────
+
+func TestLogout_BearerToken_InvalidSignature(t *testing.T) {
+	keySvc := setupTestKeyService(t)
+	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+
+	otherKeySvc, err := tokenService.NewKeyService("", "", zap.NewNop())
+	require.NoError(t, err)
+
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, "https://sso.example.com", zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+
+	// Access token signed with a different key
+	token := signAccessToken(t, otherKeySvc, "https://sso.example.com", "account-001", "session-001")
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	// Token validation fails, no session → "no_session"
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "no_session", resp["status"])
+}
+
+// ──────────────────────────────────────────────
+// Logout Tests — post_logout_redirect_uri
+// ──────────────────────────────────────────────
+
+func TestLogout_PostLogoutRedirect_InvalidURI(t *testing.T) {
+	keySvc := setupTestKeyService(t)
+	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
+
+	clientRepo := &mockClientRepo{
+		findByClientIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return &oauth2Domain.OAuth2Client{
+				ClientID:               "client-001",
+				PostLogoutRedirectURIs: []string{"https://app.example.com/logout"},
+			}, nil
+		},
+	}
+
+	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, clientRepo, tokenSvc, "https://sso.example.com", zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+
+	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
+
+	// Request with a redirect URI NOT in the client's registered list
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+token+"&client_id=client-001&post_logout_redirect_uri=https://evil.com/redirect", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestLogout_PostLogoutRedirect_ValidURI(t *testing.T) {
+	keySvc := setupTestKeyService(t)
+	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
+
+	clientRepo := &mockClientRepo{
+		findByClientIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return &oauth2Domain.OAuth2Client{
+				ClientID:               "client-001",
+				PostLogoutRedirectURIs: []string{"https://app.example.com/logout"},
+			}, nil
+		},
+	}
+
+	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, clientRepo, tokenSvc, "https://sso.example.com", zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+
+	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+token+"&client_id=client-001&post_logout_redirect_uri=https://app.example.com/logout&state=test-state", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusFound, w.Code)
+	location := w.Header().Get("Location")
+	assert.Contains(t, location, "https://app.example.com/logout")
+	assert.Contains(t, location, "state=test-state")
+}
+
+func TestLogout_PostLogoutRedirect_ClientNotFound(t *testing.T) {
+	keySvc := setupTestKeyService(t)
+	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+
+	clientRepo := &mockClientRepo{
+		findByClientIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return nil, oauth2Domain.ErrClientNotFound
+		},
+	}
+
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, clientRepo, tokenSvc, "https://sso.example.com", zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+
+	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+token+"&client_id=client-001&post_logout_redirect_uri=https://app.example.com/logout", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	// Client lookup fails → falls through to default response
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// ──────────────────────────────────────────────
+// Logout Tests — client_id mismatch with id_token_hint
+// ──────────────────────────────────────────────
+
+func TestLogout_ClientIDMismatch(t *testing.T) {
+	keySvc := setupTestKeyService(t)
+	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, "https://sso.example.com", zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+
+	// Token has audience ["client-001"], but request claims client_id=client-999
+	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+token+"&client_id=client-999", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// ──────────────────────────────────────────────
+// Logout Tests — no session
+// ──────────────────────────────────────────────
+
+func TestLogout_NoSession(t *testing.T) {
+	engine, _ := setupLogoutEngine(t, &mockClientRepo{})
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "no_session", resp["status"])
+}
+
+// ──────────────────────────────────────────────
+// Logout Tests — Discovery includes end_session_endpoint
+// ──────────────────────────────────────────────
+
+func TestDiscovery_EndSessionEndpoint(t *testing.T) {
+	engine, _ := setupLogoutEngine(t, &mockClientRepo{})
+
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/openid-configuration", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "https://sso.example.com/oidc/logout", resp["end_session_endpoint"])
 }

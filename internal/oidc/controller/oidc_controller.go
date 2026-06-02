@@ -9,8 +9,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/auth/middleware"
+	oauth2Repo "github.com/rushairer/gosso/internal/oauth2/repository"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
 
 // OIDCController OIDC protocol controller
@@ -18,6 +20,10 @@ type OIDCController struct {
 	discoverySvc *oidcService.DiscoveryService
 	jwksSvc      *oidcService.JWKSService
 	userInfoSvc  *oidcService.UserInfoService
+	logoutSvc    *oidcService.LogoutService
+	clientRepo   oauth2Repo.OAuth2ClientRepository
+	tokenSvc     *tokenService.TokenService
+	issuer       string
 	logger       *zap.Logger
 }
 
@@ -26,12 +32,20 @@ func NewOIDCController(
 	discoverySvc *oidcService.DiscoveryService,
 	jwksSvc *oidcService.JWKSService,
 	userInfoSvc *oidcService.UserInfoService,
+	logoutSvc *oidcService.LogoutService,
+	clientRepo oauth2Repo.OAuth2ClientRepository,
+	tokenSvc *tokenService.TokenService,
+	issuer string,
 	logger *zap.Logger,
 ) *OIDCController {
 	return &OIDCController{
 		discoverySvc: discoverySvc,
 		jwksSvc:      jwksSvc,
 		userInfoSvc:  userInfoSvc,
+		logoutSvc:    logoutSvc,
+		clientRepo:   clientRepo,
+		tokenSvc:     tokenSvc,
+		issuer:       issuer,
 		logger:       logger,
 	}
 }
@@ -42,6 +56,8 @@ func (c *OIDCController) RegisterRoutes(server *gin.Engine, authMiddleware gin.H
 	server.GET("/.well-known/jwks.json", c.JWKS)
 	server.GET("/oidc/userinfo", authMiddleware, c.UserInfo)
 	server.POST("/oidc/userinfo", authMiddleware, c.UserInfo)
+	server.GET("/oidc/logout", c.Logout)
+	server.POST("/oidc/logout", c.Logout)
 }
 
 // Discovery GET /.well-known/openid-configuration
@@ -82,4 +98,109 @@ func (c *OIDCController) UserInfo(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, info)
+}
+
+// logoutRequest holds the parameters for OIDC RP-Initiated Logout.
+type logoutRequest struct {
+	IDTokenHint           string `form:"id_token_hint"`
+	ClientID              string `form:"client_id"`
+	PostLogoutRedirectURI string `form:"post_logout_redirect_uri"`
+	State                 string `form:"state"`
+}
+
+// Logout handles GET/POST /oidc/logout per OpenID Connect RP-Initiated Logout 1.0.
+func (c *OIDCController) Logout(ctx *gin.Context) {
+	var req logoutRequest
+	if err := ctx.ShouldBind(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request"))
+		return
+	}
+
+	var accountID string
+	var clientID string
+	loggedOut := false
+
+	// 1. Try id_token_hint first
+	if req.IDTokenHint != "" {
+		claims, err := c.logoutSvc.ValidateIDTokenHint(req.IDTokenHint)
+		if err != nil {
+			c.logger.Debug("id_token_hint validation failed", zap.Error(err))
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid id_token_hint"))
+			return
+		}
+
+		// If client_id is provided, verify it matches the ID token audience
+		if req.ClientID != "" {
+			audMatch := false
+			for _, aud := range claims.Audience {
+				if aud == req.ClientID {
+					audMatch = true
+					break
+				}
+			}
+			if !audMatch {
+				ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "client_id does not match id_token_hint audience"))
+				return
+			}
+		}
+
+		accountID = claims.Sub
+		if len(claims.Audience) > 0 {
+			clientID = claims.Audience[0]
+		}
+		if req.ClientID != "" {
+			clientID = req.ClientID
+		}
+
+		if err := c.logoutSvc.LogoutByAccountID(ctx, accountID); err != nil {
+			c.logger.Error("Logout by account ID failed", zap.String("account_id", accountID), zap.Error(err))
+		}
+		loggedOut = true
+	}
+
+	// 2. Fallback: try Bearer token
+	if !loggedOut {
+		authHeader := ctx.GetHeader("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+			tokenClaims, err := c.tokenSvc.ValidateAccessToken(tokenString)
+			if err == nil && tokenClaims != nil {
+				accountID = tokenClaims.AccountID
+				clientID = tokenClaims.ClientID
+				if err := c.logoutSvc.LogoutBySessionID(ctx, tokenClaims.AccountID, tokenClaims.SessionID); err != nil {
+					c.logger.Error("Logout by session ID failed", zap.String("session_id", tokenClaims.SessionID), zap.Error(err))
+				}
+				loggedOut = true
+			}
+		}
+	}
+
+	// 3. Post-logout redirect
+	if req.PostLogoutRedirectURI != "" && clientID != "" {
+		client, err := c.clientRepo.FindByClientID(ctx, clientID)
+		if err != nil {
+			c.logger.Debug("Client lookup failed for post-logout redirect", zap.String("client_id", clientID), zap.Error(err))
+		} else if client.ValidatePostLogoutRedirectURI(req.PostLogoutRedirectURI) {
+			redirectURI := req.PostLogoutRedirectURI
+			if req.State != "" {
+				separator := "?"
+				if strings.Contains(redirectURI, "?") {
+					separator = "&"
+				}
+				redirectURI = redirectURI + separator + "state=" + req.State
+			}
+			ctx.Redirect(http.StatusFound, redirectURI)
+			return
+		} else {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid post_logout_redirect_uri"))
+			return
+		}
+	}
+
+	// 4. Default response
+	if loggedOut {
+		ctx.JSON(http.StatusOK, gin.H{"status": "logged_out"})
+	} else {
+		ctx.JSON(http.StatusOK, gin.H{"status": "no_session"})
+	}
 }
