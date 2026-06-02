@@ -133,6 +133,9 @@ func TestLoginAndRefresh(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// JWT iat has second-precision; ensure a new token is generated
+	time.Sleep(1100 * time.Millisecond)
+
 	refreshResult, err := authSvc.RefreshTokens(ctx, loginResult.RefreshToken)
 	require.NoError(t, err)
 	assert.NotEmpty(t, refreshResult.AccessToken)
