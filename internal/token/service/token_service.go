@@ -277,6 +277,14 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 	return nil
 }
 
+// RevokeAccessToken blacklists an access token by its JTI so it can no longer be used.
+func (s *TokenService) RevokeAccessToken(ctx context.Context, jti string, expiresAt time.Time) error {
+	if s.blacklist == nil {
+		return nil
+	}
+	return s.blacklist.RevokeToken(ctx, jti, "logout", expiresAt)
+}
+
 func (s *TokenService) buildRefreshTokenKey(token string) string {
 	return fmt.Sprintf("%s%s", RefreshTokenKeyPrefix, domain.HashToken(token))
 }

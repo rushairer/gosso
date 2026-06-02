@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/cache"
@@ -191,6 +192,50 @@ func (s *DeviceCodeService) MarkUsed(ctx context.Context, deviceCode string) err
 	dc.Status = domain.DeviceCodeStatusUsed
 
 	return s.save(ctx, dc)
+}
+
+// claimAuthorizedScript atomically reads a device code and changes its status from "authorized" to "used".
+// Returns the JSON data if the transition succeeded, or nil if the status was not "authorized".
+var claimAuthorizedScript = redis.NewScript(`
+local data = redis.call('GET', KEYS[1])
+if not data then
+    return nil
+end
+local dc = cjson.decode(data)
+if dc.status ~= "authorized" then
+    return nil
+end
+dc.status = "used"
+local updated = cjson.encode(dc)
+redis.call('SET', KEYS[1], updated, ARGV[1])
+return data
+`)
+
+// ClaimAuthorizedDeviceCode atomically validates that a device code is authorized and marks it as used.
+// Returns the device code data if the claim succeeded, or an error if the code is not in authorized state.
+// This prevents double-use race conditions.
+func (s *DeviceCodeService) ClaimAuthorizedDeviceCode(ctx context.Context, deviceCode string) (*domain.DeviceCode, error) {
+	key := DeviceCodeKeyPrefix + deviceCode
+
+	result, err := claimAuthorizedScript.Run(ctx, s.redis.GetClient(), []string{key}, "60").Result()
+	if err == redis.Nil || result == nil {
+		return nil, domain.ErrDeviceCodeNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("claim device code: %w", err)
+	}
+
+	dataStr, ok := result.(string)
+	if !ok {
+		return nil, fmt.Errorf("unexpected device code data type")
+	}
+
+	var dc domain.DeviceCode
+	if err := json.Unmarshal([]byte(dataStr), &dc); err != nil {
+		return nil, fmt.Errorf("unmarshal device code: %w", err)
+	}
+
+	return &dc, nil
 }
 
 func (s *DeviceCodeService) save(ctx context.Context, dc *domain.DeviceCode) error {

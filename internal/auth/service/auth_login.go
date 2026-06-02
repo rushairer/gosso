@@ -285,18 +285,29 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 		s.logger.Warn("Failed to revoke session during logout", zap.Error(err))
 	}
 
-	// 2. Revoke Access Token (add to blacklist)
+	// 2. Revoke refresh tokens for this session
 	if accessTokenJTI != "" {
 		if err := s.tokenSvc.RevokeAllForSession(ctx, sessionID); err != nil {
 			s.logger.Warn("Failed to revoke refresh tokens", zap.Error(err))
 		}
 	}
 
-	// 3. Audit log
+	// 3. Blacklist the access token so it cannot be used after logout
+	if accessTokenJTI != "" {
+		if err := s.tokenSvc.RevokeAccessToken(ctx, accessTokenJTI, tokenExpiresAt); err != nil {
+			s.logger.Warn("Failed to blacklist access token", zap.Error(err))
+		}
+	}
+
+	// 4. Audit log
 	var acctID *uuid.UUID
 	if accountID != "" {
-		id := uuid.MustParse(accountID)
-		acctID = &id
+		id, err := uuid.Parse(accountID)
+		if err != nil {
+			s.logger.Warn("Invalid account ID in logout", zap.String("account_id", accountID), zap.Error(err))
+		} else {
+			acctID = &id
+		}
 	}
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionLogout,

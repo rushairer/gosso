@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Security**: Access token is now blacklisted on logout via `BlacklistService.RevokeToken`, preventing post-logout token reuse (`internal/auth/service/auth_login.go`, `internal/token/service/token_service.go`).
+- **Security**: Authorization code validation is now atomic via Redis Lua script — prevents TOCTOU double-use race condition (`internal/oauth2/service/auth_code_service.go`).
+- **Security**: Consent auto-approval now intersects requested scopes with consented scopes — prevents silent scope escalation (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: OIDC post-logout `state` parameter is now properly URL-encoded using `url.Values` (`internal/oidc/controller/oidc_controller.go`).
+- **Security**: Device code token exchange now authenticates confidential clients via `client_secret` (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Device code token exchange uses atomic Redis Lua script to claim authorized codes — prevents double-use race condition (`internal/oauth2/service/device_code_service.go`).
+- **Security**: Refresh token grant now validates `client_id` binding — rejects tokens used by a different client (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: `Logout` uses `uuid.Parse` instead of `uuid.MustParse` to prevent panic on malformed account IDs (`internal/auth/service/auth_login.go`).
 - **Security**: Login rate limiter now logs Redis errors instead of silently proceeding on failure (`internal/auth/service/auth_login.go`).
 - **Security**: MFA tokens now include a unique JTI (UUID) so they can be individually revoked (`internal/auth/service/auth_login.go`).
 - **Security**: OAuth2 redirect URL parameters are now properly URL-encoded using `url.Values` (`internal/oauth2/controller/oauth2_controller.go`).

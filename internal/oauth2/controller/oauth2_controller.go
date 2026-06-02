@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -40,6 +41,7 @@ type DeviceCodeManager interface {
 	DenyDeviceCode(ctx context.Context, deviceCode string) error
 	CheckAndUpdatePollRate(ctx context.Context, deviceCode string) error
 	MarkUsed(ctx context.Context, deviceCode string) error
+	ClaimAuthorizedDeviceCode(ctx context.Context, deviceCode string) (*oauth2Domain.DeviceCode, error)
 }
 
 //go:embed template/consent.html
@@ -150,7 +152,21 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 
 	existingConsent, _ := c.consentSvc.GetConsent(ctx, accountIDStr, clientID)
 	if existingConsent != nil {
-		code, err := c.authCodeSvc.GenerateCode(ctx, clientID, accountIDStr, redirectURI, splitScope(scope), codeChallenge, codeChallengeMethod, nonce)
+		// Only grant scopes the user previously consented to
+		requestedScopes := splitScope(scope)
+		allowedScopes := intersectScopes(requestedScopes, existingConsent.Scopes)
+		if len(allowedScopes) == 0 {
+			// No overlap — require re-consent
+			ctx.Header("Content-Type", "text/html; charset=utf-8")
+			_ = c.consentTmpl.Execute(ctx.Writer, gin.H{
+				"ClientName": client.Name, "ClientID": clientID,
+				"Scopes": requestedScopes, "Scope": scope, "State": state,
+				"RedirectURI": redirectURI, "CodeChallenge": codeChallenge,
+				"CodeChallengeMethod": codeChallengeMethod, "Nonce": nonce,
+			})
+			return
+		}
+		code, err := c.authCodeSvc.GenerateCode(ctx, clientID, accountIDStr, redirectURI, allowedScopes, codeChallenge, codeChallengeMethod, nonce)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
@@ -347,6 +363,12 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 	newRefreshToken, err := c.tokenSvc.RotateRefreshToken(ctx, req.RefreshToken)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "invalid refresh token"})
+		return
+	}
+
+	// Verify client binding: if client_id is provided, it must match the token's client
+	if req.ClientID != "" && req.ClientID != newRefreshToken.ClientID {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "client_id mismatch"})
 		return
 	}
 
@@ -632,6 +654,18 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		return
 	}
 
+	// Client authentication for confidential clients
+	if client.IsConfidential {
+		if req.ClientSecret == "" {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client_secret required"})
+			return
+		}
+		if err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecretHash), []byte(req.ClientSecret)); err != nil {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "invalid client_secret"})
+			return
+		}
+	}
+
 	dc, err := c.deviceCodeSvc.GetDeviceCode(ctx, req.DeviceCode)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "device code not found"})
@@ -661,7 +695,16 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		return
 	}
 
-	// Status is authorized — issue tokens
+	// Atomically claim the device code (status authorized→used) to prevent double-use
+	claimedDC, err := c.deviceCodeSvc.ClaimAuthorizedDeviceCode(ctx, req.DeviceCode)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "device code already consumed"})
+		return
+	}
+
+	// Use claimedDC for token issuance
+	dc = claimedDC
+
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		AccountID: dc.AccountID,
 		Scope:     strings.Join(dc.Scopes, " "),
@@ -686,10 +729,6 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 				break
 			}
 		}
-	}
-
-	if err := c.deviceCodeSvc.MarkUsed(ctx, req.DeviceCode); err != nil {
-		c.logger.Warn("Failed to mark device code as used", zap.Error(err))
 	}
 
 	response := gin.H{
@@ -722,6 +761,17 @@ func splitScope(scope string) []string {
 	var result []string
 	for _, s := range strings.Split(scope, " ") {
 		if s != "" {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
+// intersectScopes returns the scopes present in both requested and allowed.
+func intersectScopes(requested, allowed []string) []string {
+	var result []string
+	for _, s := range requested {
+		if slices.Contains(allowed, s) {
 			result = append(result, s)
 		}
 	}

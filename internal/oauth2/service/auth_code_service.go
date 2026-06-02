@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/cache"
@@ -81,24 +82,37 @@ func (s *AuthCodeService) GenerateCode(
 	return ac, nil
 }
 
-// ValidateCode validates an authorization code, checks PKCE, then deletes it (single use)
+// getAndDeleteScript atomically retrieves and deletes an authorization code in a single Redis operation.
+// This prevents TOCTOU race conditions that would allow an authorization code to be used twice.
+var getAndDeleteScript = redis.NewScript(`
+local data = redis.call('GET', KEYS[1])
+if data then
+    redis.call('DEL', KEYS[1])
+end
+return data
+`)
+
+// ValidateCode validates an authorization code, checks PKCE, then deletes it (single use).
+// The get+delete is performed atomically via a Redis Lua script to prevent double-use race conditions.
 func (s *AuthCodeService) ValidateCode(ctx context.Context, code, clientID, redirectURI string, codeVerifier *string) (*domain.AuthorizationCode, error) {
 	key := AuthCodeKeyPrefix + code
-	data, err := s.redis.Get(ctx, key)
-	if err == cache.ErrKeyNotFound {
+
+	// Atomically GET + DELETE the authorization code
+	result, err := getAndDeleteScript.Run(ctx, s.redis.GetClient(), []string{key}).Result()
+	if err == redis.Nil || result == nil {
 		return nil, domain.ErrCodeNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get authorization code: %w", err)
 	}
 
-	// Delete immediately (single use)
-	if delErr := s.redis.Del(ctx, key); delErr != nil {
-		s.logger.Warn("Failed to delete authorization code after retrieval", zap.Error(delErr))
+	dataStr, ok := result.(string)
+	if !ok {
+		return nil, fmt.Errorf("unexpected authorization code data type")
 	}
 
 	var ac domain.AuthorizationCode
-	if err := json.Unmarshal([]byte(data), &ac); err != nil {
+	if err := json.Unmarshal([]byte(dataStr), &ac); err != nil {
 		return nil, fmt.Errorf("unmarshal authorization code: %w", err)
 	}
 

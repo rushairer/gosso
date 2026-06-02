@@ -105,6 +105,7 @@ type mockDeviceCodeMgr struct {
 	denyFn          func() error
 	checkPollFn     func() error
 	markUsedFn      func() error
+	claimFn         func() (*oauth2Domain.DeviceCode, error)
 }
 
 func (m *mockDeviceCodeMgr) CreateDeviceCode(_ context.Context, _ string, _ []string) (*oauth2Domain.DeviceCode, error) {
@@ -162,6 +163,13 @@ func (m *mockDeviceCodeMgr) MarkUsed(_ context.Context, _ string) error {
 		return m.markUsedFn()
 	}
 	return nil
+}
+
+func (m *mockDeviceCodeMgr) ClaimAuthorizedDeviceCode(_ context.Context, _ string) (*oauth2Domain.DeviceCode, error) {
+	if m.claimFn != nil {
+		return m.claimFn()
+	}
+	return nil, fmt.Errorf("not implemented")
 }
 
 // setupOAuth2Router builds a gin.Engine with the OAuth2 controller routes.
@@ -852,7 +860,7 @@ func TestToken_DeviceCode_AuthorizationPending(t *testing.T) {
 		},
 	)
 
-	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","device_code":"dc-123"}`
+	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","client_secret":"test-secret","device_code":"dc-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -882,7 +890,7 @@ func TestToken_DeviceCode_AccessDenied(t *testing.T) {
 		},
 	)
 
-	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","device_code":"dc-123"}`
+	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","client_secret":"test-secret","device_code":"dc-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -912,7 +920,7 @@ func TestToken_DeviceCode_ExpiredToken(t *testing.T) {
 		},
 	)
 
-	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","device_code":"dc-123"}`
+	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","client_secret":"test-secret","device_code":"dc-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -943,7 +951,7 @@ func TestToken_DeviceCode_SlowDown(t *testing.T) {
 		},
 	)
 
-	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","device_code":"dc-123"}`
+	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","client_secret":"test-secret","device_code":"dc-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -974,10 +982,20 @@ func TestToken_DeviceCode_Success(t *testing.T) {
 					Interval:   5,
 				}, nil
 			},
+			claimFn: func() (*oauth2Domain.DeviceCode, error) {
+				return &oauth2Domain.DeviceCode{
+					DeviceCode: "dc-123",
+					ClientID:   "cid-test",
+					AccountID:  "account-001",
+					Scopes:     []string{"openid", "profile"},
+					Status:     oauth2Domain.DeviceCodeStatusUsed,
+					ExpiresAt:  time.Now().Add(10 * time.Minute),
+				}, nil
+			},
 		},
 	)
 
-	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","device_code":"dc-123"}`
+	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","client_secret":"test-secret","device_code":"dc-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

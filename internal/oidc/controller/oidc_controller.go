@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -182,11 +183,13 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 		} else if client.ValidatePostLogoutRedirectURI(req.PostLogoutRedirectURI) {
 			redirectURI := req.PostLogoutRedirectURI
 			if req.State != "" {
+				params := url.Values{}
+				params.Set("state", req.State)
 				separator := "?"
-				if strings.Contains(redirectURI, "?") {
+				if u, err := url.Parse(redirectURI); err == nil && u.RawQuery != "" {
 					separator = "&"
 				}
-				redirectURI = redirectURI + separator + "state=" + req.State
+				redirectURI = redirectURI + separator + params.Encode()
 			}
 			ctx.Redirect(http.StatusFound, redirectURI)
 			return
