@@ -226,7 +226,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	oauth2ClientSvc, authCodeSvc, consentSvc, deviceCodeSvc, clientRepo := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig)
 	idTokenSvc, discoverySvc, jwksSvc, userInfoSvc, logoutSvc := oidc.InitializeOIDCModule(tokenSvc, accountMod.Service, cfg.AuthConfig, authMod.SessionService, accountMod.CredentialRepo, logger)
 
-	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, authMod.CredentialRepo, !cfg.WebServerConfig.Debug, logger)
+	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, authMod.CredentialRepo, db, !cfg.WebServerConfig.Debug, logger)
 	oauth2Ctrl := oauth2Controller.NewOAuth2Controller(oauth2ClientSvc, authCodeSvc, consentSvc, tokenSvc, idTokenSvc, deviceCodeSvc, cfg.AuthConfig.Issuer, logger)
 	clientCtrl := oauth2Controller.NewClientController(oauth2ClientSvc, logger)
 	oidcCtrl := oidcController.NewOIDCController(discoverySvc, jwksSvc, userInfoSvc, logoutSvc, clientRepo, tokenSvc, cfg.AuthConfig.Issuer, logger)
@@ -303,7 +303,9 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		middleware.CSRFMiddleware(!cfg.WebServerConfig.Debug,
 			"/api/auth/passkey/login",
 			"/api/auth/social",
-			"/oauth2",
+			"/oauth2/token",
+			"/oauth2/introspect",
+			"/oauth2/device/code",
 			"/.well-known",
 			"/swagger",
 			"/oidc/logout",

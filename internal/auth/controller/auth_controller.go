@@ -2,6 +2,7 @@ package controller
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"net/http"
 	"time"
@@ -13,6 +14,7 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	authService "github.com/rushairer/gosso/internal/auth/service"
+	dbutil "github.com/rushairer/gosso/internal/db"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
@@ -24,6 +26,7 @@ type AuthController struct {
 	verificationSvc  *authService.VerificationService
 	passwordResetSvc *authService.PasswordResetService
 	credentialRepo   accountRepo.CredentialRepository
+	db               *sql.DB
 	secureCookie     bool
 	logger           *zap.Logger
 }
@@ -51,6 +54,7 @@ func NewAuthController(
 	verificationSvc *authService.VerificationService,
 	passwordResetSvc *authService.PasswordResetService,
 	credentialRepo accountRepo.CredentialRepository,
+	db *sql.DB,
 	secureCookie bool,
 	logger *zap.Logger,
 ) *AuthController {
@@ -61,6 +65,7 @@ func NewAuthController(
 		verificationSvc:  verificationSvc,
 		passwordResetSvc: passwordResetSvc,
 		credentialRepo:   credentialRepo,
+		db:               db,
 		secureCookie:     secureCookie,
 		logger:           logger,
 	}
@@ -560,7 +565,9 @@ func (c *AuthController) ConfirmVerification(ctx *gin.Context) {
 	}
 
 	cred.Verify()
-	if err := c.credentialRepo.UpdateCredential(ctx, nil, cred); err != nil {
+	if err := dbutil.RunInTransaction(ctx, c.db, func(tx *sql.Tx) error {
+		return c.credentialRepo.UpdateCredential(ctx, tx, cred)
+	}); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to update credential"))
 		return
 	}

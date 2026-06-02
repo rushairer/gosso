@@ -96,6 +96,10 @@ func (m *mockAuthOrchestrator) MarkPasskeyMFAVerified(_ context.Context, _ strin
 	return fmt.Errorf("not implemented")
 }
 
+func (m *mockAuthOrchestrator) CompletePasskeyMFALogin(_ context.Context, _, _, _ string) (*service.LoginResult, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 func (m *mockAuthOrchestrator) MFAService() *service.MFAService         { return nil }
 func (m *mockAuthOrchestrator) PasskeyService() *service.PasskeyService { return nil }
 
@@ -151,7 +155,7 @@ func setupAuthController(authSvc *mockAuthOrchestrator, tokenMgr *mockTokenManag
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 
-	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, nil, false, zap.NewNop())
+	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, nil, nil, false, zap.NewNop())
 
 	api := engine.Group("/api")
 	ctrl.RegisterRoutes(api, nil, nil, nil)
@@ -167,7 +171,7 @@ func setupAuthControllerWithClaims(authSvc *mockAuthOrchestrator, tokenMgr *mock
 		ctx.Next()
 	})
 
-	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, nil, false, zap.NewNop())
+	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, nil, nil, false, zap.NewNop())
 	api := engine.Group("/api")
 	ctrl.RegisterRoutes(api, nil, nil, nil)
 

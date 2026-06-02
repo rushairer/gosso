@@ -269,14 +269,25 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 		return
 	}
 
-	// Mark passkey MFA as verified
+	// Mark passkey MFA as verified (consumed by CompletePasskeyMFALogin below)
 	if err := c.authSvc.MarkPasskeyMFAVerified(ctx, claims.AccountID); err != nil {
 		c.logger.Warn("Failed to mark passkey MFA verified", zap.Error(err))
 	}
 
+	// Complete login directly — no separate /mfa/verify call needed
+	result, err := c.authSvc.CompletePasskeyMFALogin(ctx, req.MFAToken, ctx.ClientIP(), ctx.Request.UserAgent())
+	if err != nil {
+		c.logger.Error("Passkey MFA login failed", zap.String("account_id", claims.AccountID), zap.Error(err))
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, err.Error()))
+		return
+	}
+
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-		"verified": true,
-		"message":  "Passkey verified. Please call /api/auth/mfa/verify to complete login.",
+		"access_token":  result.AccessToken,
+		"refresh_token": result.RefreshToken,
+		"token_type":    "Bearer",
+		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
+		"session_id":    result.Session.ID.String(),
 	}))
 }
 

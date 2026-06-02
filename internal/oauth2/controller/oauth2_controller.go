@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -317,7 +318,13 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 	var idToken string
 	for _, s := range authCode.Scopes {
 		if s == "openid" {
-			idToken, _ = c.idTokenSvc.GenerateIDToken(ctx, authCode.AccountID, authCode.ClientID, authCode.Scopes, authCode.Nonce, authCode.ExpiresAt)
+			var idErr error
+			idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, authCode.AccountID, authCode.ClientID, authCode.Scopes, authCode.Nonce, authCode.ExpiresAt)
+			if idErr != nil {
+				c.logger.Error("Failed to generate ID token", zap.Error(idErr))
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "error_description": "failed to generate id_token"})
+				return
+			}
 			break
 		}
 	}
@@ -700,11 +707,12 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 }
 
 func redirectWithCode(ctx *gin.Context, redirectURI, code, state string) {
-	url := redirectURI + "?code=" + code
+	params := url.Values{}
+	params.Set("code", code)
 	if state != "" {
-		url += "&state=" + state
+		params.Set("state", state)
 	}
-	ctx.Redirect(http.StatusFound, url)
+	ctx.Redirect(http.StatusFound, redirectURI+"?"+params.Encode())
 }
 
 func splitScope(scope string) []string {

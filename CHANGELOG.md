@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Security**: Login rate limiter now logs Redis errors instead of silently proceeding on failure (`internal/auth/service/auth_login.go`).
+- **Security**: MFA tokens now include a unique JTI (UUID) so they can be individually revoked (`internal/auth/service/auth_login.go`).
+- **Security**: OAuth2 redirect URL parameters are now properly URL-encoded using `url.Values` (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Logout now calls `RevokeSession` (which removes both session and account index) instead of `DeleteSession` (`internal/auth/service/auth_login.go`).
+- **Security**: CSRF skip paths narrowed from `/oauth2` prefix to specific paths: `/oauth2/token`, `/oauth2/introspect`, `/oauth2/device/code` (`cmd/gouno/web.go`).
+- **Security**: `ConfirmVerification` now wraps credential update in a transaction (`internal/auth/controller/auth_controller.go`).
+- **Security**: ID token generation error in OAuth2 token endpoint is no longer silently ignored (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Passkey MFA flow no longer requires a separate `/mfa/verify` call — `MFAComplete` directly issues session tokens after passkey verification (`internal/auth/controller/passkey_controller.go`, `internal/auth/service/auth_login.go`).
+- **Security**: Login error no longer leaks account existence — inactive accounts now return the same `ErrInvalidCredentials` as non-existent accounts (`internal/auth/service/auth_login.go`).
+- **Security**: `GenerateBackupCodes` now deletes old codes and creates new ones in a single atomic transaction (`internal/auth/service/mfa_service.go`).
 - **Security**: Remove hardcoded passwords and secrets from `.env.*` files and `config/development.yaml`; use environment variable references instead.
 - **Security**: Atomic refresh token rotation via Redis Lua script — eliminates TOCTOU race condition between GET and DELETE (`internal/token/service/token_service.go`).
 - **Security**: MFAService transaction error propagation — `deleteUnverifiedTOTP`, `deleteBackupCodes`, and `VerifyBackupCode` now properly return errors instead of silently discarding them (`internal/auth/service/mfa_service.go`).
@@ -18,7 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: JWT middleware only reads token from `Authorization: Bearer` header — removes fallback to query/form params (`internal/auth/middleware/auth_middleware.go`).
 - **Security**: ID Token `jti` claim uses unique UUID per token instead of reusing `accountID` (`internal/oidc/service/id_token_service.go`).
 - **Security**: ID Token email lookup fixed — uses `FindByAccountAndType(accountID)` instead of `FindByTypeAndIdentifier("")` (`internal/oidc/service/id_token_service.go`).
+- **Security**: Verification code comparison now uses `crypto/subtle.ConstantTimeCompare` to prevent timing attacks (`internal/auth/service/verification_service.go`).
+- **Security**: Captcha generation now uses `crypto/rand` instead of `math/rand` for unpredictable codes (`internal/captcha/service/captcha_service.go`).
+- **Security**: `config.Validate()` now checks that `JWTSecret` is non-empty (`config/config.go`).
 - Replace `logger.Fatal` with `logger.Error` for graceful shutdown in web server (`cmd/gouno/web.go`).
+- Remove dead code: redundant `os.Exit(1)` after `log.Fatalf` in `cmd/gouno/root.go`.
 
 ### Changed
 
@@ -29,25 +43,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `SocialLoginService` depends on `SessionTokenCreator` interface instead of duplicating session/token creation logic (`internal/auth/service/interfaces.go`, `social_login_service.go`).
 - Email service reuses a single `gomail.Dialer` instance instead of creating one per send (`internal/notification/service/email_service.go`).
 - PII masking in verification service logs (`internal/auth/service/verification_service.go`).
-
 - Add `AuthModule` struct to `internal/auth/wire.go` — replaces 7-value tuple return from `InitializeAuthModule`.
 - Add `gomail.v2` dependency for email sending with STARTTLS support.
 - Add `cryptoRandInt` helper to `internal/captcha/service/captcha_service.go` for cryptographically secure random number generation.
-
-### Changed
-
-- **Security**: Verification code comparison now uses `crypto/subtle.ConstantTimeCompare` to prevent timing attacks (`internal/auth/service/verification_service.go`).
-- **Security**: Captcha generation now uses `crypto/rand` instead of `math/rand` for unpredictable codes (`internal/captcha/service/captcha_service.go`).
-- **Security**: `config.Validate()` now checks that `JWTSecret` is non-empty (`config/config.go`).
 - Email service now uses `gomail.v2` library instead of `net/smtp` for reliable STARTTLS support (`internal/notification/service/email_service.go`).
 - `InitializeAuthModule` returns `*AuthModule` struct instead of 7-value tuple (`internal/auth/wire.go`).
 - `StubSMSService` now accepts a logger and returns a more user-friendly error message (`internal/notification/service/sms_service.go`).
 - `AuthService` split into three files: `auth_service.go` (core), `auth_login.go` (login/logout), `auth_session.go` (session/refresh).
 - Redis error handling in verification and password reset services now includes comments documenting fail-open strategy.
-
-### Fixed
-
-- Remove dead code: redundant `os.Exit(1)` after `log.Fatalf` in `cmd/gouno/root.go`.
 
 ### Removed
 

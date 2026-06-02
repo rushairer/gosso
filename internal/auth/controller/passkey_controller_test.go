@@ -28,9 +28,10 @@ import (
 // ──────────────────────────────────────────────
 
 type mockAuthOrchForPasskey struct {
-	loginByPasskeyFn   func() (*service.LoginResult, error)
-	validateMFATokenFn func() (*tokenDomain.AccessTokenClaims, error)
-	markPasskeyMFAFn   func() error
+	loginByPasskeyFn             func() (*service.LoginResult, error)
+	validateMFATokenFn           func() (*tokenDomain.AccessTokenClaims, error)
+	markPasskeyMFAFn             func() error
+	completePasskeyMFALoginFn    func() (*service.LoginResult, error)
 }
 
 func (m *mockAuthOrchForPasskey) LoginByUsernamePassword(_ context.Context, _ *service.LoginRequest) (*service.LoginResult, error) {
@@ -78,6 +79,13 @@ func (m *mockAuthOrchForPasskey) MarkPasskeyMFAVerified(_ context.Context, _ str
 
 func (m *mockAuthOrchForPasskey) MFAService() *service.MFAService         { return nil }
 func (m *mockAuthOrchForPasskey) PasskeyService() *service.PasskeyService { return nil }
+
+func (m *mockAuthOrchForPasskey) CompletePasskeyMFALogin(_ context.Context, _, _, _ string) (*service.LoginResult, error) {
+	if m.completePasskeyMFALoginFn != nil {
+		return m.completePasskeyMFALoginFn()
+	}
+	return nil, fmt.Errorf("not implemented")
+}
 
 type mockTokenMgrForPasskey struct{}
 

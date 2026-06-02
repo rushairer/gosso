@@ -227,9 +227,6 @@ func (s *MFAService) DisableTOTP(ctx context.Context, accountID string) error {
 
 // GenerateBackupCodes generates backup codes
 func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) ([]string, error) {
-	// Delete old backup codes
-	_ = s.deleteBackupCodes(ctx, accountID)
-
 	var codes []string
 	var creds []*accountDomain.Credential
 
@@ -254,10 +251,23 @@ func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) 
 	}
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// Delete old backup codes in the same transaction
+		oldCreds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeBackupCode)
+		if err != nil {
+			return fmt.Errorf("find old backup codes: %w", err)
+		}
+		for _, c := range oldCreds {
+			if !c.IsDeleted() {
+				if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
+					return fmt.Errorf("delete old backup code: %w", err)
+				}
+			}
+		}
+		// Create new backup codes
 		return s.credentialRepo.CreateCredentials(ctx, tx, creds)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("save backup codes: %w", err)
+		return nil, fmt.Errorf("generate backup codes: %w", err)
 	}
 
 	return codes, nil
@@ -303,26 +313,6 @@ func (s *MFAService) deleteUnverifiedTOTP(ctx context.Context, accountID string)
 			})
 			if err != nil {
 				s.logger.Error("Failed to soft-delete unverified TOTP", zap.String("cred_id", c.ID), zap.Error(err))
-				return fmt.Errorf("soft delete credential: %w", err)
-			}
-		}
-	}
-	return nil
-}
-
-func (s *MFAService) deleteBackupCodes(ctx context.Context, accountID string) error {
-	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeBackupCode)
-	if err != nil {
-		s.logger.Warn("Failed to find backup code credentials for cleanup", zap.Error(err), zap.String("account_id", accountID))
-		return err
-	}
-	for _, c := range creds {
-		if !c.IsDeleted() {
-			err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-				return s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now())
-			})
-			if err != nil {
-				s.logger.Error("Failed to soft-delete backup code", zap.String("cred_id", c.ID), zap.Error(err))
 				return fmt.Errorf("soft delete credential: %w", err)
 			}
 		}

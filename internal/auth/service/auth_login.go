@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/golang-jwt/jwt/v5"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/audit"
@@ -34,8 +35,10 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 
 	// 0. Check rate limit for login failures
 	attemptsKey := fmt.Sprintf("login_attempts:%s", req.Username)
-	count, err := s.redis.IncrWithExpiry(ctx, attemptsKey, loginRateLimitWindow)
-	if err == nil && count > loginMaxAttempts {
+	count, incrErr := s.redis.IncrWithExpiry(ctx, attemptsKey, loginRateLimitWindow)
+	if incrErr != nil {
+		s.logger.Warn("Failed to check login rate limit, proceeding anyway", zap.Error(incrErr))
+	} else if count > loginMaxAttempts {
 		return nil, ErrAccountLocked
 	}
 
@@ -47,7 +50,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 
 	// 2. Check account status
 	if account.Status != accountDomain.AccountStatusActive {
-		return nil, ErrAccountNotActive
+		return nil, ErrInvalidCredentials
 	}
 
 	// 3. Find password credential
@@ -157,6 +160,66 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	}, nil
 }
 
+// CompletePasskeyMFALogin completes MFA login directly after passkey verification,
+// avoiding the extra round-trip to /mfa/verify. The MFA token is validated here.
+func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip, userAgent string) (result *LoginResult, err error) {
+	defer func() {
+		if err != nil {
+			s.loginAuditLogs(ctx, auditDomain.ActionMFALoginFailure, "", nil,
+				map[string]any{"reason": err.Error()},
+				map[string]any{"ip": ip, "user_agent": userAgent},
+			)
+		}
+	}()
+
+	// 1. Validate MFA token
+	claims, err := s.tokenSvc.ValidateAccessToken(mfaToken)
+	if err != nil {
+		return nil, ErrInvalidMFAToken
+	}
+	if claims.Scope != "mfa" {
+		return nil, ErrInvalidMFATokenScope
+	}
+	accountID := claims.AccountID
+
+	// 2. Verify passkey MFA flag (set by CompleteMFALogin in the passkey controller)
+	passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", accountID)
+	verified, verr := s.redis.Get(ctx, passkeyKey)
+	if verr != nil || verified != "1" {
+		return nil, ErrPasskeyNotVerified
+	}
+	_ = s.redis.Del(ctx, passkeyKey)
+
+	// 3. Find account
+	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrAccountNotFound, err)
+	}
+
+	// 4. Create session and tokens
+	session, accessToken, refreshToken, err := s.createSessionAndTokens(ctx, account, ip, userAgent)
+	if err != nil {
+		return nil, err
+	}
+
+	s.logger.Info("Passkey MFA login successful", zap.String("account_id", account.ID))
+
+	// 5. Audit log
+	accountUUID := uuid.MustParse(account.ID)
+	s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, "", &accountUUID,
+		map[string]any{"account_id": account.ID, "session_id": session.ID.String()},
+		map[string]any{"ip": ip, "user_agent": userAgent},
+	)
+
+	return &LoginResult{
+		Account:      account,
+		Session:      session,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken.Token,
+		RequiresMFA:  false,
+	}, nil
+}
+
 // LoginByPasskey login directly after passkey verification (skipping password check)
 func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAgent string) (result *LoginResult, err error) {
 	defer func() {
@@ -176,7 +239,7 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 
 	// 2. Check account status
 	if account.Status != accountDomain.AccountStatusActive {
-		return nil, ErrAccountNotActive
+		return nil, ErrInvalidCredentials
 	}
 
 	// 3. Check if MFA is required
@@ -212,14 +275,14 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 
 // Logout deletes session and revokes tokens
 func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, accessTokenJTI string, tokenExpiresAt time.Time) error {
-	// 1. Delete session
+	// 1. Revoke session (removes from both session store and account index)
 	parsedSessionID, err := uuid.Parse(sessionID)
 	if err != nil {
 		return fmt.Errorf("invalid session id: %w", err)
 	}
 
-	if err := s.sessionSvc.DeleteSession(ctx, parsedSessionID); err != nil {
-		s.logger.Warn("Failed to delete session during logout", zap.Error(err))
+	if err := s.sessionSvc.RevokeSession(ctx, accountID, parsedSessionID); err != nil {
+		s.logger.Warn("Failed to revoke session during logout", zap.Error(err))
 	}
 
 	// 2. Revoke Access Token (add to blacklist)
@@ -256,8 +319,9 @@ func (s *AuthService) handleMFARequirement(ctx context.Context, account *account
 	}
 
 	mfaToken, err := s.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
-		AccountID: account.ID,
-		Scope:     "mfa",
+		RegisteredClaims: jwt.RegisteredClaims{ID: uuid.New().String()},
+		AccountID:        account.ID,
+		Scope:            "mfa",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("generate mfa token: %w", err)
