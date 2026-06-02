@@ -2,8 +2,9 @@ package domain
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
-	"fmt"
+	"errors"
 	"time"
 )
 
@@ -36,7 +37,7 @@ func (a *AuthorizationCode) VerifyPKCE(verifier string) bool {
 	case "S256":
 		h := sha256.Sum256([]byte(verifier))
 		computed := base64URLEncode(h[:])
-		return computed == a.CodeChallenge
+		return subtle.ConstantTimeCompare([]byte(computed), []byte(a.CodeChallenge)) == 1
 	default:
 		return false
 	}
@@ -54,10 +55,10 @@ func HashPKCEVerifier(verifier string) string {
 
 // Error definitions
 var (
-	ErrCodeNotFound           = fmt.Errorf("authorization code not found")
-	ErrCodeExpired            = fmt.Errorf("authorization code expired")
-	ErrCodeAlreadyUsed        = fmt.Errorf("authorization code already used")
-	ErrCodeClientMismatch     = fmt.Errorf("authorization code client mismatch")
-	ErrCodeURIMismatch        = fmt.Errorf("authorization code redirect_uri mismatch")
-	ErrPKCEVerificationFailed = fmt.Errorf("PKCE verification failed")
+	ErrCodeNotFound           = errors.New("authorization code not found")
+	ErrCodeExpired            = errors.New("authorization code expired")
+	ErrCodeAlreadyUsed        = errors.New("authorization code already used")
+	ErrCodeClientMismatch     = errors.New("authorization code client mismatch")
+	ErrCodeURIMismatch        = errors.New("authorization code redirect_uri mismatch")
+	ErrPKCEVerificationFailed = errors.New("PKCE verification failed")
 )

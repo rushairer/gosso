@@ -87,23 +87,27 @@ func init() {
 	migrateCmd.AddCommand(migrateStatusCmd)
 }
 
-// initMigrate initializes configuration and creates a migrate instance
-func initMigrate(cmd *cobra.Command) (*migrate.Migrate, error) {
+// initMigrate initializes configuration and creates a migrate instance.
+// Returns the migrate instance and the underlying *sql.DB (caller must close both).
+func initMigrate(cmd *cobra.Command) (*migrate.Migrate, *sql.DB, error) {
 	configPath := cmd.Flag("config_path").Value.String()
 	env := cmd.Flag("env").Value.String()
 
-	configManager := config.NewConfigManager(cmd, configPath, env)
+	configManager, err := config.NewConfigManager(cmd, configPath, env)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load config: %w", err)
+	}
 	globalConfig := configManager.Config()
 
 	defaultDriver := globalConfig.DatabaseConfig.GetDefaultDriver()
 	if defaultDriver == nil {
-		return nil, fmt.Errorf("default driver not found")
+		return nil, nil, fmt.Errorf("default driver not found")
 	}
 
 	// Connect to database
 	db, err := sql.Open("pgx", defaultDriver.DSN)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	// Get schema parameter
@@ -116,14 +120,16 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, error) {
 		SchemaName:      schemaName, // Use schema specified by parameter
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create postgres driver: %w", err)
+		db.Close()
+		return nil, nil, fmt.Errorf("failed to create postgres driver: %w", err)
 	}
 
 	// Get migration file path
 	migrationsPath := cmd.Flag("migrations_path").Value.String()
 	absPath, err := filepath.Abs(migrationsPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get absolute path: %w", err)
+		db.Close()
+		return nil, nil, fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
 	// Create migrate instance
@@ -133,25 +139,27 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, error) {
 		driver,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create migrate instance: %w", err)
+		db.Close()
+		return nil, nil, fmt.Errorf("failed to create migrate instance: %w", err)
 	}
 
-	return m, nil
+	return m, db, nil
 }
 
 // closeMigrate safely closes the migrate instance and logs any errors
 func closeMigrate(m *migrate.Migrate) {
-	if source, err := m.Close(); err != nil {
-		log.Printf("Warning: Failed to close migrate instance: %v %v\n", source, err)
+	if _, err := m.Close(); err != nil {
+		fmt.Printf("Warning: Failed to close migrate instance: %v\n", err)
 	}
 }
 
 func runMigrateUp(cmd *cobra.Command, args []string) {
-	m, err := initMigrate(cmd)
+	m, db, err := initMigrate(cmd)
 	if err != nil {
 		log.Fatalf("Migration init failed: %v", err)
 	}
 	defer closeMigrate(m)
+	defer db.Close()
 
 	if len(args) > 0 {
 		// Up migration with specified step count
@@ -175,11 +183,12 @@ func runMigrateDown(cmd *cobra.Command, args []string) {
 		log.Fatal("Refusing to run destructive migration without --force flag. Use: migrate down --force")
 	}
 
-	m, err := initMigrate(cmd)
+	m, db, err := initMigrate(cmd)
 	if err != nil {
 		log.Fatalf("Migration init failed: %v", err)
 	}
 	defer closeMigrate(m)
+	defer db.Close()
 
 	if len(args) > 0 {
 		// Down migration with specified step count
@@ -203,11 +212,12 @@ func runMigrateDrop(cmd *cobra.Command, args []string) {
 		log.Fatal("Refusing to drop database without --force flag. Use: migrate drop --force")
 	}
 
-	m, err := initMigrate(cmd)
+	m, db, err := initMigrate(cmd)
 	if err != nil {
 		log.Fatalf("Migration init failed: %v", err)
 	}
 	defer closeMigrate(m)
+	defer db.Close()
 
 	if err := m.Drop(); err != nil {
 		log.Fatalf("Migration drop failed: %v", err)
@@ -216,11 +226,12 @@ func runMigrateDrop(cmd *cobra.Command, args []string) {
 }
 
 func runMigrateForce(cmd *cobra.Command, args []string) {
-	m, err := initMigrate(cmd)
+	m, db, err := initMigrate(cmd)
 	if err != nil {
 		log.Fatalf("Migration init failed: %v", err)
 	}
 	defer closeMigrate(m)
+	defer db.Close()
 
 	version := parseVersion(args[0])
 	if err := m.Force(version); err != nil {
@@ -230,11 +241,12 @@ func runMigrateForce(cmd *cobra.Command, args []string) {
 }
 
 func runMigrateVersion(cmd *cobra.Command, args []string) {
-	m, err := initMigrate(cmd)
+	m, db, err := initMigrate(cmd)
 	if err != nil {
 		log.Fatalf("Migration init failed: %v", err)
 	}
 	defer closeMigrate(m)
+	defer db.Close()
 
 	version, dirty, err := m.Version()
 	if err != nil {
@@ -249,11 +261,12 @@ func runMigrateVersion(cmd *cobra.Command, args []string) {
 }
 
 func runMigrateStatus(cmd *cobra.Command, args []string) {
-	m, err := initMigrate(cmd)
+	m, db, err := initMigrate(cmd)
 	if err != nil {
 		log.Fatalf("Migration init failed: %v", err)
 	}
 	defer closeMigrate(m)
+	defer db.Close()
 
 	version, dirty, err := m.Version()
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -53,7 +54,11 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	configPath := cmd.Flag("config_path").Value.String()
 	env := cmd.Flag("env").Value.String()
 
-	configManager := config.NewConfigManager(cmd, configPath, env)
+	configManager, err := config.NewConfigManager(cmd, configPath, env)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
 	globalConfig := configManager.Config()
 
 	if globalConfig.WebServerConfig.Debug {

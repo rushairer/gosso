@@ -1,7 +1,7 @@
 package config
 
 import (
-	"log"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -20,7 +20,7 @@ func NewConfigManager(
 	cmd *cobra.Command,
 	configPath string,
 	env string,
-) *ConfigManager {
+) (*ConfigManager, error) {
 
 	configManager := ConfigManager{}
 
@@ -51,15 +51,15 @@ func NewConfigManager(
 	}
 
 	if err := v.ReadInConfig(); err != nil {
-		log.Fatalf("read config failed, err: %v", err)
+		return nil, fmt.Errorf("read config: %w", err)
 	}
 
 	newConfig := GoUnoConfig{}
 	if err := v.Unmarshal(&newConfig); err != nil {
-		log.Fatalf("unmarshal config failed, err: %v", err)
+		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
 	configManager.SetConfig(&newConfig)
-	return &configManager
+	return &configManager, nil
 }
 
 func (cm *ConfigManager) SetConfig(config *GoUnoConfig) {

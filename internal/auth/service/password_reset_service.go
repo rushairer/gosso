@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
@@ -32,7 +33,25 @@ const (
 	MinPasswordLength           = 8
 )
 
-// PasswordResetEmailSender password reset email sender interface
+// checkAndIncrementAttemptsScript atomically checks attempt count, increments, and returns the data.
+// Returns: data string on success, -1 if exhausted (key deleted), nil if key not found.
+var checkAndIncrementAttemptsScript = redis.NewScript(`
+local data = redis.call('GET', KEYS[1])
+if not data then
+    return nil
+end
+local cjson = require('cjson')
+local obj = cjson.decode(data)
+local max_attempts = tonumber(ARGV[1])
+if obj.attempts >= max_attempts then
+    redis.call('DEL', KEYS[1])
+    return -1
+end
+obj.attempts = obj.attempts + 1
+local updated = cjson.encode(obj)
+redis.call('SETEX', KEYS[1], ARGV[2], updated)
+return updated
+`)
 type PasswordResetEmailSender interface {
 	SendPasswordResetLink(ctx context.Context, to, resetLink string) error
 }
@@ -158,29 +177,28 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	tokenHash := tokenDomain.HashToken(token)
 	tokenKey := s.buildTokenKey(tokenHash)
 
-	raw, err := s.redis.Get(ctx, tokenKey)
-	if err == cache.ErrKeyNotFound {
+	// Atomically check attempts, increment counter, and get data
+	result, err := checkAndIncrementAttemptsScript.Run(ctx, s.redis.GetClient(), []string{tokenKey},
+		PasswordResetMaxAttempts, int(PasswordResetTokenTTL.Seconds())).Result()
+	if err == redis.Nil || result == nil {
 		return errors.New("invalid or expired reset token")
 	}
 	if err != nil {
-		return fmt.Errorf("get reset token: %w", err)
+		return fmt.Errorf("check reset token: %w", err)
 	}
-
-	var data passwordResetData
-	if err := json.Unmarshal([]byte(raw), &data); err != nil {
-		return fmt.Errorf("unmarshal reset data: %w", err)
-	}
-
-	// Check attempts count
-	if data.Attempts >= PasswordResetMaxAttempts {
-		_ = s.redis.Del(ctx, tokenKey)
+	if result == int64(-1) || result == "-1" {
 		return errors.New("reset token exhausted, please request a new one")
 	}
 
-	// Increment attempt counter
-	data.Attempts++
-	updatedData, _ := json.Marshal(data)
-	_ = s.redis.Set(ctx, tokenKey, updatedData, PasswordResetTokenTTL)
+	dataStr, ok := result.(string)
+	if !ok {
+		return fmt.Errorf("unexpected reset token data type")
+	}
+
+	var data passwordResetData
+	if err := json.Unmarshal([]byte(dataStr), &data); err != nil {
+		return fmt.Errorf("unmarshal reset data: %w", err)
+	}
 
 	// Hash new password
 	hashedPassword, err := accountDomain.HashPassword(newPassword)

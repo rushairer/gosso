@@ -13,6 +13,7 @@ import (
 
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/oauth2/domain"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
 const (
@@ -70,7 +71,7 @@ func (s *AuthCodeService) GenerateCode(
 		return nil, fmt.Errorf("marshal authorization code: %w", err)
 	}
 
-	key := AuthCodeKeyPrefix + codeString
+	key := AuthCodeKeyPrefix + tokenDomain.HashToken(codeString)
 	if err := s.redis.Set(ctx, key, data, s.expiry); err != nil {
 		return nil, fmt.Errorf("store authorization code: %w", err)
 	}
@@ -95,7 +96,7 @@ return data
 // ValidateCode validates an authorization code, checks PKCE, then deletes it (single use).
 // The get+delete is performed atomically via a Redis Lua script to prevent double-use race conditions.
 func (s *AuthCodeService) ValidateCode(ctx context.Context, code, clientID, redirectURI string, codeVerifier *string) (*domain.AuthorizationCode, error) {
-	key := AuthCodeKeyPrefix + code
+	key := AuthCodeKeyPrefix + tokenDomain.HashToken(code)
 
 	// Atomically GET + DELETE the authorization code
 	result, err := getAndDeleteScript.Run(ctx, s.redis.GetClient(), []string{key}).Result()

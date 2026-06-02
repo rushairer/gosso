@@ -70,6 +70,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Fix `VerifyCredential` parameter name from `credentialID` to `accountID` (`internal/account/service/account_service.go`).
 - Fix `PasswordResetTokenExpiry` undefined constant — use `PasswordResetTokenTTL` (`internal/auth/service/password_reset_service.go`).
 - Fix `auth_session.go` caller of `buildTokenClaims` to handle returned error (`internal/auth/service/auth_session.go`).
+- **Security**: PKCE S256 verification now uses `crypto/subtle.ConstantTimeCompare` to prevent timing attacks (`internal/oauth2/domain/authorization_code.go`).
+- **Security**: Authorization codes now stored as SHA256 hashes in Redis — prevents token leakage if Redis is compromised (`internal/oauth2/service/auth_code_service.go`).
+- **Security**: Login rate limiter now enforces per-IP limits (`login_attempts_ip:{ip}`, 30 attempts/15min) in addition to per-username limits — prevents brute force via username rotation (`internal/auth/service/auth_login.go`).
+- **Security**: Password reset and verification code attempt counters now use Redis Lua scripts for atomic check-increment — eliminates TOCTOU race conditions (`internal/auth/service/password_reset_service.go`, `internal/auth/service/verification_service.go`).
+- **Security**: `MFAEnroll` handler now derives `account_id` from JWT claims only — removes client-supplied `account_id` from request body (`internal/auth/controller/auth_controller.go`).
+- **Security**: `DisableTOTP` now returns credential/backup-code deletion errors to trigger transaction rollback — prevents partial-disable state (`internal/auth/service/mfa_service.go`).
+- Database connection leak in `migrate` command — `initMigrate` now returns `*sql.DB` for callers to close (`cmd/gouno/migrate.go`).
+- `config.NewConfigManager` now returns `(*ConfigManager, error)` instead of `*ConfigManager` — eliminates `log.Fatalf` (`config/config_manager.go`).
+- All `log.Fatalf`/`log.Printf` calls replaced with `fmt` equivalents — unified logging through zap (`config/config_manager.go`, `cmd/gouno/root.go`, `cmd/gouno/web.go`, `internal/db/transaction.go`).
+- Sentinel errors in `oauth2/domain` now use `errors.New` instead of `fmt.Errorf` — more idiomatic and avoids unnecessary format overhead (`internal/oauth2/domain/authorization_code.go`, `internal/oauth2/domain/client.go`).
+- `config.Validate()` now checks SMTP `Port > 0` and `From != ""` when `Host` is configured (`config/config.go`).
+- Dockerfile Alpine base pinned to `3.22.0` (`Dockerfile`).
 
 ### Changed
 
@@ -95,12 +107,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `StubSMSService` now accepts a logger and returns a more user-friendly error message (`internal/notification/service/sms_service.go`).
 - `AuthService` split into three files: `auth_service.go` (core), `auth_login.go` (login/logout), `auth_session.go` (session/refresh).
 - Redis error handling in verification and password reset services now includes comments documenting fail-open strategy.
+- `ListSessionsByAccount` now uses Redis pipeline for batch GET — eliminates N+1 round trips (`internal/session/service/session_service.go`).
+- `RevokeAllForSession` now deletes tokens in a single `Del(keys...)` call instead of individual deletes (`internal/token/service/token_service.go`).
+- Replaced `lib/pq` with `pgx/v5/stdlib` in tests and examples (`examples/account/main.go`, `tests/local_dev_databases.go`).
 
 ### Removed
 
 - Remove unused `Group` struct and related methods from `internal/account/domain/role.go`.
 - Remove `buildMessage` method from `EmailService` (replaced by gomail).
 - Remove `buildMessage` tests from `internal/notification/service/notification_service_test.go`.
+- Remove unused `internal/db/db.go` wrapper (`DB` struct, `NewDB` constructor) — services use `*sql.DB` directly.
+- Remove unused `WithTransaction` and `WithTransactionIsolation` methods from `internal/db/transaction.go` — only `RunInTransaction` and `RunInTransactionIsolation` are used.
 
 ### Added
 

@@ -7,12 +7,11 @@ import (
 	"log"
 	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
+
 	"github.com/rushairer/gosso/internal/account"
 	"github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/account/service"
-	"github.com/rushairer/gosso/internal/db"
-
-	_ "github.com/lib/pq"
 )
 
 // Account module usage example
@@ -20,7 +19,7 @@ func main() {
 	// 1. Connect to the database
 	dsn := "host=localhost port=5432 user=postgres password=password dbname=gosso sslmode=disable"
 
-	sqlDB, err := sql.Open("postgres", dsn)
+	sqlDB, err := sql.Open("pgx", dsn)
 	if err != nil {
 		log.Fatalf("Failed to open database connection: %v", err)
 	}
@@ -32,12 +31,10 @@ func main() {
 	if err := sqlDB.Ping(); err != nil {
 		log.Fatalf("Database connection test failed: %v", err)
 	}
-
-	database := db.NewDB(sqlDB)
-	defer func() { _ = database.Close() }()
+	defer func() { _ = sqlDB.Close() }()
 
 	// 2. Initialize the account service
-	accountMod := account.InitializeAccountModule(database.DB, nil)
+	accountMod := account.InitializeAccountModule(sqlDB, nil)
 	accountService := accountMod.Service
 
 	ctx := context.Background()

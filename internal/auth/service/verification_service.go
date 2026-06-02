@@ -3,13 +3,13 @@ package service
 import (
 	"context"
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/cache"
@@ -23,6 +23,34 @@ const (
 	VerifyCooldownTTL    = 60 * time.Second
 	VerifyCodeLength     = 6
 )
+
+// verifyAndIncrementScript atomically verifies a code and manages the attempt counter.
+// Returns JSON array: ["ok", accountID] | ["mismatch", updatedData] | ["exhausted", ""] | ["not_found", ""]
+var verifyAndIncrementScript = redis.NewScript(`
+local data = redis.call('GET', KEYS[1])
+if not data then
+    return cjson.encode({"not_found", ""})
+end
+local cjson = require('cjson')
+local obj = cjson.decode(data)
+local max_attempts = tonumber(ARGV[2])
+if obj.attempts >= max_attempts then
+    redis.call('DEL', KEYS[1])
+    return cjson.encode({"exhausted", ""})
+end
+if obj.code == ARGV[1] then
+    redis.call('DEL', KEYS[1])
+    return cjson.encode({"ok", obj.account_id})
+end
+obj.attempts = obj.attempts + 1
+local ttl = redis.call('TTL', KEYS[1])
+if ttl > 0 then
+    redis.call('SETEX', KEYS[1], ttl, cjson.encode(obj))
+else
+    redis.call('SET', KEYS[1], cjson.encode(obj))
+end
+return cjson.encode({"mismatch", cjson.encode(obj)})
+`)
 
 // EmailSender email sending interface
 type EmailSender interface {
@@ -129,37 +157,35 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifier, code string) (string, error) {
 	codeKey := s.buildCodeKey(credType, identifier)
 
-	raw, err := s.redis.Get(ctx, codeKey)
-	if err == cache.ErrKeyNotFound {
-		return "", errors.New("verification code expired or not found")
-	}
+	// Atomically verify code and increment attempts
+	resultJSON, err := verifyAndIncrementScript.Run(ctx, s.redis.GetClient(), []string{codeKey},
+		code, VerifyCodeAttempts).Result()
 	if err != nil {
-		return "", fmt.Errorf("get code: %w", err)
+		return "", fmt.Errorf("verify code: %w", err)
 	}
 
-	var data verifyCodeData
-	if err := json.Unmarshal([]byte(raw), &data); err != nil {
-		return "", fmt.Errorf("unmarshal code data: %w", err)
+	resultStr, ok := resultJSON.(string)
+	if !ok {
+		return "", fmt.Errorf("unexpected verify result type")
 	}
 
-	// Check attempt count
-	if data.Attempts >= VerifyCodeAttempts {
-		_ = s.redis.Del(ctx, codeKey)
+	var result []string
+	if err := json.Unmarshal([]byte(resultStr), &result); err != nil || len(result) < 2 {
+		return "", fmt.Errorf("unmarshal verify result: %w", err)
+	}
+
+	switch result[0] {
+	case "ok":
+		return result[1], nil
+	case "not_found":
+		return "", errors.New("verification code expired or not found")
+	case "exhausted":
 		return "", errors.New("verification code exhausted, please request a new one")
-	}
-
-	// Compare code using constant-time comparison to prevent timing attacks
-	if subtle.ConstantTimeCompare([]byte(data.Code), []byte(code)) != 1 {
-		data.Attempts++
-		updatedData, _ := json.Marshal(data)
-		_ = s.redis.Set(ctx, codeKey, updatedData, VerifyCodeTTL)
+	case "mismatch":
 		return "", errors.New("invalid verification code")
+	default:
+		return "", fmt.Errorf("unknown verify status: %s", result[0])
 	}
-
-	// Success -> delete Redis key
-	_ = s.redis.Del(ctx, codeKey)
-
-	return data.AccountID, nil
 }
 
 func (s *VerificationService) buildCodeKey(credType, identifier string) string {

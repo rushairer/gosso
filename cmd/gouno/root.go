@@ -1,7 +1,8 @@
 package gouno
 
 import (
-	"log"
+	"fmt"
+	"os"
 
 	"github.com/rushairer/gouno/generator"
 	"github.com/spf13/cobra"
@@ -23,6 +24,7 @@ func init() {
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatalf("Error executing root command: %v", err)
+		fmt.Fprintf(os.Stderr, "Error executing root command: %v\n", err)
+		os.Exit(1)
 	}
 }

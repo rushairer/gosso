@@ -246,17 +246,20 @@ func (s *MFAService) DisableTOTP(ctx context.Context, accountID string) error {
 		for _, c := range creds {
 			if !c.IsDeleted() {
 				if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
-					s.logger.Warn("Failed to delete TOTP credential", zap.String("cred_id", c.ID), zap.Error(err))
+					return fmt.Errorf("delete TOTP credential %s: %w", c.ID, err)
 				}
 			}
 		}
 
 		// Also delete all backup codes
-		backupCreds, _ := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeBackupCode)
+		backupCreds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeBackupCode)
+		if err != nil {
+			return fmt.Errorf("find backup code credentials: %w", err)
+		}
 		for _, c := range backupCreds {
 			if !c.IsDeleted() {
 				if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
-					s.logger.Warn("Failed to delete backup code credential", zap.String("cred_id", c.ID), zap.Error(err))
+					return fmt.Errorf("delete backup code credential %s: %w", c.ID, err)
 				}
 			}
 		}

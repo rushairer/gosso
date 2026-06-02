@@ -36,7 +36,10 @@ func SetupTestEnv(ctx context.Context) (*TestEnv, error) {
 	projectRoot := filepath.Join(filepath.Dir(thisFile), "..", "..")
 	configPath := filepath.Join(projectRoot, "config")
 
-	cm := config.NewConfigManager(nil, configPath, "test")
+	cm, err := config.NewConfigManager(nil, configPath, "test")
+	if err != nil {
+		return nil, fmt.Errorf("load test config: %w", err)
+	}
 	cfg := cm.Config()
 
 	logger, _ := zap.NewDevelopment()

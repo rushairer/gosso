@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/rushairer/gosso/config"
 )
@@ -33,7 +33,7 @@ func NewTestDB() *sql.DB {
 func NewTestConfigManager() (configManager *config.ConfigManager) {
 	projectRoot := projectRoot()
 	configPath := filepath.Join(projectRoot, "config")
-	configManager = config.NewConfigManager(nil, configPath, "test")
+	configManager, _ = config.NewConfigManager(nil, configPath, "test")
 	return
 }
 

@@ -2,7 +2,7 @@ package domain
 
 import (
 	"crypto/subtle"
-	"fmt"
+	"errors"
 	"slices"
 	"time"
 )
@@ -80,9 +80,9 @@ const (
 
 // Error definitions
 var (
-	ErrClientNotFound       = fmt.Errorf("oauth2 client not found")
-	ErrInvalidRedirectURI   = fmt.Errorf("invalid redirect_uri")
-	ErrUnsupportedGrantType = fmt.Errorf("unsupported grant type")
-	ErrInvalidScope         = fmt.Errorf("invalid scope")
-	ErrClientSecretMismatch = fmt.Errorf("client secret mismatch")
+	ErrClientNotFound       = errors.New("oauth2 client not found")
+	ErrInvalidRedirectURI   = errors.New("invalid redirect_uri")
+	ErrUnsupportedGrantType = errors.New("unsupported grant type")
+	ErrInvalidScope         = errors.New("invalid scope")
+	ErrClientSecretMismatch = errors.New("client secret mismatch")
 )

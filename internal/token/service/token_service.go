@@ -253,12 +253,14 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 		return fmt.Errorf("get session tokens: %w", err)
 	}
 
-	// Delete each refresh token
-	for _, hash := range hashes {
-		tokenKey := RefreshTokenKeyPrefix + hash
-		if err := s.redis.Del(ctx, tokenKey); err != nil {
-			s.logger.Warn("Failed to delete refresh token during session revoke",
-				zap.String("session_id", sessionID), zap.String("hash", hash), zap.Error(err))
+	if len(hashes) > 0 {
+		keys := make([]string, len(hashes))
+		for i, hash := range hashes {
+			keys[i] = RefreshTokenKeyPrefix + hash
+		}
+		if err := s.redis.Del(ctx, keys...); err != nil {
+			s.logger.Warn("Failed to delete refresh tokens during session revoke",
+				zap.String("session_id", sessionID), zap.Error(err))
 		}
 	}
 

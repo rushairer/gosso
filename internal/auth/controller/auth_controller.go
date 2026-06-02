@@ -319,30 +319,14 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 	}))
 }
 
-// MFAEnrollRequest MFA enrollment request body
-type MFAEnrollRequest struct {
-	AccountID string `json:"account_id" binding:"required"`
-}
-
 // MFAEnroll POST /api/auth/mfa/enroll
 func (c *AuthController) MFAEnroll(ctx *gin.Context) {
-	var req MFAEnrollRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
-		return
-	}
-
-	// Verify that the current user can only enroll MFA for themselves
 	tc, ok := getClaimsFromContext(ctx)
 	if !ok {
 		return
 	}
-	if tc.AccountID != req.AccountID {
-		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "cannot enroll MFA for another account"))
-		return
-	}
 
-	enrollment, err := c.authSvc.MFAService().EnrollTOTP(ctx, req.AccountID)
+	enrollment, err := c.authSvc.MFAService().EnrollTOTP(ctx, tc.AccountID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
 		return

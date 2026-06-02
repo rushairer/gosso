@@ -19,8 +19,9 @@ import (
 )
 
 const (
-	loginRateLimitWindow = 15 * time.Minute
-	loginMaxAttempts     = 5
+	loginRateLimitWindow  = 15 * time.Minute
+	loginMaxAttempts      = 5
+	loginMaxAttemptsPerIP = 30
 )
 
 // LoginByUsernamePassword login by username and password
@@ -41,6 +42,15 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	if incrErr != nil {
 		s.logger.Warn("Failed to check login rate limit, proceeding anyway", zap.Error(incrErr))
 	} else if count > loginMaxAttempts {
+		return nil, ErrAccountLocked
+	}
+
+	// Check overall IP-level rate limit to prevent username enumeration
+	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", req.IP)
+	ipCount, ipIncrErr := s.redis.IncrWithExpiry(ctx, ipAttemptsKey, loginRateLimitWindow)
+	if ipIncrErr != nil {
+		s.logger.Warn("Failed to check IP login rate limit, proceeding anyway", zap.Error(ipIncrErr))
+	} else if ipCount > loginMaxAttemptsPerIP {
 		return nil, ErrAccountLocked
 	}
 
@@ -90,6 +100,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 
 	// Clear login failures count
 	_ = s.redis.Del(ctx, attemptsKey)
+	_ = s.redis.Del(ctx, ipAttemptsKey)
 
 	// 8. Audit log
 	accountUUID, err := uuid.Parse(account.ID)

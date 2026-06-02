@@ -205,8 +205,7 @@ func TestRoleRepo_AssignRoleToAccount(t *testing.T) {
 
 	repo := NewRoleRepository(sqlDB)
 
-	db := dbPkg.NewDB(sqlDB)
-	err = db.WithTransaction(context.Background(), func(tx *sql.Tx) error {
+	err = dbPkg.RunInTransaction(context.Background(), sqlDB, func(tx *sql.Tx) error {
 		return repo.AssignRoleToAccount(context.Background(), tx, "account-001", "role-001")
 	})
 
@@ -226,8 +225,7 @@ func TestRoleRepo_RemoveRoleFromAccount_Success(t *testing.T) {
 
 	repo := NewRoleRepository(sqlDB)
 
-	db := dbPkg.NewDB(sqlDB)
-	err = db.WithTransaction(context.Background(), func(tx *sql.Tx) error {
+	err = dbPkg.RunInTransaction(context.Background(), sqlDB, func(tx *sql.Tx) error {
 		return repo.RemoveRoleFromAccount(context.Background(), tx, "account-001", "role-001", time.Now())
 	})
 
@@ -247,8 +245,7 @@ func TestRoleRepo_RemoveRoleFromAccount_NotFound(t *testing.T) {
 
 	repo := NewRoleRepository(sqlDB)
 
-	db := dbPkg.NewDB(sqlDB)
-	err = db.WithTransaction(context.Background(), func(tx *sql.Tx) error {
+	err = dbPkg.RunInTransaction(context.Background(), sqlDB, func(tx *sql.Tx) error {
 		return repo.RemoveRoleFromAccount(context.Background(), tx, "account-001", "role-999", time.Now())
 	})
 
@@ -269,8 +266,7 @@ func TestRoleRepo_SoftDeleteRolesByAccountID(t *testing.T) {
 
 	repo := NewRoleRepository(sqlDB)
 
-	db := dbPkg.NewDB(sqlDB)
-	err = db.WithTransaction(context.Background(), func(tx *sql.Tx) error {
+	err = dbPkg.RunInTransaction(context.Background(), sqlDB, func(tx *sql.Tx) error {
 		return repo.SoftDeleteRolesByAccountID(context.Background(), tx, "account-001", time.Now())
 	})
 

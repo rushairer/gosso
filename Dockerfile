@@ -19,7 +19,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     ./cmd
 
 # Runtime stage
-FROM alpine:3.22
+FROM alpine:3.22.0
 
 RUN apk add --no-cache ca-certificates tzdata wget
 

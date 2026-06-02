@@ -174,5 +174,13 @@ func (c *GoUnoConfig) Validate() error {
 		c.WebServerConfig.RateLimits.Passkey < 0 || c.WebServerConfig.RateLimits.API < 0 {
 		return fmt.Errorf("web_server: rate_limits values must be non-negative")
 	}
+	if c.SMTPConfig.Host != "" {
+		if c.SMTPConfig.Port <= 0 {
+			return fmt.Errorf("smtp: port must be positive when host is configured")
+		}
+		if c.SMTPConfig.From == "" {
+			return fmt.Errorf("smtp: from address is required when host is configured")
+		}
+	}
 	return nil
 }

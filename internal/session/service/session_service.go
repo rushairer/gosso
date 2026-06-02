@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/cache"
@@ -247,19 +248,58 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 		return nil, fmt.Errorf("get account sessions: %w", err)
 	}
 
-	var sessions []*domain.Session
+	if len(sessionIDs) == 0 {
+		return nil, nil
+	}
+
+	// Build keys and parse UUIDs, filtering invalid ones
+	type sessionEntry struct {
+		rawID string
+		key   string
+	}
+	entries := make([]sessionEntry, 0, len(sessionIDs))
 	for _, sid := range sessionIDs {
 		sessionUUID, err := uuid.Parse(sid)
 		if err != nil {
 			continue
 		}
-		session, err := s.GetSession(ctx, sessionUUID)
+		entries = append(entries, sessionEntry{rawID: sid, key: s.buildSessionKey(sessionUUID)})
+	}
+
+	if len(entries) == 0 {
+		return nil, nil
+	}
+
+	// Pipeline batch GET
+	rdb := s.redis.GetClient()
+	pipe := rdb.Pipeline()
+	cmds := make([]*redis.StringCmd, len(entries))
+	for i, entry := range entries {
+		cmds[i] = pipe.Get(ctx, entry.key)
+	}
+	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
+		s.logger.Warn("Pipeline session fetch had errors", zap.Error(err))
+	}
+
+	var sessions []*domain.Session
+	staleIDs := make([]string, 0)
+	for i, cmd := range cmds {
+		data, err := cmd.Result()
 		if err != nil {
-			// Session expired or not found; remove from index
-			_ = s.redis.SRem(ctx, indexKey, sid)
+			staleIDs = append(staleIDs, entries[i].rawID)
 			continue
 		}
-		sessions = append(sessions, session)
+		var session domain.Session
+		if err := json.Unmarshal([]byte(data), &session); err != nil {
+			staleIDs = append(staleIDs, entries[i].rawID)
+			continue
+		}
+		sessions = append(sessions, &session)
+	}
+
+	// Clean up stale index entries
+	for _, sid := range staleIDs {
+		_ = s.redis.SRem(ctx, indexKey, sid)
 	}
 
 	return sessions, nil
