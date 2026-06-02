@@ -139,7 +139,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - Fix CI: upgrade golangci-lint to v2.12.2 (v1 couldn't target Go 1.25), migrate config to v2 format.
+- Fix CI: upgrade golangci-lint-action to v7 (v6 doesn't support golangci-lint v2).
 - Fix CI: update auth integration test to match `InitializeAuthModule` 11-parameter signature (added `tokenSvc`).
 - Fix CI: session unit test now reads Redis DSN from `GOUNO_REDIS_DSN` env var with localhost fallback.
+- Fix CI: integration test DB connection closed by `runMigrations` — golang-migrate postgres driver's `Close()` closes the underlying `*sql.DB`.
+- Fix CI: golangci-lint v2 config schema — `exclusions` under `linters`, `local-prefixes` as array, remove deprecated `gosimple`.
+- Fix CI: JWT refresh test flaky due to second-precision `iat` — add 1s sleep before refresh.
 - Fix `*string` format specifier in examples/account/main.go.
 - Fix redundant newline in examples/metadata/main.go.
