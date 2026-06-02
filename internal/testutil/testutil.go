@@ -191,11 +191,8 @@ func runMigrations(db *sql.DB, migrationsPath string) error {
 	if err != nil {
 		return fmt.Errorf("create migrate instance: %w", err)
 	}
-	defer func() {
-		if src, closeErr := m.Close(); closeErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: close migrate: %v %v\n", src, closeErr)
-		}
-	}()
+	// Don't defer m.Close() — the golang-migrate postgres driver closes
+	// the underlying *sql.DB on Close(), which kills the shared connection.
 
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
 		return fmt.Errorf("migrate up: %w", err)

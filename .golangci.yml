@@ -10,8 +10,6 @@ linters:
     - unused
     - gosimple
     - gocritic
-    - gofmt
-    - goimports
     - misspell
     - unconvert
     - bodyclose
@@ -31,66 +29,73 @@ linters:
         - rangeValCopy
     misspell:
       locale: US
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
     goimports:
       local-prefixes: github.com/rushairer/gosso
 
 issues:
   max-issues-per-linter: 50
   max-same-issues: 5
-  exclude-rules:
-    # Test files can be more relaxed
-    - path: _test\.go
-      linters:
-        - errcheck
-        - govet
-        - unparam
-        - ineffassign
-        - staticcheck
-    # Generated code
-    - path: \.gen\.go$
-      linters:
-        - errcheck
-        - govet
-    # Allow fmt.Errorf wrapping without %w in some cases
-    - linters:
-        - gocritic
-      text: "singleCaseSwitch"
-    # migrate.go uses log.Fatal which is acceptable for CLI commands
-    - path: cmd/gouno/migrate\.go
-      linters:
-        - gocritic
-      text: "exitAfterDefer"
-    # defer tx.Rollback() is standard Go pattern — error is intentionally ignored
-    - linters:
-        - errcheck
-      text: "tx\\.Rollback"
-    # Password reset intentionally returns nil to prevent email enumeration
-    - path: internal/auth/service/password_reset_service\.go
-      linters:
-        - nilerr
-    # defer in loop: ActivateTOTP returns immediately so defer only runs once
-    - path: internal/auth/service/mfa_service\.go
-      linters:
-        - gocritic
-      text: "deferInLoop"
-    # IntrospectToken returns {"active": false} per RFC 7662, not an error
-    - path: internal/token/service/token_service\.go
-      linters:
-        - nilerr
-    # ifElseChain is a style preference, not a bug
-    - linters:
-        - gocritic
-      text: "ifElseChain"
-    # preferStringWriter is a style preference
-    - linters:
-        - gocritic
-      text: "preferStringWriter"
-    # Commented-out test code is intentional for future reference
-    - linters:
-        - gocritic
-      text: "commentedOutCode"
+  exclusions:
+    rules:
+      # Test files can be more relaxed
+      - path: _test\.go
+        linters:
+          - errcheck
+          - govet
+          - unparam
+          - ineffassign
+          - staticcheck
+      # Generated code
+      - path: \.gen\.go$
+        linters:
+          - errcheck
+          - govet
+      # Allow fmt.Errorf wrapping without %w in some cases
+      - linters:
+          - gocritic
+        text: "singleCaseSwitch"
+      # migrate.go uses log.Fatal which is acceptable for CLI commands
+      - path: cmd/gouno/migrate\.go
+        linters:
+          - gocritic
+        text: "exitAfterDefer"
+      # defer tx.Rollback() is standard Go pattern — error is intentionally ignored
+      - linters:
+          - errcheck
+        text: "tx\\.Rollback"
+      # Password reset intentionally returns nil to prevent email enumeration
+      - path: internal/auth/service/password_reset_service\.go
+        linters:
+          - nilerr
+      # defer in loop: ActivateTOTP returns immediately so defer only runs once
+      - path: internal/auth/service/mfa_service\.go
+        linters:
+          - gocritic
+        text: "deferInLoop"
+      # IntrospectToken returns {"active": false} per RFC 7662, not an error
+      - path: internal/token/service/token_service\.go
+        linters:
+          - nilerr
+      # ifElseChain is a style preference, not a bug
+      - linters:
+          - gocritic
+        text: "ifElseChain"
+      # preferStringWriter is a style preference
+      - linters:
+          - gocritic
+        text: "preferStringWriter"
+      # Commented-out test code is intentional for future reference
+      - linters:
+          - gocritic
+        text: "commentedOutCode"
 
 output:
   formats:
-    format: colored-line-number
-  sort-results: true
+    text:
+      path: stdout
