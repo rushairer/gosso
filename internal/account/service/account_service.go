@@ -18,6 +18,7 @@ import (
 	"github.com/rushairer/gosso/internal/audit"
 	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
+	dbutil "github.com/rushairer/gosso/internal/db"
 	"github.com/rushairer/gosso/utility"
 )
 
@@ -128,20 +129,9 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		}
 	}
 
-	// 3. Begin transaction
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelReadCommitted,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback() // ignore Rollback errors (Rollback after Commit is expected to fail)
-	}()
-
+	// 3. Create account + credentials in transaction
 	now := time.Now()
 
-	// 4. Create account
 	var username *string
 	if req.Username != "" {
 		username = &req.Username
@@ -159,69 +149,62 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		UpdatedAt:   now,
 	}
 
-	if err := s.accountRepo.CreateAccount(ctx, tx, account); err != nil {
-		return nil, err
-	}
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		if err := s.accountRepo.CreateAccount(ctx, tx, account); err != nil {
+			return err
+		}
 
-	// 5. Create credentials
-	var credentials []*domain.Credential
+		var credentials []*domain.Credential
 
-	// 5.1 Create password credential
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return fmt.Errorf("hash password: %w", err)
+		}
+
+		passwordCred := &domain.Credential{
+			ID:                uuid.New().String(),
+			AccountID:         account.ID,
+			Type:              domain.CredentialTypePassword,
+			Value:             string(passwordHash),
+			Verified:          true,
+			PrimaryCredential: false,
+			Metadata:          make(map[string]interface{}),
+			CreatedAt:         now,
+		}
+		credentials = append(credentials, passwordCred)
+
+		if req.Email != "" {
+			emailCred := &domain.Credential{
+				ID:                uuid.New().String(),
+				AccountID:         account.ID,
+				Type:              domain.CredentialTypeEmail,
+				Identifier:        &req.Email,
+				Verified:          false,
+				PrimaryCredential: true,
+				Metadata:          make(map[string]interface{}),
+				CreatedAt:         now,
+			}
+			credentials = append(credentials, emailCred)
+		}
+
+		if req.Phone != "" {
+			phoneCred := &domain.Credential{
+				ID:                uuid.New().String(),
+				AccountID:         account.ID,
+				Type:              domain.CredentialTypePhone,
+				Identifier:        &req.Phone,
+				Verified:          false,
+				PrimaryCredential: req.Email == "",
+				Metadata:          make(map[string]interface{}),
+				CreatedAt:         now,
+			}
+			credentials = append(credentials, phoneCred)
+		}
+
+		return s.credentialRepo.CreateCredentials(ctx, tx, credentials)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("hash password: %w", err)
-	}
-
-	passwordCred := &domain.Credential{
-		ID:                uuid.New().String(),
-		AccountID:         account.ID,
-		Type:              domain.CredentialTypePassword,
-		Value:             string(passwordHash),
-		Verified:          true,
-		PrimaryCredential: false,
-		Metadata:          make(map[string]interface{}),
-		CreatedAt:         now,
-	}
-	credentials = append(credentials, passwordCred)
-
-	// 5.2 Create email credential
-	if req.Email != "" {
-		emailCred := &domain.Credential{
-			ID:                uuid.New().String(),
-			AccountID:         account.ID,
-			Type:              domain.CredentialTypeEmail,
-			Identifier:        &req.Email,
-			Verified:          false,
-			PrimaryCredential: true,
-			Metadata:          make(map[string]interface{}),
-			CreatedAt:         now,
-		}
-		credentials = append(credentials, emailCred)
-	}
-
-	// 5.3 Create phone credential
-	if req.Phone != "" {
-		phoneCred := &domain.Credential{
-			ID:                uuid.New().String(),
-			AccountID:         account.ID,
-			Type:              domain.CredentialTypePhone,
-			Identifier:        &req.Phone,
-			Verified:          false,
-			PrimaryCredential: req.Email == "", // phone is primary when no email is provided
-			Metadata:          make(map[string]interface{}),
-			CreatedAt:         now,
-		}
-		credentials = append(credentials, phoneCred)
-	}
-
-	// 6. Bulk-create credentials
-	if err := s.credentialRepo.CreateCredentials(ctx, tx, credentials); err != nil {
 		return nil, err
-	}
-
-	// 7. Commit transaction
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
 	// 8. Audit log
@@ -248,27 +231,11 @@ func (s *accountServiceImpl) FindAccountByUsername(ctx context.Context, username
 
 // UpdateAccount updates account information.
 func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.Account) error {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelReadCommitted,
-	})
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
 	account.UpdatedAt = time.Now()
 
-	if err := s.accountRepo.UpdateAccount(ctx, tx, account); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-
-	return nil
+	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.accountRepo.UpdateAccount(ctx, tx, account)
+	})
 }
 
 // SoftDeleteAccount soft-deletes an account (cascades to all related data).
@@ -278,40 +245,23 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		return errors.New("account ID is required")
 	}
 
-	// 2. Begin transaction
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelReadCommitted,
-	})
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
+	// 2. Soft-delete in transaction
 	now := time.Now()
 
-	// 3. Soft-delete related data (in dependency order)
-	if err := s.credentialRepo.SoftDeleteCredentialsByAccount(ctx, tx, accountID, now); err != nil {
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		if err := s.credentialRepo.SoftDeleteCredentialsByAccount(ctx, tx, accountID, now); err != nil {
+			return err
+		}
+		if err := s.federatedIdentityRepo.SoftDeleteByAccountID(ctx, tx, accountID, now); err != nil {
+			return err
+		}
+		if err := s.roleRepo.SoftDeleteRolesByAccountID(ctx, tx, accountID, now); err != nil {
+			return err
+		}
+		return s.accountRepo.SoftDeleteAccount(ctx, tx, accountID, now)
+	})
+	if err != nil {
 		return err
-	}
-
-	if err := s.federatedIdentityRepo.SoftDeleteByAccountID(ctx, tx, accountID, now); err != nil {
-		return err
-	}
-
-	if err := s.roleRepo.SoftDeleteRolesByAccountID(ctx, tx, accountID, now); err != nil {
-		return err
-	}
-
-	// 4. Soft-delete the account itself
-	if err := s.accountRepo.SoftDeleteAccount(ctx, tx, accountID, now); err != nil {
-		return err
-	}
-
-	// 5. Commit transaction
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	// 6. Audit log
@@ -341,27 +291,11 @@ func (s *accountServiceImpl) VerifyCredential(ctx context.Context, credentialID 
 	credential := credentials[0]
 
 	// 2. Mark as verified
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelReadCommitted,
-	})
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
 	credential.Verify()
 
-	if err := s.credentialRepo.UpdateCredential(ctx, tx, credential); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-
-	return nil
+	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.credentialRepo.UpdateCredential(ctx, tx, credential)
+	})
 }
 
 // ChangePassword changes the account password.
@@ -384,24 +318,13 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	}
 
 	// 4. Update password
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelReadCommitted,
-	})
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
 	passwordCred.Value = string(newPasswordHash)
 
-	if err := s.credentialRepo.UpdateCredential(ctx, tx, passwordCred); err != nil {
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.credentialRepo.UpdateCredential(ctx, tx, passwordCred)
+	})
+	if err != nil {
 		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	// 5. Audit log
@@ -425,16 +348,6 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 	}
 
 	// 2. Create binding
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelReadCommitted,
-	})
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
 	now := time.Now()
 	identity := &domain.FederatedIdentity{
 		ID:             uuid.New().String(),
@@ -446,60 +359,27 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 		UpdatedAt:      now,
 	}
 
-	if err := s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-
-	return nil
+	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
+	})
 }
 
 // UnbindFederatedIdentity unbinds a third-party identity.
 func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, identityID string) error {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelReadCommitted,
-	})
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
 	now := time.Now()
 
-	if err := s.federatedIdentityRepo.SoftDeleteByID(ctx, tx, identityID, now); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-
-	return nil
+	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.federatedIdentityRepo.SoftDeleteByID(ctx, tx, identityID, now)
+	})
 }
 
 // AssignRole assigns a role to the account.
 func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID string) error {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelReadCommitted,
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.roleRepo.AssignRoleToAccount(ctx, tx, accountID, roleID)
 	})
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
-	if err := s.roleRepo.AssignRoleToAccount(ctx, tx, accountID, roleID); err != nil {
 		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	s.auditLog(ctx, auditDomain.NewRecord(
@@ -514,24 +394,13 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 
 // RemoveRole removes a role from the account.
 func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID string) error {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelReadCommitted,
-	})
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
 	now := time.Now()
 
-	if err := s.roleRepo.RemoveRoleFromAccount(ctx, tx, accountID, roleID, now); err != nil {
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.roleRepo.RemoveRoleFromAccount(ctx, tx, accountID, roleID, now)
+	})
+	if err != nil {
 		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	s.auditLog(ctx, auditDomain.NewRecord(
@@ -609,12 +478,14 @@ func (s *accountServiceImpl) GetAccountRoles(ctx context.Context, accountID stri
 // validateRegistration validates the registration request.
 var phoneRegex = regexp.MustCompile(`^\+?[1-9]\d{6,14}$`)
 
+const minPasswordLength = 8
+
 func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) error {
 	if req.Password == "" {
 		return errors.New("password is required")
 	}
 
-	if len(req.Password) < 8 {
+	if len(req.Password) < minPasswordLength {
 		return errors.New("password must be at least 8 characters")
 	}
 

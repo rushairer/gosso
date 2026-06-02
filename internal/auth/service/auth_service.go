@@ -15,6 +15,7 @@ import (
 	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
 	"github.com/rushairer/gosso/internal/cache"
+	dbutil "github.com/rushairer/gosso/internal/db"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
@@ -136,17 +137,9 @@ func (s *AuthService) auditLog(ctx context.Context, record *auditDomain.AuditRec
 
 // updateCredentialLastUsed updates the last used time of a credential
 func (s *AuthService) updateCredentialLastUsed(ctx context.Context, cred *accountDomain.Credential) error {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.credentialRepo.UpdateCredential(ctx, tx, cred); err != nil {
-		return fmt.Errorf("update credential: %w", err)
-	}
-
-	return tx.Commit()
+	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.credentialRepo.UpdateCredential(ctx, tx, cred)
+	})
 }
 
 // buildTokenClaims fetches roles and permissions for an account and builds token claims.
@@ -206,6 +199,11 @@ func (s *AuthService) createSessionAndTokens(ctx context.Context, account *accou
 	}
 
 	return session, accessToken, refreshToken, nil
+}
+
+// CreateSessionAndTokens is the public version of createSessionAndTokens, used by SocialLoginService via SessionTokenCreator interface.
+func (s *AuthService) CreateSessionAndTokens(ctx context.Context, account *accountDomain.Account, ip, userAgent string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error) {
+	return s.createSessionAndTokens(ctx, account, ip, userAgent)
 }
 
 // loginAuditLogs logs a login success or failure audit record.

@@ -22,6 +22,7 @@ func InitializeOAuth2Module(
 	*service.AuthCodeService,
 	*service.ConsentService,
 	*service.DeviceCodeService,
+	repository.OAuth2ClientRepository,
 ) {
 	clientRepo := repository.NewOAuth2ClientRepository(db)
 	clientSvc := service.NewOAuth2ClientService(db, clientRepo)
@@ -29,5 +30,5 @@ func InitializeOAuth2Module(
 	consentSvc := service.NewConsentService(redis, logger)
 	deviceCodeSvc := service.NewDeviceCodeService(redis, logger, authConfig.DeviceCodeExpiry, authConfig.DeviceCodeInterval)
 
-	return clientSvc, authCodeSvc, consentSvc, deviceCodeSvc
+	return clientSvc, authCodeSvc, consentSvc, deviceCodeSvc, clientRepo
 }

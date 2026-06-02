@@ -17,6 +17,7 @@ import (
 	"github.com/rushairer/gosso/internal/auth/domain"
 	"github.com/rushairer/gosso/internal/auth/repository"
 	"github.com/rushairer/gosso/internal/cache"
+	dbutil "github.com/rushairer/gosso/internal/db"
 )
 
 const (
@@ -139,18 +140,11 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, accountID, us
 		CreatedAt:       now,
 	}
 
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.credRepo.CreateCredential(ctx, tx, cred)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.credRepo.CreateCredential(ctx, tx, cred); err != nil {
 		return nil, fmt.Errorf("save credential: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit: %w", err)
 	}
 
 	s.logger.Info("Passkey registered",
@@ -254,18 +248,11 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 	cred.SignCount = waCred.Authenticator.SignCount
 	cred.MarkUsed()
 
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.credRepo.UpdateCredential(ctx, tx, cred)
+	})
 	if err != nil {
-		return "", nil, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.credRepo.UpdateCredential(ctx, tx, cred); err != nil {
 		s.logger.Warn("Failed to update credential sign count", zap.Error(err))
-	}
-
-	if err := tx.Commit(); err != nil {
-		s.logger.Warn("Failed to commit credential update", zap.Error(err))
 	}
 
 	return cred.AccountID, cred, nil
@@ -342,17 +329,14 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, accountID string,
 	cred.SignCount = waCred.Authenticator.SignCount
 	cred.MarkUsed()
 
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.credRepo.UpdateCredential(ctx, tx, cred)
+	})
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.credRepo.UpdateCredential(ctx, tx, cred); err != nil {
 		s.logger.Warn("Failed to update credential", zap.Error(err))
 	}
 
-	return tx.Commit()
+	return nil
 }
 
 // HasPasskeys checks if the account has any available passkey
@@ -396,18 +380,11 @@ func (s *PasskeyService) DeleteCredential(ctx context.Context, accountID, creden
 		return errors.New("credential does not belong to account")
 	}
 
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.credRepo.SoftDeleteCredential(ctx, tx, cred.ID, time.Now())
+	})
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.credRepo.SoftDeleteCredential(ctx, tx, cred.ID, time.Now()); err != nil {
 		return fmt.Errorf("delete credential: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit: %w", err)
 	}
 
 	s.logger.Info("Passkey deleted",

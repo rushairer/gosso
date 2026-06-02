@@ -121,7 +121,7 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 
 	s.logger.Info("Verification code sent",
 		zap.String("type", credType),
-		zap.String("identifier", identifier))
+		zap.String("identifier", maskIdentifier(credType, identifier)))
 	return nil
 }
 
@@ -178,4 +178,48 @@ func generateNumericCode(length int) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("%0*d", length, n), nil
+}
+
+// maskIdentifier masks PII for logging (e.g., "user@example.com" -> "u***@e***.com")
+func maskIdentifier(credType, identifier string) string {
+	switch credType {
+	case "email":
+		atIdx := -1
+		for i, c := range identifier {
+			if c == '@' {
+				atIdx = i
+				break
+			}
+		}
+		if atIdx > 0 && atIdx < len(identifier)-1 {
+			local := identifier[:atIdx]
+			domain := identifier[atIdx+1:]
+			maskedLocal := string(local[0]) + "***"
+			dotIdx := -1
+			for i, c := range domain {
+				if c == '.' {
+					dotIdx = i
+					break
+				}
+			}
+			var maskedDomain string
+			if dotIdx > 0 {
+				maskedDomain = string(domain[0]) + "***" + domain[dotIdx:]
+			} else {
+				maskedDomain = string(domain[0]) + "***"
+			}
+			return maskedLocal + "@" + maskedDomain
+		}
+		if len(identifier) > 1 {
+			return string(identifier[0]) + "***"
+		}
+		return "***"
+	case "phone":
+		if len(identifier) > 4 {
+			return identifier[:3] + "***" + identifier[len(identifier)-2:]
+		}
+		return "***"
+	default:
+		return "***"
+	}
 }

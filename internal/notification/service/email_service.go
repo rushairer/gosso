@@ -40,12 +40,9 @@ var (
 
 // EmailService email sending service
 type EmailService struct {
-	host     string
-	port     int
-	username string
-	password string
-	from     string
-	logger   *zap.Logger
+	dialer *gomail.Dialer
+	from   string
+	logger *zap.Logger
 }
 
 // NewEmailService creates a new email service instance
@@ -54,12 +51,9 @@ func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) *EmailService {
 		logger = zap.NewNop()
 	}
 	return &EmailService{
-		host:     cfg.Host,
-		port:     cfg.Port,
-		username: cfg.Username,
-		password: cfg.Password,
-		from:     cfg.From,
-		logger:   logger,
+		dialer: gomail.NewDialer(cfg.Host, cfg.Port, cfg.Username, cfg.Password),
+		from:   cfg.From,
+		logger: logger,
 	}
 }
 
@@ -92,9 +86,7 @@ func (s *EmailService) send(to, subject, htmlBody string) error {
 	msg.SetHeader("Subject", subject)
 	msg.SetBody("text/html", htmlBody)
 
-	dialer := gomail.NewDialer(s.host, s.port, s.username, s.password)
-
-	if err := dialer.DialAndSend(msg); err != nil {
+	if err := s.dialer.DialAndSend(msg); err != nil {
 		s.logger.Error("Failed to send email",
 			zap.String("to", to),
 			zap.Error(err))

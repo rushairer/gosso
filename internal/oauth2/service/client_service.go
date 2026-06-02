@@ -12,6 +12,7 @@ import (
 
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 	"github.com/rushairer/gosso/internal/oauth2/repository"
+	dbutil "github.com/rushairer/gosso/internal/db"
 )
 
 // RegisterClientRequest represents a request to register an OAuth2 client
@@ -84,18 +85,11 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 		Metadata:         req.Metadata,
 	}
 
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.clientRepo.Create(ctx, tx, client)
+	})
 	if err != nil {
-		return nil, "", fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.clientRepo.Create(ctx, tx, client); err != nil {
 		return nil, "", err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, "", fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return client, secretPlaintext, nil
@@ -110,31 +104,15 @@ func (s *oauth2ClientServiceImpl) FindByAccountID(ctx context.Context, accountID
 }
 
 func (s *oauth2ClientServiceImpl) UpdateClient(ctx context.Context, client *domain.OAuth2Client) error {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.clientRepo.Update(ctx, tx, client); err != nil {
-		return err
-	}
-
-	return tx.Commit()
+	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.clientRepo.Update(ctx, tx, client)
+	})
 }
 
 func (s *oauth2ClientServiceImpl) DeleteClient(ctx context.Context, id string) error {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.clientRepo.SoftDelete(ctx, tx, id, time.Now()); err != nil {
-		return err
-	}
-
-	return tx.Commit()
+	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.clientRepo.SoftDelete(ctx, tx, id, time.Now())
+	})
 }
 
 // generateClientID generates a 24-byte client_id (48 hex characters)

@@ -147,3 +147,54 @@ func TestWithTransactionIsolation_PanicRecovery(t *testing.T) {
 		})
 	})
 }
+
+// ──────────────────────────────────────────────
+// RunInTransaction (standalone)
+// ──────────────────────────────────────────────
+
+func TestRunInTransaction_CommitSuccess(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
+	err = RunInTransaction(context.Background(), sqlDB, func(_ *sql.Tx) error {
+		return nil
+	})
+
+	require.NoError(t, err)
+}
+
+func TestRunInTransaction_CallbackError_RollsBack(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+
+	bizErr := fmt.Errorf("business logic error")
+	err = RunInTransaction(context.Background(), sqlDB, func(_ *sql.Tx) error {
+		return bizErr
+	})
+
+	assert.Error(t, err)
+	assert.Equal(t, bizErr, err)
+}
+
+func TestRunInTransaction_PanicRecovery(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+
+	assert.Panics(t, func() {
+		_ = RunInTransaction(context.Background(), sqlDB, func(_ *sql.Tx) error {
+			panic("test panic")
+		})
+	})
+}

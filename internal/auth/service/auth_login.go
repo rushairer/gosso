@@ -16,6 +16,11 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	loginRateLimitWindow = 15 * time.Minute
+	loginMaxAttempts     = 5
+)
+
 // LoginByUsernamePassword login by username and password
 func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginRequest) (result *LoginResult, err error) {
 	defer func() {
@@ -29,8 +34,8 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 
 	// 0. Check rate limit for login failures
 	attemptsKey := fmt.Sprintf("login_attempts:%s", req.Username)
-	count, err := s.redis.IncrWithExpiry(ctx, attemptsKey, 15*time.Minute)
-	if err == nil && count > 5 {
+	count, err := s.redis.IncrWithExpiry(ctx, attemptsKey, loginRateLimitWindow)
+	if err == nil && count > loginMaxAttempts {
 		return nil, ErrAccountLocked
 	}
 

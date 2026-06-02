@@ -26,11 +26,8 @@ func TestNewEmailService(t *testing.T) {
 	}
 	svc := NewEmailService(cfg, nil)
 
-	assert.Equal(t, "smtp.example.com", svc.host)
-	assert.Equal(t, 587, svc.port)
-	assert.Equal(t, "user", svc.username)
-	assert.Equal(t, "pass", svc.password)
 	assert.Equal(t, "noreply@example.com", svc.from)
+	assert.NotNil(t, svc.dialer)
 	assert.NotNil(t, svc.logger)
 }
 

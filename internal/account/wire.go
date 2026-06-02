@@ -8,15 +8,22 @@ import (
 	auditService "github.com/rushairer/gosso/internal/audit/service"
 )
 
+// AccountModule holds the account service and shared repositories.
+type AccountModule struct {
+	Service              service.AccountService
+	AccountRepo          repository.AccountRepository
+	CredentialRepo       repository.CredentialRepository
+	FederatedIdentityRepo repository.FederatedIdentityRepository
+	RoleRepo             repository.RoleRepository
+}
+
 // InitializeAccountModule initializes the account module (dependency injection)
-func InitializeAccountModule(db *sql.DB, auditor *auditService.Auditor) service.AccountService {
-	// Create Repository instances
+func InitializeAccountModule(db *sql.DB, auditor *auditService.Auditor) *AccountModule {
 	accountRepo := repository.NewAccountRepository(db)
 	credentialRepo := repository.NewCredentialRepository(db)
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	// Create Service instances
 	accountService := service.NewAccountService(
 		db,
 		accountRepo,
@@ -26,5 +33,11 @@ func InitializeAccountModule(db *sql.DB, auditor *auditService.Auditor) service.
 		auditor,
 	)
 
-	return accountService
+	return &AccountModule{
+		Service:              accountService,
+		AccountRepo:          accountRepo,
+		CredentialRepo:       credentialRepo,
+		FederatedIdentityRepo: federatedIdentityRepo,
+		RoleRepo:             roleRepo,
+	}
 }

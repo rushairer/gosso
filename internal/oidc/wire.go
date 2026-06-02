@@ -1,8 +1,6 @@
 package oidc
 
 import (
-	"database/sql"
-
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/config"
@@ -15,15 +13,13 @@ import (
 
 // InitializeOIDCModule initializes the OIDC module
 func InitializeOIDCModule(
-	db *sql.DB,
 	tokenSvc *tokenService.TokenService,
 	accountSvc accountService.AccountService,
 	authConfig config.AuthConfig,
 	sessionSvc *sessionService.SessionService,
+	credentialRepo accountRepo.CredentialRepository,
 	logger *zap.Logger,
 ) (*oidcService.IDTokenService, *oidcService.DiscoveryService, *oidcService.JWKSService, *oidcService.UserInfoService, *oidcService.LogoutService) {
-	credentialRepo := accountRepo.NewCredentialRepository(db)
-
 	idTokenSvc := oidcService.NewIDTokenService(tokenSvc, authConfig.Issuer, accountSvc, credentialRepo, logger)
 	discoverySvc := oidcService.NewDiscoveryService(authConfig.Issuer)
 	jwksSvc := oidcService.NewJWKSService(tokenSvc.KeyService())
