@@ -1,8 +1,7 @@
-run:
-  timeout: 5m
-  build-tags: []
+version: "2"
 
 linters:
+  default: none
   enable:
     - errcheck
     - govet
@@ -17,24 +16,23 @@ linters:
     - unconvert
     - bodyclose
     - nilerr
-
-linters-settings:
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment
-      - shadow
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
-    disabled-checks:
-      - hugeParam
-      - rangeValCopy
-  misspell:
-    locale: US
-  goimports:
-    local-prefixes: github.com/rushairer/gosso
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+    misspell:
+      locale: US
+    goimports:
+      local-prefixes: github.com/rushairer/gosso
 
 issues:
   max-issues-per-linter: 50

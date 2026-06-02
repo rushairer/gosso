@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -16,7 +17,10 @@ import (
 
 func setupTestSessionService(t *testing.T) *SessionService {
 	logger := zap.NewNop()
-	dsn := "redis://localhost:6379/15"
+	dsn := os.Getenv("GOUNO_REDIS_DSN")
+	if dsn == "" {
+		dsn = "redis://localhost:6379/15"
+	}
 
 	redisClient, err := cache.NewRedisClient(dsn, 10, 5*time.Second, logger)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,10 +48,12 @@ func initAuthService(t *testing.T, e *testutil.TestEnv) *service.AuthService {
 	accountSvc := accountModule.InitializeAccountModule(e.DB, auditor)
 	keySvc, err := tokenService.NewKeyService("", "test-key", e.Logger)
 	require.NoError(t, err)
+	blacklistSvc := tokenService.NewBlacklistService(e.Redis, e.Logger)
+	tokenSvc := tokenService.NewTokenService([]byte("test-secret"), keySvc, "http://localhost:8080", 15*time.Minute, 720*time.Hour, e.Redis, blacklistSvc, e.Logger)
 	authSvc, _, _, _, _, _ := authModule.InitializeAuthModule(
 		e.DB, e.Redis, e.Logger,
 		e.Config.AuthConfig, e.Config.SMTPConfig,
-		accountSvc, nil, keySvc, "", auditor,
+		accountSvc, nil, keySvc, "", auditor, tokenSvc,
 	)
 	return authSvc
 }

@@ -138,5 +138,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Fix CI: upgrade golangci-lint to v2.12.2 (v1 couldn't target Go 1.25), migrate config to v2 format.
+- Fix CI: update auth integration test to match `InitializeAuthModule` 11-parameter signature (added `tokenSvc`).
+- Fix CI: session unit test now reads Redis DSN from `GOUNO_REDIS_DSN` env var with localhost fallback.
 - Fix `*string` format specifier in examples/account/main.go.
 - Fix redundant newline in examples/metadata/main.go.
