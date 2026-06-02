@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Authorization</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); padding: 32px; max-width: 480px; width: 100%; }
+        h1 { font-size: 20px; margin-bottom: 8px; }
+        .subtitle { color: #666; margin-bottom: 24px; font-size: 14px; }
+        .scopes { margin: 16px 0; }
+        .scope-item { padding: 8px 0; border-bottom: 1px solid #eee; font-size: 14px; }
+        .scope-item:last-child { border-bottom: none; }
+        .actions { display: flex; gap: 12px; margin-top: 24px; }
+        .btn { flex: 1; padding: 12px; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; }
+        .btn-approve { background: #2563eb; color: #fff; }
+        .btn-approve:hover { background: #1d4ed8; }
+        .btn-deny { background: #e5e7eb; color: #374151; }
+        .btn-deny:hover { background: #d1d5db; }
+        .input-group { margin-bottom: 24px; }
+        .input-group label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+        .input-group input { width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 18px; text-align: center; letter-spacing: 4px; text-transform: uppercase; }
+        .input-group input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+        .btn-submit { width: 100%; padding: 12px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; }
+        .btn-submit:hover { background: #1d4ed8; }
+        .error { background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 12px; margin-bottom: 16px; color: #dc2626; font-size: 14px; }
+    </style>
+</head>
+<body>
+    {{if .UserCode}}
+    <!-- Approval state -->
+    <div class="card">
+        <h1>{{.ClientName}} wants to access your account</h1>
+        <p class="subtitle">A device is requesting authorization. Review the permissions below:</p>
+        <div class="scopes">
+            {{range .Scopes}}
+            <div class="scope-item">{{.}}</div>
+            {{end}}
+        </div>
+        <form method="POST" action="/oauth2/device">
+            <input type="hidden" name="device_code" value="{{.DeviceCode}}">
+            <input type="hidden" name="user_code" value="{{.UserCode}}">
+            <div class="actions">
+                <button type="submit" name="approved" value="false" class="btn btn-deny">Deny</button>
+                <button type="submit" name="approved" value="true" class="btn btn-approve">Allow</button>
+            </div>
+        </form>
+    </div>
+    {{else}}
+    <!-- Entry state -->
+    <div class="card">
+        <h1>Device Authorization</h1>
+        <p class="subtitle">Enter the code displayed on your device to authorize it.</p>
+        {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+        <form method="GET" action="/oauth2/device">
+            <div class="input-group">
+                <label for="user_code">Authorization Code</label>
+                <input type="text" id="user_code" name="user_code" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off" autofocus>
+            </div>
+            <button type="submit" class="btn-submit">Continue</button>
+        </form>
+    </div>
+    {{end}}
+</body>
+</html>

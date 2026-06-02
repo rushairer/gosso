@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"embed"
+	"fmt"
 	"html/template"
 	"net/http"
 	"strings"
@@ -29,18 +30,35 @@ type TokenManager interface {
 	AccessExpiry() time.Duration
 }
 
+// DeviceCodeManager defines the device code operations needed by the OAuth2 controller.
+type DeviceCodeManager interface {
+	CreateDeviceCode(ctx context.Context, clientID string, scopes []string) (*oauth2Domain.DeviceCode, error)
+	GetDeviceCode(ctx context.Context, deviceCode string) (*oauth2Domain.DeviceCode, error)
+	GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*oauth2Domain.DeviceCode, error)
+	AuthorizeDeviceCode(ctx context.Context, deviceCode, accountID string) error
+	DenyDeviceCode(ctx context.Context, deviceCode string) error
+	CheckAndUpdatePollRate(ctx context.Context, deviceCode string) error
+	MarkUsed(ctx context.Context, deviceCode string) error
+}
+
 //go:embed template/consent.html
 var consentTemplateFS embed.FS
 
+//go:embed template/device.html
+var deviceTemplateFS embed.FS
+
 // OAuth2Controller handles OAuth2 protocol endpoints.
 type OAuth2Controller struct {
-	clientSvc   oauth2Service.OAuth2ClientService
-	authCodeSvc *oauth2Service.AuthCodeService
-	consentSvc  *oauth2Service.ConsentService
-	tokenSvc    TokenManager
-	idTokenSvc  *oidcService.IDTokenService
-	consentTmpl *template.Template
-	logger      *zap.Logger
+	clientSvc    oauth2Service.OAuth2ClientService
+	authCodeSvc  *oauth2Service.AuthCodeService
+	consentSvc   *oauth2Service.ConsentService
+	tokenSvc     TokenManager
+	idTokenSvc   *oidcService.IDTokenService
+	deviceCodeSvc DeviceCodeManager
+	issuer       string
+	consentTmpl  *template.Template
+	deviceTmpl   *template.Template
+	logger       *zap.Logger
 }
 
 // NewOAuth2Controller creates a new OAuth2 controller instance.
@@ -50,20 +68,29 @@ func NewOAuth2Controller(
 	consentSvc *oauth2Service.ConsentService,
 	tokenSvc TokenManager,
 	idTokenSvc *oidcService.IDTokenService,
+	deviceCodeSvc DeviceCodeManager,
+	issuer string,
 	logger *zap.Logger,
 ) *OAuth2Controller {
-	tmpl, err := template.ParseFS(consentTemplateFS, "template/consent.html")
+	consentTmpl, err := template.ParseFS(consentTemplateFS, "template/consent.html")
 	if err != nil {
 		panic("failed to parse consent template: " + err.Error())
 	}
+	deviceTmpl, err := template.ParseFS(deviceTemplateFS, "template/device.html")
+	if err != nil {
+		panic("failed to parse device template: " + err.Error())
+	}
 	return &OAuth2Controller{
-		clientSvc:   clientSvc,
-		authCodeSvc: authCodeSvc,
-		consentSvc:  consentSvc,
-		tokenSvc:    tokenSvc,
-		idTokenSvc:  idTokenSvc,
-		consentTmpl: tmpl,
-		logger:      logger,
+		clientSvc:     clientSvc,
+		authCodeSvc:   authCodeSvc,
+		consentSvc:    consentSvc,
+		tokenSvc:      tokenSvc,
+		idTokenSvc:    idTokenSvc,
+		deviceCodeSvc: deviceCodeSvc,
+		issuer:        issuer,
+		consentTmpl:   consentTmpl,
+		deviceTmpl:    deviceTmpl,
+		logger:        logger,
 	}
 }
 
@@ -76,6 +103,9 @@ func (c *OAuth2Controller) RegisterRoutes(server *gin.Engine, authMiddleware gin
 		oauth2.POST("/token", c.Token)
 		oauth2.POST("/revoke", authMiddleware, c.Revoke)
 		oauth2.POST("/introspect", c.Introspect)
+		oauth2.POST("/device/code", c.DeviceCodeRequest)
+		oauth2.GET("/device", authMiddleware, c.DeviceUserPage)
+		oauth2.POST("/device", authMiddleware, c.DeviceUserSubmit)
 	}
 }
 
@@ -210,6 +240,7 @@ type TokenRequest struct {
 	CodeVerifier string `json:"code_verifier"`
 	RefreshToken string `json:"refresh_token"`
 	Scope        string `json:"scope"`
+	DeviceCode   string `json:"device_code"`
 }
 
 // Token POST /oauth2/token
@@ -227,6 +258,8 @@ func (c *OAuth2Controller) Token(ctx *gin.Context) {
 		c.handleRefreshTokenGrant(ctx, &req)
 	case "client_credentials":
 		c.handleClientCredentialsGrant(ctx, &req)
+	case "urn:ietf:params:oauth:grant-type:device_code":
+		c.handleDeviceCodeGrant(ctx, &req)
 	default:
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unsupported_grant_type"})
 	}
@@ -436,6 +469,234 @@ func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, result)
+}
+
+// DeviceCodeRequestRequest is the device code initiation request body.
+type DeviceCodeRequestRequest struct {
+	ClientID string `form:"client_id" binding:"required"`
+	Scope    string `form:"scope"`
+}
+
+// DeviceCodeRequest POST /oauth2/device/code
+func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
+	var req DeviceCodeRequestRequest
+	if err := ctx.ShouldBind(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "client_id is required"})
+		return
+	}
+
+	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
+		return
+	}
+
+	if !client.HasGrantType(oauth2Domain.GrantTypeDeviceCode) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "device_code grant not allowed"})
+		return
+	}
+
+	scopes := splitScope(req.Scope)
+	if len(scopes) == 0 {
+		scopes = client.Scopes
+	}
+
+	dc, err := c.deviceCodeSvc.CreateDeviceCode(ctx, req.ClientID, scopes)
+	if err != nil {
+		c.logger.Error("Failed to create device code", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	verificationURI := c.issuer + "/oauth2/device"
+	ctx.JSON(http.StatusOK, gin.H{
+		"device_code":               dc.DeviceCode,
+		"user_code":                 dc.UserCode,
+		"verification_uri":          verificationURI,
+		"verification_uri_complete": verificationURI + "?user_code=" + dc.UserCode,
+		"expires_in":                int(time.Until(dc.ExpiresAt).Seconds()),
+		"interval":                  dc.Interval,
+	})
+}
+
+// DeviceUserPage GET /oauth2/device
+func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
+	userCode := ctx.Query("user_code")
+
+	if userCode == "" {
+		ctx.Header("Content-Type", "text/html; charset=utf-8")
+		_ = c.deviceTmpl.Execute(ctx.Writer, gin.H{
+			"UserCode": "",
+		})
+		return
+	}
+
+	dc, err := c.deviceCodeSvc.GetDeviceCodeByUserCode(ctx, userCode)
+	if err != nil {
+		ctx.Header("Content-Type", "text/html; charset=utf-8")
+		_ = c.deviceTmpl.Execute(ctx.Writer, gin.H{
+			"UserCode": "",
+			"Error":    "Invalid or expired code. Please try again.",
+		})
+		return
+	}
+
+	if dc.IsExpired() || dc.Status != oauth2Domain.DeviceCodeStatusPending {
+		ctx.Header("Content-Type", "text/html; charset=utf-8")
+		_ = c.deviceTmpl.Execute(ctx.Writer, gin.H{
+			"UserCode": "",
+			"Error":    "This code has expired or is no longer valid.",
+		})
+		return
+	}
+
+	client, err := c.clientSvc.FindByClientID(ctx, dc.ClientID)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
+		return
+	}
+
+	ctx.Header("Content-Type", "text/html; charset=utf-8")
+	_ = c.deviceTmpl.Execute(ctx.Writer, gin.H{
+		"UserCode":   dc.UserCode,
+		"DeviceCode": dc.DeviceCode,
+		"ClientName": client.Name,
+		"Scopes":     dc.Scopes,
+	})
+}
+
+// DeviceUserSubmitRequest is the device authorization form submission.
+type DeviceUserSubmitRequest struct {
+	DeviceCode string `form:"device_code" binding:"required"`
+	UserCode   string `form:"user_code"`
+	Approved   string `form:"approved"`
+}
+
+// DeviceUserSubmit POST /oauth2/device
+func (c *OAuth2Controller) DeviceUserSubmit(ctx *gin.Context) {
+	var req DeviceUserSubmitRequest
+	if err := ctx.ShouldBind(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
+	}
+
+	accountID, exists := ctx.Get(middleware.ContextKeyAccountID)
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	accountIDStr, ok := accountID.(string)
+	if !ok || accountIDStr == "" {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	if req.Approved == "true" {
+		if err := c.deviceCodeSvc.AuthorizeDeviceCode(ctx, req.DeviceCode, accountIDStr); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": err.Error()})
+			return
+		}
+	} else {
+		if err := c.deviceCodeSvc.DenyDeviceCode(ctx, req.DeviceCode); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": err.Error()})
+			return
+		}
+	}
+
+	ctx.Header("Content-Type", "text/html; charset=utf-8")
+	ctx.String(http.StatusOK, "<!DOCTYPE html><html><body><p>Authorization %s. You may close this page.</p></body></html>",
+		map[bool]string{true: "granted", false: "denied"}[req.Approved == "true"])
+}
+
+func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenRequest) {
+	if req.ClientID == "" || req.DeviceCode == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "client_id and device_code required"})
+		return
+	}
+
+	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
+		return
+	}
+
+	if !client.HasGrantType(oauth2Domain.GrantTypeDeviceCode) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "device_code grant not allowed"})
+		return
+	}
+
+	dc, err := c.deviceCodeSvc.GetDeviceCode(ctx, req.DeviceCode)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "device code not found"})
+		return
+	}
+
+	if dc.IsExpired() {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "expired_token", "error_description": "device code has expired"})
+		return
+	}
+
+	if err := c.deviceCodeSvc.CheckAndUpdatePollRate(ctx, req.DeviceCode); err != nil {
+		ctx.Header("Retry-After", fmt.Sprintf("%d", dc.Interval))
+		ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "slow_down", "error_description": "too many requests"})
+		return
+	}
+
+	switch dc.Status {
+	case oauth2Domain.DeviceCodeStatusPending:
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "authorization_pending", "error_description": "user has not yet authorized the device"})
+		return
+	case oauth2Domain.DeviceCodeStatusDenied:
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "access_denied", "error_description": "user denied the authorization request"})
+		return
+	case oauth2Domain.DeviceCodeStatusUsed:
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "device code already used"})
+		return
+	}
+
+	// Status is authorized — issue tokens
+	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
+		AccountID: dc.AccountID,
+		Scope:     strings.Join(dc.Scopes, " "),
+		ClientID:  dc.ClientID,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	refreshToken, err := c.tokenSvc.GenerateRefreshToken(ctx, dc.AccountID, dc.ClientID, "", strings.Join(dc.Scopes, " "))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	var idToken string
+	if c.idTokenSvc != nil {
+		for _, s := range dc.Scopes {
+			if s == "openid" {
+				idToken, _ = c.idTokenSvc.GenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", time.Now().Add(c.tokenSvc.AccessExpiry()))
+				break
+			}
+		}
+	}
+
+	if err := c.deviceCodeSvc.MarkUsed(ctx, req.DeviceCode); err != nil {
+		c.logger.Warn("Failed to mark device code as used", zap.Error(err))
+	}
+
+	response := gin.H{
+		"access_token":  accessToken,
+		"refresh_token": refreshToken.Token,
+		"token_type":    "Bearer",
+		"expires_in":    int(c.tokenSvc.AccessExpiry().Seconds()),
+		"scope":         strings.Join(dc.Scopes, " "),
+	}
+	if idToken != "" {
+		response["id_token"] = idToken
+	}
+
+	ctx.JSON(http.StatusOK, response)
 }
 
 func redirectWithCode(ctx *gin.Context, redirectURI, code, state string) {

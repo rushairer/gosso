@@ -97,23 +97,93 @@ func (m *mockTokenMgr) IntrospectToken(_ context.Context, _ string) (map[string]
 
 func (m *mockTokenMgr) AccessExpiry() time.Duration { return 15 * time.Minute }
 
+type mockDeviceCodeMgr struct {
+	createFn           func() (*oauth2Domain.DeviceCode, error)
+	getFn              func() (*oauth2Domain.DeviceCode, error)
+	getByUserCodeFn    func() (*oauth2Domain.DeviceCode, error)
+	authorizeFn        func() error
+	denyFn             func() error
+	checkPollFn        func() error
+	markUsedFn         func() error
+}
+
+func (m *mockDeviceCodeMgr) CreateDeviceCode(_ context.Context, _ string, _ []string) (*oauth2Domain.DeviceCode, error) {
+	if m.createFn != nil {
+		return m.createFn()
+	}
+	return &oauth2Domain.DeviceCode{
+		DeviceCode: "test-device-code",
+		UserCode:   "ABCD-EFGH",
+		ClientID:   "cid-test",
+		Scopes:     []string{"openid"},
+		Status:     oauth2Domain.DeviceCodeStatusPending,
+		ExpiresAt:  time.Now().Add(10 * time.Minute),
+		Interval:   5,
+	}, nil
+}
+
+func (m *mockDeviceCodeMgr) GetDeviceCode(_ context.Context, _ string) (*oauth2Domain.DeviceCode, error) {
+	if m.getFn != nil {
+		return m.getFn()
+	}
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockDeviceCodeMgr) GetDeviceCodeByUserCode(_ context.Context, _ string) (*oauth2Domain.DeviceCode, error) {
+	if m.getByUserCodeFn != nil {
+		return m.getByUserCodeFn()
+	}
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockDeviceCodeMgr) AuthorizeDeviceCode(_ context.Context, _, _ string) error {
+	if m.authorizeFn != nil {
+		return m.authorizeFn()
+	}
+	return nil
+}
+
+func (m *mockDeviceCodeMgr) DenyDeviceCode(_ context.Context, _ string) error {
+	if m.denyFn != nil {
+		return m.denyFn()
+	}
+	return nil
+}
+
+func (m *mockDeviceCodeMgr) CheckAndUpdatePollRate(_ context.Context, _ string) error {
+	if m.checkPollFn != nil {
+		return m.checkPollFn()
+	}
+	return nil
+}
+
+func (m *mockDeviceCodeMgr) MarkUsed(_ context.Context, _ string) error {
+	if m.markUsedFn != nil {
+		return m.markUsedFn()
+	}
+	return nil
+}
+
 // setupOAuth2Router builds a gin.Engine with the OAuth2 controller routes.
 // Since authCodeSvc/consentSvc/idTokenSvc require Redis, we only test
 // endpoints that rely on clientSvc and tokenSvc (mockable interfaces).
-func setupOAuth2Router(clientSvc *mockOAuth2ClientSvcForOAuth2, tokenSvc *mockTokenMgr) *gin.Engine {
+func setupOAuth2Router(clientSvc *mockOAuth2ClientSvcForOAuth2, tokenSvc *mockTokenMgr, deviceCodeMgr *mockDeviceCodeMgr) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 
 	ctrl := &OAuth2Controller{
-		clientSvc: clientSvc,
-		tokenSvc:  tokenSvc,
-		logger:    zap.NewNop(),
+		clientSvc:     clientSvc,
+		tokenSvc:      tokenSvc,
+		deviceCodeSvc: deviceCodeMgr,
+		issuer:        "https://sso.example.com",
+		logger:        zap.NewNop(),
 	}
 
 	// Register token and revoke routes (no Redis dependency)
 	engine.POST("/oauth2/token", ctrl.Token)
 	engine.POST("/oauth2/revoke", ctrl.Revoke)
 	engine.POST("/oauth2/introspect", ctrl.Introspect)
+	engine.POST("/oauth2/device/code", ctrl.DeviceCodeRequest)
 
 	return engine
 }
@@ -161,7 +231,7 @@ func TestSplitScope_ExtraSpaces(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestToken_MissingGrantType(t *testing.T) {
-	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{})
+	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
 	body := `{"code":"abc"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
@@ -174,7 +244,7 @@ func TestToken_MissingGrantType(t *testing.T) {
 }
 
 func TestToken_UnsupportedGrantType(t *testing.T) {
-	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{})
+	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
 	body := `{"grant_type":"password"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
@@ -187,7 +257,7 @@ func TestToken_UnsupportedGrantType(t *testing.T) {
 }
 
 func TestToken_InvalidJSON(t *testing.T) {
-	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{})
+	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString("not json"))
 	req.Header.Set("Content-Type", "application/json")
@@ -208,6 +278,7 @@ func TestToken_ClientCredentials_Success(t *testing.T) {
 			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
 		},
 		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
 	)
 
 	body := `{"grant_type":"client_credentials","client_id":"cid-test","client_secret":"test-secret","scope":"openid profile"}`
@@ -226,7 +297,7 @@ func TestToken_ClientCredentials_Success(t *testing.T) {
 }
 
 func TestToken_ClientCredentials_MissingCredentials(t *testing.T) {
-	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{})
+	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
 	body := `{"grant_type":"client_credentials"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
@@ -244,6 +315,7 @@ func TestToken_ClientCredentials_ClientNotFound(t *testing.T) {
 			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return nil, fmt.Errorf("not found") },
 		},
 		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
 	)
 
 	body := `{"grant_type":"client_credentials","client_id":"bad","client_secret":"secret"}`
@@ -263,6 +335,7 @@ func TestToken_ClientCredentials_PublicClientRejected(t *testing.T) {
 			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
 		},
 		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
 	)
 
 	body := `{"grant_type":"client_credentials","client_id":"cid-test","client_secret":"test-secret"}`
@@ -282,6 +355,7 @@ func TestToken_ClientCredentials_WrongSecret(t *testing.T) {
 			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
 		},
 		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
 	)
 
 	body := `{"grant_type":"client_credentials","client_id":"cid-test","client_secret":"wrong-secret"}`
@@ -302,6 +376,7 @@ func TestToken_ClientCredentials_GrantNotAllowed(t *testing.T) {
 			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
 		},
 		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
 	)
 
 	body := `{"grant_type":"client_credentials","client_id":"cid-test","client_secret":"test-secret"}`
@@ -319,7 +394,7 @@ func TestToken_ClientCredentials_GrantNotAllowed(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestToken_RefreshToken_Success(t *testing.T) {
-	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{})
+	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
 	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
@@ -343,6 +418,7 @@ func TestToken_RefreshToken_Invalid(t *testing.T) {
 				return nil, fmt.Errorf("token expired")
 			},
 		},
+		&mockDeviceCodeMgr{},
 	)
 
 	body := `{"grant_type":"refresh_token","refresh_token":"bad-token"}`
@@ -365,6 +441,7 @@ func TestToken_AuthCode_ClientNotFound(t *testing.T) {
 			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return nil, fmt.Errorf("not found") },
 		},
 		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
 	)
 
 	body := `{"grant_type":"authorization_code","client_id":"bad","code":"abc"}`
@@ -383,6 +460,7 @@ func TestToken_AuthCode_ConfidentialMissingSecret(t *testing.T) {
 			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
 		},
 		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
 	)
 
 	body := `{"grant_type":"authorization_code","client_id":"cid-test","code":"abc"}`
@@ -400,7 +478,7 @@ func TestToken_AuthCode_ConfidentialMissingSecret(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestRevoke_Success(t *testing.T) {
-	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{})
+	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
 	body := `{"token":"some-refresh-token"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/revoke", bytes.NewBufferString(body))
@@ -413,7 +491,7 @@ func TestRevoke_Success(t *testing.T) {
 }
 
 func TestRevoke_MissingToken(t *testing.T) {
-	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{})
+	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
 	body := `{}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/revoke", bytes.NewBufferString(body))
@@ -435,6 +513,7 @@ func TestIntrospect_BasicAuth_Success(t *testing.T) {
 			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
 		},
 		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
 	)
 
 	body := `{"token":"some-token"}`
@@ -452,7 +531,7 @@ func TestIntrospect_BasicAuth_Success(t *testing.T) {
 }
 
 func TestIntrospect_NoAuth(t *testing.T) {
-	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{})
+	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
 	body := `{"token":"some-token"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", bytes.NewBufferString(body))
@@ -470,6 +549,7 @@ func TestIntrospect_ClientNotFound(t *testing.T) {
 			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return nil, fmt.Errorf("not found") },
 		},
 		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
 	)
 
 	body := `{"token":"some-token"}`
@@ -489,6 +569,7 @@ func TestIntrospect_WrongSecret(t *testing.T) {
 			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
 		},
 		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
 	)
 
 	body := `{"token":"some-token"}`
@@ -510,6 +591,7 @@ func TestIntrospect_TokenInactive(t *testing.T) {
 		&mockTokenMgr{
 			introspectFn: func() (map[string]any, error) { return nil, fmt.Errorf("invalid") },
 		},
+		&mockDeviceCodeMgr{},
 	)
 
 	body := `{"token":"expired-token"}`
@@ -533,6 +615,7 @@ func TestIntrospect_MissingToken_Body(t *testing.T) {
 			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
 		},
 		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
 	)
 
 	body := `{}`
@@ -658,4 +741,267 @@ func TestAuthorize_Unauthorized_NoAccountID(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+// ──────────────────────────────────────────────
+// Device Code Request endpoint
+// ──────────────────────────────────────────────
+
+func TestDeviceCodeRequest_Success(t *testing.T) {
+	client := newConfidentialTestClient()
+	client.GrantTypes = append(client.GrantTypes, oauth2Domain.GrantTypeDeviceCode)
+	engine := setupOAuth2Router(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
+	)
+
+	body := `client_id=cid-test&scope=openid+profile`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/device/code", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.NotEmpty(t, resp["device_code"])
+	assert.NotEmpty(t, resp["user_code"])
+	assert.Equal(t, "https://sso.example.com/oauth2/device", resp["verification_uri"])
+	assert.NotEmpty(t, resp["verification_uri_complete"])
+	assert.NotNil(t, resp["expires_in"])
+	assert.NotNil(t, resp["interval"])
+}
+
+func TestDeviceCodeRequest_InvalidClient(t *testing.T) {
+	engine := setupOAuth2Router(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return nil, fmt.Errorf("not found") },
+		},
+		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
+	)
+
+	body := `client_id=bad-client`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/device/code", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid_client")
+}
+
+func TestDeviceCodeRequest_GrantNotAllowed(t *testing.T) {
+	client := newConfidentialTestClient()
+	engine := setupOAuth2Router(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
+	)
+
+	body := `client_id=cid-test`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/device/code", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "unauthorized_client")
+}
+
+func TestDeviceCodeRequest_MissingClientID(t *testing.T) {
+	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
+
+	body := ``
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/device/code", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid_request")
+}
+
+// ──────────────────────────────────────────────
+// Token — device_code grant
+// ──────────────────────────────────────────────
+
+func TestToken_DeviceCode_AuthorizationPending(t *testing.T) {
+	client := newConfidentialTestClient()
+	client.GrantTypes = append(client.GrantTypes, oauth2Domain.GrantTypeDeviceCode)
+	engine := setupOAuth2Router(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockDeviceCodeMgr{
+			getFn: func() (*oauth2Domain.DeviceCode, error) {
+				return &oauth2Domain.DeviceCode{
+					DeviceCode: "dc-123",
+					Status:     oauth2Domain.DeviceCodeStatusPending,
+					ExpiresAt:  time.Now().Add(10 * time.Minute),
+					Interval:   5,
+				}, nil
+			},
+		},
+	)
+
+	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","device_code":"dc-123"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "authorization_pending")
+}
+
+func TestToken_DeviceCode_AccessDenied(t *testing.T) {
+	client := newConfidentialTestClient()
+	client.GrantTypes = append(client.GrantTypes, oauth2Domain.GrantTypeDeviceCode)
+	engine := setupOAuth2Router(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockDeviceCodeMgr{
+			getFn: func() (*oauth2Domain.DeviceCode, error) {
+				return &oauth2Domain.DeviceCode{
+					DeviceCode: "dc-123",
+					Status:     oauth2Domain.DeviceCodeStatusDenied,
+					ExpiresAt:  time.Now().Add(10 * time.Minute),
+					Interval:   5,
+				}, nil
+			},
+		},
+	)
+
+	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","device_code":"dc-123"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "access_denied")
+}
+
+func TestToken_DeviceCode_ExpiredToken(t *testing.T) {
+	client := newConfidentialTestClient()
+	client.GrantTypes = append(client.GrantTypes, oauth2Domain.GrantTypeDeviceCode)
+	engine := setupOAuth2Router(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockDeviceCodeMgr{
+			getFn: func() (*oauth2Domain.DeviceCode, error) {
+				return &oauth2Domain.DeviceCode{
+					DeviceCode: "dc-123",
+					Status:     oauth2Domain.DeviceCodeStatusPending,
+					ExpiresAt:  time.Now().Add(-1 * time.Minute),
+					Interval:   5,
+				}, nil
+			},
+		},
+	)
+
+	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","device_code":"dc-123"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "expired_token")
+}
+
+func TestToken_DeviceCode_SlowDown(t *testing.T) {
+	client := newConfidentialTestClient()
+	client.GrantTypes = append(client.GrantTypes, oauth2Domain.GrantTypeDeviceCode)
+	engine := setupOAuth2Router(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockDeviceCodeMgr{
+			getFn: func() (*oauth2Domain.DeviceCode, error) {
+				return &oauth2Domain.DeviceCode{
+					DeviceCode: "dc-123",
+					Status:     oauth2Domain.DeviceCodeStatusPending,
+					ExpiresAt:  time.Now().Add(10 * time.Minute),
+					Interval:   5,
+				}, nil
+			},
+			checkPollFn: func() error { return oauth2Domain.ErrSlowDown },
+		},
+	)
+
+	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","device_code":"dc-123"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusTooManyRequests, w.Code)
+	assert.Contains(t, w.Body.String(), "slow_down")
+	assert.NotEmpty(t, w.Header().Get("Retry-After"))
+}
+
+func TestToken_DeviceCode_Success(t *testing.T) {
+	client := newConfidentialTestClient()
+	client.GrantTypes = append(client.GrantTypes, oauth2Domain.GrantTypeDeviceCode)
+	engine := setupOAuth2Router(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockDeviceCodeMgr{
+			getFn: func() (*oauth2Domain.DeviceCode, error) {
+				return &oauth2Domain.DeviceCode{
+					DeviceCode: "dc-123",
+					ClientID:   "cid-test",
+					AccountID:  "account-001",
+					Scopes:     []string{"openid", "profile"},
+					Status:     oauth2Domain.DeviceCodeStatusAuthorized,
+					ExpiresAt:  time.Now().Add(10 * time.Minute),
+					Interval:   5,
+				}, nil
+			},
+		},
+	)
+
+	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","device_code":"dc-123"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "mock-access-token", resp["access_token"])
+	assert.Equal(t, "mock-refresh", resp["refresh_token"])
+	assert.Equal(t, "Bearer", resp["token_type"])
+	assert.Equal(t, float64(900), resp["expires_in"])
+}
+
+func TestToken_DeviceCode_MissingDeviceCode(t *testing.T) {
+	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
+
+	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid_request")
 }

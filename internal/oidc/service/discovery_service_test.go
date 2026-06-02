@@ -43,6 +43,7 @@ func TestGetDiscoveryDocument_SupportedValues(t *testing.T) {
 	assert.Contains(t, doc["grant_types_supported"], "authorization_code")
 	assert.Contains(t, doc["grant_types_supported"], "refresh_token")
 	assert.Contains(t, doc["grant_types_supported"], "client_credentials")
+	assert.Contains(t, doc["grant_types_supported"], "urn:ietf:params:oauth:grant-type:device_code")
 
 	assert.Contains(t, doc["subject_types_supported"], "public")
 	assert.Contains(t, doc["id_token_signing_alg_values_supported"], "RS256")
@@ -90,4 +91,18 @@ func TestGetDiscoveryDocument_EndSessionEndpoint_Localhost(t *testing.T) {
 	doc := svc.GetDiscoveryDocument()
 
 	assert.Equal(t, "http://localhost:8080/oidc/logout", doc["end_session_endpoint"])
+}
+
+func TestGetDiscoveryDocument_DeviceAuthorizationEndpoint(t *testing.T) {
+	svc := NewDiscoveryService("https://sso.example.com")
+	doc := svc.GetDiscoveryDocument()
+
+	assert.Equal(t, "https://sso.example.com/oauth2/device/code", doc["device_authorization_endpoint"])
+}
+
+func TestGetDiscoveryDocument_DeviceAuthorizationEndpoint_Localhost(t *testing.T) {
+	svc := NewDiscoveryService("http://localhost:8080")
+	doc := svc.GetDiscoveryDocument()
+
+	assert.Equal(t, "http://localhost:8080/oauth2/device/code", doc["device_authorization_endpoint"])
 }

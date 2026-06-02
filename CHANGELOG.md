@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - Add unit tests for middleware: RequestIDMiddleware, ZapLoggerMiddleware, CSRFMiddleware, generateCSRFToken (`middleware/middleware_test.go`).
+- Add OAuth2 Device Authorization Grant (RFC 8628) — enables input-constrained devices (CLIs, smart TVs, IoT) to obtain tokens.
+- Add `POST /oauth2/device/code` endpoint — initiates device authorization flow, returns `device_code`, `user_code`, `verification_uri`.
+- Add `GET/POST /oauth2/device` — user-facing HTML page for entering and approving device codes.
+- Add `urn:ietf:params:oauth:grant-type:device_code` grant type to token endpoint with poll rate limiting (`slow_down`), expiry, and status checks.
+- Add `DeviceCodeService` (`internal/oauth2/service/device_code_service.go`) — Redis-backed storage with crypto/rand code generation, user code format `XXXX-XXXX`.
+- Add `DeviceCode` domain model (`internal/oauth2/domain/device_code.go`) — status lifecycle (pending/authorized/denied/used).
+- Add `DeviceCodeManager` interface to `OAuth2Controller` for testability.
+- Add `DeviceCodeExpiry` and `DeviceCodeInterval` to `AuthConfig`.
+- Add `device_authorization_endpoint` and `urn:ietf:params:oauth:grant-type:device_code` grant type to OIDC discovery document.
+- Add unit tests for device code domain, controller endpoints (10 tests), and discovery document.
 - Add unit tests for audit domain: NewRecord, action constants, UUID generation (`internal/audit/domain/audit_test.go`).
 - Add unit tests for audit context: SetMetadata, IPFromContext, UserAgentFromContext, RequestIDFromContext (`internal/audit/context_test.go`).
 - Add unit tests for DB transaction helpers: WithTransaction, WithTransactionIsolation, panic recovery (`internal/db/transaction_test.go`).
@@ -113,6 +123,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `InitializeOIDCModule` now accepts `*sessionService.SessionService` parameter and returns `*oidcService.LogoutService` as 5th value.
 - `NewOIDCController` now accepts `logoutSvc`, `clientRepo`, `tokenSvc`, and `issuer` parameters for logout support.
 - CSRF middleware now exempts `/oidc/logout` endpoint.
+- `InitializeOAuth2Module` now returns `*DeviceCodeService` as 4th return value.
+- `NewOAuth2Controller` now accepts `DeviceCodeManager` and `issuer` parameters.
+- `OAuth2Controller.RegisterRoutes` now registers `/oauth2/device/code`, `/oauth2/device` endpoints.
 
 - Translate all Chinese comments, doc-comments, error messages, and log strings to English across the entire codebase (78 files).
 - Normalize sentinel errors to use `errors.New()` instead of static `fmt.Errorf()` across auth, account, and verification services.

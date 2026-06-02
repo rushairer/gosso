@@ -112,6 +112,8 @@ type AuthConfig struct {
 	AccessTokenExpiry       time.Duration `mapstructure:"access_token_expiry"`
 	RefreshTokenExpiry      time.Duration `mapstructure:"refresh_token_expiry"`
 	AuthorizationCodeExpiry time.Duration `mapstructure:"authorization_code_expiry"`
+	DeviceCodeExpiry        time.Duration `mapstructure:"device_code_expiry"`
+	DeviceCodeInterval      time.Duration `mapstructure:"device_code_interval"`
 	DefaultScopes           []string      `mapstructure:"default_scopes"`
 	PrivateKeyPath          string        `mapstructure:"private_key_path"`
 	KeyID                   string        `mapstructure:"key_id"`

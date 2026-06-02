@@ -224,12 +224,12 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		db, redis, logger, cfg.AuthConfig, cfg.SMTPConfig, accountSvc, providers, keySvc, cfg.AuthConfig.PasswordResetBaseURL, auditor, tokenSvc,
 	)
 
-	oauth2ClientSvc, authCodeSvc, consentSvc := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig)
+	oauth2ClientSvc, authCodeSvc, consentSvc, deviceCodeSvc := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig)
 	idTokenSvc, discoverySvc, jwksSvc, userInfoSvc, logoutSvc := oidc.InitializeOIDCModule(db, tokenSvc, accountSvc, cfg.AuthConfig, sessionSvc, logger)
 
 	clientRepo := oauth2Repo.NewOAuth2ClientRepository(db)
 	authCtrl := authController.NewAuthController(authSvc, tokenSvc, socialSvc, verificationSvc, passwordResetSvc, credentialRepo, logger)
-	oauth2Ctrl := oauth2Controller.NewOAuth2Controller(oauth2ClientSvc, authCodeSvc, consentSvc, tokenSvc, idTokenSvc, logger)
+	oauth2Ctrl := oauth2Controller.NewOAuth2Controller(oauth2ClientSvc, authCodeSvc, consentSvc, tokenSvc, idTokenSvc, deviceCodeSvc, cfg.AuthConfig.Issuer, logger)
 	clientCtrl := oauth2Controller.NewClientController(oauth2ClientSvc, logger)
 	oidcCtrl := oidcController.NewOIDCController(discoverySvc, jwksSvc, userInfoSvc, logoutSvc, clientRepo, tokenSvc, cfg.AuthConfig.Issuer, logger)
 	adminCtrl := adminController.NewAdminController(accountSvc, logger)
