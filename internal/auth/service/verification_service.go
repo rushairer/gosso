@@ -28,11 +28,11 @@ const (
 // Returns JSON array: ["ok", accountID] | ["mismatch", ""] | ["exhausted", ""] | ["not_found", ""]
 // ARGV[1]=code, ARGV[2]=max_attempts, ARGV[3]=default_ttl_seconds
 var verifyAndIncrementScript = redis.NewScript(`
+local cjson = require('cjson')
 local data = redis.call('GET', KEYS[1])
 if not data then
     return cjson.encode({"not_found", ""})
 end
-local cjson = require('cjson')
 local obj = cjson.decode(data)
 local max_attempts = tonumber(ARGV[2])
 if obj.attempts >= max_attempts then
@@ -114,7 +114,21 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 		return fmt.Errorf("generate code: %w", err)
 	}
 
-	// Store in Redis
+	// Send before storing — if send fails, no orphaned code or cooldown
+	switch credType {
+	case "email":
+		if err := s.emailSvc.SendVerificationCode(ctx, identifier, code); err != nil {
+			return fmt.Errorf("send email: %w", err)
+		}
+	case "phone":
+		if err := s.smsSvc.SendVerificationCode(ctx, identifier, code); err != nil {
+			return fmt.Errorf("send SMS: %w", err)
+		}
+	default:
+		return fmt.Errorf("unsupported credential type: %s", credType)
+	}
+
+	// Store in Redis (only after successful send)
 	data := verifyCodeData{
 		Code:      code,
 		Attempts:  0,
@@ -133,20 +147,6 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 	// Set cooldown (fail-open: if Redis is down, we lose cooldown but can still verify)
 	if err := s.redis.Set(ctx, cooldownKey, []byte("1"), VerifyCooldownTTL); err != nil {
 		s.logger.Warn("Failed to set cooldown", zap.Error(err))
-	}
-
-	// Send
-	switch credType {
-	case "email":
-		if err := s.emailSvc.SendVerificationCode(ctx, identifier, code); err != nil {
-			return fmt.Errorf("send email: %w", err)
-		}
-	case "phone":
-		if err := s.smsSvc.SendVerificationCode(ctx, identifier, code); err != nil {
-			return fmt.Errorf("send SMS: %w", err)
-		}
-	default:
-		return fmt.Errorf("unsupported credential type: %s", credType)
 	}
 
 	s.logger.Info("Verification code sent",

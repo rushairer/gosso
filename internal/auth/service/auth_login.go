@@ -25,13 +25,34 @@ const (
 	loginMaxAttemptsPerIP = 30
 )
 
+// safeAuditReason maps errors to safe generic messages for audit logs,
+// preventing internal details (database errors, stack traces) from being persisted.
+func safeAuditReason(err error) string {
+	switch {
+	case errors.Is(err, ErrInvalidCredentials):
+		return "invalid_credentials"
+	case errors.Is(err, ErrAccountLocked):
+		return "account_locked"
+	case errors.Is(err, ErrAccountNotActive):
+		return "account_inactive"
+	case errors.Is(err, ErrInvalidMFACode):
+		return "invalid_mfa_code"
+	case errors.Is(err, ErrInvalidMFAToken), errors.Is(err, ErrInvalidMFATokenScope):
+		return "invalid_mfa_token"
+	case errors.Is(err, ErrAccountNotFound):
+		return "account_not_found"
+	default:
+		return "internal_error"
+	}
+}
+
 // LoginByUsernamePassword login by username and password
 func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginRequest) (result *LoginResult, err error) {
 	defer func() {
 		if err != nil {
 			s.loginAuditLogs(ctx, auditDomain.ActionLoginFailure, req.Username, nil,
 				map[string]any{"username": req.Username},
-				map[string]any{"ip": req.IP, "user_agent": req.UserAgent, "reason": err.Error()},
+				map[string]any{"ip": req.IP, "user_agent": req.UserAgent, "reason": safeAuditReason(err)},
 			)
 		}
 	}()
@@ -127,7 +148,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	defer func() {
 		if err != nil {
 			s.loginAuditLogs(ctx, auditDomain.ActionMFALoginFailure, "", nil,
-				map[string]any{"reason": err.Error()},
+				map[string]any{"reason": safeAuditReason(err)},
 				map[string]any{"ip": ip, "user_agent": userAgent},
 			)
 		}
@@ -146,6 +167,13 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	// 2. Verify based on MFA type
 	if err := s.verifyMFACode(ctx, mfaType, accountID, mfaCode); err != nil {
 		return nil, err
+	}
+
+	// 2.5. Blacklist MFA token to prevent reuse
+	if claims.ID != "" {
+		if err := s.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); err != nil {
+			s.logger.Warn("Failed to blacklist MFA token", zap.String("account_id", accountID), zap.Error(err))
+		}
 	}
 
 	// 3. Find account
@@ -188,7 +216,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	defer func() {
 		if err != nil {
 			s.loginAuditLogs(ctx, auditDomain.ActionMFALoginFailure, "", nil,
-				map[string]any{"reason": err.Error()},
+				map[string]any{"reason": safeAuditReason(err)},
 				map[string]any{"ip": ip, "user_agent": userAgent},
 			)
 		}
@@ -211,6 +239,13 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 		return nil, ErrPasskeyNotVerified
 	}
 	_ = s.redis.Del(ctx, passkeyKey)
+
+	// 2.5. Blacklist MFA token to prevent reuse
+	if claims.ID != "" {
+		if err := s.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); err != nil {
+			s.logger.Warn("Failed to blacklist MFA token", zap.String("account_id", accountID), zap.Error(err))
+		}
+	}
 
 	// 3. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
@@ -252,7 +287,7 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 		if err != nil {
 			s.loginAuditLogs(ctx, auditDomain.ActionLoginFailure, accountID, nil,
 				map[string]any{"method": "passkey", "account_id": accountID},
-				map[string]any{"ip": ip, "user_agent": userAgent, "reason": err.Error()},
+				map[string]any{"ip": ip, "user_agent": userAgent, "reason": safeAuditReason(err)},
 			)
 		}
 	}()

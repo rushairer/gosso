@@ -159,6 +159,10 @@ func (r *oauth2ClientRepositoryImpl) FindByAccountID(ctx context.Context, accoun
 		clients = append(clients, client)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate clients: %w", err)
+	}
+
 	return clients, nil
 }
 

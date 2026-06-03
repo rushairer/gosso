@@ -87,16 +87,15 @@ func (s *DeviceCodeService) CreateDeviceCode(ctx context.Context, clientID strin
 		return nil, fmt.Errorf("marshal device code: %w", err)
 	}
 
-	// Store device code → full JSON
+	// Store device code and user code mapping atomically
 	dcKey := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCodeStr)
-	if err := s.redis.Set(ctx, dcKey, data, s.expiry); err != nil {
-		return nil, fmt.Errorf("store device code: %w", err)
-	}
-
-	// Store user code → device code string (for lookup by user code)
 	ucKey := UserCodeKeyPrefix + strings.ToUpper(formattedUserCode)
-	if err := s.redis.Set(ctx, ucKey, deviceCodeStr, s.expiry); err != nil {
-		return nil, fmt.Errorf("store user code mapping: %w", err)
+	ttlSeconds := int(s.expiry.Seconds())
+	if err := createDeviceCodeScript.Run(ctx, s.redis.GetClient(),
+		[]string{dcKey, ucKey},
+		string(data), ttlSeconds, deviceCodeStr,
+	).Err(); err != nil {
+		return nil, fmt.Errorf("store device code: %w", err)
 	}
 
 	s.logger.Info("Device code created",
@@ -145,44 +144,58 @@ func (s *DeviceCodeService) GetDeviceCodeByUserCode(ctx context.Context, userCod
 	return s.GetDeviceCode(ctx, deviceCode)
 }
 
-// AuthorizeDeviceCode marks a device code as authorized with the given account ID.
+// AuthorizeDeviceCode atomically marks a device code as authorized with the given account ID.
 func (s *DeviceCodeService) AuthorizeDeviceCode(ctx context.Context, deviceCode, accountID string) error {
-	dc, err := s.GetDeviceCode(ctx, deviceCode)
+	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
+
+	remaining, err := s.redis.TTL(ctx, key)
 	if err != nil {
-		return err
+		return fmt.Errorf("get device code ttl: %w", err)
+	}
+	if remaining <= 0 {
+		return domain.ErrDeviceCodeNotFound
 	}
 
-	if dc.Status != domain.DeviceCodeStatusPending {
-		return fmt.Errorf("device code is not in pending status")
+	authorizedAt := time.Now().Format(time.RFC3339)
+	result, err := authorizeDeviceCodeScript.Run(ctx, s.redis.GetClient(), []string{key},
+		accountID, authorizedAt, fmt.Sprintf("%d", int(remaining.Seconds())),
+	).Result()
+	if err == redis.Nil || result == nil {
+		return domain.ErrDeviceCodeNotFound
 	}
-	if dc.IsExpired() {
-		return fmt.Errorf("device code has expired")
+	if err != nil {
+		return fmt.Errorf("authorize device code: %w", err)
 	}
 
-	dc.Status = domain.DeviceCodeStatusAuthorized
-	dc.AccountID = accountID
-	dc.AuthorizedAt = time.Now()
-
-	return s.save(ctx, dc)
+	s.logger.Info("Device code authorized",
+		zap.String("account_id", accountID))
+	return nil
 }
 
-// DenyDeviceCode marks a device code as denied.
+// DenyDeviceCode atomically marks a device code as denied.
 func (s *DeviceCodeService) DenyDeviceCode(ctx context.Context, deviceCode string) error {
-	dc, err := s.GetDeviceCode(ctx, deviceCode)
+	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
+
+	remaining, err := s.redis.TTL(ctx, key)
 	if err != nil {
-		return err
+		return fmt.Errorf("get device code ttl: %w", err)
+	}
+	if remaining <= 0 {
+		return domain.ErrDeviceCodeNotFound
 	}
 
-	if dc.Status != domain.DeviceCodeStatusPending {
-		return fmt.Errorf("device code is not in pending status")
+	result, err := denyDeviceCodeScript.Run(ctx, s.redis.GetClient(), []string{key},
+		fmt.Sprintf("%d", int(remaining.Seconds())),
+	).Result()
+	if err == redis.Nil || result == nil {
+		return domain.ErrDeviceCodeNotFound
 	}
-	if dc.IsExpired() {
-		return fmt.Errorf("device code has expired")
+	if err != nil {
+		return fmt.Errorf("deny device code: %w", err)
 	}
 
-	dc.Status = domain.DeviceCodeStatusDenied
-
-	return s.save(ctx, dc)
+	s.logger.Info("Device code denied")
+	return nil
 }
 
 // checkAndUpdatePollRateScript atomically checks the poll interval and updates LastPollAt.
@@ -255,7 +268,56 @@ func (s *DeviceCodeService) MarkUsed(ctx context.Context, deviceCode string) err
 	return s.save(ctx, dc)
 }
 
-// claimAuthorizedScript atomically reads a device code and changes its status from "authorized" to "used".
+// authorizeDeviceCodeScript atomically checks pending status and sets authorized.
+// KEYS[1] = device code key
+// ARGV[1] = accountID, ARGV[2] = authorizedAt (RFC3339), ARGV[3] = TTL seconds
+// Returns updated JSON on success, nil if not pending.
+var authorizeDeviceCodeScript = redis.NewScript(`
+local cjson = require('cjson')
+local data = redis.call('GET', KEYS[1])
+if not data then
+    return nil
+end
+local dc = cjson.decode(data)
+if dc.status ~= "pending" then
+    return nil
+end
+dc.status = "authorized"
+dc.account_id = ARGV[1]
+dc.authorized_at = ARGV[2]
+local updated = cjson.encode(dc)
+redis.call('SET', KEYS[1], updated, 'EX', ARGV[3])
+return updated
+`)
+
+// denyDeviceCodeScript atomically checks pending status and sets denied.
+// KEYS[1] = device code key
+// ARGV[1] = TTL seconds
+// Returns updated JSON on success, nil if not pending.
+var denyDeviceCodeScript = redis.NewScript(`
+local cjson = require('cjson')
+local data = redis.call('GET', KEYS[1])
+if not data then
+    return nil
+end
+local dc = cjson.decode(data)
+if dc.status ~= "pending" then
+    return nil
+end
+dc.status = "denied"
+local updated = cjson.encode(dc)
+redis.call('SET', KEYS[1], updated, 'EX', ARGV[1])
+return updated
+`)
+
+// createDeviceCodeScript atomically stores device code data and user code mapping.
+// KEYS[1] = device code key, KEYS[2] = user code key
+// ARGV[1] = device code JSON, ARGV[2] = TTL seconds, ARGV[3] = device code string
+var createDeviceCodeScript = redis.NewScript(`
+redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+redis.call('SET', KEYS[2], ARGV[3], 'EX', ARGV[2])
+return 1
+`)
 // Returns the JSON data if the transition succeeded, or nil if the status was not "authorized".
 var claimAuthorizedScript = redis.NewScript(`
 local data = redis.call('GET', KEYS[1])

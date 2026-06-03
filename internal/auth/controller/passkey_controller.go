@@ -200,6 +200,16 @@ func (c *PasskeyController) LoginComplete(ctx *gin.Context) {
 		return
 	}
 
+	if loginResult.RequiresMFA {
+		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
+			"requires_mfa":   true,
+			"mfa_token":      loginResult.AccessToken,
+			"mfa_token_type": "Bearer",
+			"mfa_types":      loginResult.MFATypes,
+		}))
+		return
+	}
+
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
 		"access_token":  loginResult.AccessToken,
 		"refresh_token": loginResult.RefreshToken,

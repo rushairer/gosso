@@ -186,6 +186,13 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 		client.Description = req.Description
 	}
 	if req.RedirectURIs != nil {
+		for _, uri := range req.RedirectURIs {
+			u, err := url.Parse(uri)
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+				ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "redirect_uris must use http or https scheme"))
+				return
+			}
+		}
 		client.RedirectURIs = req.RedirectURIs
 	}
 	if req.GrantTypes != nil {

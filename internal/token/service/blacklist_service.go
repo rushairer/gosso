@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -124,5 +125,5 @@ func (s *BlacklistService) buildBlacklistKey(jti string) string {
 
 // Error definitions
 var (
-	ErrTokenNotRevoked = fmt.Errorf("token not revoked")
+	ErrTokenNotRevoked = errors.New("token not revoked")
 )

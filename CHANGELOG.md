@@ -117,6 +117,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: SQL placeholder misalignment in `ListAccounts` count vs select queries (`internal/account/repository/account_repository.go`).
 - **Security**: Passkey `request.Body` double-read — buffer body before parsing and reset for `FinishLogin` (`internal/auth/service/passkey_service.go`).
 - **Security**: CSRF `rand.Read` error now propagated instead of ignored (`middleware/csrf.go`).
+- **Security**: Passkey MFA login now checks `RequiresMFA` before accessing `Session.ID` — prevents nil pointer panic when MFA is required (`internal/auth/controller/passkey_controller.go`).
+- **Security**: Logout now returns 500 when access token blacklisting fails — previously always returned 200 even on partial failure (`internal/auth/controller/auth_controller.go`).
+- **Security**: MFA tokens are now blacklisted after successful verification in `VerifyMFALogin` and `CompletePasskeyMFALogin` — prevents token replay attacks (`internal/auth/service/auth_login.go`).
+- **Security**: Consent auto-approval now validates requested scopes against client's current allowed scopes via `client.ValidateScope()` — prevents scope escalation when client scopes are narrowed after initial consent (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: `/api/auth/verify/send` now verifies identifier ownership — authenticated users can only send verification codes to their own email/phone (`internal/auth/controller/auth_controller.go`).
+- **Security**: `EnrollTOTP` now logs warnings when deleting unverified TOTP credentials fails — previously silently discarded errors (`internal/auth/service/mfa_service.go`).
+- **Security**: Device code user submission error messages sanitized — internal errors no longer leaked to clients (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Device code authorize/deny operations now use atomic Redis Lua scripts — eliminates TOCTOU race condition between status check and update (`internal/oauth2/service/device_code_service.go`).
+- **Security**: Device code creation now uses atomic Redis Lua script for dual-key insertion — prevents orphaned codes on partial failure (`internal/oauth2/service/device_code_service.go`).
+- **Security**: Social login now checks MFA requirements before issuing tokens for new users — matches existing user login behavior (`internal/auth/service/social_login_service.go`).
+- **Security**: `UpdateClient` now validates redirect URI schemes — matches validation in `RegisterClient` (`internal/oauth2/controller/client_controller.go`).
+- **Security**: Verification code is now sent before storing in Redis — prevents orphaned codes on send failure; cooldown only set after successful send (`internal/auth/service/verification_service.go`).
+- **Security**: Audit log error reasons now use safe generic strings (e.g. `invalid_credentials`) instead of raw `err.Error()` — prevents internal details from being persisted in audit logs (`internal/auth/service/auth_login.go`).
+- **Security**: Device code ID token generation failure now returns 500 instead of silently continuing without an ID token (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Client credentials token now sets `AccountID` claim to `req.ClientID` — ensures subject claim is non-empty per RFC 6749 (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: `RefreshTokens` now checks for nil account before accessing account status — prevents nil pointer panic (`internal/auth/service/auth_session.go`).
+- `FindByAccountID` in OAuth2 client repository now checks `rows.Err()` — properly surfaces database iteration errors (`internal/oauth2/repository/client_repository_impl.go`).
+- `ErrTokenNotRevoked` changed from `fmt.Errorf` to `errors.New` — consistent with other sentinel errors (`internal/token/service/blacklist_service.go`).
+- Consent `GetConsent` error is now logged instead of silently discarded (`internal/oauth2/controller/oauth2_controller.go`).
+- `verification_uri_complete` URL encoding now uses `url.Values` for proper encoding (`internal/oauth2/controller/oauth2_controller.go`).
+- Verification service Lua script now requires `cjson` at script top — prevents potential re-require issues (`internal/auth/service/verification_service.go`).
 - **Security**: MFA scope token bypass — tokens with non-empty scope (e.g. MFA tokens) now rejected at general endpoints (`internal/auth/middleware/auth_middleware.go`).
 - **Security**: Login rate limiting key changed to IP+normalized username to prevent cross-account brute force (`internal/auth/service/auth_login.go`).
 - **Security**: MFA token TTL shortened to explicit 5 minutes (`internal/auth/service/auth_login.go`).

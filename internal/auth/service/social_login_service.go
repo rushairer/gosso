@@ -280,6 +280,14 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 		return nil, err
 	}
 
+	// Check if MFA is required (consistency with loginExistingUser)
+	if s.mfaChecker != nil {
+		mfaResult, mfaErr := s.mfaChecker.CheckMFA(ctx, account)
+		if mfaResult != nil || mfaErr != nil {
+			return mfaResult, mfaErr
+		}
+	}
+
 	session, accessToken, refreshToken, err := s.sessionTokenCreator.CreateSessionAndTokens(ctx, account, ip, userAgent)
 	if err != nil {
 		return nil, err

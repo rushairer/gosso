@@ -233,6 +233,8 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 		if tc, ok := jwtClaims.(*tokenDomain.AccessTokenClaims); ok {
 			if err := c.authSvc.Logout(ctx, tc.AccountID, tc.SessionID, accessTokenJTI, tokenExpiresAt); err != nil {
 				c.logger.Error("Logout error", zap.String("account_id", tc.AccountID), zap.String("session_id", tc.SessionID), zap.Error(err))
+				ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout incomplete"))
+				return
 			}
 		}
 	}
@@ -504,6 +506,29 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 
 	tc, ok := getClaimsFromContext(ctx)
 	if !ok {
+		return
+	}
+
+	// Verify the identifier belongs to this account
+	credType := accountDomain.CredentialTypeEmail
+	if req.Type == "phone" {
+		credType = accountDomain.CredentialTypePhone
+	}
+	creds, err := c.credentialRepo.FindByAccountAndType(ctx, tc.AccountID, credType)
+	if err != nil {
+		c.logger.Error("Failed to lookup credentials for verification", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "verification failed"))
+		return
+	}
+	found := false
+	for _, cred := range creds {
+		if cred.Identifier != nil && *cred.Identifier == req.Identifier {
+			found = true
+			break
+		}
+	}
+	if !found {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "identifier not associated with this account"))
 		return
 	}
 

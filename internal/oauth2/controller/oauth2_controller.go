@@ -159,11 +159,15 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
-	existingConsent, _ := c.consentSvc.GetConsent(ctx, accountIDStr, clientID)
+	existingConsent, consentErr := c.consentSvc.GetConsent(ctx, accountIDStr, clientID)
+	if consentErr != nil {
+		c.logger.Warn("Failed to get consent, showing consent page", zap.Error(consentErr), zap.String("account_id", accountIDStr), zap.String("client_id", clientID))
+	}
 	if existingConsent != nil {
-		// Only grant scopes the user previously consented to
+		// Only grant scopes the user previously consented to AND the client is currently allowed
 		requestedScopes := splitScope(scope)
-		allowedScopes := intersectScopes(requestedScopes, existingConsent.Scopes)
+		clientAllowedScopes := client.ValidateScope(requestedScopes)
+		allowedScopes := intersectScopes(clientAllowedScopes, existingConsent.Scopes)
 		if len(allowedScopes) == 0 {
 			// No overlap — require re-consent
 			ctx.Header("Content-Type", "text/html; charset=utf-8")
@@ -504,8 +508,9 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 	}
 
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
-		Scope:    strings.Join(scopes, " "),
-		ClientID: req.ClientID,
+		Scope:     strings.Join(scopes, " "),
+		ClientID:  req.ClientID,
+		AccountID: req.ClientID,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -635,7 +640,7 @@ func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
 		"device_code":               dc.DeviceCode,
 		"user_code":                 dc.UserCode,
 		"verification_uri":          verificationURI,
-		"verification_uri_complete": verificationURI + "?user_code=" + dc.UserCode,
+		"verification_uri_complete": verificationURI + "?" + url.Values{"user_code": {dc.UserCode}}.Encode(),
 		"expires_in":                int(time.Until(dc.ExpiresAt).Seconds()),
 		"interval":                  dc.Interval,
 	})
@@ -727,12 +732,12 @@ func (c *OAuth2Controller) DeviceUserSubmit(ctx *gin.Context) {
 
 	if req.Approved == "true" {
 		if err := c.deviceCodeSvc.AuthorizeDeviceCode(ctx, req.DeviceCode, accountIDStr); err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": err.Error()})
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "device code authorization failed"})
 			return
 		}
 	} else {
 		if err := c.deviceCodeSvc.DenyDeviceCode(ctx, req.DeviceCode); err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": err.Error()})
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "device code denial failed"})
 			return
 		}
 	}
@@ -834,6 +839,8 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 				idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", dc.AuthorizedAt)
 				if idErr != nil {
 					c.logger.Error("Failed to generate ID token for device code", zap.Error(idErr))
+					ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+					return
 				}
 				break
 			}

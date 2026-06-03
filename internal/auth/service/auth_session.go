@@ -31,7 +31,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 
 	// 2.5. Verify account is still active
 	account, err := s.accountSvc.FindAccountByID(ctx, newRefreshToken.AccountID)
-	if err != nil || account.Status != accountDomain.AccountStatusActive {
+	if err != nil || account == nil || account.Status != accountDomain.AccountStatusActive {
 		return nil, ErrAccountNotActive
 	}
 

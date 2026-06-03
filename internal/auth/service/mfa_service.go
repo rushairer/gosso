@@ -145,7 +145,9 @@ func (s *MFAService) EnrollTOTP(ctx context.Context, accountID string) (*TOTPEnr
 	}
 
 	// Delete existing unverified TOTP credentials
-	_ = s.deleteUnverifiedTOTP(ctx, accountID)
+	if err := s.deleteUnverifiedTOTP(ctx, accountID); err != nil {
+		s.logger.Warn("Failed to delete unverified TOTP credentials during enrollment", zap.Error(err), zap.String("account_id", accountID))
+	}
 
 	// Encrypt secret for storage (if encryption key is configured)
 	storedSecret := key.Secret()
