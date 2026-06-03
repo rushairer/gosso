@@ -78,6 +78,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: ID token generation error in OAuth2 token endpoint is no longer silently ignored (`internal/oauth2/controller/oauth2_controller.go`).
 - **Security**: Passkey MFA flow no longer requires a separate `/mfa/verify` call — `MFAComplete` directly issues session tokens after passkey verification (`internal/auth/controller/passkey_controller.go`, `internal/auth/service/auth_login.go`).
 - **Security**: Login error no longer leaks account existence — inactive accounts now return the same `ErrInvalidCredentials` as non-existent accounts (`internal/auth/service/auth_login.go`).
+- **Security**: CORS production config now includes `X-CSRF-Token` in `allowed_headers` — ensures CSRF protection works in production (`config/production.yaml`, `config/development.yaml`).
+- **Security**: `engine.SetTrustedProxies(nil)` prevents X-Forwarded-For spoofing for rate limiting and logging (`cmd/gouno/web.go`).
+- **Security**: Device code `claimAuthorizedScript` returns post-update JSON instead of stale pre-update data; uses Redis TTL instead of hardcoded 60s (`internal/oauth2/service/device_code_service.go`).
+- **Security**: Device code `checkAndUpdatePollRateScript` now requires `cjson` module (`internal/oauth2/service/device_code_service.go`).
+- **Security**: Rate limiter Lua script uses server-side `redis.call('TIME')` instead of client-provided timestamp — eliminates clock skew across instances (`middleware/redis_ratelimit.go`).
+- **Security**: Rate limiter unique key uses Redis microsecond timestamp instead of `math.random` — reduces collision risk (`middleware/redis_ratelimit.go`).
+- **Security**: Captcha verification is now atomic via Redis Lua script — prevents TOCTOU double-verification race condition (`internal/captcha/service/captcha_service.go`).
+- **Security**: Captcha answer no longer logged in plaintext — only `captcha_id` is logged on verification (`internal/captcha/service/captcha_service.go`).
+- **Security**: `MFA token expiry` is no longer overwritten by `GenerateAccessToken` — caller-provided `ExpiresAt` (e.g. 5-minute MFA tokens) is respected (`internal/token/service/token_service.go`).
+- **Security**: `RevokeRefreshToken` uses atomic Lua script for GET+DEL — eliminates TOCTOU race on revocation (`internal/token/service/token_service.go`).
+- **Security**: Logout returns 401 when JWT claims are absent instead of silently returning 200 (`internal/auth/controller/auth_controller.go`).
+- **Security**: OAuth2 `Revoke` endpoint logs storage errors and returns 500 instead of silently discarding them (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Client credentials grant returns `invalid_scope` when explicit scope has no valid matches instead of falling back to all scopes (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: PKCE `code_challenge_method` is validated to be `S256` when `code_challenge` is present (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Refresh token rotation now revokes orphaned new token when account is inactive (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: PII masking in email service logs — email addresses are masked with `maskEmail()` (`internal/notification/service/email_service.go`).
+- **Security**: `Content-Security-Policy` header added to `SecurityHeadersMiddleware` (`middleware/middleware.go`).
+- **Security**: PII removed from credential error messages — identifier no longer included in `ErrCredentialNotFound` (`internal/account/repository/credential_repository.go`).
+- **Security**: OAuth state cookie uses `http.SetCookie` with `SameSite: Lax` instead of `ctx.SetCookie` without SameSite (`internal/auth/controller/auth_controller.go`).
+- **Security**: Social login callback now has rate limiting (`router/web.go`).
+- **Security**: `exchangeCode` no longer leaks provider response body in error messages (`internal/auth/service/social_login_service.go`).
+- **Security**: `fetchUserInfo` returns error for unsupported providers instead of silently falling through (`internal/auth/service/social_login_service.go`).
+- **Security**: Session revocation failure during account deletion is now logged instead of silently discarded (`internal/account/service/account_service.go`).
+- **Security**: Production passwords in `deploy/environments.yaml` replaced with `${POSTGRES_PASSWORD}` and `${REDIS_PASSWORD}` env var references (`deploy/environments.yaml`).
+- **Security**: Redis client has explicit `DialTimeout`, `ReadTimeout`, `WriteTimeout` (5s, 3s, 3s) (`internal/cache/redis_client.go`).
+- Graceful shutdown timeout increased from 5s to 30s (`cmd/gouno/web.go`).
+- `logger.Fatal` replaced with `logger.Error` + `return` in `startWebServer` — deferred cleanup (DB, Redis, Auditor) now runs on startup failure (`cmd/gouno/web.go`).
+- `logger.Fatal` replaced with `return nil, fmt.Errorf(...)` in `initModules` (`cmd/gouno/web.go`).
+- `rows.Err()` checks added after all `rows.Next()` loops in credential, federated identity, and role repositories (`internal/account/repository/credential_repository.go`, `internal/account/repository/federated_identity_repository.go`, `internal/account/repository/role_repository.go`).
+- Dead config key `rate_limit_per_minute` removed from all YAML configs (`config/production.yaml`, `config/development.yaml`, `config/test.yaml`).
+- Development Redis DSN fixed from `redis:6379` to `redis://redis:6379` (`config/development.yaml`).
+- `redis.conf` `requirepass` uncommented with placeholder to force operators to set it (`config/redis.conf`).
 - **Security**: `GenerateBackupCodes` now deletes old codes and creates new ones in a single atomic transaction (`internal/auth/service/mfa_service.go`).
 - **Security**: Remove hardcoded passwords and secrets from `.env.*` files and `config/development.yaml`; use environment variable references instead.
 - **Security**: Atomic refresh token rotation via Redis Lua script — eliminates TOCTOU race condition between GET and DELETE (`internal/token/service/token_service.go`).

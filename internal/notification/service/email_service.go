@@ -91,11 +91,45 @@ func (s *EmailService) send(to, subject, htmlBody string) error {
 
 	if err := s.dialer.DialAndSend(msg); err != nil {
 		s.logger.Error("Failed to send email",
-			zap.String("to", to),
+			zap.String("to", maskEmail(to)),
 			zap.Error(err))
 		return fmt.Errorf("send email: %w", err)
 	}
 
-	s.logger.Info("Email sent", zap.String("to", to))
+	s.logger.Info("Email sent", zap.String("to", maskEmail(to)))
 	return nil
+}
+
+// maskEmail masks PII in email addresses (e.g., "user@example.com" -> "u***@e***.com")
+func maskEmail(email string) string {
+	atIdx := -1
+	for i, c := range email {
+		if c == '@' {
+			atIdx = i
+			break
+		}
+	}
+	if atIdx > 0 && atIdx < len(email)-1 {
+		local := email[:atIdx]
+		domain := email[atIdx+1:]
+		maskedLocal := string(local[0]) + "***"
+		dotIdx := -1
+		for i, c := range domain {
+			if c == '.' {
+				dotIdx = i
+				break
+			}
+		}
+		var maskedDomain string
+		if dotIdx > 0 {
+			maskedDomain = string(domain[0]) + "***" + domain[dotIdx:]
+		} else {
+			maskedDomain = string(domain[0]) + "***"
+		}
+		return maskedLocal + "@" + maskedDomain
+	}
+	if len(email) > 1 {
+		return string(email[0]) + "***"
+	}
+	return "***"
 }

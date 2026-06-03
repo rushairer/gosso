@@ -149,6 +149,10 @@ func (r *federatedIdentityRepositoryImpl) FindByAccountID(ctx context.Context, a
 		identities = append(identities, identity)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate federated identities: %w", err)
+	}
+
 	return identities, nil
 }
 

@@ -132,6 +132,11 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 	codeChallengeMethod := ctx.Query("code_challenge_method")
 	nonce := ctx.Query("nonce")
 
+	if codeChallenge != "" && codeChallengeMethod != "S256" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "code_challenge_method must be S256"})
+		return
+	}
+
 	if responseType != "code" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unsupported_response_type"})
 		return
@@ -452,6 +457,10 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 
 	// Verify account is still active (deleted/suspended accounts cannot refresh)
 	if c.accountValidator != nil && !c.accountValidator.IsAccountActive(ctx, newRefreshToken.AccountID) {
+		// Revoke the orphaned new token since the account is inactive
+		if revokeErr := c.tokenSvc.RevokeRefreshToken(ctx, newRefreshToken.Token); revokeErr != nil {
+			c.logger.Warn("Failed to revoke orphaned refresh token for inactive account", zap.Error(revokeErr))
+		}
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "account is not active"})
 		return
 	}
@@ -504,6 +513,10 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 
 	scopes := client.ValidateScope(splitScope(req.Scope))
 	if len(scopes) == 0 {
+		if req.Scope != "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_scope", "error_description": "requested scopes are not valid for this client"})
+			return
+		}
 		scopes = client.Scopes
 	}
 
@@ -535,7 +548,11 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 		return
 	}
 
-	_ = c.tokenSvc.RevokeRefreshToken(ctx, req.Token)
+	if err := c.tokenSvc.RevokeRefreshToken(ctx, req.Token); err != nil {
+		c.logger.Error("Failed to revoke token", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
 	ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 

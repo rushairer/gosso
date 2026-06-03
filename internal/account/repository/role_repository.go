@@ -259,6 +259,10 @@ func (r *roleRepositoryImpl) FindAll(ctx context.Context) ([]*domain.Role, error
 		roles = append(roles, role)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate roles: %w", err)
+	}
+
 	return roles, nil
 }
 
@@ -370,6 +374,10 @@ func (r *roleRepositoryImpl) FindRolesByAccountID(ctx context.Context, accountID
 		}
 
 		roles = append(roles, role)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate roles: %w", err)
 	}
 
 	return roles, nil

@@ -30,6 +30,9 @@ func NewRedisClient(dsn string, maxActiveConns int, poolTimeout time.Duration, l
 	opts.MaxRetries = 3
 	opts.MinRetryBackoff = 100 * time.Millisecond
 	opts.MaxRetryBackoff = 500 * time.Millisecond
+	opts.DialTimeout = 5 * time.Second
+	opts.ReadTimeout = 3 * time.Second
+	opts.WriteTimeout = 3 * time.Second
 
 	client := redis.NewClient(opts)
 

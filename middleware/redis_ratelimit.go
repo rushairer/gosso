@@ -12,16 +12,21 @@ import (
 )
 
 // slidingWindowScript Redis Lua sliding window rate limiter script
+// KEYS[1] = rate limit key
+// ARGV[1] = window in seconds
+// ARGV[2] = max requests limit
+// Uses Redis server TIME instead of client-provided timestamp for consistency across instances.
 var slidingWindowScript = redis.NewScript(`
 local key = KEYS[1]
 local window = tonumber(ARGV[1]) * 1000
 local limit = tonumber(ARGV[2])
-local now = tonumber(ARGV[3])
+local timeArr = redis.call('TIME')
+local now = tonumber(timeArr[1]) * 1000 + math.floor(tonumber(timeArr[2]) / 1000)
 
 redis.call('ZREMRANGEBYSCORE', key, 0, now - window)
 local count = redis.call('ZCARD', key)
 if count < limit then
-    redis.call('ZADD', key, now, now .. ':' .. math.random(1000000))
+    redis.call('ZADD', key, now, now .. ':' .. timeArr[2])
     redis.call('EXPIRE', key, ARGV[1])
     return {1, limit - count - 1}
 end
@@ -37,13 +42,11 @@ return {0, 0}
 func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context) string, limit int, window time.Duration, failOpen bool) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		key := fmt.Sprintf("rate_limit:%s", keyFunc(ctx))
-		now := time.Now().UnixMilli()
 
 		result, err := slidingWindowScript.Run(ctx, rds.GetClient(),
 			[]string{key},
 			int(window.Seconds()),
 			limit,
-			now,
 		).Int64Slice()
 
 		if err != nil {

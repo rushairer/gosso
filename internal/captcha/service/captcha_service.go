@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/cache"
@@ -31,6 +32,34 @@ type CaptchaService struct {
 	logger     *zap.Logger
 	captchaTTL time.Duration
 }
+
+// verifyCaptchaScript atomically verifies a captcha in Redis.
+// KEYS[1] = captcha key
+// ARGV[1] = user-provided answer
+// Returns: "ok" | "not_found" | "expired" | "already_used" | "mismatch"
+var verifyCaptchaScript = redis.NewScript(`
+local cjson = require('cjson')
+local data = redis.call('GET', KEYS[1])
+if not data then
+    return "not_found"
+end
+local c = cjson.decode(data)
+local timeArr = redis.call('TIME')
+local now = tonumber(timeArr[1])
+if c.expires_at_unix and now > c.expires_at_unix then
+    redis.call('DEL', KEYS[1])
+    return "expired"
+end
+if c.used then
+    return "already_used"
+end
+if c.answer ~= ARGV[1] then
+    return "mismatch"
+end
+c.used = true
+redis.call('SET', KEYS[1], cjson.encode(c), 'KEEPTTL')
+return "ok"
+`)
 
 // NewCaptchaService creates a new captcha service instance
 func NewCaptchaService(redis *cache.RedisClient, logger *zap.Logger) *CaptchaService {
@@ -67,12 +96,13 @@ func (s *CaptchaService) GenerateMathCaptcha(ctx context.Context) (*domain.Captc
 	answer := fmt.Sprintf("%d", a+b)
 
 	captcha := &domain.Captcha{
-		ID:        uuid.New(),
-		Type:      domain.CaptchaTypeMath,
-		Answer:    answer,
-		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(s.captchaTTL),
-		Used:      false,
+		ID:            uuid.New(),
+		Type:          domain.CaptchaTypeMath,
+		Answer:        answer,
+		CreatedAt:     time.Now(),
+		ExpiresAt:     time.Now().Add(s.captchaTTL),
+		ExpiresAtUnix: time.Now().Add(s.captchaTTL).Unix(),
+		Used:          false,
 	}
 
 	if err := s.storeCaptcha(ctx, captcha); err != nil {
@@ -93,12 +123,13 @@ func (s *CaptchaService) GenerateDigitCaptcha(ctx context.Context) (*domain.Capt
 	code := fmt.Sprintf("%06d", r)
 
 	captcha := &domain.Captcha{
-		ID:        uuid.New(),
-		Type:      domain.CaptchaTypeDigit,
-		Answer:    code,
-		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(s.captchaTTL),
-		Used:      false,
+		ID:            uuid.New(),
+		Type:          domain.CaptchaTypeDigit,
+		Answer:        code,
+		CreatedAt:     time.Now(),
+		ExpiresAt:     time.Now().Add(s.captchaTTL),
+		ExpiresAtUnix: time.Now().Add(s.captchaTTL).Unix(),
+		Used:          false,
 	}
 
 	if err := s.storeCaptcha(ctx, captcha); err != nil {
@@ -109,48 +140,41 @@ func (s *CaptchaService) GenerateDigitCaptcha(ctx context.Context) (*domain.Capt
 	return captcha, code, nil
 }
 
-// VerifyCaptcha verifies a captcha
+// VerifyCaptcha verifies a captcha atomically using a Redis Lua script.
+// This prevents TOCTOU races between concurrent verification attempts.
 func (s *CaptchaService) VerifyCaptcha(ctx context.Context, captchaID uuid.UUID, answer string) error {
-	captcha, err := s.getCaptcha(ctx, captchaID)
+	key := s.buildCaptchaKey(captchaID)
+
+	result, err := verifyCaptchaScript.Run(ctx, s.redis.GetClient(), []string{key}, answer).Result()
 	if err != nil {
-		return err
+		s.logger.Error("Captcha verification script error", zap.Error(err), zap.String("captcha_id", captchaID.String()))
+		return fmt.Errorf("verify captcha: %w", err)
 	}
 
-	// Check if expired
-	if captcha.IsExpired() {
+	status, ok := result.(string)
+	if !ok {
+		return fmt.Errorf("unexpected captcha verify result type")
+	}
+
+	switch status {
+	case "ok":
+		_ = s.redis.Del(ctx, key)
+		s.logger.Info("Captcha verified successfully", zap.String("captcha_id", captchaID.String()))
+		return nil
+	case "not_found":
+		return ErrCaptchaNotFound
+	case "expired":
 		s.logger.Warn("Captcha expired", zap.String("captcha_id", captchaID.String()))
-		// Delete expired captcha
-		_ = s.DeleteCaptcha(ctx, captchaID)
 		return ErrCaptchaExpired
-	}
-
-	// Check if already used (replay prevention)
-	if captcha.Used {
+	case "already_used":
 		s.logger.Warn("Captcha already used", zap.String("captcha_id", captchaID.String()))
 		return ErrCaptchaUsed
-	}
-
-	// Verify answer
-	if captcha.Answer != answer {
-		s.logger.Warn("Captcha verification failed",
-			zap.String("captcha_id", captchaID.String()),
-			zap.String("expected", captcha.Answer),
-			zap.String("got", answer))
+	case "mismatch":
+		s.logger.Warn("Captcha verification failed", zap.String("captcha_id", captchaID.String()))
 		return ErrCaptchaInvalid
+	default:
+		return fmt.Errorf("unknown captcha verify status: %s", status)
 	}
-
-	// Mark as used
-	captcha.MarkUsed()
-	if err := s.storeCaptcha(ctx, captcha); err != nil {
-		s.logger.Error("Failed to mark captcha as used", zap.Error(err))
-		// Do not return error, allow verification to pass
-	}
-
-	// Optional: delete captcha immediately (more secure)
-	_ = s.DeleteCaptcha(ctx, captchaID)
-
-	s.logger.Info("Captcha verified successfully", zap.String("captcha_id", captchaID.String()))
-	return nil
 }
 
 // DeleteCaptcha deletes a captcha

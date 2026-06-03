@@ -9,7 +9,6 @@ web_server:
     read_header_timeout: 2s
     write_timeout: 30s
     request_timeout: 10s
-    rate_limit_per_minute: 120
     rate_limits:
         login: 5
         token: 10
@@ -79,6 +78,7 @@ cors:
         - Content-Type
         - Accept
         - Authorization
+        - X-CSRF-Token
     allow_credentials: true
     max_age: 86400
 oauth_providers:

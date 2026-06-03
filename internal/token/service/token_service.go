@@ -66,7 +66,9 @@ func (s *TokenService) GenerateAccessToken(claims *domain.AccessTokenClaims) (st
 	claims.Issuer = s.issuer
 	claims.Subject = claims.AccountID
 	claims.IssuedAt = jwt.NewNumericDate(now)
-	claims.ExpiresAt = jwt.NewNumericDate(now.Add(s.accessExpiry))
+	if claims.ExpiresAt == nil {
+		claims.ExpiresAt = jwt.NewNumericDate(now.Add(s.accessExpiry))
+	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = s.keySvc.KeyID()
@@ -237,24 +239,28 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	return newRT, nil
 }
 
+// revokeRefreshTokenScript atomically GETs and DELs a refresh token, returning the data.
+var revokeRefreshTokenScript = redis.NewScript(`
+local data = redis.call('GET', KEYS[1])
+if data then
+    redis.call('DEL', KEYS[1])
+end
+return data
+`)
+
 // RevokeRefreshToken revokes a refresh token and removes it from the session index.
 func (s *TokenService) RevokeRefreshToken(ctx context.Context, token string) error {
 	key := s.buildRefreshTokenKey(token)
 
-	// Read token data first to get session ID for index cleanup
-	data, err := s.redis.Get(ctx, key)
-	if err != nil && err != cache.ErrKeyNotFound {
-		return fmt.Errorf("get refresh token for revocation: %w", err)
-	}
-
-	if err := s.redis.Del(ctx, key); err != nil {
+	data, err := revokeRefreshTokenScript.Run(ctx, s.redis.GetClient(), []string{key}).Result()
+	if err != nil && err != redis.Nil {
 		return fmt.Errorf("revoke refresh token: %w", err)
 	}
 
 	// Clean up session index
-	if err == nil && data != "" {
+	if dataStr, ok := data.(string); ok && dataStr != "" {
 		var rt domain.RefreshToken
-		if jsonErr := json.Unmarshal([]byte(data), &rt); jsonErr == nil && rt.SessionID != "" {
+		if jsonErr := json.Unmarshal([]byte(dataStr), &rt); jsonErr == nil && rt.SessionID != "" {
 			sessionKey := s.buildSessionTokensKey(rt.SessionID)
 			tokenHash := domain.HashToken(token)
 			_ = s.redis.SRem(ctx, sessionKey, tokenHash)

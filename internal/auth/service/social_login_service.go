@@ -155,7 +155,7 @@ func (s *SocialLoginService) exchangeCode(ctx context.Context, p *OAuthProviderC
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("token request failed: %d %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("token request failed: %d", resp.StatusCode)
 	}
 
 	var tokenResp struct {
@@ -212,6 +212,8 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 		providerUserID, _ = userInfo["openid"].(string)
 		nickname, _ := userInfo["nickname"].(string)
 		name = nickname
+	default:
+		return "", "", "", fmt.Errorf("unsupported provider: %s", provider)
 	}
 
 	return providerUserID, email, name, nil

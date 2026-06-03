@@ -74,20 +74,23 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	logger := utility.NewLogger(loggerLevel)
 
 	if err := globalConfig.Validate(); err != nil {
-		logger.Fatal("invalid configuration", zap.Error(err))
+		logger.Error("invalid configuration", zap.Error(err))
+		return
 	}
 
 	logger.Sugar().Info("starting web server...")
 
 	db, err := initDatabase(globalConfig, logger)
 	if err != nil {
-		logger.Fatal("database init failed", zap.Error(err))
+		logger.Error("database init failed", zap.Error(err))
+		return
 	}
 	defer func() { _ = db.Close() }()
 
 	redis, err := initRedis(globalConfig, logger)
 	if err != nil {
-		logger.Fatal("redis init failed", zap.Error(err))
+		logger.Error("redis init failed", zap.Error(err))
+		return
 	}
 	defer func() { _ = redis.Close() }()
 
@@ -97,7 +100,8 @@ func startWebServer(cmd *cobra.Command, args []string) {
 
 	modules, err := initModules(ctx, db, redis, logger, globalConfig, auditAuditor)
 	if err != nil {
-		logger.Fatal("module initialization failed", zap.Error(err))
+		logger.Error("module initialization failed", zap.Error(err))
+		return
 	}
 
 	engine := setupEngine(ctx, globalConfig, logger, modules, db, redis)
@@ -126,7 +130,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	stop()
 	logger.Sugar().Info("shutting down gracefully, press Ctrl+C again to force")
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		logger.Error("server forced to shutdown", zap.Error(err))
@@ -227,7 +231,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		logger,
 	)
 	if err != nil {
-		logger.Fatal("failed to initialize key service", zap.Error(err))
+		return nil, fmt.Errorf("failed to initialize key service: %w", err)
 	}
 
 	blacklistSvc := tokenService.NewBlacklistService(redis, logger)
@@ -332,6 +336,7 @@ func defaultIfEmpty(value, defaultValue string) string {
 // setupEngine configures the Gin engine: middleware + routes
 func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger, m *appModules, db *sql.DB, redis *cache.RedisClient) *gin.Engine {
 	engine := gin.New()
+	_ = engine.SetTrustedProxies(nil)
 
 	corsConfig := buildCORSConfig(cfg)
 

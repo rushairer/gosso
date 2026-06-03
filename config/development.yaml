@@ -9,7 +9,6 @@ web_server:
     read_header_timeout: 2s
     write_timeout: 30s
     request_timeout: 10s
-    rate_limit_per_minute: 120
     rate_limits:
         login: 5
         token: 10
@@ -34,7 +33,7 @@ database:
             dsn: ${GOUNO_DATABASE_DRIVERS_POSTGRES_DSN}
             log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
 redis:
-    dsn: redis:6379
+    dsn: redis://redis:6379
     max_active_conns: 6000
     pool_timeout_seconds: 60
 task_pipeline:
@@ -80,6 +79,7 @@ cors:
         - Content-Type
         - Accept
         - Authorization
+        - X-CSRF-Token
     allow_credentials: true
     max_age: 86400
 oauth_providers:

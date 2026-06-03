@@ -73,12 +73,12 @@ environments:
       external_port: 5432     # 宿主机端口（默认+0）
       database: gosso
       user: gosso
-      password: gosso123
+      password: "${POSTGRES_PASSWORD}"   # Set via environment variable
     redis:
       port: 6379              # 容器内端口（默认）
       external_port: 6379     # 宿主机端口（默认+0）
       database: 0
-      password: "CHANGE_ME"   # 生产环境必须设置强密码
+      password: "${REDIS_PASSWORD}"   # Set via environment variable
     nginx:
       http_port: 80           # HTTP 端口
       https_port: 443         # HTTPS 端口

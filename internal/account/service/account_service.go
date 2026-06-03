@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
+	"os"
 	"regexp"
 	"time"
 	"unicode"
@@ -297,8 +298,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	// blacklisting of access token JTIs is not required here.
 	if s.sessionRevoker != nil {
 		if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
-			// Log but don't fail — DB deletion already committed
-			_ = revokeErr
+			fmt.Fprintf(os.Stderr, "Failed to revoke sessions after account deletion for %s: %v\n", accountID, revokeErr)
 		}
 	}
 

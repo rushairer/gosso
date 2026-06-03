@@ -134,6 +134,10 @@ func (r *credentialRepositoryImpl) FindByAccountAndType(ctx context.Context, acc
 		credentials = append(credentials, cred)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate credentials: %w", err)
+	}
+
 	return credentials, nil
 }
 
@@ -166,7 +170,7 @@ func (r *credentialRepositoryImpl) FindByTypeAndIdentifier(ctx context.Context, 
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("%w: %s=%s", ErrCredentialNotFound, credType, identifier)
+		return nil, fmt.Errorf("%w: %s", ErrCredentialNotFound, credType)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query credential: %w", err)

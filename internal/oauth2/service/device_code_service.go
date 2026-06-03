@@ -205,6 +205,7 @@ func (s *DeviceCodeService) DenyDeviceCode(ctx context.Context, deviceCode strin
 // ARGV[3] = interval in seconds
 // Returns 1 if poll allowed, 0 if too fast (slow down), nil if not found.
 var checkAndUpdatePollRateScript = redis.NewScript(`
+local cjson = require('cjson')
 local data = redis.call('GET', KEYS[1])
 if not data then
     return nil
@@ -320,6 +321,7 @@ return 1
 `)
 // Returns the JSON data if the transition succeeded, or nil if the status was not "authorized".
 var claimAuthorizedScript = redis.NewScript(`
+local cjson = require('cjson')
 local data = redis.call('GET', KEYS[1])
 if not data then
     return nil
@@ -330,8 +332,13 @@ if dc.status ~= "authorized" then
 end
 dc.status = "used"
 local updated = cjson.encode(dc)
-redis.call('SET', KEYS[1], updated, 'EX', ARGV[1])
-return data
+local ttl = redis.call('TTL', KEYS[1])
+if ttl > 0 then
+    redis.call('SET', KEYS[1], updated, 'EX', ttl)
+else
+    redis.call('SET', KEYS[1], updated, 'EX', 60)
+end
+return updated
 `)
 
 // ClaimAuthorizedDeviceCode atomically validates that a device code is authorized and marks it as used.
@@ -340,7 +347,7 @@ return data
 func (s *DeviceCodeService) ClaimAuthorizedDeviceCode(ctx context.Context, deviceCode string) (*domain.DeviceCode, error) {
 	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
 
-	result, err := claimAuthorizedScript.Run(ctx, s.redis.GetClient(), []string{key}, "60").Result()
+	result, err := claimAuthorizedScript.Run(ctx, s.redis.GetClient(), []string{key}).Result()
 	if err == redis.Nil || result == nil {
 		return nil, domain.ErrDeviceCodeNotFound
 	}

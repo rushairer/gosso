@@ -27,6 +27,8 @@ type Captcha struct {
 	Answer    string      `json:"answer"`
 	CreatedAt time.Time   `json:"created_at"`
 	ExpiresAt time.Time   `json:"expires_at"`
+	// ExpiresAtUnix is the Unix timestamp of ExpiresAt for Lua script compatibility
+	ExpiresAtUnix int64 `json:"expires_at_unix"`
 	// Used indicates whether the captcha has been used (replay prevention)
 	Used bool `json:"used"`
 }

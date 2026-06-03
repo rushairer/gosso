@@ -73,8 +73,8 @@ func NewAuthController(
 }
 
 // RegisterRoutes registers authentication routes
-// loginLimit, mfaLimit, passwordLimit, refreshLimit, verifyLimit: optional per-endpoint rate limiting middlewares
-func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.HandlerFunc, mfaLimit gin.HandlerFunc, passwordLimit gin.HandlerFunc, refreshLimit gin.HandlerFunc, verifyLimit gin.HandlerFunc) {
+// loginLimit, mfaLimit, passwordLimit, refreshLimit, verifyLimit, socialLimit: optional per-endpoint rate limiting middlewares
+func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.HandlerFunc, mfaLimit gin.HandlerFunc, passwordLimit gin.HandlerFunc, refreshLimit gin.HandlerFunc, verifyLimit gin.HandlerFunc, socialLimit ...gin.HandlerFunc) {
 	auth := rg.Group("/auth")
 	{
 		loginHandlers := []gin.HandlerFunc{c.Login}
@@ -109,7 +109,11 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.Hand
 
 		// Social login endpoints
 		auth.GET("/social/:provider", c.SocialAuthURL)
-		auth.GET("/social/:provider/callback", c.SocialCallback)
+		socialCallbackHandlers := []gin.HandlerFunc{c.SocialCallback}
+		if len(socialLimit) > 0 && socialLimit[0] != nil {
+			socialCallbackHandlers = []gin.HandlerFunc{socialLimit[0], c.SocialCallback}
+		}
+		auth.GET("/social/:provider/callback", socialCallbackHandlers...)
 
 		// Verification endpoints
 		verifyHandlers := []gin.HandlerFunc{c.SendVerification}
@@ -229,14 +233,20 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 	}
 
 	// Get session_id from claims
-	if jwtClaims, exists := ctx.Get("jwt_claims"); exists {
-		if tc, ok := jwtClaims.(*tokenDomain.AccessTokenClaims); ok {
-			if err := c.authSvc.Logout(ctx, tc.AccountID, tc.SessionID, accessTokenJTI, tokenExpiresAt); err != nil {
-				c.logger.Error("Logout error", zap.String("account_id", tc.AccountID), zap.String("session_id", tc.SessionID), zap.Error(err))
-				ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout incomplete"))
-				return
-			}
-		}
+	jwtClaims, exists := ctx.Get("jwt_claims")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+		return
+	}
+	tc, ok := jwtClaims.(*tokenDomain.AccessTokenClaims)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+		return
+	}
+	if err := c.authSvc.Logout(ctx, tc.AccountID, tc.SessionID, accessTokenJTI, tokenExpiresAt); err != nil {
+		c.logger.Error("Logout error", zap.String("account_id", tc.AccountID), zap.String("session_id", tc.SessionID), zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout incomplete"))
+		return
 	}
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("logged out"))
@@ -434,7 +444,15 @@ func (c *AuthController) SocialAuthURL(ctx *gin.Context) {
 		return
 	}
 	state := hex.EncodeToString(stateBytes)
-	ctx.SetCookie("oauth_state", state, 600, "/api/auth/social", "", c.secureCookie, true)
+	http.SetCookie(ctx.Writer, &http.Cookie{
+		Name:     "oauth_state",
+		Value:    state,
+		Path:     "/api/auth/social",
+		MaxAge:   600,
+		HttpOnly: true,
+		Secure:   c.secureCookie,
+		SameSite: http.SameSiteLaxMode,
+	})
 
 	authURL, err := c.socialSvc.GetAuthURL(ctx, provider, state)
 	if err != nil {
@@ -456,7 +474,15 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 	// Validate state parameter (CSRF protection)
 	state := ctx.Query("state")
 	savedState, _ := ctx.Cookie("oauth_state")
-	ctx.SetCookie("oauth_state", "", -1, "/api/auth/social", "", c.secureCookie, true)
+	http.SetCookie(ctx.Writer, &http.Cookie{
+		Name:     "oauth_state",
+		Value:    "",
+		Path:     "/api/auth/social",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   c.secureCookie,
+		SameSite: http.SameSiteLaxMode,
+	})
 	if state == "" || savedState == "" || subtle.ConstantTimeCompare([]byte(state), []byte(savedState)) != 1 {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid or missing state parameter"))
 		return
