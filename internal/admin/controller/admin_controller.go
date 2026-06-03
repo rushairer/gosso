@@ -111,7 +111,7 @@ func (c *AdminController) DeleteAccount(ctx *gin.Context) {
 
 	if err := c.accountSvc.SoftDeleteAccount(ctx, accountID); err != nil {
 		c.logger.Error("Failed to delete account", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to delete account"))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
 		return
 	}
 
@@ -133,7 +133,7 @@ func (c *AdminController) DisableAccount(ctx *gin.Context) {
 
 	if err := c.accountSvc.SuspendAccount(ctx, accountID); err != nil {
 		c.logger.Error("Failed to disable account", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to disable account"))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
 		return
 	}
 
@@ -155,7 +155,7 @@ func (c *AdminController) EnableAccount(ctx *gin.Context) {
 
 	if err := c.accountSvc.ActivateAccount(ctx, accountID); err != nil {
 		c.logger.Error("Failed to enable account", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to enable account"))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
 		return
 	}
 

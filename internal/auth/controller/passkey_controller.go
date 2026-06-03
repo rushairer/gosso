@@ -247,19 +247,23 @@ func (c *PasskeyController) MFABegin(ctx *gin.Context) {
 		return
 	}
 
-	options, err := c.passkeySvc.BeginMFALogin(ctx, claims.AccountID)
+	options, requestID, err := c.passkeySvc.BeginMFALogin(ctx, claims.AccountID)
 	if err != nil {
 		c.logger.Error("Failed to begin passkey MFA", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to begin MFA"))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(options))
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
+		"options":    options,
+		"request_id": requestID,
+	}))
 }
 
 // MFACompleteRequest is the passkey MFA complete request body.
 type MFACompleteRequest struct {
-	MFAToken string `json:"mfa_token" binding:"required"`
+	MFAToken  string `json:"mfa_token" binding:"required"`
+	RequestID string `json:"request_id" binding:"required"`
 }
 
 // MFAComplete POST /api/auth/passkey/mfa/complete
@@ -276,7 +280,7 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.passkeySvc.CompleteMFALogin(ctx, claims.AccountID, ctx.Request); err != nil {
+	if err := c.passkeySvc.CompleteMFALogin(ctx, req.RequestID, claims.AccountID, ctx.Request); err != nil {
 		c.logger.Error("Failed to complete passkey MFA", zap.Error(err))
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "passkey verification failed"))
 		return

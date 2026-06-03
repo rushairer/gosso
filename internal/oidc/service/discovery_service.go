@@ -9,6 +9,7 @@ type DiscoveryService struct {
 	userInfoEndpoint            string
 	endSessionEndpoint          string
 	deviceAuthorizationEndpoint string
+	revocationEndpoint          string
 }
 
 // NewDiscoveryService creates a new instance of DiscoveryService
@@ -21,6 +22,7 @@ func NewDiscoveryService(issuer string) *DiscoveryService {
 		userInfoEndpoint:            issuer + "/oidc/userinfo",
 		endSessionEndpoint:          issuer + "/oidc/logout",
 		deviceAuthorizationEndpoint: issuer + "/oauth2/device/code",
+		revocationEndpoint:          issuer + "/oauth2/revoke",
 	}
 }
 
@@ -64,6 +66,10 @@ func (s *DiscoveryService) GetDiscoveryDocument() map[string]any {
 		},
 		"code_challenge_methods_supported": []string{
 			"S256",
+		},
+		"revocation_endpoint": s.revocationEndpoint,
+		"revocation_endpoint_auth_methods_supported": []string{
+			"client_secret_post", "client_secret_basic",
 		},
 	}
 }

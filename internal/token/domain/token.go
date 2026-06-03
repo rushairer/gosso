@@ -23,7 +23,7 @@ type AccessTokenClaims struct {
 
 // RefreshToken refresh token
 type RefreshToken struct {
-	Token     string    `json:"token"`
+	Token     string    `json:"-"`
 	AccountID string    `json:"account_id"`
 	ClientID  string    `json:"client_id,omitempty"`
 	SessionID string    `json:"session_id,omitempty"`

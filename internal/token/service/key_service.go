@@ -59,7 +59,11 @@ func NewKeyService(privateKeyPath string, keyID string, logger *zap.Logger) (*Ke
 
 	kid := keyID
 	if kid == "" {
-		kid = computeKeyID(&privateKey.PublicKey)
+		computedKid, err := computeKeyID(&privateKey.PublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("compute key ID: %w", err)
+		}
+		kid = computedKid
 	}
 
 	return &KeyService{
@@ -149,13 +153,13 @@ func loadPrivateKeyFromPEM(path string) (*rsa.PrivateKey, error) {
 	return rsaKey, nil
 }
 
-func computeKeyID(pubKey *rsa.PublicKey) string {
+func computeKeyID(pubKey *rsa.PublicKey) (string, error) {
 	DER, err := x509.MarshalPKIXPublicKey(pubKey)
 	if err != nil {
-		return "gosso-rs256"
+		return "", fmt.Errorf("marshal public key: %w", err)
 	}
 	hash := sha256.Sum256(DER)
-	return base64.RawURLEncoding.EncodeToString(hash[:8])
+	return base64.RawURLEncoding.EncodeToString(hash[:8]), nil
 }
 
 // BigEndianBytes converts an int to its big-endian byte representation.

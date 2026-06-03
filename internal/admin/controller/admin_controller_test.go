@@ -260,7 +260,7 @@ func TestDeleteAccount_Error(t *testing.T) {
 
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
 // ──────────────────────────────────────────────
@@ -306,7 +306,7 @@ func TestDisableAccount_Error(t *testing.T) {
 
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
 // ──────────────────────────────────────────────

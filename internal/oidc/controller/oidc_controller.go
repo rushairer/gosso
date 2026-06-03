@@ -177,6 +177,8 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 					}
 				}
 				loggedOut = true
+			} else {
+				c.logger.Debug("Bearer token validation failed during logout", zap.Error(err))
 			}
 		}
 	}

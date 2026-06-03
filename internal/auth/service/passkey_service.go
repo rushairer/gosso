@@ -283,35 +283,36 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 }
 
 // BeginMFALogin starts MFA Passkey verification
-func (s *PasskeyService) BeginMFALogin(ctx context.Context, accountID string) (*protocol.CredentialAssertion, error) {
+func (s *PasskeyService) BeginMFALogin(ctx context.Context, accountID string) (*protocol.CredentialAssertion, string, error) {
 	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil || len(creds) == 0 {
-		return nil, errors.New("no passkey found for account")
+		return nil, "", errors.New("no passkey found for account")
 	}
 
 	user := domain.NewWebAuthnUser(accountID, "", "", toCredentialSlice(creds))
 
 	options, sessionData, err := s.web.BeginLogin(user)
 	if err != nil {
-		return nil, fmt.Errorf("begin mfa login: %w", err)
+		return nil, "", fmt.Errorf("begin mfa login: %w", err)
 	}
 
 	data, err := json.Marshal(sessionData)
 	if err != nil {
-		return nil, fmt.Errorf("marshal session data: %w", err)
+		return nil, "", fmt.Errorf("marshal session data: %w", err)
 	}
 
-	key := fmt.Sprintf(redisKeyMFAChallenge, accountID)
+	requestID := uuid.New().String()
+	key := fmt.Sprintf(redisKeyMFAChallenge, requestID)
 	if err := s.redis.Set(ctx, key, data, s.challengeTTL); err != nil {
-		return nil, fmt.Errorf("store challenge: %w", err)
+		return nil, "", fmt.Errorf("store challenge: %w", err)
 	}
 
-	return options, nil
+	return options, requestID, nil
 }
 
 // CompleteMFALogin completes MFA Passkey verification
-func (s *PasskeyService) CompleteMFALogin(ctx context.Context, accountID string, request *http.Request) error {
-	key := fmt.Sprintf(redisKeyMFAChallenge, accountID)
+func (s *PasskeyService) CompleteMFALogin(ctx context.Context, requestID string, accountID string, request *http.Request) error {
+	key := fmt.Sprintf(redisKeyMFAChallenge, requestID)
 	data, err := s.redis.Get(ctx, key)
 	if err != nil {
 		return errors.New("challenge not found or expired")

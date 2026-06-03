@@ -345,7 +345,7 @@ func TestPasskey_MFAComplete_InvalidMFAToken(t *testing.T) {
 	}
 	engine.POST("/api/auth/passkey/mfa/complete", ctrl.MFAComplete)
 
-	body := `{"mfa_token":"expired-token"}`
+	body := `{"mfa_token":"expired-token","request_id":"test-request-id"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/passkey/mfa/complete", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

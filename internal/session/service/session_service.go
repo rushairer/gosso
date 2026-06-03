@@ -377,7 +377,14 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 		return fmt.Errorf("session does not belong to account")
 	}
 
-	// Remove from index
+	// Delete session key
+	key := s.buildSessionKey(sessionID)
+	if err := s.redis.Del(ctx, key); err != nil {
+		s.logger.Error("Failed to delete session", zap.Error(err), zap.String("session_id", sessionID.String()))
+		return fmt.Errorf("delete session: %w", err)
+	}
+
+	// Remove from account index
 	indexKey := s.buildAccountSessionsKey(accountID)
 	if err := s.redis.SRem(ctx, indexKey, sessionID.String()); err != nil {
 		s.logger.Warn("Failed to remove session from account index during revocation",
@@ -386,7 +393,10 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 			zap.Error(err))
 	}
 
-	return s.DeleteSession(ctx, sessionID)
+	s.logger.Info("Session revoked",
+		zap.String("session_id", sessionID.String()),
+		zap.String("account_id", accountID))
+	return nil
 }
 
 // EnforceSessionLimit checks and enforces the maximum concurrent session limit.

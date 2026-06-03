@@ -32,6 +32,7 @@ if count < limit then
     end
     return {1, limit - count - 1}
 end
+redis.call('EXPIRE', key, ARGV[1])
 return {0, 0}
 `)
 

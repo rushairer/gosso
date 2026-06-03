@@ -619,8 +619,9 @@ func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 
 // DeviceCodeRequestRequest is the device code initiation request body.
 type DeviceCodeRequestRequest struct {
-	ClientID string `form:"client_id" binding:"required"`
-	Scope    string `form:"scope"`
+	ClientID     string `form:"client_id" binding:"required"`
+	ClientSecret string `form:"client_secret"`
+	Scope        string `form:"scope"`
 }
 
 // DeviceCodeRequest POST /oauth2/device/code
@@ -640,6 +641,18 @@ func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
 	if !client.HasGrantType(oauth2Domain.GrantTypeDeviceCode) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "device_code grant not allowed"})
 		return
+	}
+
+	// Client authentication for confidential clients (RFC 8628 §3.1)
+	if client.IsConfidential {
+		if req.ClientSecret == "" {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client_secret required for confidential client"})
+			return
+		}
+		if err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecretHash), []byte(req.ClientSecret)); err != nil {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "invalid client_secret"})
+			return
+		}
 	}
 
 	scopes := splitScope(req.Scope)
@@ -827,19 +840,9 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		return
 	}
 
-	switch dc.Status {
-	case oauth2Domain.DeviceCodeStatusPending:
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "authorization_pending", "error_description": "user has not yet authorized the device"})
-		return
-	case oauth2Domain.DeviceCodeStatusDenied:
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "access_denied", "error_description": "user denied the authorization request"})
-		return
-	case oauth2Domain.DeviceCodeStatusUsed:
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "device code already used"})
-		return
-	}
-
-	// Atomically claim the device code (status authorized→used) to prevent double-use
+	// Atomically claim the device code (status authorized→used) to prevent double-use.
+	// The Lua script handles all status validation atomically, so no non-atomic
+	// status check is needed before this call.
 	claimedDC, err := c.deviceCodeSvc.ClaimAuthorizedDeviceCode(ctx, req.DeviceCode)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "device code already consumed"})
@@ -848,6 +851,12 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 
 	// Use claimedDC for token issuance
 	dc = claimedDC
+
+	// Verify account is still active before issuing tokens
+	if c.accountValidator != nil && !c.accountValidator.IsAccountActive(ctx, dc.AccountID) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "account is not active"})
+		return
+	}
 
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		AccountID: dc.AccountID,

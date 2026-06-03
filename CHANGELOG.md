@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Security**: Device code grant now validates account is active before issuing tokens — consistent with all other token grant endpoints (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Device code request now requires client authentication for confidential clients — prevents unauthorized device code enumeration per RFC 8628 §3.1 (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Device code grant removed non-atomic status check before `ClaimAuthorizedDeviceCode` Lua script — eliminates TOCTOU race condition; atomic script handles all status validation (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Passkey MFA challenge now uses random `requestID` instead of `accountID` as Redis key — prevents concurrent MFA requests from overwriting each other's challenges (`internal/auth/service/passkey_service.go`, `internal/auth/controller/passkey_controller.go`).
+- **Security**: `computeKeyID` now returns an error instead of silently falling back to a static string — prevents JWKS key ID collisions when public key marshaling fails (`internal/token/service/key_service.go`).
+- **Security**: Rate limiter rejected requests now set `EXPIRE` on the key — prevents memory leak from rate limit keys that never expire (`middleware/redis_ratelimit.go`).
+- `RevokeSession` no longer makes redundant Redis calls — inlined delete logic eliminates double `GetSession` and double `SRem` (`internal/session/service/session_service.go`).
+- `RevokeAccessToken` now logs a warning when blacklist is nil — prevents silent no-op that masks misconfiguration (`internal/token/service/token_service.go`).
+- Admin controller endpoints now return 500 instead of 400 for internal errors — correctly signals server errors vs client errors (`internal/admin/controller/admin_controller.go`).
+- `DenyDeviceCode` audit log now includes `client_id` and `user_code` — enables correlation in security audit trails (`internal/oauth2/service/device_code_service.go`).
+- OIDC Logout bearer token path now logs a debug message when token validation fails — aids troubleshooting silent logout failures (`internal/oidc/controller/oidc_controller.go`).
 - **Security**: `fetchUserInfo` now uses safe type assertions for provider user ID — prevents panic when Google/GitHub returns `id` as string or missing (`internal/auth/service/social_login_service.go`).
 - **Security**: Passkey MFA verification flag now uses atomic `GETDEL` instead of separate `GET` + `DEL` — prevents TOCTOU race that allowed double-use of a single MFA verification (`internal/auth/service/auth_login.go`, `internal/cache/redis_client.go`).
 - **Security**: MFA token blacklisting now fails closed — prevents MFA token reuse when Redis blacklist write fails (`internal/auth/service/auth_login.go`).
@@ -20,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- OIDC Discovery document now includes `revocation_endpoint` and `revocation_endpoint_auth_methods_supported` — conforms to RFC 7009 (`internal/oidc/service/discovery_service.go`).
+- `RefreshToken.Token` field is now excluded from JSON serialization (`json:"-"`) — prevents token plaintext from leaking into Redis storage (`internal/token/domain/token.go`).
 - MFA token expiry now uses configurable `mfaVerificationTTL` instead of hardcoded `5*time.Minute` — aligns MFA token TTL with verification flag TTL (`internal/auth/service/auth_login.go`).
 - `DeviceCodeInterval` now has a config default (`5s`) and `Validate()` check — consistent with `DeviceCodeExpiry` (`config/config_manager.go`, `config/config.go`).
 - `IncrWithExpiry`, `CheckAndIncr`, and `SetIfExists` now use `math.Ceil` for sub-second duration handling — prevents 500ms TTL from being truncated to 0 (`internal/cache/redis_client.go`).

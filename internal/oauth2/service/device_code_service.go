@@ -194,7 +194,15 @@ func (s *DeviceCodeService) DenyDeviceCode(ctx context.Context, deviceCode strin
 		return fmt.Errorf("deny device code: %w", err)
 	}
 
-	s.logger.Info("Device code denied")
+	// Parse result for audit logging
+	var dc domain.DeviceCode
+	if data, ok := result.(string); ok {
+		_ = json.Unmarshal([]byte(data), &dc)
+	}
+
+	s.logger.Info("Device code denied",
+		zap.String("client_id", dc.ClientID),
+		zap.String("user_code", dc.UserCode))
 	return nil
 }
 

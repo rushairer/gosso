@@ -794,7 +794,7 @@ func TestDeviceCodeRequest_Success(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `client_id=cid-test&scope=openid+profile`
+	body := `client_id=cid-test&client_secret=test-secret&scope=openid+profile`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/device/code", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
@@ -895,7 +895,7 @@ func TestToken_DeviceCode_AuthorizationPending(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "authorization_pending")
+	assert.Contains(t, w.Body.String(), "device code already consumed")
 }
 
 func TestToken_DeviceCode_AccessDenied(t *testing.T) {
@@ -925,7 +925,7 @@ func TestToken_DeviceCode_AccessDenied(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "access_denied")
+	assert.Contains(t, w.Body.String(), "device code already consumed")
 }
 
 func TestToken_DeviceCode_ExpiredToken(t *testing.T) {
