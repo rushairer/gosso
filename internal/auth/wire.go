@@ -49,6 +49,9 @@ func InitializeAuthModule(
 ) *AuthModule {
 	sessionSvc := sessionService.NewSessionService(redis, logger)
 	sessionSvc.SetTokenRevoker(tokenSvc)
+	if authConfig.SessionTTL > 0 {
+		sessionSvc.SetSessionTTL(authConfig.SessionTTL)
+	}
 
 	// PasskeyService (if WebAuthn is configured)
 	var passkeySvc *service.PasskeyService

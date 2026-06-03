@@ -29,6 +29,7 @@ import (
 	oauth2Controller "github.com/rushairer/gosso/internal/oauth2/controller"
 	"github.com/rushairer/gosso/internal/oidc"
 	oidcController "github.com/rushairer/gosso/internal/oidc/controller"
+	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 	"github.com/rushairer/gosso/middleware"
 	"github.com/rushairer/gosso/router"
@@ -209,6 +210,7 @@ type appModules struct {
 	adminCtrl   *adminController.AdminController
 	passkeyCtrl *authController.PasskeyController
 	tokenSvc    *tokenService.TokenService
+	sessionSvc  *sessionService.SessionService
 }
 
 // initModules initializes all business modules and controllers
@@ -271,6 +273,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		adminCtrl:   adminCtrl,
 		passkeyCtrl: passkeyCtrl,
 		tokenSvc:    tokenSvc,
+		sessionSvc:  authMod.SessionService,
 	}
 }
 
@@ -340,7 +343,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		),
 	)
 
-	router.RegisterWebRouter(engine, db, m.authCtrl, m.oauth2Ctrl, m.clientCtrl, m.oidcCtrl, m.adminCtrl, m.tokenSvc, m.passkeyCtrl, redis, cfg.WebServerConfig.RateLimits, cfg.WebServerConfig.Debug)
+	router.RegisterWebRouter(engine, db, m.authCtrl, m.oauth2Ctrl, m.clientCtrl, m.oidcCtrl, m.adminCtrl, m.tokenSvc, m.passkeyCtrl, redis, cfg.WebServerConfig.RateLimits, cfg.WebServerConfig.Debug, m.sessionSvc)
 
 	return engine
 }

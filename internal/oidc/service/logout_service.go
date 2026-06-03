@@ -70,24 +70,11 @@ func (s *LogoutService) ValidateIDTokenHint(tokenString string) (*IDTokenClaims,
 }
 
 // LogoutByAccountID revokes all sessions and refresh tokens for the given account.
+// Token revocation is handled internally by SessionService.RevokeAllForAccount via its TokenRevoker.
 func (s *LogoutService) LogoutByAccountID(ctx context.Context, accountID string) error {
 	if s.sessionSvc == nil {
 		s.logger.Warn("Session service not available for account logout", zap.String("account_id", accountID))
 		return fmt.Errorf("session service not configured")
-	}
-
-	sessions, err := s.sessionSvc.ListSessionsByAccount(ctx, accountID)
-	if err != nil {
-		return fmt.Errorf("list sessions for account logout: %w", err)
-	}
-
-	var errs []error
-	for _, sess := range sessions {
-		if revokeErr := s.tokenSvc.RevokeAllForSession(ctx, sess.ID.String()); revokeErr != nil {
-			s.logger.Warn("Failed to revoke tokens for session during account logout",
-				zap.String("session_id", sess.ID.String()), zap.Error(revokeErr))
-			errs = append(errs, revokeErr)
-		}
 	}
 
 	if err := s.sessionSvc.RevokeAllForAccount(ctx, accountID); err != nil {

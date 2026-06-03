@@ -275,7 +275,10 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		return err
 	}
 
-	// 3. Revoke all active sessions and refresh tokens
+	// 3. Revoke all active sessions and refresh tokens.
+	// Access tokens are invalidated by the JWT middleware's session existence check
+	// (JWTAuthMiddleware validates sessions on every authenticated request), so explicit
+	// blacklisting of access token JTIs is not required here.
 	if s.sessionRevoker != nil {
 		if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
 			// Log but don't fail — DB deletion already committed
@@ -283,7 +286,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		}
 	}
 
-	// 6. Audit log
+	// 4. Audit log
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountDelete,
 		audit.IPFromContext(ctx),

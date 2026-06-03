@@ -1,16 +1,24 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/rushairer/gouno"
 
 	"github.com/rushairer/gosso/internal/audit"
+	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
+
+// SessionValidator checks whether a session is still active.
+type SessionValidator interface {
+	ValidateSession(ctx context.Context, sessionID uuid.UUID) (*sessionDomain.Session, error)
+}
 
 const (
 	// ContextKeyAccountID stores the account ID in gin.Context
@@ -19,8 +27,9 @@ const (
 	ContextKeyClaims = "jwt_claims"
 )
 
-// JWTAuthMiddleware is the JWT authentication middleware
-func JWTAuthMiddleware(tokenSvc *tokenService.TokenService) gin.HandlerFunc {
+// JWTAuthMiddleware is the JWT authentication middleware.
+// sessionValidator is optional; when provided, it verifies the session still exists in Redis.
+func JWTAuthMiddleware(tokenSvc *tokenService.TokenService, sessionValidator SessionValidator) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		tokenString := extractBearerToken(ctx)
 		if tokenString == "" {
@@ -38,6 +47,17 @@ func JWTAuthMiddleware(tokenSvc *tokenService.TokenService) gin.HandlerFunc {
 		if claims.Scope != "" {
 			ctx.AbortWithStatusJSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "token scope not allowed"))
 			return
+		}
+
+		// Verify the session still exists (invalidates tokens after account deletion/suspension)
+		if sessionValidator != nil && claims.SessionID != "" {
+			sessionUUID, err := uuid.Parse(claims.SessionID)
+			if err == nil {
+				if _, err := sessionValidator.ValidateSession(ctx.Request.Context(), sessionUUID); err != nil {
+					ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "session expired or revoked"))
+					return
+				}
+			}
 		}
 
 		ctx.Set(ContextKeyAccountID, claims.AccountID)

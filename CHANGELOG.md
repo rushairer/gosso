@@ -9,7 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- **Security**: Add `SecurityHeadersMiddleware` — sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 0`, `Referrer-Policy: strict-origin-when-cross-origin` (`middleware/middleware.go`, `cmd/gouno/web.go`).
+- **Security**: JWT middleware now validates session existence on every authenticated request — access tokens are immediately invalidated when sessions are revoked (e.g. account deletion/suspension) (`internal/auth/middleware/auth_middleware.go`, `router/web.go`, `cmd/gouno/web.go`).
+- **Security**: MFA token validation now uses request context instead of `context.Background()` — respects request cancellation (`internal/auth/service/auth_login.go`).
+- **Security**: `TOTPEncryptionKey` validated for exactly 32 bytes when configured — prevents AES-256-GCM runtime panic (`config/config.go`).
+- Remove duplicate token revocation in OIDC `LogoutByAccountID` — `RevokeAllForAccount` already handles token revocation via `TokenRevoker` (`internal/oidc/service/logout_service.go`).
+- Session TTL is now configurable via `auth.session_ttl` (default 24h) instead of being hardcoded (`config/config.go`, `config/config_manager.go`, `internal/auth/wire.go`).
+- Extract `mfaVerificationTTL` constant in `AuthService` — decouples MFA flag TTL from passkey challenge TTL (`internal/auth/service/auth_service.go`).
+- Fix comment step numbering in `SoftDeleteAccount` (`internal/account/service/account_service.go`).
+
+### Security
+
+- Add `SecurityHeadersMiddleware` — sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 0`, `Referrer-Policy: strict-origin-when-cross-origin` (`middleware/middleware.go`, `cmd/gouno/web.go`).
 - **Security**: CSRF skip paths updated to match actual passkey endpoints: `/api/passkey/login/begin`, `/api/passkey/login/complete`, `/api/passkey/mfa/begin`, `/api/passkey/mfa/complete` (`cmd/gouno/web.go`).
 - **Security**: Remove `/oidc/logout` from CSRF skip list — logout must be CSRF-protected (`cmd/gouno/web.go`).
 - **Security**: Sanitize 14 error messages in auth/passkey controllers — internal details no longer leaked to clients; errors logged server-side with `zap` (`internal/auth/controller/auth_controller.go`, `internal/auth/controller/passkey_controller.go`).

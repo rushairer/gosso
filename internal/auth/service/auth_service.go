@@ -23,6 +23,11 @@ import (
 	"github.com/rushairer/gosso/utility"
 )
 
+const (
+	// mfaVerificationTTL is the TTL for the passkey MFA verification flag in Redis.
+	mfaVerificationTTL = 5 * time.Minute
+)
+
 // LoginRequest login request
 type LoginRequest struct {
 	Username  string
@@ -124,7 +129,7 @@ func (s *AuthService) ValidateMFAToken(ctx context.Context, mfaToken string) (*t
 // MarkPasskeyMFAVerified marks passkey MFA as verified
 func (s *AuthService) MarkPasskeyMFAVerified(ctx context.Context, accountID string) error {
 	key := fmt.Sprintf("webauthn:mfa_verified:%s", accountID)
-	return s.redis.Set(ctx, key, "1", challengeTTL)
+	return s.redis.Set(ctx, key, "1", mfaVerificationTTL)
 }
 
 func (s *AuthService) auditLog(ctx context.Context, record *auditDomain.AuditRecord) {

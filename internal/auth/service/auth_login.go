@@ -133,7 +133,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	}()
 
 	// 1. Verify MFA token
-	claims, err := s.tokenSvc.ValidateAccessToken(mfaToken)
+	claims, err := s.tokenSvc.ValidateAccessTokenWithContext(ctx, mfaToken)
 	if err != nil {
 		return nil, ErrInvalidMFAToken
 	}
@@ -194,7 +194,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	}()
 
 	// 1. Validate MFA token
-	claims, err := s.tokenSvc.ValidateAccessToken(mfaToken)
+	claims, err := s.tokenSvc.ValidateAccessTokenWithContext(ctx, mfaToken)
 	if err != nil {
 		return nil, ErrInvalidMFAToken
 	}

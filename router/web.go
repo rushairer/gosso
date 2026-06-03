@@ -35,6 +35,7 @@ func RegisterWebRouter(
 	redis *cache.RedisClient,
 	rateLimits config.RateLimitsConfig,
 	debug bool,
+	sessionValidator authMiddleware.SessionValidator,
 ) {
 	// Health check (no auth, no rate limiting)
 	registerHealthRoutes(server, db, redis)
@@ -51,7 +52,7 @@ func RegisterWebRouter(
 	}
 
 	// JWT auth middleware
-	jwtAuth := authMiddleware.JWTAuthMiddleware(tokenSvc)
+	jwtAuth := authMiddleware.JWTAuthMiddleware(tokenSvc, sessionValidator)
 
 	// Per-endpoint rate limiting middleware
 	loginLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Login, time.Minute)

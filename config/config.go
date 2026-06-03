@@ -109,6 +109,7 @@ type AuthConfig struct {
 	Issuer                  string        `mapstructure:"issuer"`
 	AccessTokenExpiry       time.Duration `mapstructure:"access_token_expiry"`
 	RefreshTokenExpiry      time.Duration `mapstructure:"refresh_token_expiry"`
+	SessionTTL              time.Duration `mapstructure:"session_ttl"`
 	AuthorizationCodeExpiry time.Duration `mapstructure:"authorization_code_expiry"`
 	DeviceCodeExpiry        time.Duration `mapstructure:"device_code_expiry"`
 	DeviceCodeInterval      time.Duration `mapstructure:"device_code_interval"`
@@ -165,6 +166,9 @@ func (c *GoUnoConfig) Validate() error {
 	}
 	if len(c.AuthConfig.JWTSecret) < 32 {
 		return fmt.Errorf("auth: jwt_secret must be at least 32 characters")
+	}
+	if c.AuthConfig.TOTPEncryptionKey != "" && len(c.AuthConfig.TOTPEncryptionKey) != 32 {
+		return fmt.Errorf("auth: totp_encryption_key must be exactly 32 bytes")
 	}
 	if c.AuthConfig.AccessTokenExpiry <= 0 {
 		return fmt.Errorf("auth: access_token_expiry must be positive")
