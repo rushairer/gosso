@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -136,4 +137,29 @@ func TestCaptchaService_VerifyCaptcha_Expired(t *testing.T) {
 	// Verify expired captcha
 	err = service.VerifyCaptcha(ctx, captcha.ID, code)
 	assert.Equal(t, ErrCaptchaNotFound, err) // Redis automatically deletes expired keys
+}
+
+func TestCaptchaService_VerifyCaptcha_AlreadyUsed(t *testing.T) {
+	service := setupTestCaptchaService(t)
+	defer service.redis.Close()
+
+	ctx := context.Background()
+
+	// Generate captcha
+	captcha, _, err := service.GenerateDigitCaptcha(ctx)
+	require.NoError(t, err)
+
+	// Mark as used and re-store in Redis
+	captcha.MarkUsed()
+	data, err := json.Marshal(captcha)
+	require.NoError(t, err)
+	key := CaptchaKeyPrefix + captcha.ID.String()
+	err = service.redis.Set(ctx, key, data, 10*time.Second)
+	require.NoError(t, err)
+
+	// Verify should return ErrCaptchaUsed
+	err = service.VerifyCaptcha(ctx, captcha.ID, captcha.Answer)
+	assert.ErrorIs(t, err, ErrCaptchaUsed)
+
+	_ = service.DeleteCaptcha(ctx, captcha.ID)
 }

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -39,8 +40,8 @@ func (c *ClientController) RegisterRoutes(rg *gin.RouterGroup, authMiddleware gi
 
 // RegisterClientRequest is the request body for registering a client
 type RegisterClientRequest struct {
-	Name           string   `json:"name" binding:"required"`
-	Description    string   `json:"description"`
+	Name           string   `json:"name" binding:"required,max=255"`
+	Description    string   `json:"description" binding:"max=2000"`
 	RedirectURIs   []string `json:"redirect_uris" binding:"required,min=1"`
 	GrantTypes     []string `json:"grant_types"`
 	Scopes         []string `json:"scopes"`
@@ -71,6 +72,15 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 	if !ok || accountID == "" {
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
 		return
+	}
+
+	// Validate redirect URI schemes
+	for _, uri := range req.RedirectURIs {
+		u, err := url.Parse(uri)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "redirect_uris must use http or https scheme"))
+			return
+		}
 	}
 
 	client, secret, err := c.clientSvc.RegisterClient(ctx, &oauth2Service.RegisterClientRequest{

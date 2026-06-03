@@ -62,13 +62,14 @@ func RegisterWebRouter(
 	refreshLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute, false)
 	// Non-security endpoints fail-open (allow if Redis is unavailable)
 	passwordLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, true)
+	verifyLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, true)
 
 	// /api/* routes
 	api := server.Group("/api")
 	{
 		// Auth routes (audit middleware injects IP/UserAgent)
 		api.Use(authMiddleware.AuditMetadataMiddleware())
-		authCtrl.RegisterRoutes(api, loginLimit, mfaLimit, passwordLimit, refreshLimit)
+		authCtrl.RegisterRoutes(api, loginLimit, mfaLimit, passwordLimit, refreshLimit, verifyLimit)
 
 		// Client management routes (require JWT authentication)
 		clientCtrl.RegisterRoutes(api, jwtAuth)

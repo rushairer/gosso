@@ -95,7 +95,9 @@ func (s *MFAService) IsMFAEnabled(ctx context.Context, accountID string) (bool, 
 
 	if s.passkeySvc != nil {
 		has, err := s.passkeySvc.HasPasskeys(ctx, accountID)
-		if err == nil && has {
+		if err != nil {
+			s.logger.Warn("Failed to check passkeys for MFA", zap.String("account_id", accountID), zap.Error(err))
+		} else if has {
 			return true, nil
 		}
 	}
@@ -108,7 +110,9 @@ func (s *MFAService) GetMFATypes(ctx context.Context, accountID string) []string
 	var types []string
 
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
-	if err == nil {
+	if err != nil {
+		s.logger.Warn("Failed to query TOTP credentials for MFA types", zap.String("account_id", accountID), zap.Error(err))
+	} else {
 		for _, c := range creds {
 			if c.Verified && !c.IsDeleted() {
 				types = append(types, "totp")
@@ -119,7 +123,9 @@ func (s *MFAService) GetMFATypes(ctx context.Context, accountID string) []string
 
 	if s.passkeySvc != nil {
 		has, err := s.passkeySvc.HasPasskeys(ctx, accountID)
-		if err == nil && has {
+		if err != nil {
+			s.logger.Warn("Failed to check passkeys for MFA types", zap.String("account_id", accountID), zap.Error(err))
+		} else if has {
 			types = append(types, "passkey")
 		}
 	}

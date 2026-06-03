@@ -73,8 +73,8 @@ func NewAuthController(
 }
 
 // RegisterRoutes registers authentication routes
-// loginLimit, mfaLimit, passwordLimit, refreshLimit: optional per-endpoint rate limiting middlewares
-func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.HandlerFunc, mfaLimit gin.HandlerFunc, passwordLimit gin.HandlerFunc, refreshLimit gin.HandlerFunc) {
+// loginLimit, mfaLimit, passwordLimit, refreshLimit, verifyLimit: optional per-endpoint rate limiting middlewares
+func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.HandlerFunc, mfaLimit gin.HandlerFunc, passwordLimit gin.HandlerFunc, refreshLimit gin.HandlerFunc, verifyLimit gin.HandlerFunc) {
 	auth := rg.Group("/auth")
 	{
 		loginHandlers := []gin.HandlerFunc{c.Login}
@@ -112,7 +112,11 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.Hand
 		auth.GET("/social/:provider/callback", c.SocialCallback)
 
 		// Verification endpoints
-		auth.POST("/verify/send", c.SendVerification)
+		verifyHandlers := []gin.HandlerFunc{c.SendVerification}
+		if verifyLimit != nil {
+			verifyHandlers = []gin.HandlerFunc{verifyLimit, c.SendVerification}
+		}
+		auth.POST("/verify/send", verifyHandlers...)
 		auth.POST("/verify/confirm", c.ConfirmVerification)
 
 		// Password reset endpoints (unauthenticated)
@@ -290,7 +294,7 @@ func (c *AuthController) RevokeSession(ctx *gin.Context) {
 
 	if err := c.authSvc.RevokeSession(ctx, tc.AccountID, sessionID); err != nil {
 		c.logger.Error("Failed to revoke session", zap.Error(err))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid session"))
 		return
 	}
 

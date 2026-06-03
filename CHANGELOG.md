@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Redis `requirepass` support added to `redis.conf` and docker-compose files — set `REDIS_PASSWORD` env var to enable authentication (`config/redis.conf`, `docker-compose.yml`, `docker-compose.development.yml`, `deploy/config.go`, `deploy/environments.yaml`).
 - Nginx SSL/TLS configuration added — HTTPS server block with TLS 1.2/1.3, HSTS, and HTTP→HTTPS redirect (`config/nginx.conf`, `ssl/README.md`).
 - Fix pre-existing broken `TestToken_RefreshToken_Success` and `TestIntrospect_BasicAuth_Success` tests — mock now returns valid token data (`internal/oauth2/controller/oauth2_controller_test.go`).
+- Add missing error-path test coverage: MFAVerify handler (4 tests), captcha replay prevention (`ErrCaptchaUsed`), password reset service (`RequestReset` 5 tests, `VerifyAndReset` 3 tests) (`internal/auth/controller/auth_controller_test.go`, `internal/captcha/service/captcha_service_test.go`, `internal/auth/service/password_reset_service_test.go`).
 
 ### Security
 
@@ -80,6 +81,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: `GenerateBackupCodes` now deletes old codes and creates new ones in a single atomic transaction (`internal/auth/service/mfa_service.go`).
 - **Security**: Remove hardcoded passwords and secrets from `.env.*` files and `config/development.yaml`; use environment variable references instead.
 - **Security**: Atomic refresh token rotation via Redis Lua script — eliminates TOCTOU race condition between GET and DELETE (`internal/token/service/token_service.go`).
+- **Security**: MFA service now logs warnings when passkey/credential lookups fail silently — prevents MFA from being incorrectly reported as disabled (`internal/auth/service/mfa_service.go`).
+- **Security**: `RevokeSession` error message sanitized — internal errors no longer leaked to clients (`internal/auth/controller/auth_controller.go`).
+- **Security**: OAuth2 template execution errors now checked and return 500 instead of silently failing (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: OAuth2 consent save errors now checked and return 500 (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: OAuth2 redirect URI validation now rejects non-http/https schemes (`internal/oauth2/domain/client.go`, `internal/oauth2/controller/client_controller.go`).
+- **Security**: OIDC `GET /oidc/logout` removed — only POST accepted to prevent CSRF via `<img>` tag (`internal/oidc/controller/oidc_controller.go`).
+- **Security**: Passkey login now clears IP rate-limit counters on success — prevents lockout after successful authentication (`internal/auth/service/auth_login.go`).
+- **Security**: `/api/auth/verify/send` now has rate limiting middleware (`router/web.go`, `internal/auth/controller/auth_controller.go`).
+- **Security**: Device code authorize/deny now validates status (must be pending) and expiry before modification (`internal/oauth2/service/device_code_service.go`).
+- **Security**: OAuth2 client registration now enforces field length limits — name max 255, description max 2000 (`internal/oauth2/controller/client_controller.go`).
+- **Security**: Dev docker-compose now requires explicit `POSTGRES_PASSWORD` env var; Postgres and Redis ports bound to `127.0.0.1` only (`docker-compose.development.yml`).
+- Remove conflicting `X-XSS-Protection` header from nginx — Go middleware correctly sets `X-XSS-Protection: 0` (`config/nginx.conf`).
+- Sentinel errors in session and captcha services changed from `fmt.Errorf` to `errors.New` (`internal/session/service/session_service.go`, `internal/captcha/service/captcha_service.go`).
+- OIDC logout response now uses standard `gouno.NewSuccessResponse` format (`internal/oidc/controller/oidc_controller.go`).
+- OIDC logout tests updated to use POST method matching the controller change (`internal/oidc/controller/oidc_controller_test.go`).
+- Document gomail v2 limitation: no `context.Context` or connection timeout support (`internal/notification/service/email_service.go`).
 - **Security**: MFAService transaction error propagation — `deleteUnverifiedTOTP`, `deleteBackupCodes`, and `VerifyBackupCode` now properly return errors instead of silently discarding them (`internal/auth/service/mfa_service.go`).
 - **Security**: Password reset token is now deleted only after successful password update, not before — prevents token loss on DB failure (`internal/auth/service/password_reset_service.go`).
 - **Security**: Social login now enforces session limits by reusing the same `CreateSessionAndTokens` path as password login (`internal/auth/service/social_login_service.go`).

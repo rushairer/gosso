@@ -4,6 +4,7 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -216,8 +217,8 @@ func cryptoRandInt(max int64) (int64, error) {
 
 // Error definitions
 var (
-	ErrCaptchaNotFound = fmt.Errorf("captcha not found")
-	ErrCaptchaExpired  = fmt.Errorf("captcha expired")
-	ErrCaptchaUsed     = fmt.Errorf("captcha already used")
-	ErrCaptchaInvalid  = fmt.Errorf("captcha verification failed")
+	ErrCaptchaNotFound = errors.New("captcha not found")
+	ErrCaptchaExpired  = errors.New("captcha expired")
+	ErrCaptchaUsed     = errors.New("captcha already used")
+	ErrCaptchaInvalid  = errors.New("captcha verification failed")
 )

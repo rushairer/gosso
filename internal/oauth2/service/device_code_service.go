@@ -152,6 +152,13 @@ func (s *DeviceCodeService) AuthorizeDeviceCode(ctx context.Context, deviceCode,
 		return err
 	}
 
+	if dc.Status != domain.DeviceCodeStatusPending {
+		return fmt.Errorf("device code is not in pending status")
+	}
+	if dc.IsExpired() {
+		return fmt.Errorf("device code has expired")
+	}
+
 	dc.Status = domain.DeviceCodeStatusAuthorized
 	dc.AccountID = accountID
 	dc.AuthorizedAt = time.Now()
@@ -164,6 +171,13 @@ func (s *DeviceCodeService) DenyDeviceCode(ctx context.Context, deviceCode strin
 	dc, err := s.GetDeviceCode(ctx, deviceCode)
 	if err != nil {
 		return err
+	}
+
+	if dc.Status != domain.DeviceCodeStatusPending {
+		return fmt.Errorf("device code is not in pending status")
+	}
+	if dc.IsExpired() {
+		return fmt.Errorf("device code has expired")
 	}
 
 	dc.Status = domain.DeviceCodeStatusDenied

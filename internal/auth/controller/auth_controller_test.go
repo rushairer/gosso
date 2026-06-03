@@ -158,7 +158,7 @@ func setupAuthController(authSvc *mockAuthOrchestrator, tokenMgr *mockTokenManag
 	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, nil, nil, false, zap.NewNop())
 
 	api := engine.Group("/api")
-	ctrl.RegisterRoutes(api, nil, nil, nil, nil)
+	ctrl.RegisterRoutes(api, nil, nil, nil, nil, nil)
 
 	return engine, ctrl
 }
@@ -173,7 +173,7 @@ func setupAuthControllerWithClaims(authSvc *mockAuthOrchestrator, tokenMgr *mock
 
 	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, nil, nil, false, zap.NewNop())
 	api := engine.Group("/api")
-	ctrl.RegisterRoutes(api, nil, nil, nil, nil)
+	ctrl.RegisterRoutes(api, nil, nil, nil, nil, nil)
 
 	return engine
 }
@@ -465,6 +465,88 @@ func TestForgotPassword_InvalidEmail(t *testing.T) {
 
 	body := `{"email":"not-an-email"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/password/forgot", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMFAVerify_Success(t *testing.T) {
+	session := newTestSession()
+	authSvc := &mockAuthOrchestrator{
+		mfaVerifyFn: func() (*service.LoginResult, error) {
+			return &service.LoginResult{
+				AccessToken:  "mfa-access-123",
+				RefreshToken: "mfa-refresh-456",
+				Session:      session,
+			}, nil
+		},
+	}
+	tokenMgr := &mockTokenManager{accessExpiry: 15 * time.Minute}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	body := `{"mfa_token":"mfa-tok","code":"123456","type":"totp"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/verify", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "mfa-access-123", data["access_token"])
+	assert.Equal(t, "mfa-refresh-456", data["refresh_token"])
+	assert.Equal(t, "Bearer", data["token_type"])
+	assert.Equal(t, float64(900), data["expires_in"])
+	assert.Equal(t, session.ID.String(), data["session_id"])
+}
+
+func TestMFAVerify_MissingCode(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	body := `{"mfa_token":"mfa-tok"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/verify", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMFAVerify_ServiceError(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{
+		mfaVerifyFn: func() (*service.LoginResult, error) {
+			return nil, fmt.Errorf("expired MFA token")
+		},
+	}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	body := `{"mfa_token":"mfa-tok","code":"123456","type":"totp"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/verify", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestMFAVerify_MissingMFAToken(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	body := `{}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/verify", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 

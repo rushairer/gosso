@@ -43,9 +43,9 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-gosso_dev}
       POSTGRES_USER: ${POSTGRES_USER:-gosso}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gosso123}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     ports:
-      - "${POSTGRES_EXTERNAL_PORT:-5433}:5432"
+      - "127.0.0.1:${POSTGRES_EXTERNAL_PORT:-5433}:5432"
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
       - ./script/postgres:/docker-entrypoint-initdb.d:ro
@@ -63,7 +63,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "${REDIS_EXTERNAL_PORT:-6380}:6379"
+      - "127.0.0.1:${REDIS_EXTERNAL_PORT:-6380}:6379"
     volumes:
       - redis_dev_data:/data
     networks:

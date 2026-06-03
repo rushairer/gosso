@@ -45,7 +45,10 @@ type EmailService struct {
 	logger *zap.Logger
 }
 
-// NewEmailService creates a new email service instance
+// NewEmailService creates a new email service instance.
+// Note: gomail v2 does not support context.Context or connection timeouts.
+// The SMTP connection uses the OS-level TCP timeout. Consider upgrading to a
+// context-aware mail library if goroutine leaks are observed under load.
 func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) *EmailService {
 	if logger == nil {
 		logger = zap.NewNop()

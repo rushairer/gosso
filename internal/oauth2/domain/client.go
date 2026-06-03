@@ -3,6 +3,7 @@ package domain
 import (
 	"crypto/subtle"
 	"errors"
+	"net/url"
 	"slices"
 	"time"
 )
@@ -28,6 +29,9 @@ type OAuth2Client struct {
 
 // ValidateRedirectURI validates that the redirect URI is in the registered list
 func (c *OAuth2Client) ValidateRedirectURI(uri string) bool {
+	if !isValidRedirectScheme(uri) {
+		return false
+	}
 	for _, registered := range c.RedirectURIs {
 		if subtle.ConstantTimeCompare([]byte(uri), []byte(registered)) == 1 {
 			return true
@@ -38,12 +42,24 @@ func (c *OAuth2Client) ValidateRedirectURI(uri string) bool {
 
 // ValidatePostLogoutRedirectURI validates that the post-logout redirect URI is in the registered list
 func (c *OAuth2Client) ValidatePostLogoutRedirectURI(uri string) bool {
+	if !isValidRedirectScheme(uri) {
+		return false
+	}
 	for _, registered := range c.PostLogoutRedirectURIs {
 		if subtle.ConstantTimeCompare([]byte(uri), []byte(registered)) == 1 {
 			return true
 		}
 	}
 	return false
+}
+
+// isValidRedirectScheme checks that the URI uses http or https scheme
+func isValidRedirectScheme(uri string) bool {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return false
+	}
+	return u.Scheme == "http" || u.Scheme == "https"
 }
 
 // HasGrantType checks whether the specified grant type is supported

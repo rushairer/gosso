@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -401,6 +402,6 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 
 // Error definitions
 var (
-	ErrSessionNotFound = fmt.Errorf("session not found")
-	ErrSessionExpired  = fmt.Errorf("session expired")
+	ErrSessionNotFound = errors.New("session not found")
+	ErrSessionExpired  = errors.New("session expired")
 )

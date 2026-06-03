@@ -291,6 +291,10 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 		)
 	}
 
+	// 6. Clear IP rate-limit counters on successful passkey login
+	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", ip)
+	_ = s.redis.Del(ctx, ipAttemptsKey)
+
 	return &LoginResult{
 		Account:      account,
 		Session:      session,

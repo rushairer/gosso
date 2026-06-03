@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -423,7 +425,9 @@ func setupLogoutEngine(t *testing.T, clientRepo *mockClientRepo) (*gin.Engine, *
 func TestLogout_InvalidIDTokenHint(t *testing.T) {
 	engine, _ := setupLogoutEngine(t, &mockClientRepo{})
 
-	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint=not-a-jwt", nil)
+	form := url.Values{"id_token_hint": {"not-a-jwt"}}
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -448,7 +452,9 @@ func TestLogout_ExpiredIDTokenHint(t *testing.T) {
 
 	expiredToken := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, true)
 
-	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+expiredToken, nil)
+	form := url.Values{"id_token_hint": {expiredToken}}
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -457,9 +463,10 @@ func TestLogout_ExpiredIDTokenHint(t *testing.T) {
 	// LogoutByAccountID fails gracefully (no session service).
 	// Controller returns 200 "logged_out" since loggedOut is set true.
 	assert.Equal(t, http.StatusOK, w.Code)
-	var resp map[string]string
+	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.Equal(t, "logged_out", resp["status"])
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "logged_out", data["status"])
 }
 
 func TestLogout_IDTokenHint_WrongIssuer(t *testing.T) {
@@ -478,7 +485,9 @@ func TestLogout_IDTokenHint_WrongIssuer(t *testing.T) {
 	// Token signed by same key but issuer in claims differs from server's issuer
 	token := signIDToken(t, keySvc, "https://other-issuer.com", "account-001", []string{"client-001"}, false)
 
-	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+token, nil)
+	form := url.Values{"id_token_hint": {token}}
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -500,7 +509,9 @@ func TestLogout_IDTokenHint_NoAudience(t *testing.T) {
 
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", nil, false)
 
-	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+token, nil)
+	form := url.Values{"id_token_hint": {token}}
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -525,7 +536,9 @@ func TestLogout_IDTokenHint_WrongSignature(t *testing.T) {
 
 	token := signIDToken(t, otherKeySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
-	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+token, nil)
+	form := url.Values{"id_token_hint": {token}}
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -554,7 +567,7 @@ func TestLogout_BearerToken_InvalidSignature(t *testing.T) {
 	// Access token signed with a different key
 	token := signAccessToken(t, otherKeySvc, "https://sso.example.com", "account-001", "session-001")
 
-	req := httptest.NewRequest(http.MethodGet, "/oidc/logout", nil)
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 
@@ -562,9 +575,10 @@ func TestLogout_BearerToken_InvalidSignature(t *testing.T) {
 
 	// Token validation fails, no session → "no_session"
 	assert.Equal(t, http.StatusOK, w.Code)
-	var resp map[string]string
+	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.Equal(t, "no_session", resp["status"])
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "no_session", data["status"])
 }
 
 // ──────────────────────────────────────────────
@@ -595,7 +609,13 @@ func TestLogout_PostLogoutRedirect_InvalidURI(t *testing.T) {
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
 	// Request with a redirect URI NOT in the client's registered list
-	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+token+"&client_id=client-001&post_logout_redirect_uri=https://evil.com/redirect", nil)
+	form := url.Values{
+		"id_token_hint":           {token},
+		"client_id":               {"client-001"},
+		"post_logout_redirect_uri": {"https://evil.com/redirect"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -626,7 +646,14 @@ func TestLogout_PostLogoutRedirect_ValidURI(t *testing.T) {
 
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
-	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+token+"&client_id=client-001&post_logout_redirect_uri=https://app.example.com/logout&state=test-state", nil)
+	form := url.Values{
+		"id_token_hint":           {token},
+		"client_id":               {"client-001"},
+		"post_logout_redirect_uri": {"https://app.example.com/logout"},
+		"state":                   {"test-state"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -656,7 +683,13 @@ func TestLogout_PostLogoutRedirect_ClientNotFound(t *testing.T) {
 
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
-	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+token+"&client_id=client-001&post_logout_redirect_uri=https://app.example.com/logout", nil)
+	form := url.Values{
+		"id_token_hint":           {token},
+		"client_id":               {"client-001"},
+		"post_logout_redirect_uri": {"https://app.example.com/logout"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -683,7 +716,12 @@ func TestLogout_ClientIDMismatch(t *testing.T) {
 	// Token has audience ["client-001"], but request claims client_id=client-999
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
-	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+token+"&client_id=client-999", nil)
+	form := url.Values{
+		"id_token_hint": {token},
+		"client_id":     {"client-999"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -698,15 +736,16 @@ func TestLogout_ClientIDMismatch(t *testing.T) {
 func TestLogout_NoSession(t *testing.T) {
 	engine, _ := setupLogoutEngine(t, &mockClientRepo{})
 
-	req := httptest.NewRequest(http.MethodGet, "/oidc/logout", nil)
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", nil)
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	var resp map[string]string
+	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.Equal(t, "no_session", resp["status"])
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "no_session", data["status"])
 }
 
 // ──────────────────────────────────────────────
