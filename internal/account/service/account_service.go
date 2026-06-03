@@ -333,10 +333,20 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 func (s *accountServiceImpl) VerifyCredential(ctx context.Context, accountID string) error {
 	// 1. Find credential
 	credentials, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, domain.CredentialTypeEmail)
-	if err != nil || len(credentials) == 0 {
+	if err != nil {
+		if !errors.Is(err, repository.ErrCredentialNotFound) {
+			return fmt.Errorf("find email credential: %w", err)
+		}
+	}
+	if len(credentials) == 0 {
 		// Try phone credential as fallback
 		credentials, err = s.credentialRepo.FindByAccountAndType(ctx, accountID, domain.CredentialTypePhone)
-		if err != nil || len(credentials) == 0 {
+		if err != nil {
+			if !errors.Is(err, repository.ErrCredentialNotFound) {
+				return fmt.Errorf("find phone credential: %w", err)
+			}
+		}
+		if len(credentials) == 0 {
 			return errors.New("credential not found")
 		}
 	}
@@ -471,19 +481,9 @@ func (s *accountServiceImpl) ListAccounts(ctx context.Context, page, pageSize in
 	return s.accountRepo.FindAll(ctx, page, pageSize, status)
 }
 
-// SuspendAccount suspends the account.
+// SuspendAccount suspends the account atomically.
 func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID string) error {
-	account, err := s.accountRepo.FindByID(ctx, accountID)
-	if err != nil {
-		return fmt.Errorf("find account: %w", err)
-	}
-
-	if !account.IsActive() {
-		return fmt.Errorf("account status does not allow suspension: %s", account.Status)
-	}
-
-	account.Suspend()
-	if err := s.UpdateAccount(ctx, account); err != nil {
+	if err := s.accountRepo.SuspendAccount(ctx, accountID); err != nil {
 		return err
 	}
 
@@ -497,19 +497,9 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 	return nil
 }
 
-// ActivateAccount reactivates the account.
+// ActivateAccount reactivates the account atomically.
 func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID string) error {
-	account, err := s.accountRepo.FindByID(ctx, accountID)
-	if err != nil {
-		return fmt.Errorf("find account: %w", err)
-	}
-
-	if !account.IsSuspended() {
-		return fmt.Errorf("account status does not allow activation: %s", account.Status)
-	}
-
-	account.Activate()
-	if err := s.UpdateAccount(ctx, account); err != nil {
+	if err := s.accountRepo.ActivateAccount(ctx, accountID); err != nil {
 		return err
 	}
 

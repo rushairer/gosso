@@ -456,12 +456,19 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 	default:
 		// TOTP / backup code
 		valid, verr := s.mfaSvc.VerifyTOTP(ctx, accountID, mfaCode)
-		if verr != nil || !valid {
-			valid, verr = s.mfaSvc.VerifyBackupCode(ctx, accountID, mfaCode)
-			if verr != nil || !valid {
-				return ErrInvalidMFACode
-			}
+		if verr != nil {
+			s.logger.Warn("TOTP verification error, trying backup code", zap.Error(verr), zap.String("account_id", accountID))
+		} else if valid {
+			return nil
 		}
+		valid, berr := s.mfaSvc.VerifyBackupCode(ctx, accountID, mfaCode)
+		if berr != nil {
+			s.logger.Warn("Backup code verification error", zap.Error(berr), zap.String("account_id", accountID))
+		}
+		if !valid {
+			return ErrInvalidMFACode
+		}
+		return nil
 	}
 	return nil
 }

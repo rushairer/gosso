@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -318,10 +319,11 @@ func (r *RedisClient) GetDel(ctx context.Context, key string) (string, error) {
 		return "", nil
 	}
 	if err != nil {
+		r.logger.Error("Redis GETDEL failed", zap.String("key", key), zap.Error(err))
 		return "", fmt.Errorf("getDel key %s: %w", key, err)
 	}
 	return result, nil
 }
 
 // ErrKeyNotFound is the error returned when a Redis key does not exist
-var ErrKeyNotFound = fmt.Errorf("redis: key not found")
+var ErrKeyNotFound = errors.New("redis: key not found")

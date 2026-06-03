@@ -46,6 +46,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Config.Validate()` now checks WebAuthn configuration consistency — `webauthn_rp_name` and `webauthn_rp_origin` are required when `webauthn_rp_id` is set (`config/config.go`).
 - `TestChangePassword` now uses a real bcrypt hash and proper assertions — previously used a placeholder hash that would fail at runtime (`internal/account/service/account_service_test.go`).
 - Removed debug `log.Println(err)` from `TestRegisterAccount` (`internal/account/service/account_service_test.go`).
+- **Security**: `verifyMFACode` now logs TOTP and backup code verification errors separately — infrastructure failures (Redis/DB errors) are no longer silently swallowed, enabling incident diagnosis (`internal/auth/service/auth_login.go`).
+- Admin `GetAccount` now distinguishes "not found" from database errors — returns 404 for missing accounts, 500 for infrastructure failures (`internal/admin/controller/admin_controller.go`).
+- Admin `AddRole` and `RemoveRole` now return 500 instead of 400 for infrastructure errors — consistent with other admin endpoints (`internal/admin/controller/admin_controller.go`).
+- `Config.Validate()` now requires `password_reset_base_url` when SMTP is configured — prevents broken reset links in password reset emails (`config/config.go`).
+- `SuspendAccount` and `ActivateAccount` are now atomic — single `UPDATE ... WHERE status = X` eliminates TOCTOU race condition that allowed duplicate audit entries (`internal/account/service/account_service.go`, `internal/account/repository/account_repository.go`).
+- Password reset token Redis deletion failure is now logged — previously silently discarded, masking potential token reuse window (`internal/auth/service/password_reset_service.go`).
+- Social login recovery path now handles duplicate federated identity — concurrent social logins with the same provider no longer cause 500 errors (`internal/auth/service/social_login_service.go`).
+- `GetDel` now logs Redis errors — consistent with all other Redis client methods (`internal/cache/redis_client.go`).
+- `ErrKeyNotFound` now uses `errors.New` instead of `fmt.Errorf` — consistent with all other sentinel errors (`internal/cache/redis_client.go`).
+- `VerifyCredential` now distinguishes database errors from "not found" — infrastructure failures are returned immediately instead of silently falling through to phone credential lookup (`internal/account/service/account_service.go`).
+- Passkey challenge consumption is now atomic — uses `GetDel` instead of separate `Get` + `Del`, eliminating non-atomic window (`internal/auth/service/passkey_service.go`).
+- `IntrospectToken` now includes `jti` claim — improves RFC 7662 compliance (`internal/token/service/token_service.go`).
+- `MaskPhone` now uses rune indexing — consistent with `MaskEmail`, prevents garbled output for multi-byte characters (`utility/mask.go`).
+- `ColorWriteSyncer.Sync()` now delegates to the underlying file — ensures log data is flushed to disk on crash (`utility/logger.go`).
 
 ### Changed
 

@@ -227,7 +227,10 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	}
 
 	// One-time use: delete token only after successful password update
-	_ = s.redis.Del(ctx, tokenKey)
+	if err := s.redis.Del(ctx, tokenKey); err != nil {
+		s.logger.Warn("Failed to delete reset token from Redis, token may be reusable until TTL",
+			zap.Error(err), zap.String("token_hash", tokenHash))
+	}
 
 	// Asynchronously revoke all old sessions
 	select {

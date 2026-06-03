@@ -31,8 +31,9 @@ func MaskEmail(email string) string {
 // MaskPhone masks a phone number for safe display.
 // Example: "13800138000" -> "138***00"
 func MaskPhone(phone string) string {
-	if len(phone) > 4 {
-		return phone[:3] + "***" + phone[len(phone)-2:]
+	runes := []rune(phone)
+	if len(runes) > 4 {
+		return string(runes[:3]) + "***" + string(runes[len(runes)-2:])
 	}
 	return "***"
 }

@@ -389,6 +389,9 @@ func (s *TokenService) IntrospectToken(ctx context.Context, tokenString string) 
 	if len(claims.Roles) > 0 {
 		result["roles"] = claims.Roles
 	}
+	if claims.ID != "" {
+		result["jti"] = claims.ID
+	}
 	return result, nil
 }
 

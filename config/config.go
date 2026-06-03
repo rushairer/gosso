@@ -223,6 +223,9 @@ func (c *GoUnoConfig) Validate() error {
 		if c.SMTPConfig.From == "" {
 			return fmt.Errorf("smtp: from address is required when host is configured")
 		}
+		if c.AuthConfig.PasswordResetBaseURL == "" {
+			return fmt.Errorf("auth: password_reset_base_url is required when SMTP is configured")
+		}
 	}
 	if c.AuthConfig.WebAuthnRPID != "" {
 		if c.AuthConfig.WebAuthnRPName == "" {

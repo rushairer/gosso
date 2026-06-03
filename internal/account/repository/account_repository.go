@@ -13,7 +13,8 @@ import (
 
 // Sentinel errors for repository operations
 var (
-	ErrAccountNotFound = errors.New("account not found")
+	ErrAccountNotFound       = errors.New("account not found")
+	ErrInvalidStatusTransition = errors.New("invalid account status transition")
 )
 
 // AccountRepository defines the interface for account repository
@@ -35,6 +36,14 @@ type AccountRepository interface {
 
 	// FindAll queries accounts with pagination (for admin search)
 	FindAll(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error)
+
+	// SuspendAccount atomically sets status to 'suspended' only if currently 'active'.
+	// Returns ErrAccountNotFound if the account doesn't exist, or a sentinel error if the status transition is invalid.
+	SuspendAccount(ctx context.Context, accountID string) error
+
+	// ActivateAccount atomically sets status to 'active' only if currently 'suspended'.
+	// Returns ErrAccountNotFound if the account doesn't exist, or a sentinel error if the status transition is invalid.
+	ActivateAccount(ctx context.Context, accountID string) error
 }
 
 // accountRepositoryImpl implements AccountRepository
@@ -298,4 +307,44 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 	}
 
 	return accounts, total, nil
+}
+
+// SuspendAccount atomically sets status to 'suspended' only if currently 'active'.
+func (r *accountRepositoryImpl) SuspendAccount(ctx context.Context, accountID string) error {
+	query := `
+		UPDATE accounts SET status = 'suspended', updated_at = $1
+		WHERE id = $2 AND status = 'active' AND deleted_at IS NULL
+	`
+	result, err := r.db.ExecContext(ctx, query, time.Now(), accountID)
+	if err != nil {
+		return fmt.Errorf("suspend account: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("%w: account %s not found or not in active status", ErrInvalidStatusTransition, accountID)
+	}
+	return nil
+}
+
+// ActivateAccount atomically sets status to 'active' only if currently 'suspended'.
+func (r *accountRepositoryImpl) ActivateAccount(ctx context.Context, accountID string) error {
+	query := `
+		UPDATE accounts SET status = 'active', updated_at = $1
+		WHERE id = $2 AND status = 'suspended' AND deleted_at IS NULL
+	`
+	result, err := r.db.ExecContext(ctx, query, time.Now(), accountID)
+	if err != nil {
+		return fmt.Errorf("activate account: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("%w: account %s not found or not in suspended status", ErrInvalidStatusTransition, accountID)
+	}
+	return nil
 }

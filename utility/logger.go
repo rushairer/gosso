@@ -85,8 +85,7 @@ func (w *ColorWriteSyncer) Write(p []byte) (n int, err error) {
 
 // Sync syncs written data
 func (w *ColorWriteSyncer) Sync() error {
-	// os.File doesn't need special synchronization handling
-	return nil
+	return w.Writer.Sync()
 }
 
 // colorizeLine adds color to the entire log line

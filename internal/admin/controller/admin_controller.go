@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
+	accountRepository "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/auth/middleware"
 )
@@ -98,7 +100,12 @@ func (c *AdminController) GetAccount(ctx *gin.Context) {
 
 	account, err := c.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "account not found"))
+		if errors.Is(err, accountRepository.ErrAccountNotFound) {
+			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "account not found"))
+		} else {
+			c.logger.Error("Failed to get account", zap.Error(err), zap.String("account_id", accountID))
+			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
+		}
 		return
 	}
 
@@ -211,7 +218,7 @@ func (c *AdminController) AddRole(ctx *gin.Context) {
 
 	if err := c.accountSvc.AssignRole(ctx, accountID, req.RoleID); err != nil {
 		c.logger.Error("Failed to assign role", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to assign role"))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to assign role"))
 		return
 	}
 
@@ -231,7 +238,7 @@ func (c *AdminController) RemoveRole(ctx *gin.Context) {
 
 	if err := c.accountSvc.RemoveRole(ctx, accountID, roleID); err != nil {
 		c.logger.Error("Failed to remove role", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to remove role"))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to remove role"))
 		return
 	}
 

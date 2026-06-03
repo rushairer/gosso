@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountRepository "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 )
 
@@ -207,7 +208,7 @@ func TestGetAccount_Success(t *testing.T) {
 func TestGetAccount_NotFound(t *testing.T) {
 	accountSvc := &mockAccountService{
 		findByIDFn: func() (*accountDomain.Account, error) {
-			return nil, fmt.Errorf("not found")
+			return nil, accountRepository.ErrAccountNotFound
 		},
 	}
 	engine := setupAdminController(accountSvc)

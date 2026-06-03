@@ -114,11 +114,10 @@ func (s *PasskeyService) BeginRegistration(ctx context.Context, accountID, usern
 func (s *PasskeyService) CompleteRegistration(ctx context.Context, accountID, username, displayName string, request *http.Request) (*domain.WebAuthnCredential, error) {
 	// Get challenge from Redis
 	key := fmt.Sprintf(redisKeyRegChallenge, accountID)
-	data, err := s.redis.Get(ctx, key)
+	data, err := s.redis.GetDel(ctx, key)
 	if err != nil {
 		return nil, errors.New("challenge not found or expired")
 	}
-	_ = s.redis.Del(ctx, key)
 
 	var sessionData wa.SessionData
 	if err := json.Unmarshal([]byte(data), &sessionData); err != nil {
@@ -222,11 +221,10 @@ func (s *PasskeyService) BeginDiscoverableLogin(ctx context.Context) (*protocol.
 func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, request *http.Request) (string, *domain.WebAuthnCredential, error) {
 	// Get challenge from Redis
 	key := fmt.Sprintf(redisKeyLoginChallenge, requestID)
-	data, err := s.redis.Get(ctx, key)
+	data, err := s.redis.GetDel(ctx, key)
 	if err != nil {
 		return "", nil, errors.New("challenge not found or expired")
 	}
-	_ = s.redis.Del(ctx, key)
 
 	var sessionData wa.SessionData
 	if err := json.Unmarshal([]byte(data), &sessionData); err != nil {
@@ -316,11 +314,10 @@ func (s *PasskeyService) BeginMFALogin(ctx context.Context, accountID string) (*
 // CompleteMFALogin completes MFA Passkey verification
 func (s *PasskeyService) CompleteMFALogin(ctx context.Context, requestID string, accountID string, request *http.Request) error {
 	key := fmt.Sprintf(redisKeyMFAChallenge, requestID)
-	data, err := s.redis.Get(ctx, key)
+	data, err := s.redis.GetDel(ctx, key)
 	if err != nil {
 		return errors.New("challenge not found or expired")
 	}
-	_ = s.redis.Del(ctx, key)
 
 	var sessionData wa.SessionData
 	if err := json.Unmarshal([]byte(data), &sessionData); err != nil {
