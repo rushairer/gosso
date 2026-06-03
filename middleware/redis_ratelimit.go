@@ -32,7 +32,9 @@ return {0, 0}
 // keyFunc: extracts rate limit key from request (e.g., IP, accountID).
 // limit: max requests within the window.
 // window: time window duration.
-func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context) string, limit int, window time.Duration) gin.HandlerFunc {
+// failOpen: if true, allows requests when Redis is unavailable (fail-open);
+// if false, rejects requests with 503 when Redis is unavailable (fail-closed).
+func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context) string, limit int, window time.Duration, failOpen bool) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		key := fmt.Sprintf("rate_limit:%s", keyFunc(ctx))
 		now := time.Now().UnixMilli()
@@ -45,8 +47,15 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context)
 		).Int64Slice()
 
 		if err != nil {
-			// Fail-open on Redis failure
-			ctx.Next()
+			if failOpen {
+				ctx.Next()
+			} else {
+				ctx.JSON(http.StatusServiceUnavailable, gin.H{
+					"code":    503,
+					"message": "rate limit service unavailable",
+				})
+				ctx.Abort()
+			}
 			return
 		}
 

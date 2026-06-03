@@ -74,7 +74,7 @@ jobs:
         env:
           POSTGRES_DB: gosso_test
           POSTGRES_USER: gosso
-          POSTGRES_PASSWORD: gosso123
+          POSTGRES_PASSWORD: ${{ secrets.TEST_POSTGRES_PASSWORD }}
         ports:
           - 5434:5432
         options: >-
@@ -104,7 +104,7 @@ jobs:
       - name: Run integration tests
         run: go test -p 1 -tags=integration -v -count=1 -timeout=120s ./internal/auth/service/ ./internal/session/service/ ./middleware/
         env:
-          GOUNO_DATABASE_DRIVERS_POSTGRES_DSN: "host=127.0.0.1 user=gosso password=gosso123 dbname=gosso_test port=5434 sslmode=disable"
+          GOUNO_DATABASE_DRIVERS_POSTGRES_DSN: "host=127.0.0.1 user=gosso password=${{ secrets.TEST_POSTGRES_PASSWORD }} dbname=gosso_test port=5434 sslmode=disable"
           GOUNO_REDIS_DSN: "redis://127.0.0.1:6381/0"
 
   build:

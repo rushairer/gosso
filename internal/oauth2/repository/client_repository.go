@@ -15,4 +15,5 @@ type OAuth2ClientRepository interface {
 	FindByAccountID(ctx context.Context, accountID string) ([]*domain.OAuth2Client, error)
 	Update(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client) error
 	SoftDelete(ctx context.Context, tx *sql.Tx, id string, deletedAt time.Time) error
+	SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
 }

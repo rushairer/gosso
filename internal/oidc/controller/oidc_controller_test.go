@@ -129,6 +129,9 @@ func (m *mockClientRepo) Update(_ context.Context, _ *sql.Tx, _ *oauth2Domain.OA
 func (m *mockClientRepo) SoftDelete(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	return nil
 }
+func (m *mockClientRepo) SoftDeleteByAccountID(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+	return nil
+}
 
 var _ oauth2Repo.OAuth2ClientRepository = (*mockClientRepo)(nil)
 

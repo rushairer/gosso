@@ -55,11 +55,13 @@ func RegisterWebRouter(
 	jwtAuth := authMiddleware.JWTAuthMiddleware(tokenSvc, sessionValidator)
 
 	// Per-endpoint rate limiting middleware
-	loginLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Login, time.Minute)
-	mfaLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute)
-	passwordLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute)
-	passkeyLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Passkey, time.Minute)
-	refreshLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute)
+	// Security-sensitive endpoints fail-closed (reject if Redis is unavailable)
+	loginLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Login, time.Minute, false)
+	mfaLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute, false)
+	passkeyLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Passkey, time.Minute, false)
+	refreshLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute, false)
+	// Non-security endpoints fail-open (allow if Redis is unavailable)
+	passwordLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, true)
 
 	// /api/* routes
 	api := server.Group("/api")
@@ -73,7 +75,7 @@ func RegisterWebRouter(
 
 		// Admin routes (require JWT authentication + admin role + rate limiting)
 		admin := api.Group("/admin")
-		adminLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute)
+		adminLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, true)
 		admin.Use(adminLimit, jwtAuth, authMiddleware.AdminRequiredMiddleware())
 		adminCtrl.RegisterRoutes(admin)
 
@@ -86,7 +88,7 @@ func RegisterWebRouter(
 	}
 
 	// OAuth2 protocol routes (with rate limiting for token endpoint)
-	tokenLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute)
+	tokenLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute, true)
 	oauth2 := server.Group("/oauth2")
 	oauth2.Use(tokenLimit)
 	oauth2Ctrl.RegisterRoutes(oauth2, jwtAuth)

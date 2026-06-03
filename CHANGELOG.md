@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Session TTL is now configurable via `auth.session_ttl` (default 24h) instead of being hardcoded (`config/config.go`, `config/config_manager.go`, `internal/auth/wire.go`).
 - Extract `mfaVerificationTTL` constant in `AuthService` — decouples MFA flag TTL from passkey challenge TTL (`internal/auth/service/auth_service.go`).
 - Fix comment step numbering in `SoftDeleteAccount` (`internal/account/service/account_service.go`).
+- **Security**: `NewOAuth2Controller` now returns an error instead of panicking on template parse failure (`internal/oauth2/controller/oauth2_controller.go`, `cmd/gouno/web.go`).
+- **Security**: `cryptoRandInt` in captcha service now returns an error instead of panicking on `crypto/rand` failure (`internal/captcha/service/captcha_service.go`).
+- **Security**: Rate limit middleware now supports configurable fail-open/fail-closed — security-sensitive endpoints (login, MFA, passkey, refresh) fail-closed with 503 when Redis is unavailable (`middleware/redis_ratelimit.go`, `router/web.go`).
+- **Security**: Account soft-delete now cascades to OAuth2 clients — prevents orphaned clients from issuing tokens after account deletion (`internal/account/service/account_service.go`, `internal/oauth2/repository/client_repository.go`).
+- **Security**: CI workflow uses `secrets.TEST_POSTGRES_PASSWORD` instead of hardcoded credentials (`.github/workflows/ci.yml`).
 
 ### Security
 

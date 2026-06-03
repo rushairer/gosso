@@ -222,3 +222,12 @@ func (r *oauth2ClientRepositoryImpl) SoftDelete(ctx context.Context, tx *sql.Tx,
 	}
 	return nil
 }
+
+func (r *oauth2ClientRepositoryImpl) SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
+	query := `UPDATE oauth2_clients SET deleted_at = $1, updated_at = $1 WHERE account_id = $2 AND deleted_at IS NULL`
+	_, err := tx.ExecContext(ctx, query, deletedAt, accountID)
+	if err != nil {
+		return fmt.Errorf("soft delete oauth2_clients by account_id: %w", err)
+	}
+	return nil
+}

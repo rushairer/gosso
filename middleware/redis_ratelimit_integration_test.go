@@ -48,7 +48,7 @@ func TestRedisRateLimit_AllowsWithinLimit(t *testing.T) {
 	engine := setupRateLimitTest(t)
 
 	engine.GET("/test",
-		middleware.RedisRateLimitMiddleware(env.Redis, middleware.IPKeyFunc, 5, time.Minute),
+		middleware.RedisRateLimitMiddleware(env.Redis, middleware.IPKeyFunc, 5, time.Minute, true),
 		func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"ok": true})
 		},
@@ -69,7 +69,7 @@ func TestRedisRateLimit_BlocksOverLimit(t *testing.T) {
 	engine := setupRateLimitTest(t)
 
 	engine.GET("/test",
-		middleware.RedisRateLimitMiddleware(env.Redis, middleware.IPKeyFunc, 3, time.Minute),
+		middleware.RedisRateLimitMiddleware(env.Redis, middleware.IPKeyFunc, 3, time.Minute, true),
 		func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"ok": true})
 		},
@@ -97,7 +97,7 @@ func TestRedisRateLimit_DifferentKeysIndependent(t *testing.T) {
 	engine := setupRateLimitTest(t)
 
 	engine.GET("/test",
-		middleware.RedisRateLimitMiddleware(env.Redis, middleware.IPKeyFunc, 2, time.Minute),
+		middleware.RedisRateLimitMiddleware(env.Redis, middleware.IPKeyFunc, 2, time.Minute, true),
 		func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"ok": true})
 		},
@@ -131,7 +131,7 @@ func TestRedisRateLimit_ResponseHeaders(t *testing.T) {
 	engine := setupRateLimitTest(t)
 
 	engine.GET("/test",
-		middleware.RedisRateLimitMiddleware(env.Redis, middleware.IPKeyFunc, 10, time.Minute),
+		middleware.RedisRateLimitMiddleware(env.Redis, middleware.IPKeyFunc, 10, time.Minute, true),
 		func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"ok": true})
 		},

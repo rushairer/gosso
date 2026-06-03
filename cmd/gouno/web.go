@@ -27,6 +27,7 @@ import (
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/oauth2"
 	oauth2Controller "github.com/rushairer/gosso/internal/oauth2/controller"
+	oauth2Repository "github.com/rushairer/gosso/internal/oauth2/repository"
 	"github.com/rushairer/gosso/internal/oidc"
 	oidcController "github.com/rushairer/gosso/internal/oidc/controller"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
@@ -94,7 +95,10 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	defer auditAuditor.Close()
 	go listenAuditErrors(ctx, auditAuditor, logger)
 
-	modules := initModules(ctx, db, redis, logger, globalConfig, auditAuditor)
+	modules, err := initModules(ctx, db, redis, logger, globalConfig, auditAuditor)
+	if err != nil {
+		logger.Fatal("module initialization failed", zap.Error(err))
+	}
 
 	engine := setupEngine(ctx, globalConfig, logger, modules, db, redis)
 
@@ -214,7 +218,7 @@ type appModules struct {
 }
 
 // initModules initializes all business modules and controllers
-func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logger *zap.Logger, cfg config.GoUnoConfig, auditor *auditService.Auditor) *appModules {
+func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logger *zap.Logger, cfg config.GoUnoConfig, auditor *auditService.Auditor) (*appModules, error) {
 	accountMod := account.InitializeAccountModule(db, auditor)
 
 	keySvc, err := tokenService.NewKeyService(
@@ -253,8 +257,16 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	oauth2ClientSvc, authCodeSvc, consentSvc, deviceCodeSvc, clientRepo := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig)
 	idTokenSvc, discoverySvc, jwksSvc, userInfoSvc, logoutSvc := oidc.InitializeOIDCModule(tokenSvc, accountMod.Service, cfg.AuthConfig, authMod.SessionService, accountMod.CredentialRepo, logger)
 
+	// Wire OAuth2 client deleter into account service (for account deletion -> OAuth2 client cascade)
+	if impl, ok := accountMod.Service.(interface{ SetOAuth2ClientDeleter(accountService.OAuth2ClientDeleter) }); ok {
+		impl.SetOAuth2ClientDeleter(&oauth2ClientDeleterAdapter{clientRepo: clientRepo})
+	}
+
 	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, authMod.CredentialRepo, db, !cfg.WebServerConfig.Debug, logger)
-	oauth2Ctrl := oauth2Controller.NewOAuth2Controller(oauth2ClientSvc, authCodeSvc, consentSvc, tokenSvc, idTokenSvc, deviceCodeSvc, cfg.AuthConfig.Issuer, logger)
+	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2ClientSvc, authCodeSvc, consentSvc, tokenSvc, idTokenSvc, deviceCodeSvc, cfg.AuthConfig.Issuer, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
+	}
 	oauth2Ctrl.SetAccountValidator(&accountValidatorAdapter{accountSvc: accountMod.Service})
 	clientCtrl := oauth2Controller.NewClientController(oauth2ClientSvc, logger)
 	oidcCtrl := oidcController.NewOIDCController(discoverySvc, jwksSvc, userInfoSvc, logoutSvc, clientRepo, tokenSvc, cfg.AuthConfig.Issuer, logger)
@@ -274,7 +286,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		passkeyCtrl: passkeyCtrl,
 		tokenSvc:    tokenSvc,
 		sessionSvc:  authMod.SessionService,
-	}
+	}, nil
 }
 
 // buildOAuthProviders builds OAuth provider mappings from configuration
@@ -384,4 +396,13 @@ func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID
 		return false
 	}
 	return account.IsActive()
+}
+
+// oauth2ClientDeleterAdapter implements accountService.OAuth2ClientDeleter using the OAuth2 client repository.
+type oauth2ClientDeleterAdapter struct {
+	clientRepo oauth2Repository.OAuth2ClientRepository
+}
+
+func (a *oauth2ClientDeleterAdapter) SoftDeleteOAuth2ClientsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
+	return a.clientRepo.SoftDeleteByAccountID(ctx, tx, accountID, deletedAt)
 }

@@ -87,6 +87,11 @@ type SessionRevoker interface {
 	RevokeAllForAccount(ctx context.Context, accountID string) error
 }
 
+// OAuth2ClientDeleter soft-deletes all OAuth2 clients for an account.
+type OAuth2ClientDeleter interface {
+	SoftDeleteOAuth2ClientsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+}
+
 type accountServiceImpl struct {
 	db                    *sql.DB
 	accountRepo           repository.AccountRepository
@@ -95,6 +100,7 @@ type accountServiceImpl struct {
 	roleRepo              repository.RoleRepository
 	auditor               *auditService.Auditor
 	sessionRevoker        SessionRevoker
+	oauth2ClientDeleter   OAuth2ClientDeleter
 }
 
 // NewAccountService creates the account service.
@@ -119,6 +125,11 @@ func NewAccountService(
 // SetSessionRevoker sets the session revoker dependency (setter injection).
 func (s *accountServiceImpl) SetSessionRevoker(revoker SessionRevoker) {
 	s.sessionRevoker = revoker
+}
+
+// SetOAuth2ClientDeleter sets the OAuth2 client deleter dependency (setter injection).
+func (s *accountServiceImpl) SetOAuth2ClientDeleter(deleter OAuth2ClientDeleter) {
+	s.oauth2ClientDeleter = deleter
 }
 
 // RegisterAccount registers a new account.
@@ -268,6 +279,11 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		}
 		if err := s.roleRepo.SoftDeleteRolesByAccountID(ctx, tx, accountID, now); err != nil {
 			return err
+		}
+		if s.oauth2ClientDeleter != nil {
+			if err := s.oauth2ClientDeleter.SoftDeleteOAuth2ClientsByAccount(ctx, tx, accountID, now); err != nil {
+				return err
+			}
 		}
 		return s.accountRepo.SoftDeleteAccount(ctx, tx, accountID, now)
 	})

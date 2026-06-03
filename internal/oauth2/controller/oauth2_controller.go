@@ -81,14 +81,14 @@ func NewOAuth2Controller(
 	deviceCodeSvc DeviceCodeManager,
 	issuer string,
 	logger *zap.Logger,
-) *OAuth2Controller {
+) (*OAuth2Controller, error) {
 	consentTmpl, err := template.ParseFS(consentTemplateFS, "template/consent.html")
 	if err != nil {
-		panic("failed to parse consent template: " + err.Error())
+		return nil, fmt.Errorf("failed to parse consent template: %w", err)
 	}
 	deviceTmpl, err := template.ParseFS(deviceTemplateFS, "template/device.html")
 	if err != nil {
-		panic("failed to parse device template: " + err.Error())
+		return nil, fmt.Errorf("failed to parse device template: %w", err)
 	}
 	return &OAuth2Controller{
 		clientSvc:     clientSvc,
@@ -101,7 +101,7 @@ func NewOAuth2Controller(
 		consentTmpl:   consentTmpl,
 		deviceTmpl:    deviceTmpl,
 		logger:        logger,
-	}
+	}, nil
 }
 
 // SetAccountValidator sets the account validator dependency (setter injection).
