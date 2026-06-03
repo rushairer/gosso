@@ -15,6 +15,7 @@ import (
 
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/oauth2/domain"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
 const (
@@ -87,7 +88,7 @@ func (s *DeviceCodeService) CreateDeviceCode(ctx context.Context, clientID strin
 	}
 
 	// Store device code → full JSON
-	dcKey := DeviceCodeKeyPrefix + deviceCodeStr
+	dcKey := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCodeStr)
 	if err := s.redis.Set(ctx, dcKey, data, s.expiry); err != nil {
 		return nil, fmt.Errorf("store device code: %w", err)
 	}
@@ -107,7 +108,7 @@ func (s *DeviceCodeService) CreateDeviceCode(ctx context.Context, clientID strin
 
 // GetDeviceCode retrieves a device code by its device_code value.
 func (s *DeviceCodeService) GetDeviceCode(ctx context.Context, deviceCode string) (*domain.DeviceCode, error) {
-	key := DeviceCodeKeyPrefix + deviceCode
+	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
 	data, err := s.redis.Get(ctx, key)
 	if err == cache.ErrKeyNotFound {
 		return nil, domain.ErrDeviceCodeNotFound
@@ -218,7 +219,7 @@ return data
 // Returns the device code data if the claim succeeded, or an error if the code is not in authorized state.
 // This prevents double-use race conditions.
 func (s *DeviceCodeService) ClaimAuthorizedDeviceCode(ctx context.Context, deviceCode string) (*domain.DeviceCode, error) {
-	key := DeviceCodeKeyPrefix + deviceCode
+	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
 
 	result, err := claimAuthorizedScript.Run(ctx, s.redis.GetClient(), []string{key}, "60").Result()
 	if err == redis.Nil || result == nil {
@@ -252,7 +253,7 @@ func (s *DeviceCodeService) save(ctx context.Context, dc *domain.DeviceCode) err
 		remaining = time.Second
 	}
 
-	key := DeviceCodeKeyPrefix + dc.DeviceCode
+	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(dc.DeviceCode)
 	if err := s.redis.Set(ctx, key, data, remaining); err != nil {
 		return fmt.Errorf("save device code: %w", err)
 	}

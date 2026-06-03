@@ -152,6 +152,9 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrAccountNotFound, err)
 	}
+	if !account.IsActive() {
+		return nil, ErrInvalidCredentials
+	}
 
 	// 4. Create session and tokens
 	session, accessToken, refreshToken, err := s.createSessionAndTokens(ctx, account, ip, userAgent)
@@ -212,6 +215,9 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrAccountNotFound, err)
+	}
+	if !account.IsActive() {
+		return nil, ErrInvalidCredentials
 	}
 
 	// 4. Create session and tokens
@@ -344,7 +350,11 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 // handleMFARequirement checks if MFA is required for the account and returns an MFA result if so.
 // Returns nil, nil if MFA is not required.
 func (s *AuthService) handleMFARequirement(ctx context.Context, account *accountDomain.Account) (*LoginResult, error) {
-	mfaEnabled, _ := s.mfaSvc.IsMFAEnabled(ctx, account.ID)
+	mfaEnabled, err := s.mfaSvc.IsMFAEnabled(ctx, account.ID)
+	if err != nil {
+		s.logger.Error("Failed to check MFA status, denying login", zap.String("account_id", account.ID), zap.Error(err))
+		return nil, fmt.Errorf("check mfa status: %w", err)
+	}
 	if !mfaEnabled {
 		return nil, nil
 	}

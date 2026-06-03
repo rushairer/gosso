@@ -25,7 +25,8 @@ const (
 )
 
 // verifyAndIncrementScript atomically verifies a code and manages the attempt counter.
-// Returns JSON array: ["ok", accountID] | ["mismatch", updatedData] | ["exhausted", ""] | ["not_found", ""]
+// Returns JSON array: ["ok", accountID] | ["mismatch", ""] | ["exhausted", ""] | ["not_found", ""]
+// ARGV[1]=code, ARGV[2]=max_attempts, ARGV[3]=default_ttl_seconds
 var verifyAndIncrementScript = redis.NewScript(`
 local data = redis.call('GET', KEYS[1])
 if not data then
@@ -43,13 +44,14 @@ if obj.code == ARGV[1] then
     return cjson.encode({"ok", obj.account_id})
 end
 obj.attempts = obj.attempts + 1
+local default_ttl = tonumber(ARGV[3])
 local ttl = redis.call('TTL', KEYS[1])
 if ttl > 0 then
     redis.call('SETEX', KEYS[1], ttl, cjson.encode(obj))
 else
-    redis.call('SET', KEYS[1], cjson.encode(obj))
+    redis.call('SETEX', KEYS[1], default_ttl, cjson.encode(obj))
 end
-return cjson.encode({"mismatch", cjson.encode(obj)})
+return cjson.encode({"mismatch", ""})
 `)
 
 // EmailSender email sending interface
@@ -159,7 +161,7 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 
 	// Atomically verify code and increment attempts
 	resultJSON, err := verifyAndIncrementScript.Run(ctx, s.redis.GetClient(), []string{codeKey},
-		code, VerifyCodeAttempts).Result()
+		code, VerifyCodeAttempts, int(VerifyCodeTTL.Seconds())).Result()
 	if err != nil {
 		return "", fmt.Errorf("verify code: %w", err)
 	}

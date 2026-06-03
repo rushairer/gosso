@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Security**: Add `SecurityHeadersMiddleware` — sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 0`, `Referrer-Policy: strict-origin-when-cross-origin` (`middleware/middleware.go`, `cmd/gouno/web.go`).
+- **Security**: CSRF skip paths updated to match actual passkey endpoints: `/api/passkey/login/begin`, `/api/passkey/login/complete`, `/api/passkey/mfa/begin`, `/api/passkey/mfa/complete` (`cmd/gouno/web.go`).
+- **Security**: Remove `/oidc/logout` from CSRF skip list — logout must be CSRF-protected (`cmd/gouno/web.go`).
+- **Security**: Sanitize 14 error messages in auth/passkey controllers — internal details no longer leaked to clients; errors logged server-side with `zap` (`internal/auth/controller/auth_controller.go`, `internal/auth/controller/passkey_controller.go`).
+- **Security**: Passkey request body bounded to 64KB via `io.LimitReader` — prevents memory exhaustion (`internal/auth/service/passkey_service.go`).
+- **Security**: `ActivateTOTP` uses atomic `VerifyFirstUnverifiedTOTP` with `FOR UPDATE SKIP LOCKED` — prevents double-activate race condition (`internal/auth/service/mfa_service.go`, `internal/account/repository/credential_repository.go`).
+- **Security**: Verification code Lua script now uses `SETEX` with default TTL — prevents codes from persisting indefinitely on Redis restart; mismatch returns empty string instead of full data (`internal/auth/service/verification_service.go`).
+- **Security**: Authorization code grant now validates `client.HasGrantType("authorization_code")` (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Refresh token grant now authenticates confidential clients via `bcrypt.CompareHashAndPassword` per RFC 6749 §6 (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: `handleMFARequirement` now fails closed — MFA check errors deny login instead of skipping MFA (`internal/auth/service/auth_login.go`).
+- **Security**: `RevokeAllForAccount` now revokes refresh tokens for each session via `TokenRevoker` interface before deleting sessions (`internal/session/service/session_service.go`).
+- **Security**: `RevokeRefreshToken` now removes token hash from session index via `SRem` (`internal/token/service/token_service.go`).
+- **Security**: Device code Redis keys now use SHA256 hash — prevents token leakage if Redis is compromised (`internal/oauth2/service/device_code_service.go`).
+- **Security**: Social login email credential creation failure now returns error to trigger transaction rollback (`internal/auth/service/social_login_service.go`).
+- **Security**: Password reset cooldown key now normalized to lowercase email (`internal/auth/service/password_reset_service.go`).
+- **Security**: Verification and password reset services now fail closed on Redis errors — `VerifyCode` returns `false, err` on Redis failure instead of silently succeeding (`internal/auth/service/verification_service.go`).
+- **Security**: `VerifyMFALogin` and `CompletePasskeyMFALogin` now check `account.IsActive()` before proceeding (`internal/auth/service/auth_login.go`).
+- **Security**: PKCE S256 verification now uses `crypto/subtle.ConstantTimeCompare` to prevent timing attacks (`internal/oauth2/domain/authorization_code.go`).
+- **Security**: OAuth state comparison uses `crypto/subtle.ConstantTimeCompare` (`internal/auth/controller/auth_controller.go`).
+- Add OAuth2 rate limiting middleware — `loginLimit`, `mfaLimit`, `passwordLimit`, `refreshLimit` applied to respective endpoint groups (`router/web.go`).
+- Remove duplicate `EnforceSessionLimit` call — `CreateSession` already enforces limits (`internal/auth/service/auth_service.go`).
+- Add auth config defaults: `access_token_expiry=15m`, `refresh_token_expiry=168h`, `issuer=gosso`, `log.level=0` (`config/config_manager.go`).
+- Fix captcha config default key from `"captcha_type"` to `"captcha.type"` (`config/config_manager.go`).
+- Add `IntrospectToken` now uses `ValidateAccessTokenWithContext(ctx, ...)` for proper context propagation (`internal/token/service/token_service.go`).
+- Add max length validation on form fields: `username=255`, `password=128`, `mfa_code=32` (`internal/auth/controller/auth_controller.go`).
+- `ErrAccountNotActive` changed from `fmt.Errorf` to `errors.New` (`internal/oidc/service/userinfo_service.go`).
+- Fix `LogConfig` comment: `3: fatal` → `3: dpanic, 4: panic, 5: fatal` (`config/config.go`).
+- Remove unused `RateLimitPerMinute` field from `WebServerConfig` (`config/config.go`).
+- `ValidateRefreshToken` and `RotateRefreshToken` now wrap `cache.ErrKeyNotFound` — callers can use `errors.Is` to distinguish not-found from other failures (`internal/token/service/token_service.go`).
+- Fix `VerifyCredential` interface parameter name from `credentialID` to `accountID` (`internal/account/service/account_service.go`).
+- `RunInTransactionIsolation` rollback errors now written to stderr instead of stdout (`internal/db/transaction.go`).
+- Swagger routes only registered when `debug=true` (`router/web.go`).
 - **Security**: Access token is now blacklisted on logout via `BlacklistService.RevokeToken`, preventing post-logout token reuse (`internal/auth/service/auth_login.go`, `internal/token/service/token_service.go`).
 - **Security**: Authorization code validation is now atomic via Redis Lua script — prevents TOCTOU double-use race condition (`internal/oauth2/service/auth_code_service.go`).
 - **Security**: Consent auto-approval now intersects requested scopes with consented scopes — prevents silent scope escalation (`internal/oauth2/controller/oauth2_controller.go`).
@@ -85,6 +117,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `AuthController.RegisterRoutes` now accepts rate limiter parameters: `loginLimit`, `mfaLimit`, `passwordLimit`, `refreshLimit` (`internal/auth/controller/auth_controller.go`).
+- `OIDCController.RegisterRoutes` and `OAuth2Controller.RegisterRoutes` now accept `*gin.RouterGroup` instead of `*gin.Engine` (`internal/oidc/controller/oidc_controller.go`, `internal/oauth2/controller/oauth2_controller.go`).
+- `SessionService` now depends on `TokenRevoker` interface via `SetTokenRevoker` setter — cross-service token revocation without constructor changes (`internal/session/service/session_service.go`).
 - CSRF skip paths changed from prefix to exact match for security (`middleware/csrf.go`).
 - `RecoveryMiddleware` now accepts injected `*zap.Logger` instead of using `zap.L()` (`middleware/middleware.go`).
 - CORS default headers now include `X-CSRF-Token` (`cmd/gouno/web.go`).

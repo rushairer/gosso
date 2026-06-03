@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -242,5 +243,5 @@ func (s *PasswordResetService) buildTokenKey(tokenHash string) string {
 }
 
 func (s *PasswordResetService) buildCooldownKey(email string) string {
-	return fmt.Sprintf("%s%s", PasswordResetCooldownPrefix, email)
+	return fmt.Sprintf("%s%s", PasswordResetCooldownPrefix, strings.ToLower(email))
 }

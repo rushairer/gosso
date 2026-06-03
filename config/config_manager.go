@@ -76,7 +76,7 @@ func (cm *ConfigManager) Config() GoUnoConfig {
 
 func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	// Captcha configuration
-	v.SetDefault("captcha_type", "math")
+	v.SetDefault("captcha.type", "math")
 
 	// Web server configuration
 	v.SetDefault("web_server.debug", false)
@@ -87,7 +87,6 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("web_server.read_header_timeout", "2s")
 	v.SetDefault("web_server.write_timeout", "30s")
 	v.SetDefault("web_server.request_timeout", "10s")
-	v.SetDefault("web_server.rate_limit_per_minute", 100)
 	v.SetDefault("web_server.rate_limits.login", 5)
 	v.SetDefault("web_server.rate_limits.token", 10)
 	v.SetDefault("web_server.rate_limits.passkey", 10)
@@ -99,4 +98,12 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("database.drivers.sqlite.driver", "sqlite3")
 	v.SetDefault("database.drivers.sqlite.dsn", ":memory:")
 	v.SetDefault("database.drivers.sqlite.log_level", 1)
+
+	// Auth configuration
+	v.SetDefault("auth.access_token_expiry", "15m")
+	v.SetDefault("auth.refresh_token_expiry", "168h")
+	v.SetDefault("auth.issuer", "gosso")
+
+	// Log configuration
+	v.SetDefault("log.level", 0)
 }

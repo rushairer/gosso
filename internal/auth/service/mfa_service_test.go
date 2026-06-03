@@ -49,6 +49,10 @@ func (m *mockCredentialRepo) SoftDeleteCredential(_ context.Context, _ *sql.Tx, 
 	return nil
 }
 
+func (m *mockCredentialRepo) VerifyFirstUnverifiedTOTP(_ context.Context, _ *sql.Tx, _ string) (bool, error) {
+	return false, nil
+}
+
 func newTestMFAService(credRepo *mockCredentialRepo) *MFAService {
 	return NewMFAService(credRepo, nil, "http://localhost:8080", nil)
 }

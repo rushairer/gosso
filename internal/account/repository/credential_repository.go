@@ -38,6 +38,10 @@ type CredentialRepository interface {
 
 	// SoftDeleteCredential soft deletes a single credential (requires transaction)
 	SoftDeleteCredential(ctx context.Context, tx *sql.Tx, credentialID string, deletedAt time.Time) error
+
+	// VerifyFirstUnverifiedTOTP atomically verifies the first unverified TOTP credential for an account.
+	// Returns true if a credential was verified, false if no pending enrollment was found.
+	VerifyFirstUnverifiedTOTP(ctx context.Context, tx *sql.Tx, accountID string) (bool, error)
 }
 
 type credentialRepositoryImpl struct {
@@ -266,4 +270,31 @@ func (r *credentialRepositoryImpl) SoftDeleteCredential(ctx context.Context, tx 
 	}
 
 	return nil
+}
+
+// VerifyFirstUnverifiedTOTP atomically verifies the first unverified TOTP credential for an account.
+func (r *credentialRepositoryImpl) VerifyFirstUnverifiedTOTP(ctx context.Context, tx *sql.Tx, accountID string) (bool, error) {
+	query := `
+		UPDATE account_credentials
+		SET verified = true, verified_at = NOW()
+		WHERE id = (
+			SELECT id FROM account_credentials
+			WHERE account_id = $1 AND credential_type = 'totp' AND verified = false AND deleted_at IS NULL
+			ORDER BY created_at DESC
+			LIMIT 1
+			FOR UPDATE SKIP LOCKED
+		)
+	`
+
+	result, err := tx.ExecContext(ctx, query, accountID)
+	if err != nil {
+		return false, fmt.Errorf("verify first unverified TOTP: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("get rows affected: %w", err)
+	}
+
+	return rowsAffected > 0, nil
 }

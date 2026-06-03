@@ -40,6 +40,8 @@ type PasskeyCredentialView struct {
 	Transports      []string   `json:"transports,omitempty"`
 }
 
+const maxPasskeyRequestBodySize = 64 << 10 // 64KB — WebAuthn payloads are CBOR-encoded
+
 // PasskeyService WebAuthn Passkey service
 type PasskeyService struct {
 	web      *wa.WebAuthn
@@ -223,9 +225,12 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 	}
 
 	// Buffer the body so it can be read twice (once for parsing, once by FinishLogin)
-	bodyBytes, err := io.ReadAll(request.Body)
+	bodyBytes, err := io.ReadAll(io.LimitReader(request.Body, maxPasskeyRequestBodySize+1))
 	if err != nil {
 		return "", nil, fmt.Errorf("read request body: %w", err)
+	}
+	if int64(len(bodyBytes)) > maxPasskeyRequestBodySize {
+		return "", nil, errors.New("request body too large")
 	}
 	request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
@@ -310,9 +315,12 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, accountID string,
 	}
 
 	// Buffer the body so it can be read twice (once for parsing, once by FinishLogin)
-	bodyBytes, err := io.ReadAll(request.Body)
+	bodyBytes, err := io.ReadAll(io.LimitReader(request.Body, maxPasskeyRequestBodySize+1))
 	if err != nil {
 		return fmt.Errorf("read request body: %w", err)
+	}
+	if int64(len(bodyBytes)) > maxPasskeyRequestBodySize {
+		return errors.New("request body too large")
 	}
 	request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 

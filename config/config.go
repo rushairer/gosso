@@ -27,7 +27,6 @@ type WebServerConfig struct {
 	ReadHeaderTimeout  time.Duration    `mapstructure:"read_header_timeout"`
 	WriteTimeout       time.Duration    `mapstructure:"write_timeout"`
 	RequestTimeout     time.Duration    `mapstructure:"request_timeout"`
-	RateLimitPerMinute int              `mapstructure:"rate_limit_per_minute"`
 	RateLimits         RateLimitsConfig `mapstructure:"rate_limits"`
 }
 
@@ -101,7 +100,7 @@ type CaptchaConfig struct {
 }
 
 type LogConfig struct {
-	// Log level: -1: debug, 0: info, 1: warn, 2: error, 3: fatal, 4: panic, 5: fatal
+	// Log level: -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
 	Level int `mapstructure:"level"`
 }
 

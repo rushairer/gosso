@@ -52,7 +52,7 @@ func NewOIDCController(
 }
 
 // RegisterRoutes registers OIDC routes
-func (c *OIDCController) RegisterRoutes(server *gin.Engine, authMiddleware gin.HandlerFunc) {
+func (c *OIDCController) RegisterRoutes(server *gin.RouterGroup, authMiddleware gin.HandlerFunc) {
 	server.GET("/.well-known/openid-configuration", c.Discovery)
 	server.GET("/.well-known/jwks.json", c.JWKS)
 	server.GET("/oidc/userinfo", authMiddleware, c.UserInfo)

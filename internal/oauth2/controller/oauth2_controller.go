@@ -98,18 +98,15 @@ func NewOAuth2Controller(
 }
 
 // RegisterRoutes registers OAuth2 routes.
-func (c *OAuth2Controller) RegisterRoutes(server *gin.Engine, authMiddleware gin.HandlerFunc) {
-	oauth2 := server.Group("/oauth2")
-	{
-		oauth2.GET("/authorize", authMiddleware, c.Authorize)
-		oauth2.POST("/authorize", authMiddleware, c.SubmitConsent)
-		oauth2.POST("/token", c.Token)
-		oauth2.POST("/revoke", authMiddleware, c.Revoke)
-		oauth2.POST("/introspect", c.Introspect)
-		oauth2.POST("/device/code", c.DeviceCodeRequest)
-		oauth2.GET("/device", authMiddleware, c.DeviceUserPage)
-		oauth2.POST("/device", authMiddleware, c.DeviceUserSubmit)
-	}
+func (c *OAuth2Controller) RegisterRoutes(rg *gin.RouterGroup, authMiddleware gin.HandlerFunc) {
+	rg.GET("/authorize", authMiddleware, c.Authorize)
+	rg.POST("/authorize", authMiddleware, c.SubmitConsent)
+	rg.POST("/token", c.Token)
+	rg.POST("/revoke", authMiddleware, c.Revoke)
+	rg.POST("/introspect", c.Introspect)
+	rg.POST("/device/code", c.DeviceCodeRequest)
+	rg.GET("/device", authMiddleware, c.DeviceUserPage)
+	rg.POST("/device", authMiddleware, c.DeviceUserSubmit)
 }
 
 // Authorize GET /oauth2/authorize
@@ -289,6 +286,11 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		return
 	}
 
+	if !client.HasGrantType("authorization_code") {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "client is not authorized for authorization_code grant"})
+		return
+	}
+
 	if client.IsConfidential {
 		if req.ClientSecret == "" {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client_secret required"})
@@ -311,7 +313,8 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 
 	authCode, err := c.authCodeSvc.ValidateCode(ctx, req.Code, req.ClientID, req.RedirectURI, codeVerifier)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": err.Error()})
+		c.logger.Debug("Authorization code validation failed", zap.Error(err))
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "invalid or expired authorization code"})
 		return
 	}
 
@@ -370,6 +373,23 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 	if req.ClientID != "" && req.ClientID != newRefreshToken.ClientID {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "client_id mismatch"})
 		return
+	}
+
+	// RFC 6749 Section 6: confidential clients MUST authenticate when using refresh token grant
+	client, err := c.clientSvc.FindByClientID(ctx, newRefreshToken.ClientID)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "client not found"})
+		return
+	}
+	if client.IsConfidential {
+		if req.ClientSecret == "" {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client_secret required for confidential clients"})
+			return
+		}
+		if err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecretHash), []byte(req.ClientSecret)); err != nil {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "invalid client_secret"})
+			return
+		}
 	}
 
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
@@ -725,7 +745,11 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 	if c.idTokenSvc != nil {
 		for _, s := range dc.Scopes {
 			if s == "openid" {
-				idToken, _ = c.idTokenSvc.GenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", time.Now().Add(c.tokenSvc.AccessExpiry()))
+				var idErr error
+				idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", time.Now().Add(c.tokenSvc.AccessExpiry()))
+				if idErr != nil {
+					c.logger.Error("Failed to generate ID token for device code", zap.Error(idErr))
+				}
 				break
 			}
 		}

@@ -168,7 +168,7 @@ func (s *TokenService) ValidateRefreshToken(ctx context.Context, token string) (
 	key := s.buildRefreshTokenKey(token)
 	data, err := s.redis.Get(ctx, key)
 	if err == cache.ErrKeyNotFound {
-		return nil, fmt.Errorf("refresh token not found or expired")
+		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get refresh token: %w", err)
@@ -201,7 +201,7 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	// Atomically GET + DELETE the old token
 	result, err := rotateAndDeleteScript.Run(ctx, s.redis.GetClient(), []string{oldKey}).Result()
 	if err == redis.Nil || result == nil {
-		return nil, fmt.Errorf("refresh token not found or expired")
+		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("rotate refresh token: %w", err)
@@ -235,12 +235,30 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	return newRT, nil
 }
 
-// RevokeRefreshToken revokes a refresh token
+// RevokeRefreshToken revokes a refresh token and removes it from the session index.
 func (s *TokenService) RevokeRefreshToken(ctx context.Context, token string) error {
 	key := s.buildRefreshTokenKey(token)
+
+	// Read token data first to get session ID for index cleanup
+	data, err := s.redis.Get(ctx, key)
+	if err != nil && err != cache.ErrKeyNotFound {
+		return fmt.Errorf("get refresh token for revocation: %w", err)
+	}
+
 	if err := s.redis.Del(ctx, key); err != nil {
 		return fmt.Errorf("revoke refresh token: %w", err)
 	}
+
+	// Clean up session index
+	if err == nil && data != "" {
+		var rt domain.RefreshToken
+		if jsonErr := json.Unmarshal([]byte(data), &rt); jsonErr == nil && rt.SessionID != "" {
+			sessionKey := s.buildSessionTokensKey(rt.SessionID)
+			tokenHash := domain.HashToken(token)
+			_ = s.redis.SRem(ctx, sessionKey, tokenHash)
+		}
+	}
+
 	return nil
 }
 
@@ -292,7 +310,7 @@ func (s *TokenService) buildSessionTokensKey(sessionID string) string {
 
 // IntrospectToken validates a token and returns its active status (RFC 7662)
 func (s *TokenService) IntrospectToken(ctx context.Context, tokenString string) (map[string]any, error) {
-	claims, err := s.ValidateAccessToken(tokenString)
+	claims, err := s.ValidateAccessTokenWithContext(ctx, tokenString)
 	if err != nil {
 		return map[string]any{"active": false}, nil
 	}

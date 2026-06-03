@@ -45,8 +45,10 @@ func RegisterWebRouter(
 	}
 	registerWebIndexRouter(server)
 
-	// Swagger UI
-	registerSwaggerRouter(server)
+	// Swagger UI (debug only)
+	if debug {
+		registerSwaggerRouter(server)
+	}
 
 	// JWT auth middleware
 	jwtAuth := authMiddleware.JWTAuthMiddleware(tokenSvc)
@@ -56,13 +58,14 @@ func RegisterWebRouter(
 	mfaLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute)
 	passwordLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute)
 	passkeyLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Passkey, time.Minute)
+	refreshLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute)
 
 	// /api/* routes
 	api := server.Group("/api")
 	{
 		// Auth routes (audit middleware injects IP/UserAgent)
 		api.Use(authMiddleware.AuditMetadataMiddleware())
-		authCtrl.RegisterRoutes(api, loginLimit, mfaLimit, passwordLimit)
+		authCtrl.RegisterRoutes(api, loginLimit, mfaLimit, passwordLimit, refreshLimit)
 
 		// Client management routes (require JWT authentication)
 		clientCtrl.RegisterRoutes(api, jwtAuth)
@@ -85,10 +88,10 @@ func RegisterWebRouter(
 	tokenLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute)
 	oauth2 := server.Group("/oauth2")
 	oauth2.Use(tokenLimit)
-	oauth2Ctrl.RegisterRoutes(server, jwtAuth)
+	oauth2Ctrl.RegisterRoutes(oauth2, jwtAuth)
 
 	// OIDC routes
-	oidcCtrl.RegisterRoutes(server, jwtAuth)
+	oidcCtrl.RegisterRoutes(&server.RouterGroup, jwtAuth)
 }
 
 func registerWebTestRouter(server *gin.Engine) {

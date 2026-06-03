@@ -40,7 +40,7 @@ type AccountService interface {
 	SoftDeleteAccount(ctx context.Context, accountID string) error
 
 	// VerifyCredential verifies a credential (email/phone).
-	VerifyCredential(ctx context.Context, credentialID string) error
+	VerifyCredential(ctx context.Context, accountID string) error
 
 	// ChangePassword changes the account password.
 	ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error

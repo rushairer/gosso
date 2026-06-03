@@ -2,6 +2,7 @@ package controller
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/hex"
 	"net/http"
@@ -72,8 +73,8 @@ func NewAuthController(
 }
 
 // RegisterRoutes registers authentication routes
-// loginLimit, mfaLimit, passwordLimit: optional per-endpoint rate limiting middlewares
-func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.HandlerFunc, mfaLimit gin.HandlerFunc, passwordLimit gin.HandlerFunc) {
+// loginLimit, mfaLimit, passwordLimit, refreshLimit: optional per-endpoint rate limiting middlewares
+func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.HandlerFunc, mfaLimit gin.HandlerFunc, passwordLimit gin.HandlerFunc, refreshLimit gin.HandlerFunc) {
 	auth := rg.Group("/auth")
 	{
 		loginHandlers := []gin.HandlerFunc{c.Login}
@@ -82,7 +83,11 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.Hand
 		}
 		auth.POST("/login", loginHandlers...)
 
-		auth.POST("/refresh", c.Refresh)
+		refreshHandlers := []gin.HandlerFunc{c.Refresh}
+		if refreshLimit != nil {
+			refreshHandlers = []gin.HandlerFunc{refreshLimit, c.Refresh}
+		}
+		auth.POST("/refresh", refreshHandlers...)
 		auth.POST("/logout", c.Logout)
 		auth.GET("/session", c.GetSession)
 
@@ -122,8 +127,8 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.Hand
 
 // LoginRequestBody login request body
 type LoginRequestBody struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	Username string `json:"username" binding:"required,max=255"`
+	Password string `json:"password" binding:"required,max=128"`
 }
 
 // Login POST /api/auth/login
@@ -141,7 +146,8 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		UserAgent: ctx.Request.UserAgent(),
 	})
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, err.Error()))
+		c.logger.Debug("Login failed", zap.Error(err))
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid credentials"))
 		return
 	}
 
@@ -179,7 +185,8 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 
 	result, err := c.authSvc.RefreshTokens(ctx, req.RefreshToken)
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, err.Error()))
+		c.logger.Debug("Token refresh failed", zap.Error(err))
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid refresh token"))
 		return
 	}
 
@@ -287,7 +294,7 @@ func (c *AuthController) RevokeSession(ctx *gin.Context) {
 // MFAVerifyRequest MFA verification request body
 type MFAVerifyRequest struct {
 	MFAToken string `json:"mfa_token" binding:"required"`
-	Code     string `json:"code"`
+	Code     string `json:"code" binding:"max=32"`
 	Type     string `json:"type"` // "totp" (default) or "passkey"
 }
 
@@ -306,7 +313,8 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 
 	result, err := c.authSvc.VerifyMFALogin(ctx, req.MFAToken, req.Code, req.Type, ctx.ClientIP(), ctx.Request.UserAgent())
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, err.Error()))
+		c.logger.Debug("MFA verification failed", zap.Error(err))
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid or expired MFA token"))
 		return
 	}
 
@@ -328,7 +336,8 @@ func (c *AuthController) MFAEnroll(ctx *gin.Context) {
 
 	enrollment, err := c.authSvc.MFAService().EnrollTOTP(ctx, tc.AccountID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
+		c.logger.Error("MFA enrollment failed", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to enroll MFA"))
 		return
 	}
 
@@ -354,7 +363,8 @@ func (c *AuthController) MFAActivate(ctx *gin.Context) {
 	}
 
 	if err := c.authSvc.MFAService().ActivateTOTP(ctx, tc.AccountID, req.Code); err != nil {
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		c.logger.Debug("MFA activation failed", zap.Error(err))
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid activation code"))
 		return
 	}
 
@@ -369,7 +379,8 @@ func (c *AuthController) MFADisable(ctx *gin.Context) {
 	}
 
 	if err := c.authSvc.MFAService().DisableTOTP(ctx, tc.AccountID); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
+		c.logger.Error("MFA disable failed", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to disable MFA"))
 		return
 	}
 
@@ -385,7 +396,8 @@ func (c *AuthController) MFAGenerateBackupCodes(ctx *gin.Context) {
 
 	codes, err := c.authSvc.MFAService().GenerateBackupCodes(ctx, tc.AccountID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, err.Error()))
+		c.logger.Error("Backup codes generation failed", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to generate backup codes"))
 		return
 	}
 
@@ -414,7 +426,8 @@ func (c *AuthController) SocialAuthURL(ctx *gin.Context) {
 
 	authURL, err := c.socialSvc.GetAuthURL(ctx, provider, state)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		c.logger.Warn("Social auth URL generation failed", zap.String("provider", provider), zap.Error(err))
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "social login not available"))
 		return
 	}
 
@@ -432,7 +445,7 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 	state := ctx.Query("state")
 	savedState, _ := ctx.Cookie("oauth_state")
 	ctx.SetCookie("oauth_state", "", -1, "/api/auth/social", "", c.secureCookie, true)
-	if state == "" || savedState == "" || state != savedState {
+	if state == "" || savedState == "" || subtle.ConstantTimeCompare([]byte(state), []byte(savedState)) != 1 {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid or missing state parameter"))
 		return
 	}
@@ -446,7 +459,8 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 
 	result, err := c.socialSvc.HandleCallback(ctx, provider, code, ctx.ClientIP(), ctx.Request.UserAgent())
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, err.Error()))
+		c.logger.Warn("Social login callback failed", zap.String("provider", provider), zap.Error(err))
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "social login failed"))
 		return
 	}
 
@@ -519,7 +533,8 @@ func (c *AuthController) ConfirmVerification(ctx *gin.Context) {
 	// Validate verification code
 	accountID, err := c.verificationSvc.VerifyCode(ctx, req.Type, req.Identifier, req.Code)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		c.logger.Debug("Verification code failed", zap.Error(err))
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid verification code"))
 		return
 	}
 
@@ -595,7 +610,8 @@ func (c *AuthController) ResetPassword(ctx *gin.Context) {
 	}
 
 	if err := c.passwordResetSvc.VerifyAndReset(ctx, req.Token, req.NewPassword); err != nil {
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		c.logger.Debug("Password reset failed", zap.Error(err))
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid or expired reset token"))
 		return
 	}
 

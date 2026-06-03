@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.uber.org/zap"
@@ -12,7 +13,7 @@ import (
 )
 
 // ErrAccountNotActive is returned when the account is not in active status.
-var ErrAccountNotActive = fmt.Errorf("account is not active")
+var ErrAccountNotActive = errors.New("account is not active")
 
 // UserInfoService OIDC UserInfo service
 type UserInfoService struct {

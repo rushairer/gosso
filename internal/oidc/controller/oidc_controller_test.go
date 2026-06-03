@@ -99,6 +99,9 @@ func (m *mockCredentialRepo) SoftDeleteCredentialsByAccount(_ context.Context, _
 func (m *mockCredentialRepo) SoftDeleteCredential(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	return nil
 }
+func (m *mockCredentialRepo) VerifyFirstUnverifiedTOTP(_ context.Context, _ *sql.Tx, _ string) (bool, error) {
+	return false, nil
+}
 
 // ──────────────────────────────────────────────
 // Mock OAuth2ClientRepository
@@ -148,7 +151,7 @@ func setupUserInfoEngine(accountSvc *mockAccountService, credRepo *mockCredentia
 	userInfoSvc := oidcService.NewUserInfoService(accountSvc, credRepo, nil)
 
 	ctrl := NewOIDCController(discoverySvc, nil, userInfoSvc, nil, nil, nil, "https://sso.example.com", zap.NewNop())
-	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	return engine
 }
@@ -261,7 +264,7 @@ func TestUserInfo_NoClaims(t *testing.T) {
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 	userInfoSvc := oidcService.NewUserInfoService(&mockAccountService{}, &mockCredentialRepo{}, nil)
 	ctrl := NewOIDCController(discoverySvc, nil, userInfoSvc, nil, nil, nil, "https://sso.example.com", zap.NewNop())
-	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	req := httptest.NewRequest(http.MethodGet, "/oidc/userinfo", nil)
 	w := httptest.NewRecorder()
@@ -405,7 +408,7 @@ func setupLogoutEngine(t *testing.T, clientRepo *mockClientRepo) (*gin.Engine, *
 	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, clientRepo, tokenSvc, "https://sso.example.com", zap.NewNop())
 
 	engine := gin.New()
-	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	return engine, keySvc
 }
@@ -438,7 +441,7 @@ func TestLogout_ExpiredIDTokenHint(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	expiredToken := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, true)
 
@@ -467,7 +470,7 @@ func TestLogout_IDTokenHint_WrongIssuer(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	// Token signed by same key but issuer in claims differs from server's issuer
 	token := signIDToken(t, keySvc, "https://other-issuer.com", "account-001", []string{"client-001"}, false)
@@ -490,7 +493,7 @@ func TestLogout_IDTokenHint_NoAudience(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", nil, false)
 
@@ -515,7 +518,7 @@ func TestLogout_IDTokenHint_WrongSignature(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	token := signIDToken(t, otherKeySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
@@ -543,7 +546,7 @@ func TestLogout_BearerToken_InvalidSignature(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	// Access token signed with a different key
 	token := signAccessToken(t, otherKeySvc, "https://sso.example.com", "account-001", "session-001")
@@ -584,7 +587,7 @@ func TestLogout_PostLogoutRedirect_InvalidURI(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
@@ -616,7 +619,7 @@ func TestLogout_PostLogoutRedirect_ValidURI(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
@@ -646,7 +649,7 @@ func TestLogout_PostLogoutRedirect_ClientNotFound(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
@@ -672,7 +675,7 @@ func TestLogout_ClientIDMismatch(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(engine, func(ctx *gin.Context) { ctx.Next() })
+	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	// Token has audience ["client-001"], but request claims client_id=client-999
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)

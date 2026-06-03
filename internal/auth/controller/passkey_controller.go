@@ -196,7 +196,7 @@ func (c *PasskeyController) LoginComplete(ctx *gin.Context) {
 	loginResult, err := c.authSvc.LoginByPasskey(ctx, accountID, ctx.ClientIP(), ctx.Request.UserAgent())
 	if err != nil {
 		c.logger.Error("Passkey login failed", zap.String("account_id", accountID), zap.Error(err))
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, err.Error()))
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "login failed"))
 		return
 	}
 
@@ -278,7 +278,7 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 	result, err := c.authSvc.CompletePasskeyMFALogin(ctx, req.MFAToken, ctx.ClientIP(), ctx.Request.UserAgent())
 	if err != nil {
 		c.logger.Error("Passkey MFA login failed", zap.String("account_id", claims.AccountID), zap.Error(err))
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, err.Error()))
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "MFA verification failed"))
 		return
 	}
 
@@ -325,7 +325,7 @@ func (c *PasskeyController) DeleteCredential(ctx *gin.Context) {
 
 	if err := c.passkeySvc.DeleteCredential(ctx, accountID, credentialID); err != nil {
 		c.logger.Error("Failed to delete passkey", zap.Error(err))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "credential not found"))
 		return
 	}
 

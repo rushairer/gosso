@@ -193,8 +193,6 @@ func (s *AuthService) createSessionAndTokens(ctx context.Context, account *accou
 		return nil, "", nil, fmt.Errorf("create session: %w", err)
 	}
 
-	s.sessionSvc.EnforceSessionLimit(ctx, account.ID)
-
 	claims, err := s.buildTokenClaims(ctx, account.ID, session.ID.String())
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("build token claims: %w", err)

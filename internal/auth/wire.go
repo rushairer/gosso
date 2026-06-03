@@ -48,6 +48,7 @@ func InitializeAuthModule(
 	federatedIdentityRepo accountRepo.FederatedIdentityRepository,
 ) *AuthModule {
 	sessionSvc := sessionService.NewSessionService(redis, logger)
+	sessionSvc.SetTokenRevoker(tokenSvc)
 
 	// PasskeyService (if WebAuthn is configured)
 	var passkeySvc *service.PasskeyService

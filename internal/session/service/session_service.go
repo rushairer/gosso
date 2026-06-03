@@ -26,12 +26,18 @@ const (
 	DefaultMaxSessions = 10
 )
 
+// TokenRevoker revokes all tokens for a given session.
+type TokenRevoker interface {
+	RevokeAllForSession(ctx context.Context, sessionID string) error
+}
+
 // SessionService manages user sessions backed by Redis.
 type SessionService struct {
 	redis       *cache.RedisClient
 	logger      *zap.Logger
 	sessionTTL  time.Duration
 	maxSessions int
+	tokenRevoker TokenRevoker
 }
 
 // NewSessionService creates a new session service instance.
@@ -46,6 +52,11 @@ func NewSessionService(redis *cache.RedisClient, logger *zap.Logger) *SessionSer
 		sessionTTL:  DefaultSessionTTL,
 		maxSessions: DefaultMaxSessions,
 	}
+}
+
+// SetTokenRevoker sets the token revoker for cascading token revocation.
+func (s *SessionService) SetTokenRevoker(revoker TokenRevoker) {
+	s.tokenRevoker = revoker
 }
 
 // SetMaxSessions sets the maximum concurrent sessions per account.
@@ -206,7 +217,7 @@ func (s *SessionService) buildAccountSessionsKey(accountID string) string {
 	return fmt.Sprintf("%s%s", AccountSessionsPrefix, accountID)
 }
 
-// RevokeAllForAccount revokes all sessions for the given account.
+// RevokeAllForAccount revokes all sessions and tokens for the given account.
 func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID string) error {
 	indexKey := s.buildAccountSessionsKey(accountID)
 
@@ -214,6 +225,16 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 	if err != nil {
 		s.logger.Error("Failed to get account sessions", zap.String("account_id", accountID), zap.Error(err))
 		return fmt.Errorf("get account sessions: %w", err)
+	}
+
+	// Revoke tokens for each session before deleting sessions
+	if s.tokenRevoker != nil {
+		for _, sid := range sessionIDs {
+			if err := s.tokenRevoker.RevokeAllForSession(ctx, sid); err != nil {
+				s.logger.Warn("Failed to revoke tokens for session during account revocation",
+					zap.String("session_id", sid), zap.Error(err))
+			}
+		}
 	}
 
 	if len(sessionIDs) > 0 {

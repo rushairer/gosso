@@ -251,7 +251,7 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 			emailCred.PrimaryCredential = true
 			emailCred.Verify()
 			if err := s.credentialRepo.CreateCredentials(ctx, tx, []*accountDomain.Credential{emailCred}); err != nil {
-				s.logger.Warn("Failed to create email credential for social login", zap.Error(err))
+				return fmt.Errorf("create email credential: %w", err)
 			}
 		}
 

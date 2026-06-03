@@ -214,25 +214,22 @@ func (s *MFAService) ActivateTOTP(ctx context.Context, accountID, code string) e
 		return errors.New("invalid TOTP code")
 	}
 
-	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
+	// Atomically verify the first unverified TOTP credential in a transaction
+	// Using FOR UPDATE SKIP LOCKED prevents concurrent activation race conditions
+	var activated bool
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		var txErr error
+		activated, txErr = s.credentialRepo.VerifyFirstUnverifiedTOTP(ctx, tx, accountID)
+		return txErr
+	})
 	if err != nil {
-		return fmt.Errorf("find totp credential: %w", err)
+		return fmt.Errorf("activate totp credential: %w", err)
+	}
+	if !activated {
+		return errors.New("no pending TOTP enrollment found")
 	}
 
-	for _, c := range creds {
-		if !c.Verified && !c.IsDeleted() {
-			c.Verify()
-			err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-				return s.credentialRepo.UpdateCredential(ctx, tx, c)
-			})
-			if err != nil {
-				return fmt.Errorf("update totp credential: %w", err)
-			}
-			return nil
-		}
-	}
-
-	return errors.New("no pending TOTP enrollment found")
+	return nil
 }
 
 // DisableTOTP disables TOTP

@@ -38,3 +38,14 @@ func RecoveryMiddleware(logger *zap.Logger) gin.HandlerFunc {
 		},
 	)
 }
+
+// SecurityHeadersMiddleware sets common security response headers.
+func SecurityHeadersMiddleware() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		ctx.Header("X-Content-Type-Options", "nosniff")
+		ctx.Header("X-Frame-Options", "DENY")
+		ctx.Header("X-XSS-Protection", "0")
+		ctx.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		ctx.Next()
+	}
+}
