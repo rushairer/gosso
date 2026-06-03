@@ -70,7 +70,7 @@ var migrateStatusCmd = &cobra.Command{
 func init() {
 	// Add global flags
 	migrateCmd.PersistentFlags().StringP("config_path", "c", "./config", "config file path")
-	migrateCmd.PersistentFlags().StringP("env", "e", "development", "env: development, test, production")
+	migrateCmd.PersistentFlags().StringP("env", "e", "production", "env: development, test, production")
 	migrateCmd.PersistentFlags().StringP("migrations_path", "m", "./db/migrations", "migrations directory path")
 	migrateCmd.PersistentFlags().StringP("schema", "s", "public", "database schema name")
 
@@ -105,7 +105,7 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, *sql.DB, error) {
 	}
 
 	// Connect to database
-	db, err := sql.Open("pgx", defaultDriver.DSN)
+	db, err := sql.Open(defaultDriver.Driver, defaultDriver.DSN)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
@@ -199,6 +199,7 @@ func runMigrateDown(cmd *cobra.Command, args []string) {
 		log.Printf("Migration down %d steps completed successfully", steps)
 	} else {
 		// Run all down migrations
+		log.Println("WARNING: Rolling back ALL migrations")
 		if err := m.Down(); err != nil && err != migrate.ErrNoChange {
 			log.Fatalf("Migration down failed: %v", err)
 		}
@@ -307,6 +308,9 @@ func parseVersion(s string) int {
 	var version int
 	if _, err := fmt.Sscanf(s, "%d", &version); err != nil {
 		log.Fatalf("Invalid version number: %s", s)
+	}
+	if version < 0 {
+		log.Fatalf("Version must be non-negative, got: %d", version)
 	}
 	return version
 }

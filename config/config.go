@@ -163,6 +163,9 @@ func (c *GoUnoConfig) Validate() error {
 	if c.AuthConfig.JWTSecret == "" {
 		return fmt.Errorf("auth: jwt_secret is empty")
 	}
+	if len(c.AuthConfig.JWTSecret) < 32 {
+		return fmt.Errorf("auth: jwt_secret must be at least 32 characters")
+	}
 	if c.AuthConfig.AccessTokenExpiry <= 0 {
 		return fmt.Errorf("auth: access_token_expiry must be positive")
 	}

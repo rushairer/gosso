@@ -5,7 +5,9 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
+	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 )
 
@@ -27,6 +29,12 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		return nil, fmt.Errorf("%w: %w", ErrSessionInvalid, err)
 	}
 
+	// 2.5. Verify account is still active
+	account, err := s.accountSvc.FindAccountByID(ctx, newRefreshToken.AccountID)
+	if err != nil || account.Status != accountDomain.AccountStatusActive {
+		return nil, ErrAccountNotActive
+	}
+
 	// 3. Build claims and generate new access token
 	claims, err := s.buildTokenClaims(ctx, newRefreshToken.AccountID, session.ID.String())
 	if err != nil {
@@ -39,7 +47,9 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	}
 
 	// 4. Refresh session
-	_ = s.sessionSvc.RefreshSession(ctx, sessionID)
+	if err := s.sessionSvc.RefreshSession(ctx, sessionID); err != nil {
+		s.logger.Warn("Failed to refresh session", zap.Error(err), zap.String("session_id", sessionID.String()))
+	}
 
 	return &RefreshResult{
 		AccessToken:  accessToken,

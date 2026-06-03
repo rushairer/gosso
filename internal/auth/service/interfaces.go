@@ -50,3 +50,9 @@ type AccountReader interface {
 	FindAccountByID(ctx context.Context, accountID string) (*accountDomain.Account, error)
 	FindAccountByUsername(ctx context.Context, username string) (*accountDomain.Account, error)
 }
+
+// MFAChecker checks whether MFA is required for an account.
+// Returns (*LoginResult, nil) if MFA is required, (nil, nil) if not.
+type MFAChecker interface {
+	CheckMFA(ctx context.Context, account *accountDomain.Account) (*LoginResult, error)
+}

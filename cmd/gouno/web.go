@@ -18,6 +18,7 @@ import (
 
 	"github.com/rushairer/gosso/config"
 	"github.com/rushairer/gosso/internal/account"
+	accountService "github.com/rushairer/gosso/internal/account/service"
 	adminController "github.com/rushairer/gosso/internal/admin/controller"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
 	"github.com/rushairer/gosso/internal/auth"
@@ -242,11 +243,17 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		accountMod.CredentialRepo, accountMod.AccountRepo, accountMod.RoleRepo, accountMod.FederatedIdentityRepo,
 	)
 
+	// Wire session revoker into account service (for account deletion -> session revocation)
+	if impl, ok := accountMod.Service.(interface{ SetSessionRevoker(accountService.SessionRevoker) }); ok {
+		impl.SetSessionRevoker(authMod.SessionService)
+	}
+
 	oauth2ClientSvc, authCodeSvc, consentSvc, deviceCodeSvc, clientRepo := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig)
 	idTokenSvc, discoverySvc, jwksSvc, userInfoSvc, logoutSvc := oidc.InitializeOIDCModule(tokenSvc, accountMod.Service, cfg.AuthConfig, authMod.SessionService, accountMod.CredentialRepo, logger)
 
 	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, authMod.CredentialRepo, db, !cfg.WebServerConfig.Debug, logger)
 	oauth2Ctrl := oauth2Controller.NewOAuth2Controller(oauth2ClientSvc, authCodeSvc, consentSvc, tokenSvc, idTokenSvc, deviceCodeSvc, cfg.AuthConfig.Issuer, logger)
+	oauth2Ctrl.SetAccountValidator(&accountValidatorAdapter{accountSvc: accountMod.Service})
 	clientCtrl := oauth2Controller.NewClientController(oauth2ClientSvc, logger)
 	oidcCtrl := oidcController.NewOIDCController(discoverySvc, jwksSvc, userInfoSvc, logoutSvc, clientRepo, tokenSvc, cfg.AuthConfig.Issuer, logger)
 	adminCtrl := adminController.NewAdminController(accountMod.Service, logger)
@@ -361,4 +368,17 @@ func buildCORSConfig(cfg config.GoUnoConfig) cors.Config {
 		corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token"}
 	}
 	return corsConfig
+}
+
+// accountValidatorAdapter implements oauth2Controller.AccountValidator using the account service.
+type accountValidatorAdapter struct {
+	accountSvc accountService.AccountService
+}
+
+func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID string) bool {
+	account, err := a.accountSvc.FindAccountByID(ctx, accountID)
+	if err != nil {
+		return false
+	}
+	return account.IsActive()
 }

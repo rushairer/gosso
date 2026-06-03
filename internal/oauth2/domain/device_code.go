@@ -17,15 +17,16 @@ const (
 
 // DeviceCode represents an OAuth2 Device Authorization Grant code (RFC 8628).
 type DeviceCode struct {
-	DeviceCode string           `json:"device_code"`
-	UserCode   string           `json:"user_code"`
-	ClientID   string           `json:"client_id"`
-	AccountID  string           `json:"account_id"`
-	Scopes     []string         `json:"scopes"`
-	Status     DeviceCodeStatus `json:"status"`
-	ExpiresAt  time.Time        `json:"expires_at"`
-	LastPollAt time.Time        `json:"last_poll_at"`
-	Interval   int              `json:"interval"` // Minimum seconds between poll requests
+	DeviceCode   string           `json:"device_code"`
+	UserCode     string           `json:"user_code"`
+	ClientID     string           `json:"client_id"`
+	AccountID    string           `json:"account_id"`
+	Scopes       []string         `json:"scopes"`
+	Status       DeviceCodeStatus `json:"status"`
+	ExpiresAt    time.Time        `json:"expires_at"`
+	AuthorizedAt time.Time        `json:"authorized_at,omitempty"` // When the user authorized the device
+	LastPollAt   time.Time        `json:"last_poll_at"`
+	Interval     int              `json:"interval"` // Minimum seconds between poll requests
 }
 
 // IsExpired returns true if the device code has passed its expiration time.

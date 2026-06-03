@@ -170,6 +170,12 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 				if err := c.logoutSvc.LogoutBySessionID(ctx, tokenClaims.AccountID, tokenClaims.SessionID); err != nil {
 					c.logger.Error("Logout by session ID failed", zap.String("session_id", tokenClaims.SessionID), zap.Error(err))
 				}
+				// Blacklist the current access token so it cannot be reused
+				if tokenClaims.ExpiresAt != nil {
+					if err := c.tokenSvc.RevokeAccessToken(ctx, tokenClaims.ID, tokenClaims.ExpiresAt.Time); err != nil {
+						c.logger.Warn("Failed to blacklist access token during logout", zap.String("jti", tokenClaims.ID), zap.Error(err))
+					}
+				}
 				loggedOut = true
 			}
 		}

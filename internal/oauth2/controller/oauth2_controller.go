@@ -26,6 +26,7 @@ import (
 type TokenManager interface {
 	GenerateAccessToken(claims *tokenDomain.AccessTokenClaims) (string, error)
 	GenerateRefreshToken(ctx context.Context, accountID, clientID, sessionID, scope string) (*tokenDomain.RefreshToken, error)
+	ValidateRefreshToken(ctx context.Context, token string) (*tokenDomain.RefreshToken, error)
 	RotateRefreshToken(ctx context.Context, oldToken string) (*tokenDomain.RefreshToken, error)
 	RevokeRefreshToken(ctx context.Context, token string) error
 	IntrospectToken(ctx context.Context, tokenString string) (map[string]any, error)
@@ -44,6 +45,11 @@ type DeviceCodeManager interface {
 	ClaimAuthorizedDeviceCode(ctx context.Context, deviceCode string) (*oauth2Domain.DeviceCode, error)
 }
 
+// AccountValidator checks whether an account exists and is active.
+type AccountValidator interface {
+	IsAccountActive(ctx context.Context, accountID string) bool
+}
+
 //go:embed template/consent.html
 var consentTemplateFS embed.FS
 
@@ -52,16 +58,17 @@ var deviceTemplateFS embed.FS
 
 // OAuth2Controller handles OAuth2 protocol endpoints.
 type OAuth2Controller struct {
-	clientSvc     oauth2Service.OAuth2ClientService
-	authCodeSvc   *oauth2Service.AuthCodeService
-	consentSvc    *oauth2Service.ConsentService
-	tokenSvc      TokenManager
-	idTokenSvc    *oidcService.IDTokenService
-	deviceCodeSvc DeviceCodeManager
-	issuer        string
-	consentTmpl   *template.Template
-	deviceTmpl    *template.Template
-	logger        *zap.Logger
+	clientSvc         oauth2Service.OAuth2ClientService
+	authCodeSvc       *oauth2Service.AuthCodeService
+	consentSvc        *oauth2Service.ConsentService
+	tokenSvc          TokenManager
+	idTokenSvc        *oidcService.IDTokenService
+	deviceCodeSvc     DeviceCodeManager
+	accountValidator  AccountValidator
+	issuer            string
+	consentTmpl       *template.Template
+	deviceTmpl        *template.Template
+	logger            *zap.Logger
 }
 
 // NewOAuth2Controller creates a new OAuth2 controller instance.
@@ -95,6 +102,11 @@ func NewOAuth2Controller(
 		deviceTmpl:    deviceTmpl,
 		logger:        logger,
 	}
+}
+
+// SetAccountValidator sets the account validator dependency (setter injection).
+func (c *OAuth2Controller) SetAccountValidator(v AccountValidator) {
+	c.accountValidator = v
 }
 
 // RegisterRoutes registers OAuth2 routes.
@@ -227,7 +239,27 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		return
 	}
 
+	// Validate client exists
+	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
+		return
+	}
+
+	// Validate redirect URI against client registration (prevents open redirect)
+	if !client.ValidateRedirectURI(req.RedirectURI) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_redirect_uri"})
+		return
+	}
+
 	scopes := splitScope(req.Scope)
+
+	// Validate scopes against client registration
+	scopes = client.ValidateScope(scopes)
+	if len(scopes) == 0 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_scope"})
+		return
+	}
 
 	_ = c.consentSvc.SaveConsent(ctx, &oauth2Domain.Consent{
 		AccountID: accountIDStr,
@@ -338,7 +370,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 	for _, s := range authCode.Scopes {
 		if s == "openid" {
 			var idErr error
-			idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, authCode.AccountID, authCode.ClientID, authCode.Scopes, authCode.Nonce, authCode.ExpiresAt)
+			idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, authCode.AccountID, authCode.ClientID, authCode.Scopes, authCode.Nonce, authCode.AuthTime)
 			if idErr != nil {
 				c.logger.Error("Failed to generate ID token", zap.Error(idErr))
 				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "error_description": "failed to generate id_token"})
@@ -363,22 +395,27 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 }
 
 func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenRequest) {
-	newRefreshToken, err := c.tokenSvc.RotateRefreshToken(ctx, req.RefreshToken)
+	// Non-destructive read first to validate client before consuming the token
+	oldRefreshToken, err := c.tokenSvc.ValidateRefreshToken(ctx, req.RefreshToken)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "invalid refresh token"})
 		return
 	}
 
-	// Verify client binding: if client_id is provided, it must match the token's client
-	if req.ClientID != "" && req.ClientID != newRefreshToken.ClientID {
+	// Verify client binding before rotation
+	if req.ClientID != "" && req.ClientID != oldRefreshToken.ClientID {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "client_id mismatch"})
 		return
 	}
 
 	// RFC 6749 Section 6: confidential clients MUST authenticate when using refresh token grant
-	client, err := c.clientSvc.FindByClientID(ctx, newRefreshToken.ClientID)
+	client, err := c.clientSvc.FindByClientID(ctx, oldRefreshToken.ClientID)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "client not found"})
+		return
+	}
+	if !client.HasGrantType("refresh_token") {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "client is not authorized for refresh_token grant"})
 		return
 	}
 	if client.IsConfidential {
@@ -390,6 +427,19 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "invalid client_secret"})
 			return
 		}
+	}
+
+	// All validations passed — now atomically rotate the token
+	newRefreshToken, err := c.tokenSvc.RotateRefreshToken(ctx, req.RefreshToken)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "invalid refresh token"})
+		return
+	}
+
+	// Verify account is still active (deleted/suspended accounts cannot refresh)
+	if c.accountValidator != nil && !c.accountValidator.IsAccountActive(ctx, newRefreshToken.AccountID) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "account is not active"})
+		return
 	}
 
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
@@ -517,6 +567,12 @@ func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 		return
 	}
 
+	// RFC 7662: only return full token info if the token belongs to the authenticated client
+	if tokenClientID, ok := result["client_id"].(string); !ok || tokenClientID != clientID {
+		ctx.JSON(http.StatusOK, gin.H{"active": false})
+		return
+	}
+
 	ctx.JSON(http.StatusOK, result)
 }
 
@@ -546,8 +602,15 @@ func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
 	}
 
 	scopes := splitScope(req.Scope)
+	originalScope := req.Scope
 	if len(scopes) == 0 {
 		scopes = client.Scopes
+	} else {
+		scopes = client.ValidateScope(scopes)
+		if len(scopes) == 0 && originalScope != "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_scope", "error_description": "none of the requested scopes are valid for this client"})
+			return
+		}
 	}
 
 	dc, err := c.deviceCodeSvc.CreateDeviceCode(ctx, req.ClientID, scopes)
@@ -746,7 +809,7 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		for _, s := range dc.Scopes {
 			if s == "openid" {
 				var idErr error
-				idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", time.Now().Add(c.tokenSvc.AccessExpiry()))
+				idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", dc.AuthorizedAt)
 				if idErr != nil {
 					c.logger.Error("Failed to generate ID token for device code", zap.Error(idErr))
 				}

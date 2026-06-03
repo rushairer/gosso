@@ -82,6 +82,11 @@ type RegisterAccountRequest struct {
 	Metadata    map[string]any // extra metadata
 }
 
+// SessionRevoker revokes all sessions and tokens for an account.
+type SessionRevoker interface {
+	RevokeAllForAccount(ctx context.Context, accountID string) error
+}
+
 type accountServiceImpl struct {
 	db                    *sql.DB
 	accountRepo           repository.AccountRepository
@@ -89,6 +94,7 @@ type accountServiceImpl struct {
 	federatedIdentityRepo repository.FederatedIdentityRepository
 	roleRepo              repository.RoleRepository
 	auditor               *auditService.Auditor
+	sessionRevoker        SessionRevoker
 }
 
 // NewAccountService creates the account service.
@@ -108,6 +114,11 @@ func NewAccountService(
 		roleRepo:              roleRepo,
 		auditor:               auditor,
 	}
+}
+
+// SetSessionRevoker sets the session revoker dependency (setter injection).
+func (s *accountServiceImpl) SetSessionRevoker(revoker SessionRevoker) {
+	s.sessionRevoker = revoker
 }
 
 // RegisterAccount registers a new account.
@@ -262,6 +273,14 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	})
 	if err != nil {
 		return err
+	}
+
+	// 3. Revoke all active sessions and refresh tokens
+	if s.sessionRevoker != nil {
+		if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
+			// Log but don't fail — DB deletion already committed
+			_ = revokeErr
+		}
 	}
 
 	// 6. Audit log

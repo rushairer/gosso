@@ -64,6 +64,7 @@ func NewTokenService(
 func (s *TokenService) GenerateAccessToken(claims *domain.AccessTokenClaims) (string, error) {
 	now := time.Now()
 	claims.Issuer = s.issuer
+	claims.Subject = claims.AccountID
 	claims.IssuedAt = jwt.NewNumericDate(now)
 	claims.ExpiresAt = jwt.NewNumericDate(now.Add(s.accessExpiry))
 
@@ -137,6 +138,7 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 		SessionID: sessionID,
 		Scope:     scope,
 		ExpiresAt: time.Now().Add(s.refreshExpiry),
+		CreatedAt: time.Now(),
 	}
 
 	data, err := json.Marshal(rt)
@@ -271,6 +273,13 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 		return fmt.Errorf("get session tokens: %w", err)
 	}
 
+	// Delete the session index FIRST, then delete individual tokens.
+	// If individual deletion partially fails, tokens will expire naturally via TTL.
+	// Deleting the index first prevents orphaned tokens from being discoverable.
+	if err := s.redis.Del(ctx, sessionKey); err != nil {
+		s.logger.Warn("Failed to delete session tokens set", zap.String("session_id", sessionID), zap.Error(err))
+	}
+
 	if len(hashes) > 0 {
 		keys := make([]string, len(hashes))
 		for i, hash := range hashes {
@@ -280,11 +289,6 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 			s.logger.Warn("Failed to delete refresh tokens during session revoke",
 				zap.String("session_id", sessionID), zap.Error(err))
 		}
-	}
-
-	// Delete the session index
-	if err := s.redis.Del(ctx, sessionKey); err != nil {
-		s.logger.Warn("Failed to delete session tokens set", zap.String("session_id", sessionID), zap.Error(err))
 	}
 
 	s.logger.Info("Revoked all refresh tokens for session",

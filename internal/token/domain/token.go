@@ -29,6 +29,7 @@ type RefreshToken struct {
 	SessionID string    `json:"session_id,omitempty"`
 	Scope     string    `json:"scope,omitempty"`
 	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // HashToken computes the SHA256 hash of a token (used as Redis storage key)

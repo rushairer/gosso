@@ -128,7 +128,7 @@ func (s *DeviceCodeService) GetDeviceCode(ctx context.Context, deviceCode string
 // GetDeviceCodeByUserCode resolves a user code to its device code.
 func (s *DeviceCodeService) GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*domain.DeviceCode, error) {
 	normalized := strings.ToUpper(strings.ReplaceAll(userCode, "-", ""))
-	if len(normalized) < 4 {
+	if len(normalized) != 8 {
 		return nil, domain.ErrDeviceCodeNotFound
 	}
 	formatted := normalized[:4] + "-" + normalized[4:]
@@ -154,6 +154,7 @@ func (s *DeviceCodeService) AuthorizeDeviceCode(ctx context.Context, deviceCode,
 
 	dc.Status = domain.DeviceCodeStatusAuthorized
 	dc.AccountID = accountID
+	dc.AuthorizedAt = time.Now()
 
 	return s.save(ctx, dc)
 }
@@ -170,20 +171,62 @@ func (s *DeviceCodeService) DenyDeviceCode(ctx context.Context, deviceCode strin
 	return s.save(ctx, dc)
 }
 
+// checkAndUpdatePollRateScript atomically checks the poll interval and updates LastPollAt.
+// KEYS[1] = device code key
+// ARGV[1] = TTL in seconds
+// ARGV[2] = current epoch seconds (integer)
+// ARGV[3] = interval in seconds
+// Returns 1 if poll allowed, 0 if too fast (slow down), nil if not found.
+var checkAndUpdatePollRateScript = redis.NewScript(`
+local data = redis.call('GET', KEYS[1])
+if not data then
+    return nil
+end
+local dc = cjson.decode(data)
+local now = tonumber(ARGV[2])
+local interval = tonumber(ARGV[3])
+local lastEpoch = dc._last_poll_epoch or 0
+if lastEpoch > 0 and (now - lastEpoch) < interval then
+    return 0
+end
+dc._last_poll_epoch = now
+dc.last_poll_at = os.date("!%Y-%m-%dT%H:%M:%SZ", now)
+local updated = cjson.encode(dc)
+redis.call('SET', KEYS[1], updated, 'EX', ARGV[1])
+return 1
+`)
+
 // CheckAndUpdatePollRate enforces the minimum polling interval.
 // Returns ErrSlowDown if the client polls too fast.
 func (s *DeviceCodeService) CheckAndUpdatePollRate(ctx context.Context, deviceCode string) error {
-	dc, err := s.GetDeviceCode(ctx, deviceCode)
+	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
+
+	remaining, err := s.redis.TTL(ctx, key)
 	if err != nil {
-		return err
+		return fmt.Errorf("get device code ttl: %w", err)
+	}
+	if remaining <= 0 {
+		return domain.ErrDeviceCodeNotFound
 	}
 
-	if !dc.LastPollAt.IsZero() && time.Since(dc.LastPollAt) < time.Duration(dc.Interval)*time.Second {
+	now := time.Now().Unix()
+	result, err := checkAndUpdatePollRateScript.Run(ctx, s.redis.GetClient(), []string{key},
+		fmt.Sprintf("%d", int(remaining.Seconds())),
+		fmt.Sprintf("%d", now),
+		fmt.Sprintf("%d", int(s.interval.Seconds())),
+	).Result()
+	if err == redis.Nil || result == nil {
+		return domain.ErrDeviceCodeNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("check poll rate: %w", err)
+	}
+
+	if code, ok := result.(int64); ok && code == 0 {
 		return domain.ErrSlowDown
 	}
 
-	dc.LastPollAt = time.Now()
-	return s.save(ctx, dc)
+	return nil
 }
 
 // MarkUsed sets the device code status to "used".

@@ -132,6 +132,11 @@ func (s *SessionService) GetSession(ctx context.Context, sessionID uuid.UUID) (*
 }
 
 // UpdateSession updates session information.
+// NOTE: There is a small TOCTOU window between the existence check (GetSession)
+// and the subsequent Set — the session could expire between the two calls.
+// This is acceptable because the worst case is setting a session that just
+// expired, which simply refreshes it. A fully atomic check-and-set would
+// require a Redis Lua script, which is a larger change deferred for later.
 func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Session) error {
 	// Verify the session exists first
 	if _, err := s.GetSession(ctx, session.ID); err != nil {
@@ -153,13 +158,19 @@ func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Sess
 		return fmt.Errorf("update session: %w", err)
 	}
 
+	// Refresh the account sessions index TTL to prevent it from expiring before the session
+	indexKey := s.buildAccountSessionsKey(session.AccountID.String())
+	_ = s.redis.Expire(ctx, indexKey, s.sessionTTL)
+
 	s.logger.Debug("Session updated", zap.String("session_id", session.ID.String()))
 	return nil
 }
 
 // DeleteSession deletes a session and removes it from the account session index.
 func (s *SessionService) DeleteSession(ctx context.Context, sessionID uuid.UUID) error {
-	// Load session to get accountID for index cleanup
+	// Load session to get accountID for index cleanup.
+	// If the session has already expired and GetSession fails, we still
+	// attempt the index cleanup using whatever data we can obtain.
 	session, getErr := s.GetSession(ctx, sessionID)
 
 	key := s.buildSessionKey(sessionID)
@@ -168,10 +179,18 @@ func (s *SessionService) DeleteSession(ctx context.Context, sessionID uuid.UUID)
 		return fmt.Errorf("delete session: %w", err)
 	}
 
-	// Clean up account session index
-	if getErr == nil && session != nil {
+	// Always attempt to clean up the account session index.
+	// If the session was loaded, use its accountID. Otherwise, the stale
+	// index entry will be cleaned up lazily by ListSessionsByAccount.
+	if session != nil {
 		indexKey := s.buildAccountSessionsKey(session.AccountID.String())
-		_ = s.redis.SRem(ctx, indexKey, sessionID.String())
+		if err := s.redis.SRem(ctx, indexKey, sessionID.String()); err != nil {
+			s.logger.Warn("Failed to remove session from account index",
+				zap.String("session_id", sessionID.String()), zap.Error(err))
+		}
+	} else if getErr != nil {
+		s.logger.Debug("Session data unavailable for index cleanup, stale entry will be cleaned by ListSessionsByAccount",
+			zap.String("session_id", sessionID.String()), zap.Error(getErr))
 	}
 
 	s.logger.Info("Session deleted", zap.String("session_id", sessionID.String()))
@@ -339,7 +358,12 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 
 	// Remove from index
 	indexKey := s.buildAccountSessionsKey(accountID)
-	_ = s.redis.SRem(ctx, indexKey, sessionID.String())
+	if err := s.redis.SRem(ctx, indexKey, sessionID.String()); err != nil {
+		s.logger.Warn("Failed to remove session from account index during revocation",
+			zap.String("session_id", sessionID.String()),
+			zap.String("account_id", accountID),
+			zap.Error(err))
+	}
 
 	return s.DeleteSession(ctx, sessionID)
 }

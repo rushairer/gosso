@@ -97,6 +97,10 @@ func (m *mockTokenMgr) IntrospectToken(_ context.Context, _ string) (map[string]
 
 func (m *mockTokenMgr) AccessExpiry() time.Duration { return 15 * time.Minute }
 
+func (m *mockTokenMgr) ValidateRefreshToken(_ context.Context, _ string) (*tokenDomain.RefreshToken, error) {
+	return nil, nil
+}
+
 type mockDeviceCodeMgr struct {
 	createFn        func() (*oauth2Domain.DeviceCode, error)
 	getFn           func() (*oauth2Domain.DeviceCode, error)

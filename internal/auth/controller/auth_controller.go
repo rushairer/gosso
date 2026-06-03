@@ -121,7 +121,11 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.Hand
 			passwordHandlers = []gin.HandlerFunc{passwordLimit, c.ForgotPassword}
 		}
 		auth.POST("/password/forgot", passwordHandlers...)
-		auth.POST("/password/reset", c.ResetPassword)
+		resetPasswordHandlers := []gin.HandlerFunc{c.ResetPassword}
+		if passwordLimit != nil {
+			resetPasswordHandlers = []gin.HandlerFunc{passwordLimit, c.ResetPassword}
+		}
+		auth.POST("/password/reset", resetPasswordHandlers...)
 	}
 }
 
@@ -223,7 +227,9 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 	// Get session_id from claims
 	if jwtClaims, exists := ctx.Get("jwt_claims"); exists {
 		if tc, ok := jwtClaims.(*tokenDomain.AccessTokenClaims); ok {
-			_ = c.authSvc.Logout(ctx, tc.AccountID, tc.SessionID, accessTokenJTI, tokenExpiresAt)
+			if err := c.authSvc.Logout(ctx, tc.AccountID, tc.SessionID, accessTokenJTI, tokenExpiresAt); err != nil {
+				c.logger.Error("Logout error", zap.String("account_id", tc.AccountID), zap.String("session_id", tc.SessionID), zap.Error(err))
+			}
 		}
 	}
 
@@ -598,7 +604,7 @@ func (c *AuthController) ForgotPassword(ctx *gin.Context) {
 // ResetPasswordRequestBody reset password request body
 type ResetPasswordRequestBody struct {
 	Token       string `json:"token" binding:"required"`
-	NewPassword string `json:"new_password" binding:"required,min=8"`
+	NewPassword string `json:"new_password" binding:"required,min=8,max=128"`
 }
 
 // ResetPassword POST /api/auth/password/reset

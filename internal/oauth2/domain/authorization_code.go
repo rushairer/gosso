@@ -19,6 +19,7 @@ type AuthorizationCode struct {
 	CodeChallengeMethod string    `json:"code_challenge_method,omitempty"`
 	Nonce               string    `json:"nonce,omitempty"`
 	ExpiresAt           time.Time `json:"expires_at"`
+	AuthTime            time.Time `json:"auth_time"` // When the user authenticated (consent time)
 	Used                bool      `json:"used"`
 }
 
@@ -29,7 +30,7 @@ func (a *AuthorizationCode) IsExpired() bool {
 
 // VerifyPKCE verifies the PKCE code_verifier
 func (a *AuthorizationCode) VerifyPKCE(verifier string) bool {
-	if a.CodeChallenge == "" || a.CodeChallengeMethod == "" {
+	if a.CodeChallenge == "" {
 		return true // No PKCE requirement, pass through
 	}
 

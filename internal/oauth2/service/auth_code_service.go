@@ -63,6 +63,7 @@ func (s *AuthCodeService) GenerateCode(
 		CodeChallengeMethod: codeChallengeMethod,
 		Nonce:               nonce,
 		ExpiresAt:           time.Now().Add(s.expiry),
+		AuthTime:            time.Now(), // User just authenticated/consented
 		Used:                false,
 	}
 

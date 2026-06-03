@@ -36,6 +36,7 @@ type SocialLoginService struct {
 	db                    *sql.DB
 	accountSvc            accountService.AccountService
 	sessionTokenCreator   SessionTokenCreator
+	mfaChecker            MFAChecker
 	accountRepo           accountRepo.AccountRepository
 	credentialRepo        accountRepo.CredentialRepository
 	federatedIdentityRepo accountRepo.FederatedIdentityRepository
@@ -69,6 +70,11 @@ func NewSocialLoginService(
 		httpClient:            &http.Client{Timeout: 10 * time.Second},
 		logger:                logger,
 	}
+}
+
+// SetMFAChecker sets the MFA checker dependency (setter injection to avoid circular constructor deps).
+func (s *SocialLoginService) SetMFAChecker(checker MFAChecker) {
+	s.mfaChecker = checker
 }
 
 // GetAuthURL gets the third-party authorization URL
@@ -219,6 +225,14 @@ func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, i
 
 	if account.Status != accountDomain.AccountStatusActive {
 		return nil, errors.New("account is not active")
+	}
+
+	// Check if MFA is required before issuing tokens
+	if s.mfaChecker != nil {
+		mfaResult, mfaErr := s.mfaChecker.CheckMFA(ctx, account)
+		if mfaResult != nil || mfaErr != nil {
+			return mfaResult, mfaErr
+		}
 	}
 
 	session, accessToken, refreshToken, err := s.sessionTokenCreator.CreateSessionAndTokens(ctx, account, ip, userAgent)

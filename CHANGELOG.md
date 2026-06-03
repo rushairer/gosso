@@ -114,6 +114,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Sentinel errors in `oauth2/domain` now use `errors.New` instead of `fmt.Errorf` — more idiomatic and avoids unnecessary format overhead (`internal/oauth2/domain/authorization_code.go`, `internal/oauth2/domain/client.go`).
 - `config.Validate()` now checks SMTP `Port > 0` and `From != ""` when `Host` is configured (`config/config.go`).
 - Dockerfile Alpine base pinned to `3.22.0` (`Dockerfile`).
+- **Security**: Social login now checks MFA requirements before issuing tokens — prevents MFA bypass via OAuth (`internal/auth/service/social_login_service.go`, `internal/auth/service/interfaces.go`).
+- **Security**: Account soft-delete now revokes all sessions and tokens via `SessionRevoker` interface (`internal/account/service/account_service.go`, `cmd/gouno/web.go`).
+- **Security**: Session account index TTL now refreshed on `UpdateSession` — prevents index expiring before session (`internal/session/service/session_service.go`).
+- **Security**: Refresh grant now checks account status before issuing tokens — rejects tokens for deleted/suspended accounts (`internal/auth/service/auth_session.go`, `internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Refresh token now validated (client identity check) before atomic rotation — prevents token loss from unauthenticated rotation (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: `config.Validate()` now requires `jwt_secret` to be at least 32 characters (`config/config.go`).
+- **Security**: Consent endpoint now validates `client_id`, `redirect_uri`, and requested scopes against the client (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: `auth_time` ID token claim now uses actual authentication timestamp (`authCode.AuthTime` / `dc.AuthorizedAt`) instead of code expiry time (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: PKCE bypass fixed — verification now triggers when `CodeChallenge != ""` regardless of `CodeChallengeMethod` (`internal/oauth2/domain/authorization_code.go`).
+- **Security**: Device code request now validates scopes against client allowed scopes — returns `invalid_scope` for disallowed scopes (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Introspect endpoint now restricts token visibility to the owning client per RFC 7662 — returns `{"active": false}` when client IDs don't match (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Device code poll rate check is now atomic via Redis Lua script — eliminates TOCTOU race condition (`internal/oauth2/service/device_code_service.go`).
+- **Security**: Refresh token grant now validates `client.HasGrantType("refresh_token")` — returns `unauthorized_client` for disallowed clients (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Logout now blacklists the current access token via `RevokeAccessToken` (`internal/oidc/controller/oidc_controller.go`).
+- **Security**: Password reset submission (`POST /api/auth/password/reset`) now has rate limiting middleware (`internal/auth/controller/auth_controller.go`).
+- **Security**: Logout handler now logs errors instead of silently discarding them (`internal/auth/controller/auth_controller.go`).
+- **Security**: `RevokeAllForSession` now deletes session index before individual tokens — prevents orphaned tokens from being discoverable on partial failure (`internal/token/service/token_service.go`).
+- **Security**: `RevokeSession` now logs `SRem` errors instead of discarding them (`internal/session/service/session_service.go`).
+- **Security**: `DeleteSession` now attempts index cleanup even when session data is unavailable — stale entries cleaned lazily by `ListSessionsByAccount` (`internal/session/service/session_service.go`).
+- **Security**: Access token `sub` claim now set to `AccountID` per OIDC spec (`internal/token/service/token_service.go`).
+- Add composite index `idx_credentials_account_type` on `account_credentials(account_id, credential_type)` — accelerates credential lookups (`db/migrations/0008_credentials_composite_index.up.sql`).
+- **Security**: `Strict-Transport-Security` and `Permissions-Policy` headers added to security middleware (`middleware/middleware.go`).
+- **Security**: New password max length capped at 128 characters (`internal/auth/controller/auth_controller.go`).
+- Session refresh error now logged instead of silently discarded (`internal/auth/service/auth_session.go`).
+- Refresh token `CreatedAt` timestamp field added (`internal/token/domain/token.go`).
+- Device code user code validation now enforces exact 8-character length (`internal/oauth2/service/device_code_service.go`).
+- Migrate command `--env` default changed to `production`; migration driver uses configured driver name instead of hardcoded `"pgx"` (`cmd/gouno/migrate.go`).
 
 ### Changed
 

@@ -378,6 +378,11 @@ func (s *AuthService) handleMFARequirement(ctx context.Context, account *account
 	}, nil
 }
 
+// CheckMFA implements the MFAChecker interface for use by SocialLoginService.
+func (s *AuthService) CheckMFA(ctx context.Context, account *accountDomain.Account) (*LoginResult, error) {
+	return s.handleMFARequirement(ctx, account)
+}
+
 // verifyMFACode verifies MFA code based on the MFA type.
 func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfaCode string) error {
 	switch mfaType {
