@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/utility"
 )
 
 // SMSService SMS sending service interface
@@ -27,6 +29,6 @@ func NewStubSMSService(logger *zap.Logger) *StubSMSService {
 
 func (s *StubSMSService) SendVerificationCode(ctx context.Context, phone, code string) error {
 	s.logger.Warn("SMS service not implemented, cannot send verification code",
-		zap.String("phone", phone))
+		zap.String("phone", utility.MaskPhone(phone)))
 	return fmt.Errorf("SMS verification is not yet supported, please use email verification")
 }

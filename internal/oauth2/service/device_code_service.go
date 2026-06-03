@@ -356,25 +356,6 @@ func (s *DeviceCodeService) ClaimAuthorizedDeviceCode(ctx context.Context, devic
 	return &dc, nil
 }
 
-func (s *DeviceCodeService) save(ctx context.Context, dc *domain.DeviceCode) error {
-	data, err := json.Marshal(dc)
-	if err != nil {
-		return fmt.Errorf("marshal device code: %w", err)
-	}
-
-	remaining := time.Until(dc.ExpiresAt)
-	if remaining <= 0 {
-		remaining = time.Second
-	}
-
-	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(dc.DeviceCode)
-	if err := s.redis.Set(ctx, key, data, remaining); err != nil {
-		return fmt.Errorf("save device code: %w", err)
-	}
-
-	return nil
-}
-
 func generateUserCode(length int) (string, error) {
 	var sb strings.Builder
 	sb.Grow(length)

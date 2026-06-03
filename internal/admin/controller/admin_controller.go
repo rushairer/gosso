@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	accountService "github.com/rushairer/gosso/internal/account/service"
+	"github.com/rushairer/gosso/internal/auth/middleware"
 )
 
 // AdminController handles admin operations
@@ -102,6 +103,12 @@ func (c *AdminController) DeleteAccount(ctx *gin.Context) {
 		return
 	}
 
+	currentAdminID := ctx.GetString(middleware.ContextKeyAccountID)
+	if currentAdminID == accountID {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "cannot perform this operation on your own account"))
+		return
+	}
+
 	if err := c.accountSvc.SoftDeleteAccount(ctx, accountID); err != nil {
 		c.logger.Error("Failed to delete account", zap.Error(err), zap.String("account_id", accountID))
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to delete account"))
@@ -118,6 +125,12 @@ func (c *AdminController) DisableAccount(ctx *gin.Context) {
 		return
 	}
 
+	currentAdminID := ctx.GetString(middleware.ContextKeyAccountID)
+	if currentAdminID == accountID {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "cannot perform this operation on your own account"))
+		return
+	}
+
 	if err := c.accountSvc.SuspendAccount(ctx, accountID); err != nil {
 		c.logger.Error("Failed to disable account", zap.Error(err), zap.String("account_id", accountID))
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to disable account"))
@@ -131,6 +144,12 @@ func (c *AdminController) DisableAccount(ctx *gin.Context) {
 func (c *AdminController) EnableAccount(ctx *gin.Context) {
 	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
 	if !ok {
+		return
+	}
+
+	currentAdminID := ctx.GetString(middleware.ContextKeyAccountID)
+	if currentAdminID == accountID {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "cannot perform this operation on your own account"))
 		return
 	}
 

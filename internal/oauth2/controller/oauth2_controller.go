@@ -890,12 +890,18 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 }
 
 func redirectWithCode(ctx *gin.Context, redirectURI, code, state string) {
-	params := url.Values{}
+	parsedURL, err := url.Parse(redirectURI)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_redirect_uri"})
+		return
+	}
+	params := parsedURL.Query()
 	params.Set("code", code)
 	if state != "" {
 		params.Set("state", state)
 	}
-	ctx.Redirect(http.StatusFound, redirectURI+"?"+params.Encode())
+	parsedURL.RawQuery = params.Encode()
+	ctx.Redirect(http.StatusFound, parsedURL.String())
 }
 
 func splitScope(scope string) []string {

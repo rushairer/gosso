@@ -58,7 +58,11 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 			return
 		}
 
+		// Check header first, then fall back to form field for HTML form submissions
 		header := ctx.GetHeader(csrfHeaderName)
+		if header == "" {
+			header = ctx.PostForm("csrf_token")
+		}
 		if header == "" || subtle.ConstantTimeCompare([]byte(header), []byte(cookie)) != 1 {
 			ctx.JSON(http.StatusForbidden, gin.H{
 				"code":    403,

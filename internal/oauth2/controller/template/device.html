@@ -42,11 +42,15 @@
         <form method="POST" action="/oauth2/device">
             <input type="hidden" name="device_code" value="{{.DeviceCode}}">
             <input type="hidden" name="user_code" value="{{.UserCode}}">
+            <input type="hidden" name="csrf_token" id="csrf_token">
             <div class="actions">
                 <button type="submit" name="approved" value="false" class="btn btn-deny">Deny</button>
                 <button type="submit" name="approved" value="true" class="btn btn-approve">Allow</button>
             </div>
         </form>
+        <script>
+            document.getElementById('csrf_token').value = document.cookie.match(/csrf_token=([^;]+)/)?.[1] || '';
+        </script>
     </div>
     {{else}}
     <!-- Entry state -->

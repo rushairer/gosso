@@ -206,7 +206,7 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 
 	switch provider {
 	case "google":
-		providerUserID = fmt.Sprintf("%v", userInfo["id"])
+		providerUserID = fmt.Sprintf("%.0f", userInfo["id"].(float64))
 		email, _ = userInfo["email"].(string)
 		name, _ = userInfo["name"].(string)
 	case "github":

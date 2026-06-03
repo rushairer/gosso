@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"strings"
+	"unicode"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -10,6 +13,8 @@ const (
 	ContextKeyRequestID = "request_id"
 	// HeaderRequestID is the HTTP header name for the request ID.
 	HeaderRequestID = "X-Request-ID"
+
+	maxRequestIDLength = 128
 )
 
 // RequestIDMiddleware injects a unique request ID into every request.
@@ -20,6 +25,8 @@ func RequestIDMiddleware() gin.HandlerFunc {
 		requestID := ctx.GetHeader(HeaderRequestID)
 		if requestID == "" {
 			requestID = uuid.New().String()
+		} else if len(requestID) > maxRequestIDLength || !isValidRequestID(requestID) {
+			requestID = uuid.New().String()
 		}
 
 		ctx.Set(ContextKeyRequestID, requestID)
@@ -27,4 +34,14 @@ func RequestIDMiddleware() gin.HandlerFunc {
 
 		ctx.Next()
 	}
+}
+
+// isValidRequestID checks that the request ID contains only safe characters.
+func isValidRequestID(s string) bool {
+	for _, r := range s {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.' {
+			return false
+		}
+	}
+	return !strings.ContainsAny(s, "\r\n")
 }

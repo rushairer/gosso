@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Security**: `GenerateAccessToken` now auto-generates JTI when not set — fixes regression from JTI enforcement that caused all access tokens to be rejected by `ValidateAccessTokenWithContext` (`internal/token/service/token_service.go`).
+- **Security**: Google OAuth user ID now formatted with `%.0f` instead of `%v` — prevents scientific notation for large numeric IDs that broke Google login (`internal/auth/service/social_login_service.go`).
+- **Security**: `redirectWithCode` now uses `url.Parse` to merge query parameters — prevents malformed URLs when redirect URI already contains query params (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: JWT middleware now rejects tokens with malformed `SessionID` instead of silently skipping session validation — prevents bypassing Redis session check with crafted tokens (`internal/auth/middleware/auth_middleware.go`).
+- **Security**: OAuth2 consent and device authorization forms now include CSRF token — prevents cross-site request forgery on browser-facing authorization endpoints (`middleware/csrf.go`, `internal/oauth2/controller/template/consent.html`, `internal/oauth2/controller/template/device.html`).
+- **Security**: Admin endpoints now use fail-closed rate limiting — prevents brute-force on admin operations when Redis is unavailable (`router/web.go`).
+- **Security**: Admin controllers now prevent self-deletion/self-suspension — guards against accidental lockout of the last admin account (`internal/admin/controller/admin_controller.go`).
+- `X-Request-ID` header now validated for length (max 128) and safe characters — prevents log injection and header amplification (`middleware/requestid.go`).
+- `Validate()` now checks `session_ttl`, `authorization_code_expiry`, and `device_code_expiry` are positive — prevents non-functional services from misconfiguration (`config/config.go`).
+- SMS service now masks phone numbers in logs using `utility.MaskPhone` — consistent with email PII masking (`internal/notification/service/sms_service.go`).
+
+### Changed
+
+- Removed dead code `DeviceCodeService.save()` — all state changes use Lua scripts for atomicity (`internal/oauth2/service/device_code_service.go`).
+
+### Fixed
+
 - **Security**: Login rate limit comparison now uses `>=` instead of `>` — prevents one extra attempt beyond the configured limit (`internal/auth/service/auth_login.go`).
 - **Security**: OIDC `LogoutByAccountID` now documents the access token blacklist gap with TODO — session revocation relies on JWT middleware session check; access tokens remain valid in the brief window until session deletion propagates (`internal/oidc/service/logout_service.go`).
 - Startup failures (config validation, database, Redis, module init) now exit with code 1 instead of 0 — enables container orchestrators to detect failed starts (`cmd/gouno/web.go`).

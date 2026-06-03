@@ -52,11 +52,13 @@ func JWTAuthMiddleware(tokenSvc *tokenService.TokenService, sessionValidator Ses
 		// Verify the session still exists (invalidates tokens after account deletion/suspension)
 		if sessionValidator != nil && claims.SessionID != "" {
 			sessionUUID, err := uuid.Parse(claims.SessionID)
-			if err == nil {
-				if _, err := sessionValidator.ValidateSession(ctx.Request.Context(), sessionUUID); err != nil {
-					ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "session expired or revoked"))
-					return
-				}
+			if err != nil {
+				ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid session ID in token"))
+				return
+			}
+			if _, err := sessionValidator.ValidateSession(ctx.Request.Context(), sessionUUID); err != nil {
+				ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "session expired or revoked"))
+				return
 			}
 		}
 

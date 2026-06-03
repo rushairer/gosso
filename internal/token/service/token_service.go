@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
@@ -63,6 +64,9 @@ func NewTokenService(
 // GenerateAccessToken generates a JWT access token (RS256)
 func (s *TokenService) GenerateAccessToken(claims *domain.AccessTokenClaims) (string, error) {
 	now := time.Now()
+	if claims.ID == "" {
+		claims.ID = uuid.New().String()
+	}
 	claims.Issuer = s.issuer
 	claims.Subject = claims.AccountID
 	claims.IssuedAt = jwt.NewNumericDate(now)
