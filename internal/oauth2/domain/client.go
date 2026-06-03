@@ -96,9 +96,5 @@ const (
 
 // Error definitions
 var (
-	ErrClientNotFound       = errors.New("oauth2 client not found")
-	ErrInvalidRedirectURI   = errors.New("invalid redirect_uri")
-	ErrUnsupportedGrantType = errors.New("unsupported grant type")
-	ErrInvalidScope         = errors.New("invalid scope")
-	ErrClientSecretMismatch = errors.New("client secret mismatch")
+	ErrClientNotFound = errors.New("oauth2 client not found")
 )

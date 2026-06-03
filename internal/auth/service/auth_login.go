@@ -170,7 +170,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	// 2.5. Blacklist MFA token to prevent reuse
 	if claims.ID != "" {
 		if err := s.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); err != nil {
-			s.logger.Warn("Failed to blacklist MFA token", zap.String("account_id", accountID), zap.Error(err))
+			return nil, fmt.Errorf("blacklist mfa token: %w", err)
 		}
 	}
 
@@ -232,16 +232,15 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 
 	// 2. Verify passkey MFA flag (set by CompleteMFALogin in the passkey controller)
 	passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", accountID)
-	verified, verr := s.redis.Get(ctx, passkeyKey)
+	verified, verr := s.redis.GetDel(ctx, passkeyKey)
 	if verr != nil || verified != "1" {
 		return nil, ErrPasskeyNotVerified
 	}
-	_ = s.redis.Del(ctx, passkeyKey)
 
 	// 2.5. Blacklist MFA token to prevent reuse
 	if claims.ID != "" {
 		if err := s.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); err != nil {
-			s.logger.Warn("Failed to blacklist MFA token", zap.String("account_id", accountID), zap.Error(err))
+			return nil, fmt.Errorf("blacklist mfa token: %w", err)
 		}
 	}
 
@@ -408,7 +407,7 @@ func (s *AuthService) handleMFARequirement(ctx context.Context, account *account
 	mfaToken, err := s.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.New().String(),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.mfaVerificationTTL)),
 		},
 		AccountID: account.ID,
 		Scope:     "mfa",
@@ -437,11 +436,10 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 			return ErrPasskeyNotAvailable
 		}
 		passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", accountID)
-		verified, verr := s.redis.Get(ctx, passkeyKey)
+		verified, verr := s.redis.GetDel(ctx, passkeyKey)
 		if verr != nil || verified != "1" {
 			return ErrPasskeyNotVerified
 		}
-		_ = s.redis.Del(ctx, passkeyKey)
 	default:
 		// TOTP / backup code
 		valid, verr := s.mfaSvc.VerifyTOTP(ctx, accountID, mfaCode)

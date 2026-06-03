@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -260,7 +261,7 @@ func (r *RedisClient) IncrWithExpiry(ctx context.Context, key string, expiry tim
 		end
 		return current
 	`)
-	result, err := script.Run(ctx, r.client, []string{key}, int(expiry.Seconds())).Int64()
+	result, err := script.Run(ctx, r.client, []string{key}, int(math.Ceil(expiry.Seconds()))).Int64()
 	if err != nil {
 		r.logger.Error("Redis IncrWithExpiry failed", zap.String("key", key), zap.Error(err))
 		return 0, fmt.Errorf("incrWithExpiry key %s: %w", key, err)
@@ -283,7 +284,7 @@ func (r *RedisClient) CheckAndIncr(ctx context.Context, key string, limit int, e
 		end
 		return new
 	`)
-	result, err := script.Run(ctx, r.client, []string{key}, limit, int(expiry.Seconds())).Int64()
+	result, err := script.Run(ctx, r.client, []string{key}, limit, int(math.Ceil(expiry.Seconds()))).Int64()
 	if err != nil {
 		r.logger.Error("Redis CheckAndIncr failed", zap.String("key", key), zap.Error(err))
 		return 0, fmt.Errorf("checkAndIncr key %s: %w", key, err)
@@ -301,12 +302,25 @@ func (r *RedisClient) SetIfExists(ctx context.Context, key string, value interfa
 		end
 		return 0
 	`)
-	result, err := script.Run(ctx, r.client, []string{key}, value, int(expiry.Seconds())).Int64()
+	result, err := script.Run(ctx, r.client, []string{key}, value, int(math.Ceil(expiry.Seconds()))).Int64()
 	if err != nil {
 		r.logger.Error("Redis SetIfExists failed", zap.String("key", key), zap.Error(err))
 		return false, fmt.Errorf("setIfExists key %s: %w", key, err)
 	}
 	return result == 1, nil
+}
+
+// GetDel atomically retrieves and deletes a key in a single operation (Redis GETDEL).
+// Returns empty string and no error if the key does not exist.
+func (r *RedisClient) GetDel(ctx context.Context, key string) (string, error) {
+	result, err := r.client.GetDel(ctx, key).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("getDel key %s: %w", key, err)
+	}
+	return result, nil
 }
 
 // ErrKeyNotFound is the error returned when a Redis key does not exist

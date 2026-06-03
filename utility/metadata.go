@@ -98,14 +98,6 @@ func (m *MetadataHelper) GetMap(key string, defaultValue map[string]any) map[str
 	if v, ok := m.data[key].(map[string]any); ok {
 		return v
 	}
-	// Try converting from map[string]interface{}
-	if v, ok := m.data[key].(map[string]interface{}); ok {
-		result := make(map[string]any, len(v))
-		for k, val := range v {
-			result[k] = val
-		}
-		return result
-	}
 	return defaultValue
 }
 

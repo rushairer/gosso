@@ -398,6 +398,7 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 
 	sessions, err := s.ListSessionsByAccount(ctx, accountID)
 	if err != nil {
+		s.logger.Warn("Failed to list sessions for limit enforcement", zap.String("account_id", accountID), zap.Error(err))
 		return
 	}
 

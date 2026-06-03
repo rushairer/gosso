@@ -104,6 +104,8 @@ func NewPasswordResetService(
 
 // RequestReset requests password reset (sends password reset email)
 func (s *PasswordResetService) RequestReset(ctx context.Context, email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+
 	// Check cooldown (fail-open: if Redis is down, we still allow the request)
 	cooldownKey := s.buildCooldownKey(email)
 	exists, err := s.redis.Exists(ctx, cooldownKey)

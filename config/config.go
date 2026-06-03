@@ -199,9 +199,12 @@ func (c *GoUnoConfig) Validate() error {
 	if c.AuthConfig.DeviceCodeExpiry <= 0 {
 		return fmt.Errorf("auth: device_code_expiry must be positive")
 	}
-	if c.WebServerConfig.RateLimits.Login < 0 || c.WebServerConfig.RateLimits.Token < 0 ||
-		c.WebServerConfig.RateLimits.Passkey < 0 || c.WebServerConfig.RateLimits.API < 0 {
-		return fmt.Errorf("web_server: rate_limits values must be non-negative")
+	if c.AuthConfig.DeviceCodeInterval <= 0 {
+		return fmt.Errorf("auth: device_code_interval must be positive")
+	}
+	if c.WebServerConfig.RateLimits.Login <= 0 || c.WebServerConfig.RateLimits.Token <= 0 ||
+		c.WebServerConfig.RateLimits.Passkey <= 0 || c.WebServerConfig.RateLimits.API <= 0 {
+		return fmt.Errorf("web_server: rate_limits values must be positive")
 	}
 	if c.SMTPConfig.Host != "" {
 		if c.SMTPConfig.Port <= 0 {

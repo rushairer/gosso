@@ -9,7 +9,6 @@ var (
 	ErrAccountLocked      = errors.New("account locked, try again later")
 
 	// MFA errors
-	ErrMFARequired          = errors.New("MFA verification required")
 	ErrInvalidMFAToken      = errors.New("invalid or expired MFA token")
 	ErrInvalidMFATokenScope = errors.New("invalid MFA token scope")
 	ErrInvalidMFACode       = errors.New("invalid MFA code")
@@ -22,7 +21,6 @@ var (
 
 	// Token errors
 	ErrInvalidRefreshToken = errors.New("invalid refresh token")
-	ErrTokenRevoked        = errors.New("token has been revoked")
 
 	// General input errors
 	ErrInvalidSessionID = errors.New("invalid session id")

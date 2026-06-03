@@ -523,6 +523,12 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 		scopes = client.Scopes
 	}
 
+	// Verify account is still active (deleted/suspended clients cannot get new tokens)
+	if c.accountValidator != nil && !c.accountValidator.IsAccountActive(ctx, client.AccountID) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client", "error_description": "account is not active"})
+		return
+	}
+
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		Scope:     strings.Join(scopes, " "),
 		ClientID:  req.ClientID,

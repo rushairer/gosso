@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"fmt"
+	"errors"
 	"time"
 )
 
@@ -41,7 +41,7 @@ func (d *DeviceCode) IsPending() bool {
 
 // Sentinel errors for device code operations.
 var (
-	ErrDeviceCodeNotFound = fmt.Errorf("device code not found")
-	ErrDeviceCodeExpired  = fmt.Errorf("device code expired")
-	ErrSlowDown           = fmt.Errorf("slow down")
+	ErrDeviceCodeNotFound = errors.New("device code not found")
+	ErrDeviceCodeExpired  = errors.New("device code expired")
+	ErrSlowDown           = errors.New("slow down")
 )

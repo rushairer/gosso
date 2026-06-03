@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Security**: `fetchUserInfo` now uses safe type assertions for provider user ID — prevents panic when Google/GitHub returns `id` as string or missing (`internal/auth/service/social_login_service.go`).
+- **Security**: Passkey MFA verification flag now uses atomic `GETDEL` instead of separate `GET` + `DEL` — prevents TOCTOU race that allowed double-use of a single MFA verification (`internal/auth/service/auth_login.go`, `internal/cache/redis_client.go`).
+- **Security**: MFA token blacklisting now fails closed — prevents MFA token reuse when Redis blacklist write fails (`internal/auth/service/auth_login.go`).
+- **Security**: Client Credentials grant now validates account is active before issuing tokens — consistent with refresh_token grant behavior (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Rate limit validation now rejects zero values — prevents `limit=0` from silently blocking all requests for an endpoint (`config/config.go`).
+- **Security**: OAuth2 token endpoint rate limiter now fails closed — prevents brute-force on authorization codes when Redis is unavailable (`router/web.go`).
+- Password reset cooldown can no longer be bypassed by varying email case — email is normalized at the entry point (`internal/auth/service/password_reset_service.go`).
+- `EnforceSessionLimit` now logs a warning when session listing fails — previously failed silently (`internal/session/service/session_service.go`).
+
+### Changed
+
+- MFA token expiry now uses configurable `mfaVerificationTTL` instead of hardcoded `5*time.Minute` — aligns MFA token TTL with verification flag TTL (`internal/auth/service/auth_login.go`).
+- `DeviceCodeInterval` now has a config default (`5s`) and `Validate()` check — consistent with `DeviceCodeExpiry` (`config/config_manager.go`, `config/config.go`).
+- `IncrWithExpiry`, `CheckAndIncr`, and `SetIfExists` now use `math.Ceil` for sub-second duration handling — prevents 500ms TTL from being truncated to 0 (`internal/cache/redis_client.go`).
+- Sentinel errors in `device_code.go` now use `errors.New` instead of `fmt.Errorf` — consistent with other domain files (`internal/oauth2/domain/device_code.go`).
+- Removed dead code: `ErrMFARequired`, `ErrTokenRevoked` from auth errors; `ErrInvalidRedirectURI`, `ErrUnsupportedGrantType`, `ErrInvalidScope`, `ErrClientSecretMismatch` from OAuth2 client errors.
+- Removed unreachable `map[string]interface{}` type assertion in `GetMap` (`utility/metadata.go`).
+
+### Fixed
+
 - **Security**: Client Credentials grant now uses `client.AccountID` instead of `req.ClientID` for the AccountID claim — ensures correct account association when client and account IDs differ (`internal/oauth2/controller/oauth2_controller.go`).
 - **Security**: `oauth2_clients` foreign key now includes `ON DELETE CASCADE` — consistent with other child tables and prevents orphaned rows on account deletion (`db/migrations/0009_oauth2_clients_cascade.up.sql`).
 - **Security**: Password reset service now masks email addresses in logs using `utility.MaskEmail` — prevents PII leakage in log aggregation systems (`internal/auth/service/password_reset_service.go`).

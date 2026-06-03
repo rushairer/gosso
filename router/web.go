@@ -93,7 +93,7 @@ func RegisterWebRouter(
 	}
 
 	// OAuth2 protocol routes (with rate limiting for token endpoint)
-	tokenLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute, true)
+	tokenLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute, false)
 	oauth2 := server.Group("/oauth2")
 	oauth2.Use(tokenLimit)
 	oauth2Ctrl.RegisterRoutes(oauth2, jwtAuth)
