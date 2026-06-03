@@ -27,7 +27,9 @@ redis.call('ZREMRANGEBYSCORE', key, 0, now - window)
 local count = redis.call('ZCARD', key)
 if count < limit then
     redis.call('ZADD', key, now, now .. ':' .. timeArr[2])
-    redis.call('EXPIRE', key, ARGV[1])
+    if count == 0 then
+        redis.call('EXPIRE', key, ARGV[1])
+    end
     return {1, limit - count - 1}
 end
 return {0, 0}

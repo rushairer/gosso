@@ -121,7 +121,6 @@ func setupTestIDTokenService(t *testing.T) (*IDTokenService, *cache.RedisClient)
 	keySvc, err := tokenService.NewKeyService("", "", logger)
 	require.NoError(t, err)
 	tokenSvc := tokenService.NewTokenService(
-		[]byte("test-secret-key-for-jwt"),
 		keySvc,
 		"http://localhost:8080",
 		15*time.Minute,

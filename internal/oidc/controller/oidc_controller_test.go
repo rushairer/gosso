@@ -406,7 +406,7 @@ func setupLogoutEngine(t *testing.T, clientRepo *mockClientRepo) (*gin.Engine, *
 	gin.SetMode(gin.TestMode)
 
 	keySvc := setupTestKeyService(t)
-	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
@@ -441,7 +441,7 @@ func TestLogout_ExpiredIDTokenHint(t *testing.T) {
 	// At the controller layer, the accepted token triggers LogoutByAccountID which
 	// requires a session service — tested in integration tests.
 	keySvc := setupTestKeyService(t)
-	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, "https://sso.example.com", zap.NewNop())
@@ -472,7 +472,7 @@ func TestLogout_ExpiredIDTokenHint(t *testing.T) {
 func TestLogout_IDTokenHint_WrongIssuer(t *testing.T) {
 	// Sign with a different issuer
 	keySvc := setupTestKeyService(t)
-	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://other-issuer.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://other-issuer.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
@@ -497,7 +497,7 @@ func TestLogout_IDTokenHint_WrongIssuer(t *testing.T) {
 
 func TestLogout_IDTokenHint_NoAudience(t *testing.T) {
 	keySvc := setupTestKeyService(t)
-	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
@@ -521,7 +521,7 @@ func TestLogout_IDTokenHint_NoAudience(t *testing.T) {
 
 func TestLogout_IDTokenHint_WrongSignature(t *testing.T) {
 	keySvc := setupTestKeyService(t)
-	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	// Sign with a DIFFERENT key service
@@ -552,7 +552,7 @@ func TestLogout_IDTokenHint_WrongSignature(t *testing.T) {
 
 func TestLogout_BearerToken_InvalidSignature(t *testing.T) {
 	keySvc := setupTestKeyService(t)
-	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	otherKeySvc, err := tokenService.NewKeyService("", "", zap.NewNop())
@@ -586,7 +586,7 @@ func TestLogout_BearerToken_InvalidSignature(t *testing.T) {
 
 func TestLogout_PostLogoutRedirect_InvalidURI(t *testing.T) {
 	keySvc := setupTestKeyService(t)
-	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
@@ -624,7 +624,7 @@ func TestLogout_PostLogoutRedirect_InvalidURI(t *testing.T) {
 
 func TestLogout_PostLogoutRedirect_ValidURI(t *testing.T) {
 	keySvc := setupTestKeyService(t)
-	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
@@ -665,7 +665,7 @@ func TestLogout_PostLogoutRedirect_ValidURI(t *testing.T) {
 
 func TestLogout_PostLogoutRedirect_ClientNotFound(t *testing.T) {
 	keySvc := setupTestKeyService(t)
-	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	clientRepo := &mockClientRepo{
@@ -703,7 +703,7 @@ func TestLogout_PostLogoutRedirect_ClientNotFound(t *testing.T) {
 
 func TestLogout_ClientIDMismatch(t *testing.T) {
 	keySvc := setupTestKeyService(t)
-	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, "https://sso.example.com", zap.NewNop())

@@ -64,7 +64,6 @@ func (s *AuthCodeService) GenerateCode(
 		Nonce:               nonce,
 		ExpiresAt:           time.Now().Add(s.expiry),
 		AuthTime:            time.Now(), // User just authenticated/consented
-		Used:                false,
 	}
 
 	data, err := json.Marshal(ac)

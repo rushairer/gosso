@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Security**: Client Credentials grant now uses `client.AccountID` instead of `req.ClientID` for the AccountID claim — ensures correct account association when client and account IDs differ (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: `oauth2_clients` foreign key now includes `ON DELETE CASCADE` — consistent with other child tables and prevents orphaned rows on account deletion (`db/migrations/0009_oauth2_clients_cascade.up.sql`).
+- **Security**: Password reset service now masks email addresses in logs using `utility.MaskEmail` — prevents PII leakage in log aggregation systems (`internal/auth/service/password_reset_service.go`).
+- **Security**: Verification code and password reset Lua scripts no longer `DEL` the key when attempts are exhausted — prevents attackers from immediately requesting a new code to bypass rate limiting (`internal/auth/service/verification_service.go`, `internal/auth/service/password_reset_service.go`).
+- **Security**: Rate limiter Lua script now only calls `EXPIRE` on first insertion — prevents TTL from being extended on every allowed request, which turned a fixed window into a sliding window (`middleware/redis_ratelimit.go`).
+- `MaskEmail` now uses rune indexing instead of byte indexing — prevents garbled output for multi-byte UTF-8 characters in local-part and domain (`utility/mask.go`).
+- `isValidRequestID` now validates ASCII-only alphanumeric characters — prevents CJK or other Unicode from entering request IDs and causing downstream encoding issues; removed redundant `\r\n` check (`middleware/requestid.go`).
+
+### Changed
+
+- `TokenService` no longer accepts unused `secret []byte` parameter — all signing uses RSA keys (`internal/token/service/token_service.go`, `cmd/gouno/web.go`).
+- Config defaults now include `authorization_code_expiry` (5m) and `device_code_expiry` (10m) — prevents misconfiguration when `config.Validate()` requires positive values (`config/config_manager.go`).
+- Removed unused domain types: `AuthorizationCode.Used` field, `ErrCodeAlreadyUsed`, `ErrDeviceCodeDenied`, `ErrDeviceCodeAlreadyUsed` (`internal/oauth2/domain/`).
+
+### Fixed
+
 - **Security**: GitHub OAuth user ID now uses `.(float64)` type assertion — fixes regression from Round 3 that broke GitHub login (`internal/auth/service/social_login_service.go`).
 - **Security**: OIDC Logout now supports GET in addition to POST — enables browser-initiated RP-Initiated Logout via 302 redirect (`internal/oidc/controller/oidc_controller.go`).
 - **Security**: OIDC Logout now returns 400 when no session is found instead of 200 — aligns with OIDC RP-Initiated Logout specification (`internal/oidc/controller/oidc_controller.go`).

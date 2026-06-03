@@ -240,7 +240,6 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 
 	blacklistSvc := tokenService.NewBlacklistService(redis, logger)
 	tokenSvc := tokenService.NewTokenService(
-		[]byte(cfg.AuthConfig.JWTSecret),
 		keySvc,
 		cfg.AuthConfig.Issuer,
 		cfg.AuthConfig.AccessTokenExpiry,

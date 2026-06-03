@@ -49,7 +49,7 @@ func initAuthService(t *testing.T, e *testutil.TestEnv) *service.AuthService {
 	keySvc, err := tokenService.NewKeyService("", "test-key", e.Logger)
 	require.NoError(t, err)
 	blacklistSvc := tokenService.NewBlacklistService(e.Redis, e.Logger)
-	tokenSvc := tokenService.NewTokenService([]byte("test-secret"), keySvc, "http://localhost:8080", 15*time.Minute, 720*time.Hour, e.Redis, blacklistSvc, e.Logger)
+	tokenSvc := tokenService.NewTokenService(keySvc, "http://localhost:8080", 15*time.Minute, 720*time.Hour, e.Redis, blacklistSvc, e.Logger)
 	authMod := authModule.InitializeAuthModule(
 		e.DB, e.Redis, e.Logger,
 		e.Config.AuthConfig, e.Config.SMTPConfig,

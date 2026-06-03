@@ -41,9 +41,7 @@ func (d *DeviceCode) IsPending() bool {
 
 // Sentinel errors for device code operations.
 var (
-	ErrDeviceCodeNotFound    = fmt.Errorf("device code not found")
-	ErrDeviceCodeExpired     = fmt.Errorf("device code expired")
-	ErrDeviceCodeDenied      = fmt.Errorf("device code denied")
-	ErrDeviceCodeAlreadyUsed = fmt.Errorf("device code already used")
-	ErrSlowDown              = fmt.Errorf("slow down")
+	ErrDeviceCodeNotFound = fmt.Errorf("device code not found")
+	ErrDeviceCodeExpired  = fmt.Errorf("device code expired")
+	ErrSlowDown           = fmt.Errorf("slow down")
 )

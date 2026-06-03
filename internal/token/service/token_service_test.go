@@ -30,7 +30,6 @@ func setupTestTokenService(t *testing.T) (*TokenService, *cache.RedisClient) {
 
 	blacklist := NewBlacklistService(redisClient, logger)
 	svc := NewTokenService(
-		[]byte("test-secret-key-for-jwt"),
 		keySvc,
 		"http://localhost:8080",
 		15*time.Minute,

@@ -46,7 +46,6 @@ local cjson = require('cjson')
 local obj = cjson.decode(data)
 local max_attempts = tonumber(ARGV[1])
 if obj.attempts >= max_attempts then
-    redis.call('DEL', KEYS[1])
     return -1
 end
 obj.attempts = obj.attempts + 1
@@ -119,14 +118,14 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 	cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, accountDomain.CredentialTypeEmail, email)
 	if err != nil {
 		// Not found -> Silent success to prevent enumeration
-		s.logger.Debug("Password reset requested for non-existent email", zap.String("email", email))
+		s.logger.Debug("Password reset requested for non-existent email", zap.String("email", utility.MaskEmail(email)))
 		return nil
 	}
 
 	// Check account status
 	account, err := s.accountSvc.FindAccountByID(ctx, cred.AccountID)
 	if err != nil || !account.IsActive() {
-		s.logger.Debug("Password reset requested for inactive account", zap.String("email", email))
+		s.logger.Debug("Password reset requested for inactive account", zap.String("email", utility.MaskEmail(email)))
 		return nil
 	}
 
@@ -162,11 +161,11 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 	// Send email
 	resetLink := fmt.Sprintf("%s?token=%s", s.baseURL, token)
 	if err := s.emailSender.SendPasswordResetLink(ctx, email, resetLink); err != nil {
-		s.logger.Error("Failed to send password reset email", zap.Error(err), zap.String("email", email))
+		s.logger.Error("Failed to send password reset email", zap.Error(err), zap.String("email", utility.MaskEmail(email)))
 		return fmt.Errorf("send reset email: %w", err)
 	}
 
-	s.logger.Info("Password reset email sent", zap.String("email", email))
+	s.logger.Info("Password reset email sent", zap.String("email", utility.MaskEmail(email)))
 	return nil
 }
 

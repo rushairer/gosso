@@ -41,7 +41,6 @@ func TestGenerateCode(t *testing.T) {
 	assert.Equal(t, "http://localhost/callback", code.RedirectURI)
 	assert.Equal(t, []string{"openid", "profile"}, code.Scopes)
 	assert.Equal(t, "test-nonce", code.Nonce)
-	assert.False(t, code.Used)
 	assert.True(t, code.ExpiresAt.After(time.Now()))
 }
 

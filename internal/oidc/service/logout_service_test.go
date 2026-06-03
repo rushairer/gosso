@@ -18,7 +18,7 @@ func setupTestLogoutService(t *testing.T) (*LogoutService, *tokenService.KeyServ
 	keySvc, err := tokenService.NewKeyService("", "", logger)
 	require.NoError(t, err)
 
-	tokenSvc := tokenService.NewTokenService(nil, keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, logger)
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, logger)
 	logoutSvc := NewLogoutService(tokenSvc, nil, "https://sso.example.com", logger)
 
 	return logoutSvc, keySvc

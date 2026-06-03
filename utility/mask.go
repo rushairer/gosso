@@ -7,20 +7,23 @@ import "strings"
 func MaskEmail(email string) string {
 	atIdx := strings.Index(email, "@")
 	if atIdx > 0 && atIdx < len(email)-1 {
-		local := email[:atIdx]
+		local := []rune(email[:atIdx])
 		domain := email[atIdx+1:]
 		maskedLocal := string(local[0]) + "***"
 		dotIdx := strings.Index(domain, ".")
 		var maskedDomain string
 		if dotIdx > 0 {
-			maskedDomain = string(domain[0]) + "***" + domain[dotIdx:]
+			domainRunes := []rune(domain)
+			prefixLen := len([]rune(domain[:dotIdx]))
+			maskedDomain = string(domainRunes[0]) + "***" + string(domainRunes[prefixLen:])
 		} else {
-			maskedDomain = string(domain[0]) + "***"
+			maskedDomain = string([]rune(domain)[0]) + "***"
 		}
 		return maskedLocal + "@" + maskedDomain
 	}
-	if len(email) > 1 {
-		return string(email[0]) + "***"
+	runes := []rune(email)
+	if len(runes) > 1 {
+		return string(runes[0]) + "***"
 	}
 	return "***"
 }

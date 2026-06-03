@@ -20,7 +20,6 @@ type AuthorizationCode struct {
 	Nonce               string    `json:"nonce,omitempty"`
 	ExpiresAt           time.Time `json:"expires_at"`
 	AuthTime            time.Time `json:"auth_time"` // When the user authenticated (consent time)
-	Used                bool      `json:"used"`
 }
 
 // IsExpired checks if the authorization code has expired
@@ -58,7 +57,6 @@ func HashPKCEVerifier(verifier string) string {
 var (
 	ErrCodeNotFound           = errors.New("authorization code not found")
 	ErrCodeExpired            = errors.New("authorization code expired")
-	ErrCodeAlreadyUsed        = errors.New("authorization code already used")
 	ErrCodeClientMismatch     = errors.New("authorization code client mismatch")
 	ErrCodeURIMismatch        = errors.New("authorization code redirect_uri mismatch")
 	ErrPKCEVerificationFailed = errors.New("PKCE verification failed")

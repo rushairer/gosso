@@ -1,9 +1,6 @@
 package middleware
 
 import (
-	"strings"
-	"unicode"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -36,12 +33,12 @@ func RequestIDMiddleware() gin.HandlerFunc {
 	}
 }
 
-// isValidRequestID checks that the request ID contains only safe characters.
+// isValidRequestID checks that the request ID contains only safe ASCII characters.
 func isValidRequestID(s string) bool {
 	for _, r := range s {
-		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.' {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != '_' && r != '.' {
 			return false
 		}
 	}
-	return !strings.ContainsAny(s, "\r\n")
+	return true
 }

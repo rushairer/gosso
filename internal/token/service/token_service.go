@@ -25,7 +25,6 @@ const (
 
 // TokenService JWT and refresh token service
 type TokenService struct {
-	secret        []byte
 	keySvc        *KeyService
 	issuer        string
 	accessExpiry  time.Duration
@@ -37,7 +36,6 @@ type TokenService struct {
 
 // NewTokenService creates a new token service instance
 func NewTokenService(
-	secret []byte,
 	keySvc *KeyService,
 	issuer string,
 	accessExpiry time.Duration,
@@ -50,7 +48,6 @@ func NewTokenService(
 		logger = zap.NewNop()
 	}
 	return &TokenService{
-		secret:        secret,
 		keySvc:        keySvc,
 		issuer:        issuer,
 		accessExpiry:  accessExpiry,

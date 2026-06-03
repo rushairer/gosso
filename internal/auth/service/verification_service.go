@@ -37,7 +37,6 @@ end
 local obj = cjson.decode(data)
 local max_attempts = tonumber(ARGV[2])
 if obj.attempts >= max_attempts then
-    redis.call('DEL', KEYS[1])
     return cjson.encode({"exhausted", ""})
 end
 if obj.code == ARGV[1] then

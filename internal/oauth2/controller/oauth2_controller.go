@@ -526,7 +526,7 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		Scope:     strings.Join(scopes, " "),
 		ClientID:  req.ClientID,
-		AccountID: req.ClientID,
+		AccountID: client.AccountID,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
