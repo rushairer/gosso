@@ -210,7 +210,7 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 		email, _ = userInfo["email"].(string)
 		name, _ = userInfo["name"].(string)
 	case "github":
-		providerUserID = fmt.Sprintf("%.0f", userInfo["id"])
+		providerUserID = fmt.Sprintf("%.0f", userInfo["id"].(float64))
 		email, _ = userInfo["email"].(string)
 		name, _ = userInfo["name"].(string)
 	case "wechat":
@@ -256,6 +256,24 @@ func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, i
 }
 
 func (s *SocialLoginService) createNewUser(ctx context.Context, provider, providerUserID, email, name, ip, userAgent string) (*LoginResult, error) {
+	// If email is provided, check if an account already exists with that email.
+	// This prevents duplicate accounts when a user registers via email/password first
+	// and later uses social login with the same email.
+	if email != "" {
+		existingCred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, accountDomain.CredentialTypeEmail, email)
+		if err == nil && existingCred != nil {
+			// Link federated identity to existing account
+			identity := accountDomain.NewFederatedIdentity(existingCred.AccountID, accountDomain.Provider(provider), providerUserID, nil)
+			linkErr := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+				return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
+			})
+			if linkErr != nil {
+				return nil, fmt.Errorf("link federated identity: %w", linkErr)
+			}
+			return s.loginExistingUser(ctx, existingCred.AccountID, ip, userAgent)
+		}
+	}
+
 	if name == "" {
 		name = "User"
 	}

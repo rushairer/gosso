@@ -209,7 +209,24 @@ func (s *SessionService) RefreshSession(ctx context.Context, sessionID uuid.UUID
 	}
 
 	session.UpdateActivity()
-	return s.UpdateSession(ctx, session)
+
+	data, err := json.Marshal(session)
+	if err != nil {
+		s.logger.Error("Failed to marshal session", zap.Error(err), zap.String("session_id", sessionID.String()))
+		return fmt.Errorf("marshal session: %w", err)
+	}
+
+	key := s.buildSessionKey(sessionID)
+	ok, err := s.redis.SetIfExists(ctx, key, data, s.sessionTTL)
+	if err != nil {
+		s.logger.Error("Failed to refresh session", zap.Error(err), zap.String("session_id", sessionID.String()))
+		return fmt.Errorf("refresh session: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("session %s no longer exists", sessionID)
+	}
+
+	return nil
 }
 
 // ValidateSession validates whether a session is still active.

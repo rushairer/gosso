@@ -573,12 +573,11 @@ func TestLogout_BearerToken_InvalidSignature(t *testing.T) {
 
 	engine.ServeHTTP(w, req)
 
-	// Token validation fails, no session → "no_session"
-	assert.Equal(t, http.StatusOK, w.Code)
+	// Token validation fails, no session → 400 error
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	data := resp["data"].(map[string]any)
-	assert.Equal(t, "no_session", data["status"])
+	assert.Equal(t, float64(http.StatusBadRequest), resp["code"])
 }
 
 // ──────────────────────────────────────────────
@@ -741,11 +740,10 @@ func TestLogout_NoSession(t *testing.T) {
 
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	data := resp["data"].(map[string]any)
-	assert.Equal(t, "no_session", data["status"])
+	assert.Equal(t, float64(http.StatusBadRequest), resp["code"])
 }
 
 // ──────────────────────────────────────────────

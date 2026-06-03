@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Security**: GitHub OAuth user ID now uses `.(float64)` type assertion — fixes regression from Round 3 that broke GitHub login (`internal/auth/service/social_login_service.go`).
+- **Security**: OIDC Logout now supports GET in addition to POST — enables browser-initiated RP-Initiated Logout via 302 redirect (`internal/oidc/controller/oidc_controller.go`).
+- **Security**: OIDC Logout now returns 400 when no session is found instead of 200 — aligns with OIDC RP-Initiated Logout specification (`internal/oidc/controller/oidc_controller.go`).
+- **Security**: Social login now prevents duplicate accounts when a user registers via email/password first and later uses social login with the same email — links federated identity to existing account instead (`internal/auth/service/social_login_service.go`).
+- **Security**: MFA management endpoints (`/mfa/enroll`, `/mfa/activate`, `DELETE /mfa`, `/mfa/backup-codes`) now have rate limiting — prevents brute-force on TOTP activation codes (`internal/auth/controller/auth_controller.go`).
+- `RefreshSession` no longer double-fetches session from Redis — eliminates TOCTOU race window and reduces Redis round-trips (`internal/session/service/session_service.go`).
+- Removed dead code `result == "-1"` comparison in password reset token validation — Redis Lua returns `int64(-1)`, not string (`internal/auth/service/password_reset_service.go`).
+- OIDC Discovery document now includes `response_modes_supported: ["query"]` — recommended field per OIDC Discovery specification (`internal/oidc/service/discovery_service.go`).
+
+### Fixed
+
 - **Security**: `GenerateAccessToken` now auto-generates JTI when not set — fixes regression from JTI enforcement that caused all access tokens to be rejected by `ValidateAccessTokenWithContext` (`internal/token/service/token_service.go`).
 - **Security**: Google OAuth user ID now formatted with `%.0f` instead of `%v` — prevents scientific notation for large numeric IDs that broke Google login (`internal/auth/service/social_login_service.go`).
 - **Security**: `redirectWithCode` now uses `url.Parse` to merge query parameters — prevents malformed URLs when redirect URI already contains query params (`internal/oauth2/controller/oauth2_controller.go`).

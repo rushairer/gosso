@@ -57,6 +57,7 @@ func (c *OIDCController) RegisterRoutes(server *gin.RouterGroup, authMiddleware 
 	server.GET("/.well-known/jwks.json", c.JWKS)
 	server.GET("/oidc/userinfo", authMiddleware, c.UserInfo)
 	server.POST("/oidc/userinfo", authMiddleware, c.UserInfo)
+	server.GET("/oidc/logout", c.Logout)
 	server.POST("/oidc/logout", c.Logout)
 }
 
@@ -208,6 +209,6 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 	if loggedOut {
 		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{"status": "logged_out"}))
 	} else {
-		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{"status": "no_session"}))
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "no session found, unable to logout"))
 	}
 }

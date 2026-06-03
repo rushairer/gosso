@@ -37,6 +37,9 @@ func (s *DiscoveryService) GetDiscoveryDocument() map[string]any {
 		"scopes_supported": []string{
 			"openid", "profile", "email", "phone",
 		},
+		"response_modes_supported": []string{
+			"query",
+		},
 		"response_types_supported": []string{
 			"code",
 		},

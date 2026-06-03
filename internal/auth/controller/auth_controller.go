@@ -102,10 +102,14 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.Hand
 		}
 		auth.POST("/mfa/verify", mfaVerifyHandlers...)
 
-		auth.POST("/mfa/enroll", c.MFAEnroll)
-		auth.POST("/mfa/activate", c.MFAActivate)
-		auth.DELETE("/mfa", c.MFADisable)
-		auth.POST("/mfa/backup-codes", c.MFAGenerateBackupCodes)
+		mfaMgmtHandlers := []gin.HandlerFunc{mfaLimit}
+		if mfaLimit == nil {
+			mfaMgmtHandlers = nil
+		}
+		auth.POST("/mfa/enroll", append(mfaMgmtHandlers, c.MFAEnroll)...)
+		auth.POST("/mfa/activate", append(mfaMgmtHandlers, c.MFAActivate)...)
+		auth.DELETE("/mfa", append(mfaMgmtHandlers, c.MFADisable)...)
+		auth.POST("/mfa/backup-codes", append(mfaMgmtHandlers, c.MFAGenerateBackupCodes)...)
 
 		// Social login endpoints
 		auth.GET("/social/:provider", c.SocialAuthURL)
