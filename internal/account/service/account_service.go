@@ -156,6 +156,12 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 			return nil, err
 		}
 	}
+	if req.Username != "" {
+		existing, err := s.FindAccountByUsername(ctx, req.Username)
+		if err == nil && existing != nil {
+			return nil, fmt.Errorf("username already taken")
+		}
+	}
 
 	// 3. Create account + credentials in transaction
 	now := time.Now()

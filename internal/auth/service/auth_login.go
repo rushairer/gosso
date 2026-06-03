@@ -95,6 +95,9 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	// 5. Check if MFA is required
 	mfaResult, mfaErr := s.handleMFARequirement(ctx, account)
 	if mfaResult != nil || mfaErr != nil {
+		// Password was correct — clear rate limit before returning MFA challenge
+		_ = s.redis.Del(ctx, attemptsKey)
+		_ = s.redis.Del(ctx, ipAttemptsKey)
 		return mfaResult, mfaErr
 	}
 

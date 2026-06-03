@@ -164,7 +164,7 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 		authHeader := ctx.GetHeader("Authorization")
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-			tokenClaims, err := c.tokenSvc.ValidateAccessToken(tokenString)
+			tokenClaims, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx, tokenString)
 			if err == nil && tokenClaims != nil {
 				clientID = tokenClaims.ClientID
 				if err := c.logoutSvc.LogoutBySessionID(ctx, tokenClaims.AccountID, tokenClaims.SessionID); err != nil {

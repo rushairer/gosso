@@ -227,7 +227,7 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 	var accessTokenJTI string
 	var tokenExpiresAt time.Time
 	if len(authHeader) > 7 {
-		claims, err := c.tokenMgr.ValidateAccessToken(authHeader[7:])
+		claims, err := c.tokenMgr.ValidateAccessTokenWithContext(ctx, authHeader[7:])
 		if err == nil {
 			accessTokenJTI = claims.ID
 			if claims.ExpiresAt != nil {

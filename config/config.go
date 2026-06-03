@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"fmt"
 	"time"
 )
@@ -181,8 +182,14 @@ func (c *GoUnoConfig) Validate() error {
 	if len(c.AuthConfig.JWTSecret) < 32 {
 		return fmt.Errorf("auth: jwt_secret must be at least 32 characters")
 	}
-	if c.AuthConfig.TOTPEncryptionKey != "" && len(c.AuthConfig.TOTPEncryptionKey) != 32 {
-		return fmt.Errorf("auth: totp_encryption_key must be exactly 32 bytes")
+	if c.AuthConfig.TOTPEncryptionKey != "" {
+		key, err := hex.DecodeString(c.AuthConfig.TOTPEncryptionKey)
+		if err != nil {
+			return fmt.Errorf("auth: totp_encryption_key must be a valid hex string")
+		}
+		if len(key) != 32 {
+			return fmt.Errorf("auth: totp_encryption_key must decode to exactly 32 bytes (got %d)", len(key))
+		}
 	}
 	if c.AuthConfig.AccessTokenExpiry <= 0 {
 		return fmt.Errorf("auth: access_token_expiry must be positive")
@@ -215,6 +222,14 @@ func (c *GoUnoConfig) Validate() error {
 		}
 		if c.SMTPConfig.From == "" {
 			return fmt.Errorf("smtp: from address is required when host is configured")
+		}
+	}
+	if c.AuthConfig.WebAuthnRPID != "" {
+		if c.AuthConfig.WebAuthnRPName == "" {
+			return fmt.Errorf("auth: webauthn_rp_name is required when webauthn_rp_id is set")
+		}
+		if c.AuthConfig.WebAuthnRPOrigin == "" {
+			return fmt.Errorf("auth: webauthn_rp_origin is required when webauthn_rp_id is set")
 		}
 	}
 	return nil

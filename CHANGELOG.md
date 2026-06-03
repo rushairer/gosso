@@ -39,7 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `PasswordResetService` goroutine concurrency is now bounded by a semaphore (max 10) — prevents goroutine explosion during mass password resets (`internal/auth/service/password_reset_service.go`).
 - `DenyDeviceCode` unmarshal error is now logged instead of silently dropped — aids debugging corrupted Redis data (`internal/oauth2/service/device_code_service.go`).
 - `Config.Validate()` now checks `IDTokenExpiry > 0` — prevents ID tokens from being issued without expiry when misconfigured (`config/config.go`).
-- Admin `ListAccounts` now validates the `status` query parameter against allowed values — rejects invalid status values with 400 instead of passing raw input to the service layer (`internal/admin/controller/admin_controller.go`).
+- **Security**: TOTP encryption key config validation now uses `hex.DecodeString` — aligns with runtime validation that expects 64-char hex string (32 decoded bytes), prevents operators from configuring invalid 32-char non-hex keys (`config/config.go`).
+- **Security**: Login rate limit counter is now cleared when MFA is required — prevents legitimate MFA users from being locked out after 5 successful password attempts (`internal/auth/service/auth_login.go`).
+- **Security**: `ValidateAccessToken` callers now use `ValidateAccessTokenWithContext` — passes request context (cancellation, trace ID) to blacklist check instead of `context.Background()` (`internal/auth/controller/auth_controller.go`, `internal/auth/service/auth_service.go`, `internal/oidc/controller/oidc_controller.go`).
+- Account registration now checks username uniqueness before creating account — returns a friendly error instead of a raw database unique constraint violation (`internal/account/service/account_service.go`).
+- `Config.Validate()` now checks WebAuthn configuration consistency — `webauthn_rp_name` and `webauthn_rp_origin` are required when `webauthn_rp_id` is set (`config/config.go`).
 - `TestChangePassword` now uses a real bcrypt hash and proper assertions — previously used a placeholder hash that would fail at runtime (`internal/account/service/account_service_test.go`).
 - Removed debug `log.Println(err)` from `TestRegisterAccount` (`internal/account/service/account_service_test.go`).
 

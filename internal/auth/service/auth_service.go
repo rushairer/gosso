@@ -132,7 +132,7 @@ func (s *AuthService) TokenService() *tokenService.TokenService {
 
 // ValidateMFAToken validates MFA token and returns claims
 func (s *AuthService) ValidateMFAToken(ctx context.Context, mfaToken string) (*tokenDomain.AccessTokenClaims, error) {
-	claims, err := s.tokenSvc.ValidateAccessToken(mfaToken)
+	claims, err := s.tokenSvc.ValidateAccessTokenWithContext(ctx, mfaToken)
 	if err != nil {
 		return nil, ErrInvalidMFAToken
 	}
