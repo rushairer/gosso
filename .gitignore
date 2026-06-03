@@ -40,6 +40,11 @@ Thumbs.db
 .env.*
 !.env.*.example
 
+# SSL certificates
+ssl/*.crt
+ssl/*.key
+ssl/*.pem
+
 # Go 相关文件
 # Test binary, built with `go test -c`
 # *.test

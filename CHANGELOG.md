@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: Rate limit middleware now supports configurable fail-open/fail-closed — security-sensitive endpoints (login, MFA, passkey, refresh) fail-closed with 503 when Redis is unavailable (`middleware/redis_ratelimit.go`, `router/web.go`).
 - **Security**: Account soft-delete now cascades to OAuth2 clients — prevents orphaned clients from issuing tokens after account deletion (`internal/account/service/account_service.go`, `internal/oauth2/repository/client_repository.go`).
 - **Security**: CI workflow uses `secrets.TEST_POSTGRES_PASSWORD` instead of hardcoded credentials (`.github/workflows/ci.yml`).
+- **Security**: `Logout` now returns an error when access token blacklisting fails — clients are informed when logout is incomplete (`internal/auth/service/auth_login.go`).
+- Redis `requirepass` support added to `redis.conf` and docker-compose files — set `REDIS_PASSWORD` env var to enable authentication (`config/redis.conf`, `docker-compose.yml`, `docker-compose.development.yml`, `deploy/config.go`, `deploy/environments.yaml`).
+- Nginx SSL/TLS configuration added — HTTPS server block with TLS 1.2/1.3, HSTS, and HTTP→HTTPS redirect (`config/nginx.conf`, `ssl/README.md`).
+- Fix pre-existing broken `TestToken_RefreshToken_Success` and `TestIntrospect_BasicAuth_Success` tests — mock now returns valid token data (`internal/oauth2/controller/oauth2_controller_test.go`).
 
 ### Security
 

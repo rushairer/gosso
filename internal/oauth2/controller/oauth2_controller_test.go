@@ -53,11 +53,12 @@ func (m *mockOAuth2ClientSvcForOAuth2) DeleteClient(_ context.Context, _ string)
 }
 
 type mockTokenMgr struct {
-	generateAccessFn  func() (string, error)
-	generateRefreshFn func() (*tokenDomain.RefreshToken, error)
-	rotateRefreshFn   func() (*tokenDomain.RefreshToken, error)
-	revokeFn          func() error
-	introspectFn      func() (map[string]any, error)
+	generateAccessFn    func() (string, error)
+	generateRefreshFn   func() (*tokenDomain.RefreshToken, error)
+	rotateRefreshFn     func() (*tokenDomain.RefreshToken, error)
+	revokeFn            func() error
+	introspectFn        func() (map[string]any, error)
+	validateRefreshFn   func() (*tokenDomain.RefreshToken, error)
 }
 
 func (m *mockTokenMgr) GenerateAccessToken(_ *tokenDomain.AccessTokenClaims) (string, error) {
@@ -98,7 +99,10 @@ func (m *mockTokenMgr) IntrospectToken(_ context.Context, _ string) (map[string]
 func (m *mockTokenMgr) AccessExpiry() time.Duration { return 15 * time.Minute }
 
 func (m *mockTokenMgr) ValidateRefreshToken(_ context.Context, _ string) (*tokenDomain.RefreshToken, error) {
-	return nil, nil
+	if m.validateRefreshFn != nil {
+		return m.validateRefreshFn()
+	}
+	return &tokenDomain.RefreshToken{Token: "valid-refresh", ClientID: "cid-test", AccountID: "account-001"}, nil
 }
 
 type mockDeviceCodeMgr struct {
@@ -406,7 +410,23 @@ func TestToken_ClientCredentials_GrantNotAllowed(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestToken_RefreshToken_Success(t *testing.T) {
-	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
+	engine := setupOAuth2Router(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+				return &oauth2Domain.OAuth2Client{
+					ID:             "client-uuid-001",
+					AccountID:      "account-001",
+					ClientID:       "cid-test",
+					Name:           "Test App",
+					GrantTypes:     []string{"refresh_token"},
+					Scopes:         []string{"openid"},
+					IsConfidential: false,
+				}, nil
+			},
+		},
+		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
+	)
 
 	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
@@ -426,7 +446,7 @@ func TestToken_RefreshToken_Invalid(t *testing.T) {
 	engine := setupOAuth2Router(
 		&mockOAuth2ClientSvcForOAuth2{},
 		&mockTokenMgr{
-			rotateRefreshFn: func() (*tokenDomain.RefreshToken, error) {
+			validateRefreshFn: func() (*tokenDomain.RefreshToken, error) {
 				return nil, fmt.Errorf("token expired")
 			},
 		},
@@ -524,7 +544,11 @@ func TestIntrospect_BasicAuth_Success(t *testing.T) {
 		&mockOAuth2ClientSvcForOAuth2{
 			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
 		},
-		&mockTokenMgr{},
+		&mockTokenMgr{
+			introspectFn: func() (map[string]any, error) {
+				return map[string]any{"active": true, "client_id": "cid-test"}, nil
+			},
+		},
 		&mockDeviceCodeMgr{},
 	)
 

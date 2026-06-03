@@ -41,9 +41,10 @@ type DBEnvConfig struct {
 }
 
 type RedisEnvConfig struct {
-	Port         int `mapstructure:"port"`
-	ExternalPort int `mapstructure:"external_port"`
-	Database     int `mapstructure:"database"`
+	Port         int    `mapstructure:"port"`
+	ExternalPort int    `mapstructure:"external_port"`
+	Database     int    `mapstructure:"database"`
+	Password     string `mapstructure:"password"`
 }
 
 type SMTPEnvConfig struct {

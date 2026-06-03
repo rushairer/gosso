@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -301,6 +302,8 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 
 // Logout deletes session and revokes tokens
 func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, accessTokenJTI string, tokenExpiresAt time.Time) error {
+	var errs []error
+
 	// 1. Revoke session (removes from both session store and account index)
 	parsedSessionID, err := uuid.Parse(sessionID)
 	if err != nil {
@@ -318,10 +321,11 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 		}
 	}
 
-	// 3. Blacklist the access token so it cannot be used after logout
+	// 3. Blacklist the access token so it cannot be used after logout (fail-closed)
 	if accessTokenJTI != "" {
 		if err := s.tokenSvc.RevokeAccessToken(ctx, accessTokenJTI, tokenExpiresAt); err != nil {
-			s.logger.Warn("Failed to blacklist access token", zap.Error(err))
+			s.logger.Error("Failed to blacklist access token", zap.Error(err))
+			errs = append(errs, fmt.Errorf("blacklist access token: %w", err))
 		}
 	}
 
@@ -342,6 +346,10 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 		utility.MustMarshalJSON(map[string]any{"session_id": sessionID}),
 		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
 
 	s.logger.Info("Logout successful", zap.String("session_id", sessionID))
 	return nil
