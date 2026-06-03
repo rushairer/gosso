@@ -31,6 +31,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: OAuth2 token endpoint rate limiter now fails closed — prevents brute-force on authorization codes when Redis is unavailable (`router/web.go`).
 - Password reset cooldown can no longer be bypassed by varying email case — email is normalized at the entry point (`internal/auth/service/password_reset_service.go`).
 - `EnforceSessionLimit` now logs a warning when session listing fails — previously failed silently (`internal/session/service/session_service.go`).
+- **Security**: Refresh token rotation now passes real token data to Lua script — eliminates TOCTOU window where a crash between Lua script and Go-side overwrite could store invalid JSON, locking out the user (`internal/token/service/token_service.go`).
+- **Security**: `RefreshTokens` now validates session and account before rotating refresh token — prevents orphaned tokens in Redis when session is revoked or account is deactivated (`internal/auth/service/auth_session.go`).
+- **Security**: Social login `createNewUser` now handles unique constraint violations from concurrent registrations — falls back to linking federated identity when a race condition causes duplicate email insert (`internal/auth/service/social_login_service.go`).
+- **Security**: WeChat provider now validates that `openid` is present and non-empty — prevents storing empty federated identity when WeChat response is malformed (`internal/auth/service/social_login_service.go`).
+- Passkey MFA `GetDel` now distinguishes Redis errors from key-not-found — Redis failures are logged and returned as infrastructure errors instead of misleading "passkey not verified" (`internal/auth/service/auth_login.go`).
+- `PasswordResetService` goroutine concurrency is now bounded by a semaphore (max 10) — prevents goroutine explosion during mass password resets (`internal/auth/service/password_reset_service.go`).
+- `DenyDeviceCode` unmarshal error is now logged instead of silently dropped — aids debugging corrupted Redis data (`internal/oauth2/service/device_code_service.go`).
+- `Config.Validate()` now checks `IDTokenExpiry > 0` — prevents ID tokens from being issued without expiry when misconfigured (`config/config.go`).
+- Admin `ListAccounts` now validates the `status` query parameter against allowed values — rejects invalid status values with 400 instead of passing raw input to the service layer (`internal/admin/controller/admin_controller.go`).
+- `TestChangePassword` now uses a real bcrypt hash and proper assertions — previously used a placeholder hash that would fail at runtime (`internal/account/service/account_service_test.go`).
+- Removed debug `log.Println(err)` from `TestRegisterAccount` (`internal/account/service/account_service_test.go`).
 
 ### Changed
 

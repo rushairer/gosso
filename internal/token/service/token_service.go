@@ -199,7 +199,7 @@ return data
 `)
 
 // rotateTokenScript atomically rotates a refresh token: validates and deletes the old token,
-// stores the new token, and updates the session index — all in a single Redis transaction.
+// stores the new token with real data, and updates the session index — all in a single Lua script.
 // KEYS[1] = old token key, KEYS[2] = new token key, KEYS[3] = session index key (or "" if no session)
 // ARGV[1] = new token JSON, ARGV[2] = expiry seconds, ARGV[3] = old token hash, ARGV[4] = new token hash
 // Returns old token data on success, nil if old token not found.
@@ -219,38 +219,17 @@ return oldData
 `)
 
 // RotateRefreshToken rotates refresh tokens atomically.
-// The old token is validated, deleted, and replaced with a new token in a single Lua script,
-// preventing lockout if post-rotation operations fail.
+// The old token is read (read-only), validated, and replaced with a new token in a single Lua script.
+// The new token data is passed directly to the Lua script, eliminating any placeholder/overwrite window.
 func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) (*domain.RefreshToken, error) {
-	// Generate new token bytes first (before any Redis call)
-	newBytes := make([]byte, RefreshTokenLength)
-	if _, err := rand.Read(newBytes); err != nil {
-		return nil, fmt.Errorf("generate new token: %w", err)
-	}
-	newTokenString := hex.EncodeToString(newBytes)
-	newHash := domain.HashToken(newTokenString)
-	oldHash := domain.HashToken(oldToken)
-
+	// 1. Read old token data (read-only) to derive new token fields
 	oldKey := s.buildRefreshTokenKey(oldToken)
-	newKey := s.buildRefreshTokenKey(newTokenString)
-	expirySeconds := int(s.refreshExpiry.Seconds())
-
-	// Call Lua script — use empty string as session key placeholder.
-	// Session index will be updated after we know the session ID from old token data.
-	result, err := rotateTokenScript.Run(ctx, s.redis.GetClient(),
-		[]string{oldKey, newKey, ""},
-		[]byte("{}"), expirySeconds, oldHash, newHash,
-	).Result()
-	if err == redis.Nil || result == nil {
+	oldDataStr, err := s.redis.Get(ctx, oldKey)
+	if err == cache.ErrKeyNotFound {
 		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("rotate refresh token: %w", err)
-	}
-
-	oldDataStr, ok := result.(string)
-	if !ok {
-		return nil, fmt.Errorf("unexpected token data type")
+		return nil, fmt.Errorf("get refresh token: %w", err)
 	}
 
 	var oldRT domain.RefreshToken
@@ -258,7 +237,13 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 		return nil, fmt.Errorf("unmarshal old refresh token: %w", err)
 	}
 
-	// Build and store the real new token data
+	// 2. Generate new token and build complete data
+	newBytes := make([]byte, RefreshTokenLength)
+	if _, err := rand.Read(newBytes); err != nil {
+		return nil, fmt.Errorf("generate new token: %w", err)
+	}
+	newTokenString := hex.EncodeToString(newBytes)
+
 	newRT := &domain.RefreshToken{
 		Token:     newTokenString,
 		AccountID: oldRT.AccountID,
@@ -274,19 +259,26 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 		return nil, fmt.Errorf("marshal new refresh token: %w", err)
 	}
 
-	// Overwrite placeholder with real data and update session index
-	if err := s.redis.Set(ctx, newKey, newData, s.refreshExpiry); err != nil {
-		s.logger.Error("Failed to store new refresh token data", zap.Error(err))
-		return nil, fmt.Errorf("store refresh token: %w", err)
+	// 3. Atomically rotate: delete old, store new (with real data), update session index
+	newHash := domain.HashToken(newTokenString)
+	oldHash := domain.HashToken(oldToken)
+	newKey := s.buildRefreshTokenKey(newTokenString)
+	expirySeconds := int(s.refreshExpiry.Seconds())
+
+	sessionKey := ""
+	if newRT.SessionID != "" {
+		sessionKey = s.buildSessionTokensKey(newRT.SessionID)
 	}
 
-	if newRT.SessionID != "" {
-		sessionKey := s.buildSessionTokensKey(newRT.SessionID)
-		_ = s.redis.SRem(ctx, sessionKey, oldHash)
-		if err := s.redis.SAdd(ctx, sessionKey, newHash); err != nil {
-			s.logger.Warn("Failed to add new token to session index", zap.Error(err))
-		}
-		_ = s.redis.Expire(ctx, sessionKey, s.refreshExpiry)
+	result, err := rotateTokenScript.Run(ctx, s.redis.GetClient(),
+		[]string{oldKey, newKey, sessionKey},
+		newData, expirySeconds, oldHash, newHash,
+	).Result()
+	if err == redis.Nil || result == nil {
+		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("rotate refresh token: %w", err)
 	}
 
 	return newRT, nil

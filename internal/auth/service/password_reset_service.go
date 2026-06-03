@@ -74,6 +74,7 @@ type PasswordResetService struct {
 	baseURL        string
 	logger         *zap.Logger
 	wg             sync.WaitGroup
+	revokeSem      chan struct{} // limits concurrent session-revoke goroutines
 }
 
 // NewPasswordResetService creates a new password reset service instance
@@ -99,6 +100,7 @@ func NewPasswordResetService(
 		db:             db,
 		baseURL:        baseURL,
 		logger:         logger,
+		revokeSem:      make(chan struct{}, 10),
 	}
 }
 
@@ -228,16 +230,23 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	_ = s.redis.Del(ctx, tokenKey)
 
 	// Asynchronously revoke all old sessions
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		bgCtx, cancel := context.WithTimeout(context.Background(), PasswordResetRevokeTimeout)
-		defer cancel()
-		if err := s.sessionSvc.RevokeAllForAccount(bgCtx, data.AccountID); err != nil {
-			s.logger.Error("Failed to revoke sessions after password reset",
-				zap.String("account_id", data.AccountID), zap.Error(err))
-		}
-	}()
+	select {
+	case s.revokeSem <- struct{}{}:
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			defer func() { <-s.revokeSem }()
+			bgCtx, cancel := context.WithTimeout(context.Background(), PasswordResetRevokeTimeout)
+			defer cancel()
+			if err := s.sessionSvc.RevokeAllForAccount(bgCtx, data.AccountID); err != nil {
+				s.logger.Error("Failed to revoke sessions after password reset",
+					zap.String("account_id", data.AccountID), zap.Error(err))
+			}
+		}()
+	default:
+		s.logger.Warn("Revoke goroutine limit reached, skipping async session revocation",
+			zap.String("account_id", data.AccountID))
+	}
 
 	s.logger.Info("Password reset successfully", zap.String("account_id", data.AccountID))
 	return nil

@@ -55,6 +55,15 @@ func (c *AdminController) ListAccounts(ctx *gin.Context) {
 		pageSize = 100
 	}
 	status := ctx.Query("status")
+	if status != "" {
+		switch status {
+		case "active", "suspended", "deleted":
+			// valid
+		default:
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid status value, must be active, suspended, or deleted"))
+			return
+		}
+	}
 
 	accounts, total, err := c.accountSvc.ListAccounts(ctx, page, pageSize, status)
 	if err != nil {

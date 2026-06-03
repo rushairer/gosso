@@ -233,7 +233,12 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	// 2. Verify passkey MFA flag (set by CompleteMFALogin in the passkey controller)
 	passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", accountID)
 	verified, verr := s.redis.GetDel(ctx, passkeyKey)
-	if verr != nil || verified != "1" {
+	if verr != nil {
+		s.logger.Error("Redis GetDel failed for passkey MFA verification",
+			zap.Error(verr), zap.String("account_id", accountID))
+		return nil, fmt.Errorf("verify passkey mfa: %w", verr)
+	}
+	if verified != "1" {
 		return nil, ErrPasskeyNotVerified
 	}
 
@@ -437,7 +442,12 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 		}
 		passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", accountID)
 		verified, verr := s.redis.GetDel(ctx, passkeyKey)
-		if verr != nil || verified != "1" {
+		if verr != nil {
+			s.logger.Error("Redis GetDel failed for passkey MFA verification",
+				zap.Error(verr), zap.String("account_id", accountID))
+			return fmt.Errorf("verify passkey mfa: %w", verr)
+		}
+		if verified != "1" {
 			return ErrPasskeyNotVerified
 		}
 	default:

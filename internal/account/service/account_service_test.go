@@ -3,13 +3,13 @@ package service
 import (
 	"context"
 	"database/sql"
-	"log"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/account/repository"
@@ -67,7 +67,6 @@ func TestRegisterAccount(t *testing.T) {
 
 	account, err := accountService.RegisterAccount(context.Background(), req)
 
-	log.Println(err)
 	// Verify results
 	assert.NoError(t, err)
 	assert.NotNil(t, account)
@@ -151,11 +150,17 @@ func TestChangePassword(t *testing.T) {
 	oldPassword := "OldPassword123!"
 	newPassword := "NewPassword456!"
 
-	// Mock finding password credential
-	// Note: actual bcrypt hash needs to be generated in advance
-	passwordHash := "$2a$10$YourBcryptHashHere"
-	rows := sqlmock.NewRows([]string{"id", "account_id", "credential_type", "credential_value", "created_at"}).
-		AddRow("cred-id", accountID, domain.CredentialTypePassword, passwordHash, time.Now())
+	// Generate a real bcrypt hash for the old password
+	oldHash, err := bcrypt.GenerateFromPassword([]byte(oldPassword), bcrypt.DefaultCost)
+	require.NoError(t, err)
+
+	rows := sqlmock.NewRows([]string{
+		"id", "account_id", "credential_type", "identifier", "credential_value",
+		"verified", "primary_credential", "metadata", "created_at", "verified_at", "last_used_at", "deleted_at",
+	}).AddRow(
+		"cred-id", accountID, domain.CredentialTypePassword, "test@example.com", string(oldHash),
+		true, true, []byte("{}"), time.Now(), nil, nil, nil,
+	)
 
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
 		WithArgs(accountID, domain.CredentialTypePassword).
@@ -166,12 +171,9 @@ func TestChangePassword(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
-	// Note: due to bcrypt verification, this test requires a real password hash
-	// Here it only serves as an example showing the test structure
 	err = accountService.ChangePassword(context.Background(), accountID, oldPassword, newPassword)
-
-	// Verify according to actual situation (this will fail due to password hash mismatch)
-	// A real password hash pair should be used in actual testing
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // TestSoftDeleteAccount tests soft deleting account

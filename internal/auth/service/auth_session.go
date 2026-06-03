@@ -13,14 +13,14 @@ import (
 
 // RefreshTokens refreshes access and refresh tokens
 func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*RefreshResult, error) {
-	// 1. Verify and rotate Refresh Token
-	newRefreshToken, err := s.tokenSvc.RotateRefreshToken(ctx, refreshToken)
+	// 1. Validate old refresh token (read-only, no rotation)
+	oldRT, err := s.tokenSvc.ValidateRefreshToken(ctx, refreshToken)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidRefreshToken, err)
 	}
 
-	// 2. Verify if the session is still active
-	sessionID, err := uuid.Parse(newRefreshToken.SessionID)
+	// 2. Validate session BEFORE rotation (prevents orphaned token on failure)
+	sessionID, err := uuid.Parse(oldRT.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidSessionID, err)
 	}
@@ -29,13 +29,19 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		return nil, fmt.Errorf("%w: %w", ErrSessionInvalid, err)
 	}
 
-	// 2.5. Verify account is still active
-	account, err := s.accountSvc.FindAccountByID(ctx, newRefreshToken.AccountID)
+	// 3. Validate account BEFORE rotation
+	account, err := s.accountSvc.FindAccountByID(ctx, oldRT.AccountID)
 	if err != nil || account == nil || account.Status != accountDomain.AccountStatusActive {
 		return nil, ErrAccountNotActive
 	}
 
-	// 3. Build claims and generate new access token
+	// 4. Rotate refresh token (session + account already validated)
+	newRefreshToken, err := s.tokenSvc.RotateRefreshToken(ctx, refreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidRefreshToken, err)
+	}
+
+	// 5. Build claims and generate new access token
 	claims, err := s.buildTokenClaims(ctx, newRefreshToken.AccountID, session.ID.String())
 	if err != nil {
 		return nil, fmt.Errorf("build token claims: %w", err)
@@ -46,7 +52,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		return nil, fmt.Errorf("generate access token: %w", err)
 	}
 
-	// 4. Refresh session
+	// 6. Refresh session
 	if err := s.sessionSvc.RefreshSession(ctx, sessionID); err != nil {
 		s.logger.Warn("Failed to refresh session", zap.Error(err), zap.String("session_id", sessionID.String()))
 	}

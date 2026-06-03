@@ -216,7 +216,11 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 		email, _ = userInfo["email"].(string)
 		name, _ = userInfo["name"].(string)
 	case "wechat":
-		providerUserID, _ = userInfo["openid"].(string)
+		openid, ok := userInfo["openid"].(string)
+		if !ok || openid == "" {
+			return "", "", "", fmt.Errorf("wechat: missing or empty openid")
+		}
+		providerUserID = openid
 		nickname, _ := userInfo["nickname"].(string)
 		name = nickname
 	default:
@@ -304,6 +308,22 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 		return nil
 	})
 	if err != nil {
+		// Handle race condition: concurrent social logins with the same email.
+		// The pre-check above passed, but another request created the account between the check and the transaction.
+		// The DB unique constraint on (credential_type, identifier) caught it — fall back to linking.
+		if email != "" && isUniqueViolation(err) {
+			existingCred, findErr := s.credentialRepo.FindByTypeAndIdentifier(ctx, accountDomain.CredentialTypeEmail, email)
+			if findErr == nil && existingCred != nil {
+				identity := accountDomain.NewFederatedIdentity(existingCred.AccountID, accountDomain.Provider(provider), providerUserID, nil)
+				linkErr := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+					return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
+				})
+				if linkErr != nil {
+					return nil, fmt.Errorf("link federated identity after race: %w", linkErr)
+				}
+				return s.loginExistingUser(ctx, existingCred.AccountID, ip, userAgent)
+			}
+		}
 		return nil, err
 	}
 
@@ -326,4 +346,15 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken.Token,
 	}, nil
+}
+
+// isUniqueViolation checks if an error is a PostgreSQL unique constraint violation.
+// This handles race conditions where concurrent requests pass an existence check
+// but the DB constraint catches the duplicate.
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "duplicate key") || strings.Contains(msg, "unique_violation")
 }

@@ -190,6 +190,9 @@ func (c *GoUnoConfig) Validate() error {
 	if c.AuthConfig.RefreshTokenExpiry <= 0 {
 		return fmt.Errorf("auth: refresh_token_expiry must be positive")
 	}
+	if c.AuthConfig.IDTokenExpiry <= 0 {
+		return fmt.Errorf("auth: id_token_expiry must be positive")
+	}
 	if c.AuthConfig.SessionTTL <= 0 {
 		return fmt.Errorf("auth: session_ttl must be positive")
 	}
