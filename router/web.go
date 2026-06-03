@@ -72,8 +72,11 @@ func RegisterWebRouter(
 		api.Use(authMiddleware.AuditMetadataMiddleware())
 		authCtrl.RegisterRoutes(api, loginLimit, mfaLimit, passwordLimit, refreshLimit, verifyLimit, socialLimit)
 
-		// Client management routes (require JWT authentication)
-		clientCtrl.RegisterRoutes(api, jwtAuth)
+		// Client management routes (require JWT authentication + rate limiting)
+		clientLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, true)
+		clientGroup := api.Group("")
+		clientGroup.Use(clientLimit)
+		clientCtrl.RegisterRoutes(clientGroup, jwtAuth)
 
 		// Admin routes (require JWT authentication + admin role + rate limiting)
 		admin := api.Group("/admin")

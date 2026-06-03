@@ -10,10 +10,10 @@
 ```
 
 例如：
-- `0001_init_authn.up.sql` - 创建认证相关表
-- `0001_init_authn.down.sql` - 回滚认证相关表
-- `0002_authn_constraints.up.sql` - 添加认证约束
-- `0002_authn_constraints.down.sql` - 移除认证约束
+- `0001_audit.up.sql` - 创建审计表
+- `0001_audit.down.sql` - 回滚审计表
+- `0002_accounts.up.sql` - 创建认证表
+- `0002_accounts.down.sql` - 回滚认证表
 
 ## 使用方法
 
@@ -67,12 +67,12 @@
 ## 创建新的迁移文件
 
 1. 在 `db/migrations/` 目录下创建新的迁移文件
-2. 使用递增的版本号（如 0004）
+2. 使用递增的版本号（如 0009）
 3. 创建 `.up.sql` 和 `.down.sql` 两个文件
 
 例如创建用户表迁移：
 
-**0004_create_users.up.sql**:
+**0009_create_users.up.sql**:
 ```sql
 CREATE TABLE users (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -84,7 +84,7 @@ CREATE TABLE users (
 CREATE INDEX idx_users_email ON users(email);
 ```
 
-**0004_create_users.down.sql**:
+**0009_create_users.down.sql**:
 ```sql
 DROP TABLE IF EXISTS users;
 ```
@@ -119,6 +119,13 @@ DROP TABLE IF EXISTS users;
 
 ## 当前迁移文件
 
-- `0001_init_authn.sql` - 初始化认证系统（accounts, profiles, credentials 表）
-- `0002_authn_constraints.sql` - 添加认证系统约束和唯一索引
-- `0003_audit.sql` - 创建审计系统（audit_event, audit_pending 表）
+| 版本 | 文件名 | 说明 |
+|------|--------|------|
+| 0001 | `0001_audit` | 创建审计系统（audit_record, audit_entry 表） |
+| 0002 | `0002_accounts` | 创建认证系统（accounts, account_credentials, federated_identities, roles, account_roles 表） |
+| 0003 | `0003_oauth2` | 创建 OAuth2 系统（oauth2_clients 表） |
+| 0004 | `0004_audit_dd_column` | 为 audit_record 添加 dd 日期分区列 |
+| 0005 | `0005_webauthn_credentials` | 创建 WebAuthn 凭证表（webauthn_credentials） |
+| 0006 | `0006_fix_constraints` | 修复缺失的外键约束和 updated_at 触发器 |
+| 0007 | `0007_post_logout_redirect_uris` | 为 oauth2_clients 添加 post_logout_redirect_uris 列 |
+| 0008 | `0008_credentials_composite_index` | 为 account_credentials 添加复合索引 (account_id, credential_type) |

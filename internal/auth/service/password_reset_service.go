@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -21,6 +22,7 @@ import (
 	dbutil "github.com/rushairer/gosso/internal/db"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	"github.com/rushairer/gosso/utility"
 )
 
 const (
@@ -31,7 +33,6 @@ const (
 	PasswordResetCooldownTTL    = 60 * time.Second
 	PasswordResetMaxAttempts    = 5
 	PasswordResetRevokeTimeout  = 30 * time.Second
-	MinPasswordLength           = 8
 )
 
 // checkAndIncrementAttemptsScript atomically checks attempt count, increments, and returns the data.
@@ -73,6 +74,7 @@ type PasswordResetService struct {
 	db             *sql.DB
 	baseURL        string
 	logger         *zap.Logger
+	wg             sync.WaitGroup
 }
 
 // NewPasswordResetService creates a new password reset service instance
@@ -170,8 +172,8 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 
 // VerifyAndReset verifies the reset token and sets a new password
 func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPassword string) error {
-	if len(newPassword) < MinPasswordLength {
-		return errors.New("password must be at least 8 characters")
+	if err := utility.ValidatePasswordStrength(newPassword); err != nil {
+		return err
 	}
 
 	// Find token
@@ -225,7 +227,9 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	_ = s.redis.Del(ctx, tokenKey)
 
 	// Asynchronously revoke all old sessions
+	s.wg.Add(1)
 	go func() {
+		defer s.wg.Done()
 		bgCtx, cancel := context.WithTimeout(context.Background(), PasswordResetRevokeTimeout)
 		defer cancel()
 		if err := s.sessionSvc.RevokeAllForAccount(bgCtx, data.AccountID); err != nil {
@@ -244,4 +248,10 @@ func (s *PasswordResetService) buildTokenKey(tokenHash string) string {
 
 func (s *PasswordResetService) buildCooldownKey(email string) string {
 	return fmt.Sprintf("%s%s", PasswordResetCooldownPrefix, strings.ToLower(email))
+}
+
+// Wait blocks until all background goroutines (e.g., session revocation) complete.
+// Call this during graceful shutdown to ensure in-flight operations finish.
+func (s *PasswordResetService) Wait() {
+	s.wg.Wait()
 }

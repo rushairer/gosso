@@ -28,7 +28,7 @@ func TestRegisterAccount(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 
 	// Set mock expectations (in order of execution)
 
@@ -91,7 +91,7 @@ func TestRegisterAccount_DuplicateEmail(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 
 	// Set mock: email already exists (queried outside transaction)
 	// Note: requires all columns to be returned to match Scan of FindByTypeAndIdentifier
@@ -145,7 +145,7 @@ func TestChangePassword(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 
 	accountID := "test-account-id"
 	oldPassword := "OldPassword123!"
@@ -185,7 +185,7 @@ func TestSoftDeleteAccount(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 
 	accountID := "test-account-id"
 

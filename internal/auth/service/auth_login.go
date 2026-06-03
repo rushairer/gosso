@@ -304,8 +304,9 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 	}
 
 	// 3. Check if MFA is required
-	if result, err := s.handleMFARequirement(ctx, account); result != nil || err != nil {
-		return result, err
+	mfaResult, mfaErr := s.handleMFARequirement(ctx, account)
+	if mfaResult != nil || mfaErr != nil {
+		return mfaResult, mfaErr
 	}
 
 	// 4. Create session and tokens

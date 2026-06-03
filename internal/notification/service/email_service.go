@@ -10,6 +10,7 @@ import (
 	"gopkg.in/gomail.v2"
 
 	"github.com/rushairer/gosso/config"
+	"github.com/rushairer/gosso/utility"
 )
 
 var (
@@ -102,34 +103,5 @@ func (s *EmailService) send(to, subject, htmlBody string) error {
 
 // maskEmail masks PII in email addresses (e.g., "user@example.com" -> "u***@e***.com")
 func maskEmail(email string) string {
-	atIdx := -1
-	for i, c := range email {
-		if c == '@' {
-			atIdx = i
-			break
-		}
-	}
-	if atIdx > 0 && atIdx < len(email)-1 {
-		local := email[:atIdx]
-		domain := email[atIdx+1:]
-		maskedLocal := string(local[0]) + "***"
-		dotIdx := -1
-		for i, c := range domain {
-			if c == '.' {
-				dotIdx = i
-				break
-			}
-		}
-		var maskedDomain string
-		if dotIdx > 0 {
-			maskedDomain = string(domain[0]) + "***" + domain[dotIdx:]
-		} else {
-			maskedDomain = string(domain[0]) + "***"
-		}
-		return maskedLocal + "@" + maskedDomain
-	}
-	if len(email) > 1 {
-		return string(email[0]) + "***"
-	}
-	return "***"
+	return utility.MaskEmail(email)
 }

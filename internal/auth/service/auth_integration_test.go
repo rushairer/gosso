@@ -45,7 +45,7 @@ func initAuthService(t *testing.T, e *testutil.TestEnv) *service.AuthService {
 	t.Helper()
 	ctx := context.Background()
 	auditor := auditService.NewAuditor(ctx, e.DB)
-	accountMod := accountModule.InitializeAccountModule(e.DB, auditor)
+	accountMod := accountModule.InitializeAccountModule(e.DB, auditor, e.Logger)
 	keySvc, err := tokenService.NewKeyService("", "test-key", e.Logger)
 	require.NoError(t, err)
 	blacklistSvc := tokenService.NewBlacklistService(e.Redis, e.Logger)

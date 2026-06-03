@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Security**: `checkCredentialExists` now propagates database errors instead of silently swallowing them — prevents duplicate credential registration during database outages (`internal/account/service/account_service.go`).
+- **Security**: Password reset flow now enforces the same complexity requirements (uppercase, lowercase, digit) as registration — extracted shared `ValidatePasswordStrength` utility (`utility/password.go`, `internal/auth/service/password_reset_service.go`, `internal/account/service/account_service.go`).
+- **Security**: OAuth2 client management routes (`/api/oauth2/clients`) now have rate limiting — prevents unlimited client registration by authenticated users (`router/web.go`).
+- **Security**: WebAuthn repository `FindByCredentialID` now distinguishes `sql.ErrNoRows` with a typed sentinel error; `SoftDeleteCredential` checks `RowsAffected` and returns `ErrWebAuthnCredentialNotFound` when no rows are affected (`internal/auth/repository/webauthn_repository.go`).
+- Template execution errors in OAuth2 consent and device authorization pages now render into a buffer before writing to the response — prevents corrupted HTTP responses when template rendering fails (`internal/oauth2/controller/oauth2_controller.go`).
+- `deleteUnverifiedTOTP` now wraps all deletions in a single transaction instead of opening separate transactions per credential (`internal/auth/service/mfa_service.go`).
+- Fix shadow variable in `LoginByPasskey` — `handleMFARequirement` result no longer shadows named return values (`internal/auth/service/auth_login.go`).
+- `PasswordResetService` background goroutine for session revocation now uses `sync.WaitGroup` for graceful shutdown — `Wait()` method blocks until in-flight operations complete (`internal/auth/service/password_reset_service.go`, `cmd/gouno/web.go`).
+- Setter injection safety: `SoftDeleteAccount` now logs warnings when `SessionRevoker` or `OAuth2ClientDeleter` is nil, and uses structured `zap` logging instead of `os.Stderr` (`internal/account/service/account_service.go`).
+- Extract shared `MaskIdentifier`/`MaskEmail`/`MaskPhone` utilities — eliminates duplicate masking logic between `verification_service.go` and `email_service.go` (`utility/mask.go`, `internal/auth/service/verification_service.go`, `internal/notification/service/email_service.go`).
+- Update `db/migrations/README.md` to reflect all 8 actual migration files instead of the outdated 3-file listing.
+
 - **Security**: JWT middleware now validates session existence on every authenticated request — access tokens are immediately invalidated when sessions are revoked (e.g. account deletion/suspension) (`internal/auth/middleware/auth_middleware.go`, `router/web.go`, `cmd/gouno/web.go`).
 - **Security**: MFA token validation now uses request context instead of `context.Background()` — respects request cancellation (`internal/auth/service/auth_login.go`).
 - **Security**: `TOTPEncryptionKey` validated for exactly 32 bytes when configured — prevents AES-256-GCM runtime panic (`config/config.go`).

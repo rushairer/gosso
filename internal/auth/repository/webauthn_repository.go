@@ -4,10 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/rushairer/gosso/internal/auth/domain"
+)
+
+// Sentinel errors for repository operations
+var (
+	ErrWebAuthnCredentialNotFound = errors.New("webauthn credential not found")
 )
 
 // WebAuthnCredentialRepository defines the webauthn credential repository interface
@@ -88,7 +94,10 @@ func (r *webAuthnCredentialRepositoryImpl) FindByCredentialID(ctx context.Contex
 		&deletedAt,
 	)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("%w: %s", ErrWebAuthnCredentialNotFound, credentialID)
+		}
+		return nil, fmt.Errorf("find webauthn credential: %w", err)
 	}
 
 	cred.LastUsedAt = lastUsedAt
@@ -184,8 +193,18 @@ func (r *webAuthnCredentialRepositoryImpl) UpdateCredential(ctx context.Context,
 
 func (r *webAuthnCredentialRepositoryImpl) SoftDeleteCredential(ctx context.Context, tx *sql.Tx, id string, deletedAt time.Time) error {
 	query := `UPDATE webauthn_credentials SET deleted_at = $2 WHERE id = $1 AND deleted_at IS NULL`
-	_, err := tx.ExecContext(ctx, query, id, deletedAt)
-	return err
+	result, err := tx.ExecContext(ctx, query, id, deletedAt)
+	if err != nil {
+		return fmt.Errorf("soft delete webauthn credential: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("%w: %s", ErrWebAuthnCredentialNotFound, id)
+	}
+	return nil
 }
 
 func (r *webAuthnCredentialRepositoryImpl) SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {

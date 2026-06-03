@@ -136,6 +136,9 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		logger.Error("server forced to shutdown", zap.Error(err))
 	}
 
+	// Wait for background goroutines (e.g., session revocation after password reset) to complete
+	modules.passwordResetSvc.Wait()
+
 	logger.Sugar().Info("server exiting")
 }
 
@@ -211,19 +214,20 @@ func listenAuditErrors(ctx context.Context, auditor *auditService.Auditor, logge
 
 // appModules aggregates all initialized modules and controllers
 type appModules struct {
-	authCtrl    *authController.AuthController
-	oauth2Ctrl  *oauth2Controller.OAuth2Controller
-	clientCtrl  *oauth2Controller.ClientController
-	oidcCtrl    *oidcController.OIDCController
-	adminCtrl   *adminController.AdminController
-	passkeyCtrl *authController.PasskeyController
-	tokenSvc    *tokenService.TokenService
-	sessionSvc  *sessionService.SessionService
+	authCtrl          *authController.AuthController
+	oauth2Ctrl        *oauth2Controller.OAuth2Controller
+	clientCtrl        *oauth2Controller.ClientController
+	oidcCtrl          *oidcController.OIDCController
+	adminCtrl         *adminController.AdminController
+	passkeyCtrl       *authController.PasskeyController
+	tokenSvc          *tokenService.TokenService
+	sessionSvc        *sessionService.SessionService
+	passwordResetSvc  *authService.PasswordResetService
 }
 
 // initModules initializes all business modules and controllers
 func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logger *zap.Logger, cfg config.GoUnoConfig, auditor *auditService.Auditor) (*appModules, error) {
-	accountMod := account.InitializeAccountModule(db, auditor)
+	accountMod := account.InitializeAccountModule(db, auditor, logger)
 
 	keySvc, err := tokenService.NewKeyService(
 		cfg.AuthConfig.PrivateKeyPath,
@@ -282,14 +286,15 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	}
 
 	return &appModules{
-		authCtrl:    authCtrl,
-		oauth2Ctrl:  oauth2Ctrl,
-		clientCtrl:  clientCtrl,
-		oidcCtrl:    oidcCtrl,
-		adminCtrl:   adminCtrl,
-		passkeyCtrl: passkeyCtrl,
-		tokenSvc:    tokenSvc,
-		sessionSvc:  authMod.SessionService,
+		authCtrl:         authCtrl,
+		oauth2Ctrl:       oauth2Ctrl,
+		clientCtrl:       clientCtrl,
+		oidcCtrl:         oidcCtrl,
+		adminCtrl:        adminCtrl,
+		passkeyCtrl:      passkeyCtrl,
+		tokenSvc:         tokenSvc,
+		sessionSvc:       authMod.SessionService,
+		passwordResetSvc: authMod.PasswordResetService,
 	}, nil
 }
 

@@ -357,18 +357,17 @@ func (s *MFAService) deleteUnverifiedTOTP(ctx context.Context, accountID string)
 		s.logger.Warn("Failed to find TOTP credentials for cleanup", zap.Error(err), zap.String("account_id", accountID))
 		return err
 	}
-	for _, c := range creds {
-		if !c.Verified && !c.IsDeleted() {
-			err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-				return s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now())
-			})
-			if err != nil {
-				s.logger.Error("Failed to soft-delete unverified TOTP", zap.String("cred_id", c.ID), zap.Error(err))
-				return fmt.Errorf("soft delete credential: %w", err)
+	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		for _, c := range creds {
+			if !c.Verified && !c.IsDeleted() {
+				if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
+					s.logger.Error("Failed to soft-delete unverified TOTP", zap.String("cred_id", c.ID), zap.Error(err))
+					return fmt.Errorf("soft delete credential: %w", err)
+				}
 			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func generateRandomCode(length int) (string, error) {

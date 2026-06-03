@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"fmt"
@@ -175,8 +176,8 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		allowedScopes := intersectScopes(clientAllowedScopes, existingConsent.Scopes)
 		if len(allowedScopes) == 0 {
 			// No overlap — require re-consent
-			ctx.Header("Content-Type", "text/html; charset=utf-8")
-			if err := c.consentTmpl.Execute(ctx.Writer, gin.H{
+			var buf bytes.Buffer
+			if err := c.consentTmpl.Execute(&buf, gin.H{
 				"ClientName": client.Name, "ClientID": clientID,
 				"Scopes": requestedScopes, "Scope": scope, "State": state,
 				"RedirectURI": redirectURI, "CodeChallenge": codeChallenge,
@@ -184,7 +185,9 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 			}); err != nil {
 				c.logger.Error("Failed to render consent template", zap.Error(err))
 				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+				return
 			}
+			ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
 			return
 		}
 		code, err := c.authCodeSvc.GenerateCode(ctx, clientID, accountIDStr, redirectURI, allowedScopes, codeChallenge, codeChallengeMethod, nonce)
@@ -196,9 +199,8 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
-	ctx.Header("Content-Type", "text/html; charset=utf-8")
-
-	if err := c.consentTmpl.Execute(ctx.Writer, gin.H{
+	var buf bytes.Buffer
+	if err := c.consentTmpl.Execute(&buf, gin.H{
 		"ClientName":          client.Name,
 		"ClientID":            clientID,
 		"Scopes":              splitScope(scope),
@@ -211,7 +213,9 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 	}); err != nil {
 		c.logger.Error("Failed to render consent template", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
 	}
+	ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
 }
 
 // ConsentRequest is the consent approval request body.
@@ -668,38 +672,44 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 	userCode := ctx.Query("user_code")
 
 	if userCode == "" {
-		ctx.Header("Content-Type", "text/html; charset=utf-8")
-		if err := c.deviceTmpl.Execute(ctx.Writer, gin.H{
+		var buf bytes.Buffer
+		if err := c.deviceTmpl.Execute(&buf, gin.H{
 			"UserCode": "",
 		}); err != nil {
 			c.logger.Error("Failed to render device template", zap.Error(err))
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
 		}
+		ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
 		return
 	}
 
 	dc, err := c.deviceCodeSvc.GetDeviceCodeByUserCode(ctx, userCode)
 	if err != nil {
-		ctx.Header("Content-Type", "text/html; charset=utf-8")
-		if err := c.deviceTmpl.Execute(ctx.Writer, gin.H{
+		var buf bytes.Buffer
+		if err := c.deviceTmpl.Execute(&buf, gin.H{
 			"UserCode": "",
 			"Error":    "Invalid or expired code. Please try again.",
 		}); err != nil {
 			c.logger.Error("Failed to render device template", zap.Error(err))
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
 		}
+		ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
 		return
 	}
 
 	if dc.IsExpired() || dc.Status != oauth2Domain.DeviceCodeStatusPending {
-		ctx.Header("Content-Type", "text/html; charset=utf-8")
-		if err := c.deviceTmpl.Execute(ctx.Writer, gin.H{
+		var buf bytes.Buffer
+		if err := c.deviceTmpl.Execute(&buf, gin.H{
 			"UserCode": "",
 			"Error":    "This code has expired or is no longer valid.",
 		}); err != nil {
 			c.logger.Error("Failed to render device template", zap.Error(err))
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
 		}
+		ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
 		return
 	}
 
@@ -709,8 +719,8 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 		return
 	}
 
-	ctx.Header("Content-Type", "text/html; charset=utf-8")
-	if err := c.deviceTmpl.Execute(ctx.Writer, gin.H{
+	var buf bytes.Buffer
+	if err := c.deviceTmpl.Execute(&buf, gin.H{
 		"UserCode":   dc.UserCode,
 		"DeviceCode": dc.DeviceCode,
 		"ClientName": client.Name,
@@ -718,7 +728,9 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 	}); err != nil {
 		c.logger.Error("Failed to render device template", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
 	}
+	ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
 }
 
 // DeviceUserSubmitRequest is the device authorization form submission.

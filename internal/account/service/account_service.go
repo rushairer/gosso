@@ -6,12 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
-	"os"
 	"regexp"
 	"time"
-	"unicode"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/rushairer/gosso/internal/account/domain"
@@ -102,6 +101,7 @@ type accountServiceImpl struct {
 	auditor               *auditService.Auditor
 	sessionRevoker        SessionRevoker
 	oauth2ClientDeleter   OAuth2ClientDeleter
+	logger                *zap.Logger
 }
 
 // NewAccountService creates the account service.
@@ -112,7 +112,11 @@ func NewAccountService(
 	federatedIdentityRepo repository.FederatedIdentityRepository,
 	roleRepo repository.RoleRepository,
 	auditor *auditService.Auditor,
+	logger *zap.Logger,
 ) AccountService {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &accountServiceImpl{
 		db:                    db,
 		accountRepo:           accountRepo,
@@ -120,6 +124,7 @@ func NewAccountService(
 		federatedIdentityRepo: federatedIdentityRepo,
 		roleRepo:              roleRepo,
 		auditor:               auditor,
+		logger:                logger,
 	}
 }
 
@@ -285,6 +290,8 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 			if err := s.oauth2ClientDeleter.SoftDeleteOAuth2ClientsByAccount(ctx, tx, accountID, now); err != nil {
 				return err
 			}
+		} else {
+			s.logger.Warn("OAuth2ClientDeleter not set, skipping OAuth2 client cascade on account deletion", zap.String("account_id", accountID))
 		}
 		return s.accountRepo.SoftDeleteAccount(ctx, tx, accountID, now)
 	})
@@ -298,8 +305,10 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	// blacklisting of access token JTIs is not required here.
 	if s.sessionRevoker != nil {
 		if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
-			fmt.Fprintf(os.Stderr, "Failed to revoke sessions after account deletion for %s: %v\n", accountID, revokeErr)
+			s.logger.Error("Failed to revoke sessions after account deletion", zap.String("account_id", accountID), zap.Error(revokeErr))
 		}
+	} else {
+		s.logger.Warn("SessionRevoker not set, skipping session revocation on account deletion", zap.String("account_id", accountID))
 	}
 
 	// 4. Audit log
@@ -516,31 +525,13 @@ func (s *accountServiceImpl) GetAccountRoles(ctx context.Context, accountID stri
 // validateRegistration validates the registration request.
 var phoneRegex = regexp.MustCompile(`^\+?[1-9]\d{6,14}$`)
 
-const minPasswordLength = 8
-
 func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) error {
 	if req.Password == "" {
 		return errors.New("password is required")
 	}
 
-	if len(req.Password) < minPasswordLength {
-		return errors.New("password must be at least 8 characters")
-	}
-
-	// Password strength check: must contain at least one uppercase, lowercase, and digit
-	var hasUpper, hasLower, hasDigit bool
-	for _, c := range req.Password {
-		switch {
-		case unicode.IsUpper(c):
-			hasUpper = true
-		case unicode.IsLower(c):
-			hasLower = true
-		case unicode.IsDigit(c):
-			hasDigit = true
-		}
-	}
-	if !hasUpper || !hasLower || !hasDigit {
-		return errors.New("password must contain uppercase, lowercase, and digit")
+	if err := utility.ValidatePasswordStrength(req.Password); err != nil {
+		return err
 	}
 
 	if req.Email == "" && req.Phone == "" {
@@ -571,7 +562,13 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 // checkCredentialExists checks whether a credential with the given type and identifier already exists.
 func (s *accountServiceImpl) checkCredentialExists(ctx context.Context, credType domain.CredentialType, identifier string) error {
 	cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, credType, identifier)
-	if err == nil && cred != nil {
+	if err != nil {
+		if errors.Is(err, repository.ErrCredentialNotFound) {
+			return nil
+		}
+		return fmt.Errorf("check credential existence: %w", err)
+	}
+	if cred != nil {
 		switch credType {
 		case domain.CredentialTypeEmail:
 			return errors.New("email already registered")

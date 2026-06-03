@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/utility"
 )
 
 const (
@@ -210,44 +211,5 @@ func generateNumericCode(length int) (string, error) {
 
 // maskIdentifier masks PII for logging (e.g., "user@example.com" -> "u***@e***.com")
 func maskIdentifier(credType, identifier string) string {
-	switch credType {
-	case "email":
-		atIdx := -1
-		for i, c := range identifier {
-			if c == '@' {
-				atIdx = i
-				break
-			}
-		}
-		if atIdx > 0 && atIdx < len(identifier)-1 {
-			local := identifier[:atIdx]
-			domain := identifier[atIdx+1:]
-			maskedLocal := string(local[0]) + "***"
-			dotIdx := -1
-			for i, c := range domain {
-				if c == '.' {
-					dotIdx = i
-					break
-				}
-			}
-			var maskedDomain string
-			if dotIdx > 0 {
-				maskedDomain = string(domain[0]) + "***" + domain[dotIdx:]
-			} else {
-				maskedDomain = string(domain[0]) + "***"
-			}
-			return maskedLocal + "@" + maskedDomain
-		}
-		if len(identifier) > 1 {
-			return string(identifier[0]) + "***"
-		}
-		return "***"
-	case "phone":
-		if len(identifier) > 4 {
-			return identifier[:3] + "***" + identifier[len(identifier)-2:]
-		}
-		return "***"
-	default:
-		return "***"
-	}
+	return utility.MaskIdentifier(credType, identifier)
 }

@@ -3,6 +3,8 @@ package account
 import (
 	"database/sql"
 
+	"go.uber.org/zap"
+
 	"github.com/rushairer/gosso/internal/account/repository"
 	"github.com/rushairer/gosso/internal/account/service"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
@@ -18,7 +20,7 @@ type AccountModule struct {
 }
 
 // InitializeAccountModule initializes the account module (dependency injection)
-func InitializeAccountModule(db *sql.DB, auditor *auditService.Auditor) *AccountModule {
+func InitializeAccountModule(db *sql.DB, auditor *auditService.Auditor, logger *zap.Logger) *AccountModule {
 	accountRepo := repository.NewAccountRepository(db)
 	credentialRepo := repository.NewCredentialRepository(db)
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
@@ -31,6 +33,7 @@ func InitializeAccountModule(db *sql.DB, auditor *auditService.Auditor) *Account
 		federatedIdentityRepo,
 		roleRepo,
 		auditor,
+		logger,
 	)
 
 	return &AccountModule{
