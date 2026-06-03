@@ -143,7 +143,10 @@ type LoginBeginRequest struct {
 // LoginBegin POST /api/auth/passkey/login/begin
 func (c *PasskeyController) LoginBegin(ctx *gin.Context) {
 	var req LoginBeginRequest
-	_ = ctx.ShouldBindJSON(&req)
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
 
 	if req.AccountID != "" {
 		options, requestID, err := c.passkeySvc.BeginLogin(ctx, req.AccountID)

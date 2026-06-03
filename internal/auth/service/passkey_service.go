@@ -24,10 +24,10 @@ import (
 )
 
 const (
-	challengeTTL           = 5 * time.Minute
-	redisKeyRegChallenge   = "webauthn:reg:%s"
-	redisKeyLoginChallenge = "webauthn:login:%s"
-	redisKeyMFAChallenge   = "webauthn:mfa:%s"
+	defaultChallengeTTL       = 5 * time.Minute
+	redisKeyRegChallenge      = "webauthn:reg:%s"
+	redisKeyLoginChallenge    = "webauthn:login:%s"
+	redisKeyMFAChallenge      = "webauthn:mfa:%s"
 )
 
 // PasskeyCredentialView passkey list view (does not expose sensitive data)
@@ -44,11 +44,12 @@ const maxPasskeyRequestBodySize = 64 << 10 // 64KB — WebAuthn payloads are CBO
 
 // PasskeyService WebAuthn Passkey service
 type PasskeyService struct {
-	web      *wa.WebAuthn
-	credRepo repository.WebAuthnCredentialRepository
-	redis    *cache.RedisClient
-	db       *sql.DB
-	logger   *zap.Logger
+	web         *wa.WebAuthn
+	credRepo    repository.WebAuthnCredentialRepository
+	redis       *cache.RedisClient
+	db          *sql.DB
+	logger      *zap.Logger
+	challengeTTL time.Duration
 }
 
 // NewPasskeyService creates a new PasskeyService instance
@@ -63,11 +64,19 @@ func NewPasskeyService(
 		logger = zap.NewNop()
 	}
 	return &PasskeyService{
-		web:      web,
-		credRepo: credRepo,
-		redis:    redis,
-		db:       db,
-		logger:   logger,
+		web:          web,
+		credRepo:     credRepo,
+		redis:        redis,
+		db:           db,
+		logger:       logger,
+		challengeTTL: defaultChallengeTTL,
+	}
+}
+
+// SetChallengeTTL overrides the WebAuthn challenge TTL.
+func (s *PasskeyService) SetChallengeTTL(d time.Duration) {
+	if d > 0 {
+		s.challengeTTL = d
 	}
 }
 
@@ -94,7 +103,7 @@ func (s *PasskeyService) BeginRegistration(ctx context.Context, accountID, usern
 	}
 
 	key := fmt.Sprintf(redisKeyRegChallenge, accountID)
-	if err := s.redis.Set(ctx, key, data, challengeTTL); err != nil {
+	if err := s.redis.Set(ctx, key, data, s.challengeTTL); err != nil {
 		return nil, fmt.Errorf("store challenge: %w", err)
 	}
 
@@ -181,7 +190,7 @@ func (s *PasskeyService) BeginLogin(ctx context.Context, accountID string) (*pro
 	}
 
 	key := fmt.Sprintf(redisKeyLoginChallenge, requestID)
-	if err := s.redis.Set(ctx, key, data, challengeTTL); err != nil {
+	if err := s.redis.Set(ctx, key, data, s.challengeTTL); err != nil {
 		return nil, "", fmt.Errorf("store challenge: %w", err)
 	}
 
@@ -202,7 +211,7 @@ func (s *PasskeyService) BeginDiscoverableLogin(ctx context.Context) (*protocol.
 	}
 
 	key := fmt.Sprintf(redisKeyLoginChallenge, requestID)
-	if err := s.redis.Set(ctx, key, data, challengeTTL); err != nil {
+	if err := s.redis.Set(ctx, key, data, s.challengeTTL); err != nil {
 		return nil, "", fmt.Errorf("store challenge: %w", err)
 	}
 
@@ -293,7 +302,7 @@ func (s *PasskeyService) BeginMFALogin(ctx context.Context, accountID string) (*
 	}
 
 	key := fmt.Sprintf(redisKeyMFAChallenge, accountID)
-	if err := s.redis.Set(ctx, key, data, challengeTTL); err != nil {
+	if err := s.redis.Set(ctx, key, data, s.challengeTTL); err != nil {
 		return nil, fmt.Errorf("store challenge: %w", err)
 	}
 

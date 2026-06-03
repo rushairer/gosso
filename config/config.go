@@ -121,6 +121,17 @@ type AuthConfig struct {
 	WebAuthnRPName          string        `mapstructure:"webauthn_rp_name"`
 	WebAuthnRPOrigin        string        `mapstructure:"webauthn_rp_origin"`
 	TOTPEncryptionKey       string        `mapstructure:"totp_encryption_key"`
+
+	// Login rate limiting (0 = use built-in defaults)
+	LoginRateLimitWindow  time.Duration `mapstructure:"login_rate_limit_window"`
+	LoginMaxAttempts      int           `mapstructure:"login_max_attempts"`
+	LoginMaxAttemptsPerIP int           `mapstructure:"login_max_attempts_per_ip"`
+
+	// MFA settings (0 = use built-in defaults)
+	MFAVerificationTTL time.Duration `mapstructure:"mfa_verification_ttl"`
+	ChallengeTTL       time.Duration `mapstructure:"challenge_ttl"`
+	BackupCodeCount    int           `mapstructure:"backup_code_count"`
+	BackupCodeLength   int           `mapstructure:"backup_code_length"`
 }
 
 type CORSConfig struct {

@@ -132,14 +132,11 @@ func (s *SessionService) GetSession(ctx context.Context, sessionID uuid.UUID) (*
 	return &session, nil
 }
 
-// UpdateSession updates session information.
-// NOTE: There is a small TOCTOU window between the existence check (GetSession)
-// and the subsequent Set — the session could expire between the two calls.
-// This is acceptable because the worst case is setting a session that just
-// expired, which simply refreshes it. A fully atomic check-and-set would
-// require a Redis Lua script, which is a larger change deferred for later.
+// UpdateSession updates session information atomically.
+// Uses a Lua script to ensure the session still exists before overwriting,
+// preventing resurrection of sessions that expired between the read and write.
 func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Session) error {
-	// Verify the session exists first
+	// Load current session data for UpdateActivity
 	if _, err := s.GetSession(ctx, session.ID); err != nil {
 		return err
 	}
@@ -153,10 +150,16 @@ func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Sess
 		return fmt.Errorf("marshal session: %w", err)
 	}
 
+	// Atomically set only if the session still exists (prevents TOCTOU resurrection)
 	key := s.buildSessionKey(session.ID)
-	if err := s.redis.Set(ctx, key, data, s.sessionTTL); err != nil {
+	ok, err := s.redis.SetIfExists(ctx, key, data, s.sessionTTL)
+	if err != nil {
 		s.logger.Error("Failed to update session", zap.Error(err), zap.String("session_id", session.ID.String()))
 		return fmt.Errorf("update session: %w", err)
+	}
+	if !ok {
+		s.logger.Warn("Session expired during update, skipping", zap.String("session_id", session.ID.String()))
+		return fmt.Errorf("session %s no longer exists", session.ID)
 	}
 
 	// Refresh the account sessions index TTL to prevent it from expiring before the session

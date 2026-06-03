@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Security**: Login rate limiting now uses atomic check-and-increment Lua script — prevents counter from growing past the limit and eliminates race conditions between concurrent requests (`internal/cache/redis_client.go`, `internal/auth/service/auth_login.go`).
+- **Security**: `LoginByUsernamePassword` now parses account UUID before creating session — prevents session leak in Redis if UUID parse fails (`internal/auth/service/auth_login.go`).
+- **Security**: `UpdateSession` now uses atomic `SetIfExists` Lua script — prevents resurrection of sessions that expired between the read and write (TOCTOU fix) (`internal/cache/redis_client.go`, `internal/session/service/session_service.go`).
+- **Security**: Passkey `LoginBegin` now properly handles JSON binding errors — malformed request bodies return 400 instead of silently falling through to discoverable login (`internal/auth/controller/passkey_controller.go`).
+- **Security**: `SocialLoginService.HandleCallback` now validates `MFAChecker` is set at entry — prevents social login users from bypassing MFA if the checker was not injected (`internal/auth/service/social_login_service.go`).
+- WebAuthn repository `FindByAccountID` and `SoftDeleteByAccountID` now wrap errors consistently with other repositories (`internal/auth/repository/webauthn_repository.go`).
+- `FindAll` SQL parameter numbering now uses a consistent counter — eliminates fragile manual `$N` management between count and select queries (`internal/account/repository/account_repository.go`).
+- `accountServiceImpl.auditLog` now logs warnings on auditor failure — consistent with `AuthService.auditLog` behavior (`internal/account/service/account_service.go`).
+
+### Changed
+
+- Login rate limiting, MFA verification TTL, WebAuthn challenge TTL, and backup code parameters are now configurable via `auth` config section — existing hardcoded values serve as defaults (`config/config.go`, `internal/auth/service/auth_service.go`, `internal/auth/service/mfa_service.go`, `internal/auth/service/passkey_service.go`, `internal/auth/wire.go`).
+- Added unit tests for `utility` package: `ValidatePasswordStrength`, `MustMarshalJSON`, `MaskEmail`, `MaskPhone`, `MaskIdentifier` (`utility/password_test.go`, `utility/jsonutil_test.go`, `utility/mask_test.go`).
+
+### Fixed
+
 - **Security**: `checkCredentialExists` now propagates database errors instead of silently swallowing them — prevents duplicate credential registration during database outages (`internal/account/service/account_service.go`).
 - **Security**: Password reset flow now enforces the same complexity requirements (uppercase, lowercase, digit) as registration — extracted shared `ValidatePasswordStrength` utility (`utility/password.go`, `internal/auth/service/password_reset_service.go`, `internal/account/service/account_service.go`).
 - **Security**: OAuth2 client management routes (`/api/oauth2/clients`) now have rate limiting — prevents unlimited client registration by authenticated users (`router/web.go`).

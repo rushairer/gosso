@@ -24,8 +24,14 @@ import (
 )
 
 const (
-	// mfaVerificationTTL is the TTL for the passkey MFA verification flag in Redis.
-	mfaVerificationTTL = 5 * time.Minute
+	// defaultMFAVerificationTTL is the default TTL for the passkey MFA verification flag in Redis.
+	defaultMFAVerificationTTL = 5 * time.Minute
+	// defaultLoginRateLimitWindow is the default window for login rate limiting.
+	defaultLoginRateLimitWindow = 15 * time.Minute
+	// defaultLoginMaxAttempts is the default max login attempts per username+IP.
+	defaultLoginMaxAttempts = 5
+	// defaultLoginMaxAttemptsPerIP is the default max login attempts per IP.
+	defaultLoginMaxAttemptsPerIP = 30
 )
 
 // LoginRequest login request
@@ -65,6 +71,12 @@ type AuthService struct {
 	passkeySvc     *PasskeyService
 	auditor        *auditService.Auditor
 	logger         *zap.Logger
+
+	// Configurable security parameters (with built-in defaults)
+	loginRateLimitWindow  time.Duration
+	loginMaxAttempts      int
+	loginMaxAttemptsPerIP int
+	mfaVerificationTTL    time.Duration
 }
 
 // NewAuthService creates a new auth service instance
@@ -85,17 +97,21 @@ func NewAuthService(
 		logger = zap.NewNop()
 	}
 	return &AuthService{
-		db:             db,
-		accountSvc:     accountSvc,
-		sessionSvc:     sessionSvc,
-		tokenSvc:       tokenSvc,
-		credentialRepo: credentialRepo,
-		roleRepo:       roleRepo,
-		redis:          redis,
-		mfaSvc:         mfaSvc,
-		auditor:        auditor,
-		logger:         logger,
-		passkeySvc:     passkeySvc,
+		db:                    db,
+		accountSvc:            accountSvc,
+		sessionSvc:            sessionSvc,
+		tokenSvc:              tokenSvc,
+		credentialRepo:        credentialRepo,
+		roleRepo:              roleRepo,
+		redis:                 redis,
+		mfaSvc:                mfaSvc,
+		auditor:               auditor,
+		logger:                logger,
+		passkeySvc:            passkeySvc,
+		loginRateLimitWindow:  defaultLoginRateLimitWindow,
+		loginMaxAttempts:      defaultLoginMaxAttempts,
+		loginMaxAttemptsPerIP: defaultLoginMaxAttemptsPerIP,
+		mfaVerificationTTL:    defaultMFAVerificationTTL,
 	}
 }
 
@@ -129,7 +145,35 @@ func (s *AuthService) ValidateMFAToken(ctx context.Context, mfaToken string) (*t
 // MarkPasskeyMFAVerified marks passkey MFA as verified
 func (s *AuthService) MarkPasskeyMFAVerified(ctx context.Context, accountID string) error {
 	key := fmt.Sprintf("webauthn:mfa_verified:%s", accountID)
-	return s.redis.Set(ctx, key, "1", mfaVerificationTTL)
+	return s.redis.Set(ctx, key, "1", s.mfaVerificationTTL)
+}
+
+// SetLoginRateLimitWindow overrides the login rate limit window (for config-driven setup).
+func (s *AuthService) SetLoginRateLimitWindow(d time.Duration) {
+	if d > 0 {
+		s.loginRateLimitWindow = d
+	}
+}
+
+// SetLoginMaxAttempts overrides the max login attempts per username+IP.
+func (s *AuthService) SetLoginMaxAttempts(n int) {
+	if n > 0 {
+		s.loginMaxAttempts = n
+	}
+}
+
+// SetLoginMaxAttemptsPerIP overrides the max login attempts per IP.
+func (s *AuthService) SetLoginMaxAttemptsPerIP(n int) {
+	if n > 0 {
+		s.loginMaxAttemptsPerIP = n
+	}
+}
+
+// SetMFAVerificationTTL overrides the MFA verification flag TTL.
+func (s *AuthService) SetMFAVerificationTTL(d time.Duration) {
+	if d > 0 {
+		s.mfaVerificationTTL = d
+	}
 }
 
 func (s *AuthService) auditLog(ctx context.Context, record *auditDomain.AuditRecord) {

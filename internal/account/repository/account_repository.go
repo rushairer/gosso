@@ -232,12 +232,14 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 	}
 	offset := (page - 1) * pageSize
 
-	// Build conditions
+	// Build WHERE clause with consistent parameter numbering
 	where := "deleted_at IS NULL"
-	var args []interface{}
+	args := []interface{}{}
+	paramIdx := 1
 	if status != "" {
-		where += " AND status = $1"
+		where += fmt.Sprintf(" AND status = $%d", paramIdx)
 		args = append(args, status)
+		paramIdx++
 	}
 
 	// Count
@@ -251,22 +253,14 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 		return []*domain.Account{}, 0, nil
 	}
 
-	// Select — build select query with $1=LIMIT, $2=OFFSET, $3+=WHERE params
-	var selectArgs []interface{}
-	var selectWhere string
-	if status != "" {
-		selectWhere = "deleted_at IS NULL AND status = $3"
-		selectArgs = []interface{}{pageSize, offset, status}
-	} else {
-		selectWhere = "deleted_at IS NULL"
-		selectArgs = []interface{}{pageSize, offset}
-	}
+	// Select with LIMIT and OFFSET appended after WHERE params
 	selectQuery := fmt.Sprintf(`
 			SELECT id, username, display_name, avatar_url, status, locale, timezone, metadata, created_at, updated_at, deleted_at
 			FROM accounts
 			WHERE %s
 			ORDER BY created_at DESC
-			LIMIT $1 OFFSET $2`, selectWhere)
+			LIMIT $%d OFFSET $%d`, where, paramIdx, paramIdx+1)
+	selectArgs := append(args, pageSize, offset)
 
 	rows, err := r.db.QueryContext(ctx, selectQuery, selectArgs...)
 	if err != nil {

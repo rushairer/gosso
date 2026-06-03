@@ -19,12 +19,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	loginRateLimitWindow  = 15 * time.Minute
-	loginMaxAttempts      = 5
-	loginMaxAttemptsPerIP = 30
-)
-
 // safeAuditReason maps errors to safe generic messages for audit logs,
 // preventing internal details (database errors, stack traces) from being persisted.
 func safeAuditReason(err error) string {
@@ -60,19 +54,19 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	// 0. Check rate limit for login failures (keyed on IP + normalized username)
 	normalizedUsername := strings.ToLower(req.Username)
 	attemptsKey := fmt.Sprintf("login_attempts:%s:%s", req.IP, normalizedUsername)
-	count, incrErr := s.redis.IncrWithExpiry(ctx, attemptsKey, loginRateLimitWindow)
+	count, incrErr := s.redis.CheckAndIncr(ctx, attemptsKey, s.loginMaxAttempts, s.loginRateLimitWindow)
 	if incrErr != nil {
 		s.logger.Warn("Failed to check login rate limit, proceeding anyway", zap.Error(incrErr))
-	} else if count > loginMaxAttempts {
+	} else if count > int64(s.loginMaxAttempts) {
 		return nil, ErrAccountLocked
 	}
 
 	// Check overall IP-level rate limit to prevent username enumeration
 	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", req.IP)
-	ipCount, ipIncrErr := s.redis.IncrWithExpiry(ctx, ipAttemptsKey, loginRateLimitWindow)
+	ipCount, ipIncrErr := s.redis.CheckAndIncr(ctx, ipAttemptsKey, s.loginMaxAttemptsPerIP, s.loginRateLimitWindow)
 	if ipIncrErr != nil {
 		s.logger.Warn("Failed to check IP login rate limit, proceeding anyway", zap.Error(ipIncrErr))
-	} else if ipCount > loginMaxAttemptsPerIP {
+	} else if ipCount > int64(s.loginMaxAttemptsPerIP) {
 		return nil, ErrAccountLocked
 	}
 
@@ -104,13 +98,19 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		return mfaResult, mfaErr
 	}
 
-	// 6. Create session and tokens
+	// 6. Parse account ID for audit log (before creating session to avoid leak on parse failure)
+	accountUUID, parseErr := uuid.Parse(account.ID)
+	if parseErr != nil {
+		s.logger.Warn("Invalid account ID for audit", zap.String("account_id", account.ID), zap.Error(parseErr))
+	}
+
+	// 7. Create session and tokens
 	session, accessToken, refreshToken, err := s.createSessionAndTokens(ctx, account, req.IP, req.UserAgent)
 	if err != nil {
 		return nil, err
 	}
 
-	// 7. Update credential last used time
+	// 8. Update credential last used time
 	cred.MarkUsed()
 	if txErr := s.updateCredentialLastUsed(ctx, cred); txErr != nil {
 		s.logger.Warn("Failed to update credential last_used_at", zap.Error(txErr))
@@ -124,15 +124,13 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	_ = s.redis.Del(ctx, attemptsKey)
 	_ = s.redis.Del(ctx, ipAttemptsKey)
 
-	// 8. Audit log
-	accountUUID, err := uuid.Parse(account.ID)
-	if err != nil {
-		return nil, fmt.Errorf("invalid account id: %w", err)
+	// 9. Audit log
+	if accountUUID != (uuid.UUID{}) {
+		s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, req.Username, &accountUUID,
+			map[string]any{"account_id": account.ID, "session_id": session.ID.String()},
+			map[string]any{"ip": req.IP, "user_agent": req.UserAgent},
+		)
 	}
-	s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, req.Username, &accountUUID,
-		map[string]any{"account_id": account.ID, "session_id": session.ID.String()},
-		map[string]any{"ip": req.IP, "user_agent": req.UserAgent},
-	)
 
 	return &LoginResult{
 		Account:      account,

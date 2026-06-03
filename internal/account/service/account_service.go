@@ -581,7 +581,9 @@ func (s *accountServiceImpl) checkCredentialExists(ctx context.Context, credType
 
 func (s *accountServiceImpl) auditLog(ctx context.Context, record *auditDomain.AuditRecord) {
 	if s.auditor != nil {
-		_ = s.auditor.Log(ctx, record)
+		if err := s.auditor.Log(ctx, record); err != nil {
+			s.logger.Warn("Failed to submit audit record", zap.Error(err))
+		}
 	}
 }
 

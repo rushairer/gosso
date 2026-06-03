@@ -122,7 +122,7 @@ func (r *webAuthnCredentialRepositoryImpl) FindByAccountID(ctx context.Context, 
 
 	rows, err := r.db.QueryContext(ctx, query, accountID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find webauthn credentials by account_id: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -147,7 +147,7 @@ func (r *webAuthnCredentialRepositoryImpl) FindByAccountID(ctx context.Context, 
 			&lastUsedAt,
 			&deletedAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan webauthn credential: %w", err)
 		}
 
 		cred.LastUsedAt = lastUsedAt
@@ -210,5 +210,8 @@ func (r *webAuthnCredentialRepositoryImpl) SoftDeleteCredential(ctx context.Cont
 func (r *webAuthnCredentialRepositoryImpl) SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `UPDATE webauthn_credentials SET deleted_at = $2 WHERE account_id = $1 AND deleted_at IS NULL`
 	_, err := tx.ExecContext(ctx, query, accountID, deletedAt)
-	return err
+	if err != nil {
+		return fmt.Errorf("soft delete webauthn credentials by account_id: %w", err)
+	}
+	return nil
 }

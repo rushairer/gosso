@@ -100,6 +100,11 @@ func (s *SocialLoginService) GetAuthURL(ctx context.Context, provider, state str
 
 // HandleCallback handles the third-party callback
 func (s *SocialLoginService) HandleCallback(ctx context.Context, provider, code, ip, userAgent string) (*LoginResult, error) {
+	if s.mfaChecker == nil {
+		s.logger.Error("SocialLoginService: MFAChecker not set, this is a programming error")
+		return nil, fmt.Errorf("social login service misconfigured: mfa checker not set")
+	}
+
 	p, ok := s.providers[provider]
 	if !ok {
 		return nil, fmt.Errorf("unsupported provider: %s", provider)

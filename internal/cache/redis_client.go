@@ -268,5 +268,46 @@ func (r *RedisClient) IncrWithExpiry(ctx context.Context, key string, expiry tim
 	return result, nil
 }
 
+// CheckAndIncr atomically checks if a counter has reached the limit before incrementing.
+// Returns the current count. If the count is already >= limit, the counter is NOT incremented.
+// This prevents the counter from growing unboundedly past the limit.
+func (r *RedisClient) CheckAndIncr(ctx context.Context, key string, limit int, expiry time.Duration) (int64, error) {
+	script := redis.NewScript(`
+		local current = tonumber(redis.call('GET', KEYS[1]) or '0')
+		if current >= tonumber(ARGV[1]) then
+			return current
+		end
+		local new = redis.call('INCR', KEYS[1])
+		if new == 1 then
+			redis.call('EXPIRE', KEYS[1], ARGV[2])
+		end
+		return new
+	`)
+	result, err := script.Run(ctx, r.client, []string{key}, limit, int(expiry.Seconds())).Int64()
+	if err != nil {
+		r.logger.Error("Redis CheckAndIncr failed", zap.String("key", key), zap.Error(err))
+		return 0, fmt.Errorf("checkAndIncr key %s: %w", key, err)
+	}
+	return result, nil
+}
+
+// SetIfExists atomically sets a key only if it already exists, preventing TOCTOU issues.
+// Returns true if the key was updated, false if the key did not exist.
+func (r *RedisClient) SetIfExists(ctx context.Context, key string, value interface{}, expiry time.Duration) (bool, error) {
+	script := redis.NewScript(`
+		if redis.call('EXISTS', KEYS[1]) == 1 then
+			redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+			return 1
+		end
+		return 0
+	`)
+	result, err := script.Run(ctx, r.client, []string{key}, value, int(expiry.Seconds())).Int64()
+	if err != nil {
+		r.logger.Error("Redis SetIfExists failed", zap.String("key", key), zap.Error(err))
+		return false, fmt.Errorf("setIfExists key %s: %w", key, err)
+	}
+	return result == 1, nil
+}
+
 // ErrKeyNotFound is the error returned when a Redis key does not exist
 var ErrKeyNotFound = fmt.Errorf("redis: key not found")

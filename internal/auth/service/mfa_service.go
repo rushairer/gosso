@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	backupCodeCount  = 10
-	backupCodeLength = 8 // 8 bytes = 16 hex chars
+	defaultBackupCodeCount  = 10
+	defaultBackupCodeLength = 8 // 8 bytes = 16 hex chars
 )
 
 // TOTPEnrollment TOTP enrollment result
@@ -40,6 +40,8 @@ type MFAService struct {
 	issuer            string
 	totpEncryptionKey []byte
 	logger            *zap.Logger
+	backupCodeCount   int
+	backupCodeLength  int
 }
 
 // NewMFAService creates an MFA service instance
@@ -54,15 +56,31 @@ func NewMFAService(
 		logger = zap.NewNop()
 	}
 	svc := &MFAService{
-		credentialRepo: credentialRepo,
-		db:             db,
-		issuer:         issuer,
-		logger:         logger,
+		credentialRepo:   credentialRepo,
+		db:               db,
+		issuer:           issuer,
+		logger:           logger,
+		backupCodeCount:  defaultBackupCodeCount,
+		backupCodeLength: defaultBackupCodeLength,
 	}
 	if len(passkeySvc) > 0 {
 		svc.passkeySvc = passkeySvc[0]
 	}
 	return svc
+}
+
+// SetBackupCodeCount overrides the backup code count.
+func (s *MFAService) SetBackupCodeCount(n int) {
+	if n > 0 {
+		s.backupCodeCount = n
+	}
+}
+
+// SetBackupCodeLength overrides the backup code length.
+func (s *MFAService) SetBackupCodeLength(n int) {
+	if n > 0 {
+		s.backupCodeLength = n
+	}
 }
 
 // SetTOTPEncryptionKey sets the AES-256 key used to encrypt TOTP secrets at rest.
@@ -278,8 +296,8 @@ func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) 
 	var codes []string
 	var creds []*accountDomain.Credential
 
-	for i := 0; i < backupCodeCount; i++ {
-		code, err := generateRandomCode(backupCodeLength)
+	for i := 0; i < s.backupCodeCount; i++ {
+		code, err := generateRandomCode(s.backupCodeLength)
 		if err != nil {
 			return nil, fmt.Errorf("generate backup code: %w", err)
 		}

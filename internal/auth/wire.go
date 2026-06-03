@@ -66,6 +66,9 @@ func InitializeAuthModule(
 		} else {
 			webauthnRepo := repository.NewWebAuthnCredentialRepository(db)
 			passkeySvc = service.NewPasskeyService(web, webauthnRepo, redis, db, logger)
+			if authConfig.ChallengeTTL > 0 {
+				passkeySvc.SetChallengeTTL(authConfig.ChallengeTTL)
+			}
 		}
 	}
 
@@ -75,8 +78,26 @@ func InitializeAuthModule(
 			logger.Error("Failed to set TOTP encryption key", zap.Error(err))
 		}
 	}
+	if authConfig.BackupCodeCount > 0 {
+		mfaSvc.SetBackupCodeCount(authConfig.BackupCodeCount)
+	}
+	if authConfig.BackupCodeLength > 0 {
+		mfaSvc.SetBackupCodeLength(authConfig.BackupCodeLength)
+	}
 
 	authSvc := service.NewAuthService(db, accountSvc, sessionSvc, tokenSvc, credentialRepo, roleRepo, redis, logger, auditor, mfaSvc, passkeySvc)
+	if authConfig.LoginRateLimitWindow > 0 {
+		authSvc.SetLoginRateLimitWindow(authConfig.LoginRateLimitWindow)
+	}
+	if authConfig.LoginMaxAttempts > 0 {
+		authSvc.SetLoginMaxAttempts(authConfig.LoginMaxAttempts)
+	}
+	if authConfig.LoginMaxAttemptsPerIP > 0 {
+		authSvc.SetLoginMaxAttemptsPerIP(authConfig.LoginMaxAttemptsPerIP)
+	}
+	if authConfig.MFAVerificationTTL > 0 {
+		authSvc.SetMFAVerificationTTL(authConfig.MFAVerificationTTL)
+	}
 
 	var socialSvc *service.SocialLoginService
 	if len(providers) > 0 {
