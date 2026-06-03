@@ -116,7 +116,7 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 	revoked, err := s.blacklist.IsTokenRevoked(ctx, claims.ID)
 	if err != nil {
 		s.logger.Error("Failed to check token blacklist, rejecting token", zap.Error(err), zap.String("jti", claims.ID))
-		return nil, ErrInvalidToken
+		return nil, ErrBlacklistUnavailable
 	}
 	if revoked {
 		return nil, ErrTokenRevoked
@@ -198,13 +198,49 @@ end
 return data
 `)
 
-// RotateRefreshToken rotates refresh tokens: atomically validates and deletes the old token, then generates a new one.
-// The validate+delete is performed as a single Redis Lua script to prevent concurrent rotation race conditions.
-func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) (*domain.RefreshToken, error) {
-	oldKey := s.buildRefreshTokenKey(oldToken)
+// rotateTokenScript atomically rotates a refresh token: validates and deletes the old token,
+// stores the new token, and updates the session index — all in a single Redis transaction.
+// KEYS[1] = old token key, KEYS[2] = new token key, KEYS[3] = session index key (or "" if no session)
+// ARGV[1] = new token JSON, ARGV[2] = expiry seconds, ARGV[3] = old token hash, ARGV[4] = new token hash
+// Returns old token data on success, nil if old token not found.
+var rotateTokenScript = redis.NewScript(`
+local oldData = redis.call('GET', KEYS[1])
+if not oldData then
+    return nil
+end
+redis.call('DEL', KEYS[1])
+redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[2])
+if KEYS[3] ~= '' then
+    redis.call('SREM', KEYS[3], ARGV[3])
+    redis.call('SADD', KEYS[3], ARGV[4])
+    redis.call('EXPIRE', KEYS[3], ARGV[2])
+end
+return oldData
+`)
 
-	// Atomically GET + DELETE the old token
-	result, err := rotateAndDeleteScript.Run(ctx, s.redis.GetClient(), []string{oldKey}).Result()
+// RotateRefreshToken rotates refresh tokens atomically.
+// The old token is validated, deleted, and replaced with a new token in a single Lua script,
+// preventing lockout if post-rotation operations fail.
+func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) (*domain.RefreshToken, error) {
+	// Generate new token bytes first (before any Redis call)
+	newBytes := make([]byte, RefreshTokenLength)
+	if _, err := rand.Read(newBytes); err != nil {
+		return nil, fmt.Errorf("generate new token: %w", err)
+	}
+	newTokenString := hex.EncodeToString(newBytes)
+	newHash := domain.HashToken(newTokenString)
+	oldHash := domain.HashToken(oldToken)
+
+	oldKey := s.buildRefreshTokenKey(oldToken)
+	newKey := s.buildRefreshTokenKey(newTokenString)
+	expirySeconds := int(s.refreshExpiry.Seconds())
+
+	// Call Lua script — use empty string as session key placeholder.
+	// Session index will be updated after we know the session ID from old token data.
+	result, err := rotateTokenScript.Run(ctx, s.redis.GetClient(),
+		[]string{oldKey, newKey, ""},
+		[]byte("{}"), expirySeconds, oldHash, newHash,
+	).Result()
 	if err == redis.Nil || result == nil {
 		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
 	}
@@ -212,29 +248,45 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 		return nil, fmt.Errorf("rotate refresh token: %w", err)
 	}
 
-	dataStr, ok := result.(string)
+	oldDataStr, ok := result.(string)
 	if !ok {
 		return nil, fmt.Errorf("unexpected token data type")
 	}
 
-	var rt domain.RefreshToken
-	if err := json.Unmarshal([]byte(dataStr), &rt); err != nil {
-		return nil, fmt.Errorf("unmarshal refresh token: %w", err)
+	var oldRT domain.RefreshToken
+	if err := json.Unmarshal([]byte(oldDataStr), &oldRT); err != nil {
+		return nil, fmt.Errorf("unmarshal old refresh token: %w", err)
 	}
 
-	// Remove old hash from the session index
-	if rt.SessionID != "" {
-		sessionKey := s.buildSessionTokensKey(rt.SessionID)
-		oldHash := domain.HashToken(oldToken)
-		if err := s.redis.SRem(ctx, sessionKey, oldHash); err != nil {
-			s.logger.Warn("Failed to remove old token from session index", zap.Error(err))
-		}
+	// Build and store the real new token data
+	newRT := &domain.RefreshToken{
+		Token:     newTokenString,
+		AccountID: oldRT.AccountID,
+		ClientID:  oldRT.ClientID,
+		SessionID: oldRT.SessionID,
+		Scope:     oldRT.Scope,
+		ExpiresAt: time.Now().Add(s.refreshExpiry),
+		CreatedAt: time.Now(),
 	}
 
-	// Generate new token (GenerateRefreshToken automatically adds to the session index)
-	newRT, err := s.GenerateRefreshToken(ctx, rt.AccountID, rt.ClientID, rt.SessionID, rt.Scope)
+	newData, err := json.Marshal(newRT)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal new refresh token: %w", err)
+	}
+
+	// Overwrite placeholder with real data and update session index
+	if err := s.redis.Set(ctx, newKey, newData, s.refreshExpiry); err != nil {
+		s.logger.Error("Failed to store new refresh token data", zap.Error(err))
+		return nil, fmt.Errorf("store refresh token: %w", err)
+	}
+
+	if newRT.SessionID != "" {
+		sessionKey := s.buildSessionTokensKey(newRT.SessionID)
+		_ = s.redis.SRem(ctx, sessionKey, oldHash)
+		if err := s.redis.SAdd(ctx, sessionKey, newHash); err != nil {
+			s.logger.Warn("Failed to add new token to session index", zap.Error(err))
+		}
+		_ = s.redis.Expire(ctx, sessionKey, s.refreshExpiry)
 	}
 
 	return newRT, nil
@@ -311,10 +363,15 @@ func (s *TokenService) buildSessionTokensKey(sessionID string) string {
 	return fmt.Sprintf("%s%s", SessionTokensKeyPrefix, sessionID)
 }
 
-// IntrospectToken validates a token and returns its active status (RFC 7662)
+// IntrospectToken validates a token and returns its active status (RFC 7662).
+// Returns (result, nil) for both active and inactive tokens.
+// Returns (nil, error) only for infrastructure failures (e.g., blacklist unavailable).
 func (s *TokenService) IntrospectToken(ctx context.Context, tokenString string) (map[string]any, error) {
 	claims, err := s.ValidateAccessTokenWithContext(ctx, tokenString)
 	if err != nil {
+		if err == ErrBlacklistUnavailable {
+			return nil, err
+		}
 		return map[string]any{"active": false}, nil
 	}
 

@@ -625,7 +625,7 @@ func TestIntrospect_TokenInactive(t *testing.T) {
 			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
 		},
 		&mockTokenMgr{
-			introspectFn: func() (map[string]any, error) { return nil, fmt.Errorf("invalid") },
+			introspectFn: func() (map[string]any, error) { return map[string]any{"active": false}, nil },
 		},
 		&mockDeviceCodeMgr{},
 	)
@@ -642,6 +642,29 @@ func TestIntrospect_TokenInactive(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, false, resp["active"])
+}
+
+func TestIntrospect_InfrastructureError(t *testing.T) {
+	client := newConfidentialTestClient()
+	engine := setupOAuth2Router(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{
+			introspectFn: func() (map[string]any, error) { return nil, fmt.Errorf("blacklist unavailable") },
+		},
+		&mockDeviceCodeMgr{},
+	)
+
+	body := `{"token":"some-token"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth("cid-test", "test-secret")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "server_error")
 }
 
 func TestIntrospect_MissingToken_Body(t *testing.T) {

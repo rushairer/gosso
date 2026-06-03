@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Admin controller endpoints now return 500 instead of 400 for internal errors — correctly signals server errors vs client errors (`internal/admin/controller/admin_controller.go`).
 - `DenyDeviceCode` audit log now includes `client_id` and `user_code` — enables correlation in security audit trails (`internal/oauth2/service/device_code_service.go`).
 - OIDC Logout bearer token path now logs a debug message when token validation fails — aids troubleshooting silent logout failures (`internal/oidc/controller/oidc_controller.go`).
+- **Security**: `IntrospectToken` now distinguishes infrastructure errors (e.g., blacklist unavailable) from invalid tokens — infrastructure failures return 500 instead of silently reporting `active: false` (`internal/token/service/token_service.go`, `internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Refresh token rotation is now atomic — old token delete + new token store happen in a single Lua script, preventing user lockout when new token generation fails (`internal/token/service/token_service.go`).
+- Passkey sign count update failure now logged at Error level with credential context — clone detection failures require monitoring visibility (`internal/auth/service/passkey_service.go`).
 - **Security**: `fetchUserInfo` now uses safe type assertions for provider user ID — prevents panic when Google/GitHub returns `id` as string or missing (`internal/auth/service/social_login_service.go`).
 - **Security**: Passkey MFA verification flag now uses atomic `GETDEL` instead of separate `GET` + `DEL` — prevents TOCTOU race that allowed double-use of a single MFA verification (`internal/auth/service/auth_login.go`, `internal/cache/redis_client.go`).
 - **Security**: MFA token blacklisting now fails closed — prevents MFA token reuse when Redis blacklist write fails (`internal/auth/service/auth_login.go`).
@@ -33,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - OIDC Discovery document now includes `revocation_endpoint` and `revocation_endpoint_auth_methods_supported` — conforms to RFC 7009 (`internal/oidc/service/discovery_service.go`).
 - `RefreshToken.Token` field is now excluded from JSON serialization (`json:"-"`) — prevents token plaintext from leaking into Redis storage (`internal/token/domain/token.go`).
+- Added `ErrBlacklistUnavailable` sentinel error to distinguish Redis blacklist failures from invalid tokens — enables callers to differentiate infrastructure errors (`internal/token/service/errors.go`).
+- Refresh token rotation now uses dedicated `rotateTokenScript` Lua script — atomically deletes old token and stores new token in a single Redis operation (`internal/token/service/token_service.go`).
 - MFA token expiry now uses configurable `mfaVerificationTTL` instead of hardcoded `5*time.Minute` — aligns MFA token TTL with verification flag TTL (`internal/auth/service/auth_login.go`).
 - `DeviceCodeInterval` now has a config default (`5s`) and `Validate()` check — consistent with `DeviceCodeExpiry` (`config/config_manager.go`, `config/config.go`).
 - `IncrWithExpiry`, `CheckAndIncr`, and `SetIfExists` now use `math.Ceil` for sub-second duration handling — prevents 500ms TTL from being truncated to 0 (`internal/cache/redis_client.go`).

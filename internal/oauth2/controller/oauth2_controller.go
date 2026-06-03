@@ -604,7 +604,8 @@ func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 
 	result, err := c.tokenSvc.IntrospectToken(ctx, req.Token)
 	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"active": false})
+		c.logger.Error("Token introspection failed", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
 	}
 

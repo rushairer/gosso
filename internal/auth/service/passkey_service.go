@@ -276,7 +276,10 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 		return s.credRepo.UpdateCredential(ctx, tx, cred)
 	})
 	if err != nil {
-		s.logger.Warn("Failed to update credential sign count", zap.Error(err))
+		s.logger.Error("Failed to update credential sign count — clone detection may be compromised",
+			zap.Error(err),
+			zap.String("account_id", cred.AccountID),
+			zap.String("credential_id", cred.ID))
 	}
 
 	return cred.AccountID, cred, nil
