@@ -126,18 +126,3 @@ func TestDeviceCodeService_PollRate(t *testing.T) {
 	err = svc.CheckAndUpdatePollRate(ctx, dc.DeviceCode)
 	assert.ErrorIs(t, err, domain.ErrSlowDown)
 }
-
-func TestDeviceCodeService_MarkUsed(t *testing.T) {
-	svc := setupDeviceCodeService(t)
-	ctx := context.Background()
-
-	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
-	require.NoError(t, err)
-
-	err = svc.MarkUsed(ctx, dc.DeviceCode)
-	require.NoError(t, err)
-
-	fetched, err := svc.GetDeviceCode(ctx, dc.DeviceCode)
-	require.NoError(t, err)
-	assert.Equal(t, domain.DeviceCodeStatusUsed, fetched.Status)
-}

@@ -57,7 +57,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	count, incrErr := s.redis.CheckAndIncr(ctx, attemptsKey, s.loginMaxAttempts, s.loginRateLimitWindow)
 	if incrErr != nil {
 		s.logger.Warn("Failed to check login rate limit, proceeding anyway", zap.Error(incrErr))
-	} else if count > int64(s.loginMaxAttempts) {
+	} else if count >= int64(s.loginMaxAttempts) {
 		return nil, ErrAccountLocked
 	}
 
@@ -66,7 +66,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	ipCount, ipIncrErr := s.redis.CheckAndIncr(ctx, ipAttemptsKey, s.loginMaxAttemptsPerIP, s.loginRateLimitWindow)
 	if ipIncrErr != nil {
 		s.logger.Warn("Failed to check IP login rate limit, proceeding anyway", zap.Error(ipIncrErr))
-	} else if ipCount > int64(s.loginMaxAttemptsPerIP) {
+	} else if ipCount >= int64(s.loginMaxAttemptsPerIP) {
 		return nil, ErrAccountLocked
 	}
 

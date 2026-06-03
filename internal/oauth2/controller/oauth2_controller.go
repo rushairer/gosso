@@ -42,7 +42,6 @@ type DeviceCodeManager interface {
 	AuthorizeDeviceCode(ctx context.Context, deviceCode, accountID string) error
 	DenyDeviceCode(ctx context.Context, deviceCode string) error
 	CheckAndUpdatePollRate(ctx context.Context, deviceCode string) error
-	MarkUsed(ctx context.Context, deviceCode string) error
 	ClaimAuthorizedDeviceCode(ctx context.Context, deviceCode string) (*oauth2Domain.DeviceCode, error)
 }
 

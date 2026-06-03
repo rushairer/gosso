@@ -71,6 +71,9 @@ func (cm *ConfigManager) SetConfig(config *GoUnoConfig) {
 func (cm *ConfigManager) Config() GoUnoConfig {
 	cm.configMutex.RLock()
 	defer cm.configMutex.RUnlock()
+	if cm.config == nil {
+		return GoUnoConfig{}
+	}
 	return *cm.config
 }
 

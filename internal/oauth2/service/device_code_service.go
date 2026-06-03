@@ -257,18 +257,6 @@ func (s *DeviceCodeService) CheckAndUpdatePollRate(ctx context.Context, deviceCo
 	return nil
 }
 
-// MarkUsed sets the device code status to "used".
-func (s *DeviceCodeService) MarkUsed(ctx context.Context, deviceCode string) error {
-	dc, err := s.GetDeviceCode(ctx, deviceCode)
-	if err != nil {
-		return err
-	}
-
-	dc.Status = domain.DeviceCodeStatusUsed
-
-	return s.save(ctx, dc)
-}
-
 // authorizeDeviceCodeScript atomically checks pending status and sets authorized.
 // KEYS[1] = device code key
 // ARGV[1] = accountID, ARGV[2] = authorizedAt (RFC3339), ARGV[3] = TTL seconds

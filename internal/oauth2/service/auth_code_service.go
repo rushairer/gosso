@@ -121,9 +121,6 @@ func (s *AuthCodeService) ValidateCode(ctx context.Context, code, clientID, redi
 	if ac.IsExpired() {
 		return nil, domain.ErrCodeExpired
 	}
-	if ac.Used {
-		return nil, domain.ErrCodeAlreadyUsed
-	}
 	if ac.ClientID != clientID {
 		return nil, domain.ErrCodeClientMismatch
 	}

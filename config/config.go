@@ -132,6 +132,9 @@ type AuthConfig struct {
 	ChallengeTTL       time.Duration `mapstructure:"challenge_ttl"`
 	BackupCodeCount    int           `mapstructure:"backup_code_count"`
 	BackupCodeLength   int           `mapstructure:"backup_code_length"`
+
+	// OIDC settings
+	IDTokenExpiry time.Duration `mapstructure:"id_token_expiry"`
 }
 
 type CORSConfig struct {

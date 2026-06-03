@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Security**: Login rate limit comparison now uses `>=` instead of `>` — prevents one extra attempt beyond the configured limit (`internal/auth/service/auth_login.go`).
+- **Security**: OIDC `LogoutByAccountID` now documents the access token blacklist gap with TODO — session revocation relies on JWT middleware session check; access tokens remain valid in the brief window until session deletion propagates (`internal/oidc/service/logout_service.go`).
+- Startup failures (config validation, database, Redis, module init) now exit with code 1 instead of 0 — enables container orchestrators to detect failed starts (`cmd/gouno/web.go`).
+- `ConfigManager.Config()` now guards against nil config pointer — prevents panic if called before `SetConfig()` (`config/config_manager.go`).
+- `ConnMaxIdleTime` default changed from 10min to 3min — idle connections now expire before `ConnMaxLifetime` (5min) as intended (`cmd/gouno/web.go`).
+- `addEmailClaims` and `addPhoneClaims` now log warnings on credential query errors — errors are no longer silently swallowed during ID token generation (`internal/oidc/service/id_token_service.go`).
+
+### Changed
+
+- ID token expiry is now configurable via `auth.id_token_expiry` (default 10m) instead of being hardcoded (`config/config.go`, `internal/oidc/service/id_token_service.go`, `internal/oidc/wire.go`).
+- Security headers enhanced: CSP now includes `img-src`, `font-src`, `connect-src` directives; HSTS adds `preload`; added `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy` headers (`middleware/middleware.go`).
+- Removed duplicate `revokeRefreshTokenScript` Lua script — `RevokeRefreshToken` now reuses `rotateAndDeleteScript` (`internal/token/service/token_service.go`).
+- Removed dead code `DeviceCodeService.MarkUsed` and its interface declaration — the method had no production callers; `ClaimAuthorizedDeviceCode` handles the atomic claim flow (`internal/oauth2/service/device_code_service.go`, `internal/oauth2/controller/oauth2_controller.go`).
+- Removed redundant `ac.Used` check in `AuthCodeService.ValidateCode` — atomic GET+DEL Lua script already guarantees single-use (`internal/oauth2/service/auth_code_service.go`).
+
+### Fixed
+
 - **Security**: Login rate limiting now uses atomic check-and-increment Lua script — prevents counter from growing past the limit and eliminates race conditions between concurrent requests (`internal/cache/redis_client.go`, `internal/auth/service/auth_login.go`).
 - **Security**: `LoginByUsernamePassword` now parses account UUID before creating session — prevents session leak in Redis if UUID parse fails (`internal/auth/service/auth_login.go`).
 - **Security**: `UpdateSession` now uses atomic `SetIfExists` Lua script — prevents resurrection of sessions that expired between the read and write (TOCTOU fix) (`internal/cache/redis_client.go`, `internal/session/service/session_service.go`).

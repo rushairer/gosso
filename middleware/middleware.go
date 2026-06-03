@@ -46,9 +46,11 @@ func SecurityHeadersMiddleware() gin.HandlerFunc {
 		ctx.Header("X-Frame-Options", "DENY")
 		ctx.Header("X-XSS-Protection", "0")
 		ctx.Header("Referrer-Policy", "strict-origin-when-cross-origin")
-		ctx.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		ctx.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
 		ctx.Header("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
-		ctx.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'")
+		ctx.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'")
+		ctx.Header("Cross-Origin-Opener-Policy", "same-origin")
+		ctx.Header("Cross-Origin-Resource-Policy", "same-origin")
 		ctx.Next()
 	}
 }

@@ -75,7 +75,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 
 	if err := globalConfig.Validate(); err != nil {
 		logger.Error("invalid configuration", zap.Error(err))
-		return
+		os.Exit(1)
 	}
 
 	logger.Sugar().Info("starting web server...")
@@ -83,14 +83,14 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	db, err := initDatabase(globalConfig, logger)
 	if err != nil {
 		logger.Error("database init failed", zap.Error(err))
-		return
+		os.Exit(1)
 	}
 	defer func() { _ = db.Close() }()
 
 	redis, err := initRedis(globalConfig, logger)
 	if err != nil {
 		logger.Error("redis init failed", zap.Error(err))
-		return
+		os.Exit(1)
 	}
 	defer func() { _ = redis.Close() }()
 
@@ -101,7 +101,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	modules, err := initModules(ctx, db, redis, logger, globalConfig, auditAuditor)
 	if err != nil {
 		logger.Error("module initialization failed", zap.Error(err))
-		return
+		os.Exit(1)
 	}
 
 	engine := setupEngine(ctx, globalConfig, logger, modules, db, redis)
@@ -157,7 +157,7 @@ func initDatabase(cfg config.GoUnoConfig, logger *zap.Logger) (*sql.DB, error) {
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(10 * time.Minute)
+	db.SetConnMaxIdleTime(3 * time.Minute)
 
 	if cfg.DatabaseConfig.MaxOpenConns > 0 {
 		db.SetMaxOpenConns(cfg.DatabaseConfig.MaxOpenConns)

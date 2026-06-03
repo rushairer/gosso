@@ -239,20 +239,11 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	return newRT, nil
 }
 
-// revokeRefreshTokenScript atomically GETs and DELs a refresh token, returning the data.
-var revokeRefreshTokenScript = redis.NewScript(`
-local data = redis.call('GET', KEYS[1])
-if data then
-    redis.call('DEL', KEYS[1])
-end
-return data
-`)
-
 // RevokeRefreshToken revokes a refresh token and removes it from the session index.
 func (s *TokenService) RevokeRefreshToken(ctx context.Context, token string) error {
 	key := s.buildRefreshTokenKey(token)
 
-	data, err := revokeRefreshTokenScript.Run(ctx, s.redis.GetClient(), []string{key}).Result()
+	data, err := rotateAndDeleteScript.Run(ctx, s.redis.GetClient(), []string{key}).Result()
 	if err != nil && err != redis.Nil {
 		return fmt.Errorf("revoke refresh token: %w", err)
 	}

@@ -20,7 +20,7 @@ func InitializeOIDCModule(
 	credentialRepo accountRepo.CredentialRepository,
 	logger *zap.Logger,
 ) (*oidcService.IDTokenService, *oidcService.DiscoveryService, *oidcService.JWKSService, *oidcService.UserInfoService, *oidcService.LogoutService) {
-	idTokenSvc := oidcService.NewIDTokenService(tokenSvc, authConfig.Issuer, accountSvc, credentialRepo, logger)
+	idTokenSvc := oidcService.NewIDTokenService(tokenSvc, authConfig.Issuer, accountSvc, credentialRepo, authConfig.IDTokenExpiry, logger)
 	discoverySvc := oidcService.NewDiscoveryService(authConfig.Issuer)
 	jwksSvc := oidcService.NewJWKSService(tokenSvc.KeyService())
 	userInfoSvc := oidcService.NewUserInfoService(accountSvc, credentialRepo, logger)

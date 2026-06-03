@@ -170,7 +170,7 @@ func setupTestIDTokenService(t *testing.T) (*IDTokenService, *cache.RedisClient)
 		},
 	}
 
-	svc := NewIDTokenService(tokenSvc, "http://localhost:8080", accountSvc, credRepo, logger)
+	svc := NewIDTokenService(tokenSvc, "http://localhost:8080", accountSvc, credRepo, 0, logger)
 	return svc, redisClient
 }
 
