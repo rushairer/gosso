@@ -35,14 +35,10 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		return nil, ErrAccountNotActive
 	}
 
-	// 4. Rotate refresh token (session + account already validated)
-	newRefreshToken, err := s.tokenSvc.RotateRefreshToken(ctx, refreshToken)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidRefreshToken, err)
-	}
-
-	// 5. Build claims and generate new access token
-	claims, err := s.buildTokenClaims(ctx, newRefreshToken.AccountID, session.ID.String())
+	// 4. Build claims and generate new access token BEFORE rotating refresh token.
+	// If access token generation fails, the old refresh token remains valid so the
+	// client can retry instead of being locked out.
+	claims, err := s.buildTokenClaims(ctx, oldRT.AccountID, session.ID.String())
 	if err != nil {
 		return nil, fmt.Errorf("build token claims: %w", err)
 	}
@@ -50,6 +46,12 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	accessToken, err := s.tokenSvc.GenerateAccessToken(claims)
 	if err != nil {
 		return nil, fmt.Errorf("generate access token: %w", err)
+	}
+
+	// 5. Rotate refresh token (old token deleted from Redis)
+	newRefreshToken, err := s.tokenSvc.RotateRefreshToken(ctx, refreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidRefreshToken, err)
 	}
 
 	// 6. Refresh session
