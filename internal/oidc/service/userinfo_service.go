@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"go.uber.org/zap"
@@ -10,10 +9,8 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
+	authService "github.com/rushairer/gosso/internal/auth/service"
 )
-
-// ErrAccountNotActive is returned when the account is not in active status.
-var ErrAccountNotActive = errors.New("account is not active")
 
 // UserInfoService OIDC UserInfo service
 type UserInfoService struct {
@@ -46,7 +43,7 @@ func (s *UserInfoService) GetUserInfo(ctx context.Context, accountID string, sco
 	}
 
 	if account.Status != accountDomain.AccountStatusActive {
-		return nil, ErrAccountNotActive
+		return nil, authService.ErrAccountNotActive
 	}
 
 	info := map[string]any{

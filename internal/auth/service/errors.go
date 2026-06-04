@@ -24,6 +24,17 @@ var (
 
 	// General input errors
 	ErrInvalidSessionID = errors.New("invalid session id")
+
+	// Passkey/WebAuthn errors
+	ErrChallengeNotFound   = errors.New("challenge not found or expired")
+	ErrPasskeyNotFound     = errors.New("no passkey found for account")
+	ErrRequestBodyTooLarge = errors.New("request body too large")
+	ErrCredentialNotFound  = errors.New("credential not found")
+	ErrCredentialOwnership = errors.New("credential does not belong to account")
+
+	// Social login errors
+	ErrUnsupportedProvider = errors.New("unsupported provider")
+	ErrSocialMisconfigured = errors.New("social login service misconfigured")
 )
 
 // Scope constants for JWT token claims

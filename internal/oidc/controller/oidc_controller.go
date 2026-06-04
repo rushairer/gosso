@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/auth/middleware"
+	authService "github.com/rushairer/gosso/internal/auth/service"
 	oauth2Repo "github.com/rushairer/gosso/internal/oauth2/repository"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
@@ -90,7 +91,7 @@ func (c *OIDCController) UserInfo(ctx *gin.Context) {
 
 	info, err := c.userInfoSvc.GetUserInfo(ctx, claims.AccountID, scopes)
 	if err != nil {
-		if err == oidcService.ErrAccountNotActive {
+		if err == authService.ErrAccountNotActive {
 			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "account is not active"))
 			return
 		}

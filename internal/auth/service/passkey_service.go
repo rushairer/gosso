@@ -116,7 +116,7 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, accountID, us
 	key := fmt.Sprintf(redisKeyRegChallenge, accountID)
 	data, err := s.redis.GetDel(ctx, key)
 	if err != nil {
-		return nil, errors.New("challenge not found or expired")
+		return nil, ErrChallengeNotFound
 	}
 
 	var sessionData wa.SessionData
@@ -171,7 +171,7 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, accountID, us
 func (s *PasskeyService) BeginLogin(ctx context.Context, accountID string) (*protocol.CredentialAssertion, string, error) {
 	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil || len(creds) == 0 {
-		return nil, "", errors.New("no passkey found for account")
+		return nil, "", ErrPasskeyNotFound
 	}
 
 	user := domain.NewWebAuthnUser(accountID, "", "", toCredentialSlice(creds))
@@ -223,7 +223,7 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 	key := fmt.Sprintf(redisKeyLoginChallenge, requestID)
 	data, err := s.redis.GetDel(ctx, key)
 	if err != nil {
-		return "", nil, errors.New("challenge not found or expired")
+		return "", nil, ErrChallengeNotFound
 	}
 
 	var sessionData wa.SessionData
@@ -237,7 +237,7 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 		return "", nil, fmt.Errorf("read request body: %w", err)
 	}
 	if int64(len(bodyBytes)) > maxPasskeyRequestBodySize {
-		return "", nil, errors.New("request body too large")
+		return "", nil, ErrRequestBodyTooLarge
 	}
 	request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
@@ -250,7 +250,7 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 	credID := parsedResponse.RawID
 	cred, err := s.credRepo.FindByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credID))
 	if err != nil {
-		return "", nil, errors.New("credential not found")
+		return "", nil, ErrCredentialNotFound
 	}
 
 	// Find all credentials for this account
@@ -287,7 +287,7 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 func (s *PasskeyService) BeginMFALogin(ctx context.Context, accountID string) (*protocol.CredentialAssertion, string, error) {
 	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil || len(creds) == 0 {
-		return nil, "", errors.New("no passkey found for account")
+		return nil, "", ErrPasskeyNotFound
 	}
 
 	user := domain.NewWebAuthnUser(accountID, "", "", toCredentialSlice(creds))
@@ -316,7 +316,7 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, requestID string,
 	key := fmt.Sprintf(redisKeyMFAChallenge, requestID)
 	data, err := s.redis.GetDel(ctx, key)
 	if err != nil {
-		return errors.New("challenge not found or expired")
+		return ErrChallengeNotFound
 	}
 
 	var sessionData wa.SessionData
@@ -346,7 +346,7 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, requestID string,
 	}
 
 	if cred.AccountID != accountID {
-		return errors.New("credential does not belong to account")
+		return ErrCredentialOwnership
 	}
 
 	allCreds, err := s.credRepo.FindByAccountID(ctx, accountID)
@@ -412,7 +412,7 @@ func (s *PasskeyService) DeleteCredential(ctx context.Context, accountID, creden
 	}
 
 	if cred.AccountID != accountID {
-		return errors.New("credential does not belong to account")
+		return ErrCredentialOwnership
 	}
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {

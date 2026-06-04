@@ -92,7 +92,7 @@ func (s *SocialLoginService) SetAuditor(auditor *auditService.Auditor) {
 func (s *SocialLoginService) GetAuthURL(ctx context.Context, provider, state string) (string, error) {
 	p, ok := s.providers[provider]
 	if !ok {
-		return "", fmt.Errorf("unsupported provider: %s", provider)
+		return "", fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
 	}
 
 	if p.AuthURL == "" {
@@ -113,12 +113,12 @@ func (s *SocialLoginService) GetAuthURL(ctx context.Context, provider, state str
 func (s *SocialLoginService) HandleCallback(ctx context.Context, provider, code, ip, userAgent string) (*LoginResult, error) {
 	if s.mfaChecker == nil {
 		s.logger.Error("SocialLoginService: MFAChecker not set, this is a programming error")
-		return nil, fmt.Errorf("social login service misconfigured: mfa checker not set")
+		return nil, ErrSocialMisconfigured
 	}
 
 	p, ok := s.providers[provider]
 	if !ok {
-		return nil, fmt.Errorf("unsupported provider: %s", provider)
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
 	}
 
 	// 1. Exchange code for access_token
@@ -235,7 +235,7 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 		nickname, _ := userInfo["nickname"].(string)
 		name = nickname
 	default:
-		return "", "", "", fmt.Errorf("unsupported provider: %s", provider)
+		return "", "", "", fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
 	}
 
 	return providerUserID, email, name, nil
@@ -248,7 +248,7 @@ func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, i
 	}
 
 	if account.Status != accountDomain.AccountStatusActive {
-		return nil, errors.New("account is not active")
+		return nil, ErrAccountNotActive
 	}
 
 	// Check if MFA is required before issuing tokens
