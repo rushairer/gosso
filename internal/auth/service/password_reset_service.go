@@ -32,8 +32,10 @@ const (
 	PasswordResetTokenLength    = 32
 	PasswordResetTokenTTL       = 30 * time.Minute
 	PasswordResetCooldownTTL    = 60 * time.Second
-	PasswordResetMaxAttempts    = 5
-	PasswordResetRevokeTimeout  = 30 * time.Second
+	PasswordResetMaxAttempts       = 5
+	PasswordResetRevokeTimeout     = 30 * time.Second
+	PasswordResetRetryDelay        = 100 * time.Millisecond
+	PasswordResetSyncRevokeTimeout = 5 * time.Second
 )
 
 // checkAndIncrementAttemptsScript atomically checks attempt count, increments, and returns the data.
@@ -232,7 +234,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	// If the process crashes between token deletion and DB update, the worst case
 	// is that the user must request a new reset link — a safe failure mode.
 	if err := s.redis.Del(ctx, tokenKey); err != nil {
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(PasswordResetRetryDelay)
 		if retryErr := s.redis.Del(ctx, tokenKey); retryErr != nil {
 			s.logger.Error("Failed to delete reset token from Redis after retry, aborting password reset",
 				zap.Error(retryErr), zap.String("token_hash", tokenHash))
@@ -264,7 +266,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	default:
 		s.logger.Warn("Revoke goroutine limit reached, falling back to synchronous revocation",
 			zap.String("account_id", data.AccountID))
-		syncCtx, syncCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		syncCtx, syncCancel := context.WithTimeout(context.Background(), PasswordResetSyncRevokeTimeout)
 		defer syncCancel()
 		if err := s.sessionSvc.RevokeAllForAccount(syncCtx, data.AccountID); err != nil {
 			s.logger.Error("Failed to revoke sessions synchronously after password reset",

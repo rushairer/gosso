@@ -74,11 +74,17 @@ func (s *SessionService) SetTokenRevoker(revoker TokenRevoker) {
 
 // SetMaxSessions sets the maximum concurrent sessions per account.
 func (s *SessionService) SetMaxSessions(n int) {
+	if n < 0 {
+		return
+	}
 	s.maxSessions = n
 }
 
 // SetSessionTTL sets the session expiry duration.
 func (s *SessionService) SetSessionTTL(ttl time.Duration) {
+	if ttl <= 0 {
+		return
+	}
 	s.sessionTTL = ttl
 }
 

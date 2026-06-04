@@ -11,6 +11,15 @@ import (
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
 
+// OIDCModule holds all initialized OIDC services.
+type OIDCModule struct {
+	IDTokenService    *oidcService.IDTokenService
+	DiscoveryService  *oidcService.DiscoveryService
+	JWKSService       *oidcService.JWKSService
+	UserInfoService   *oidcService.UserInfoService
+	LogoutService     *oidcService.LogoutService
+}
+
 // InitializeOIDCModule initializes the OIDC module
 func InitializeOIDCModule(
 	tokenSvc *tokenService.TokenService,
@@ -19,12 +28,18 @@ func InitializeOIDCModule(
 	sessionSvc *sessionService.SessionService,
 	credentialRepo accountRepo.CredentialRepository,
 	logger *zap.Logger,
-) (*oidcService.IDTokenService, *oidcService.DiscoveryService, *oidcService.JWKSService, *oidcService.UserInfoService, *oidcService.LogoutService) {
+) *OIDCModule {
 	idTokenSvc := oidcService.NewIDTokenService(tokenSvc, authConfig.Issuer, accountSvc, credentialRepo, authConfig.IDTokenExpiry, logger)
 	discoverySvc := oidcService.NewDiscoveryService(authConfig.Issuer)
 	jwksSvc := oidcService.NewJWKSService(tokenSvc.KeyService())
 	userInfoSvc := oidcService.NewUserInfoService(accountSvc, credentialRepo, logger)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, authConfig.Issuer, logger)
 
-	return idTokenSvc, discoverySvc, jwksSvc, userInfoSvc, logoutSvc
+	return &OIDCModule{
+		IDTokenService:   idTokenSvc,
+		DiscoveryService: discoverySvc,
+		JWKSService:      jwksSvc,
+		UserInfoService:  userInfoSvc,
+		LogoutService:    logoutSvc,
+	}
 }

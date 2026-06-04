@@ -19,7 +19,7 @@ const (
 )
 
 // CSRFMiddleware double-submit cookie CSRF protection middleware.
-// Skips: Bearer auth, GET/HEAD/OPTIONS, skipPaths prefix match.
+// Skips: Bearer auth, GET/HEAD/OPTIONS, skipPaths exact match.
 func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		// Skip idempotent methods

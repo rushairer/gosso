@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -234,6 +235,10 @@ func (c *GoUnoConfig) Validate() error {
 		}
 		if c.AuthConfig.WebAuthnRPOrigin == "" {
 			return fmt.Errorf("auth: webauthn_rp_origin is required when webauthn_rp_id is set")
+		}
+		origin, err := url.Parse(c.AuthConfig.WebAuthnRPOrigin)
+		if err != nil || (origin.Scheme != "http" && origin.Scheme != "https") {
+			return fmt.Errorf("auth: webauthn_rp_origin must be a valid URL with http or https scheme")
 		}
 	}
 	if c.DatabaseConfig.MaxIdleConns > 0 && c.DatabaseConfig.MaxOpenConns > 0 &&

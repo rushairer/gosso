@@ -251,6 +251,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 				"Scopes": requestedScopes, "Scope": scope, "State": state,
 				"RedirectURI": redirectURI, "CodeChallenge": codeChallenge,
 				"CodeChallengeMethod": codeChallengeMethod, "Nonce": nonce,
+				"CSRFToken": csrfTokenFromCookie(ctx),
 			}); err != nil {
 				c.logger.Error("Failed to render consent template", zap.Error(err))
 				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -279,6 +280,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		"CodeChallenge":       codeChallenge,
 		"CodeChallengeMethod": codeChallengeMethod,
 		"Nonce":               nonce,
+		"CSRFToken":           csrfTokenFromCookie(ctx),
 	}); err != nil {
 		c.logger.Error("Failed to render consent template", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -859,6 +861,7 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 		"DeviceCode": dc.DeviceCode,
 		"ClientName": client.Name,
 		"Scopes":     dc.Scopes,
+		"CSRFToken":  csrfTokenFromCookie(ctx),
 	}); err != nil {
 		c.logger.Error("Failed to render device template", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -1057,4 +1060,10 @@ func intersectScopes(requested, allowed []string) []string {
 		}
 	}
 	return result
+}
+
+// csrfTokenFromCookie reads the CSRF token from the request cookie for server-side template injection.
+func csrfTokenFromCookie(ctx *gin.Context) string {
+	cookie, _ := ctx.Cookie("csrf_token")
+	return cookie
 }

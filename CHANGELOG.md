@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `wire.go` renamed to `module.go` in all modules — avoids confusion with Google Wire DI tool (`internal/account/module.go`, `internal/auth/module.go`, `internal/oauth2/module.go`, `internal/oidc/module.go`).
 - `isUniqueViolation` now uses `pgconn.PgError` type assertion with SQLSTATE code `23505` instead of fragile string matching (`internal/auth/service/social_login_service.go`).
 - Session index and token index `EXPIRE` failure now logged at Error level — silent failure could leave sets without TTL, accumulating indefinitely in Redis (`internal/session/service/session_service.go`, `internal/token/service/token_service.go`).
+- Consent and device authorization templates now inject CSRF token server-side via `{{.CSRFToken}}` with JS fallback — defense-in-depth against cookie-not-set edge cases (`internal/oauth2/controller/template/consent.html`, `internal/oauth2/controller/template/device.html`, `internal/oauth2/controller/oauth2_controller.go`).
+- CSRF middleware doc comment corrected from "prefix match" to "exact match" to match actual behavior (`middleware/csrf.go`).
+- Magic numbers `100ms` and `5s` in password reset service extracted to named constants `PasswordResetRetryDelay` and `PasswordResetSyncRevokeTimeout` (`internal/auth/service/password_reset_service.go`).
+- `WebAuthnRPOrigin` config validation now checks URL format with `http`/`https` scheme in addition to non-empty check (`config/config.go`).
+- `SessionService.SetSessionTTL` and `SetMaxSessions` now reject invalid values (non-positive TTL, negative max sessions) instead of silently accepting them (`internal/session/service/session_service.go`).
+- `OAuth2Module` and `OIDCModule` `Initialize` functions now return a struct instead of 5 separate values — improves readability and maintainability (`internal/oauth2/module.go`, `internal/oidc/module.go`, `cmd/gouno/web.go`).
 
 ### Removed
 

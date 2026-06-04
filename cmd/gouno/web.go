@@ -261,23 +261,23 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		impl.SetSessionRevoker(authMod.SessionService)
 	}
 
-	oauth2ClientSvc, authCodeSvc, consentSvc, deviceCodeSvc, clientRepo := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig)
-	idTokenSvc, discoverySvc, jwksSvc, userInfoSvc, logoutSvc := oidc.InitializeOIDCModule(tokenSvc, accountMod.Service, cfg.AuthConfig, authMod.SessionService, accountMod.CredentialRepo, logger)
+	oauth2Mod := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig)
+	oidcMod := oidc.InitializeOIDCModule(tokenSvc, accountMod.Service, cfg.AuthConfig, authMod.SessionService, accountMod.CredentialRepo, logger)
 
 	// Wire OAuth2 client deleter into account service (for account deletion -> OAuth2 client cascade)
 	if impl, ok := accountMod.Service.(interface{ SetOAuth2ClientDeleter(accountService.OAuth2ClientDeleter) }); ok {
-		impl.SetOAuth2ClientDeleter(&oauth2ClientDeleterAdapter{clientRepo: clientRepo})
+		impl.SetOAuth2ClientDeleter(&oauth2ClientDeleterAdapter{clientRepo: oauth2Mod.ClientRepo})
 	}
 
 	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, authMod.CredentialRepo, db, !cfg.WebServerConfig.Debug, logger)
-	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2ClientSvc, authCodeSvc, consentSvc, tokenSvc, idTokenSvc, deviceCodeSvc, cfg.AuthConfig.Issuer, logger)
+	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, cfg.AuthConfig.Issuer, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
 	}
 	oauth2Ctrl.SetAccountValidator(&accountValidatorAdapter{accountSvc: accountMod.Service})
 	oauth2Ctrl.SetSessionValidator(authMod.SessionService)
-	clientCtrl := oauth2Controller.NewClientController(oauth2ClientSvc, logger)
-	oidcCtrl := oidcController.NewOIDCController(discoverySvc, jwksSvc, userInfoSvc, logoutSvc, clientRepo, tokenSvc, cfg.AuthConfig.Issuer, logger)
+	clientCtrl := oauth2Controller.NewClientController(oauth2Mod.ClientService, logger)
+	oidcCtrl := oidcController.NewOIDCController(oidcMod.DiscoveryService, oidcMod.JWKSService, oidcMod.UserInfoService, oidcMod.LogoutService, oauth2Mod.ClientRepo, tokenSvc, cfg.AuthConfig.Issuer, logger)
 	adminCtrl := adminController.NewAdminController(accountMod.Service, logger)
 
 	var passkeyCtrl *authController.PasskeyController
