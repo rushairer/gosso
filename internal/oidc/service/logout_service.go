@@ -106,8 +106,8 @@ func (s *LogoutService) LogoutBySessionID(ctx context.Context, accountID, sessio
 			zap.String("session_id", sessionID), zap.Error(err))
 	}
 
-	if err := s.sessionSvc.DeleteSession(ctx, parsedID); err != nil {
-		return fmt.Errorf("delete session: %w", err)
+	if err := s.sessionSvc.RevokeSession(ctx, accountID, parsedID); err != nil {
+		return fmt.Errorf("revoke session: %w", err)
 	}
 
 	s.logger.Info("Session logout successful",
