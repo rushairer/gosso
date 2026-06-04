@@ -498,6 +498,17 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 		return err
 	}
 
+	// Revoke all active sessions so the suspended user loses access immediately
+	if s.sessionRevoker != nil {
+		if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
+			s.logger.Error("Failed to revoke sessions after account suspension",
+				zap.String("account_id", accountID), zap.Error(revokeErr))
+		}
+	} else {
+		s.logger.Warn("SessionRevoker not set, skipping session revocation on account suspension",
+			zap.String("account_id", accountID))
+	}
+
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountSuspend,
 		audit.IPFromContext(ctx),
