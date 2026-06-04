@@ -53,10 +53,11 @@ func NewOIDCController(
 
 // RegisterRoutes registers OIDC routes (UserInfo + Logout).
 // .well-known routes are registered at the router layer for independent rate limiting.
+// GET /logout is intentionally omitted to prevent CSRF via image tags or link prefetching.
+// Clients must use POST or redirect with id_token_hint (handled in Logout).
 func (c *OIDCController) RegisterRoutes(server *gin.RouterGroup, authMiddleware gin.HandlerFunc) {
 	server.GET("/userinfo", authMiddleware, c.UserInfo)
 	server.POST("/userinfo", authMiddleware, c.UserInfo)
-	server.GET("/logout", c.Logout)
 	server.POST("/logout", c.Logout)
 }
 
@@ -108,7 +109,7 @@ type logoutRequest struct {
 	State                 string `form:"state"`
 }
 
-// Logout handles GET/POST /oidc/logout per OpenID Connect RP-Initiated Logout 1.0.
+// Logout handles POST /oidc/logout per OpenID Connect RP-Initiated Logout 1.0.
 func (c *OIDCController) Logout(ctx *gin.Context) {
 	var req logoutRequest
 	if err := ctx.ShouldBind(&req); err != nil {
@@ -170,6 +171,8 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 				clientID = tokenClaims.ClientID
 				if err := c.logoutSvc.LogoutBySessionID(ctx, tokenClaims.AccountID, tokenClaims.SessionID); err != nil {
 					c.logger.Error("Logout by session ID failed", zap.String("session_id", tokenClaims.SessionID), zap.Error(err))
+					ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout failed"))
+					return
 				}
 				// Blacklist the current access token so it cannot be reused
 				if tokenClaims.ExpiresAt != nil {
