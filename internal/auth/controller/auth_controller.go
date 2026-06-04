@@ -73,8 +73,9 @@ func NewAuthController(
 }
 
 // RegisterRoutes registers authentication routes
+// jwtAuth: JWT authentication middleware for protected endpoints
 // loginLimit, mfaLimit, passwordLimit, refreshLimit, verifyLimit, socialLimit: optional per-endpoint rate limiting middlewares
-func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.HandlerFunc, mfaLimit gin.HandlerFunc, passwordLimit gin.HandlerFunc, refreshLimit gin.HandlerFunc, verifyLimit gin.HandlerFunc, socialLimit ...gin.HandlerFunc) {
+func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, jwtAuth gin.HandlerFunc, loginLimit gin.HandlerFunc, mfaLimit gin.HandlerFunc, passwordLimit gin.HandlerFunc, refreshLimit gin.HandlerFunc, verifyLimit gin.HandlerFunc, socialLimit ...gin.HandlerFunc) {
 	auth := rg.Group("/auth")
 	{
 		loginHandlers := []gin.HandlerFunc{c.Login}
@@ -88,30 +89,15 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.Hand
 			refreshHandlers = []gin.HandlerFunc{refreshLimit, c.Refresh}
 		}
 		auth.POST("/refresh", refreshHandlers...)
-		auth.POST("/logout", c.Logout)
-		auth.GET("/session", c.GetSession)
 
-		// Session management endpoints
-		auth.GET("/sessions", c.ListSessions)
-		auth.DELETE("/sessions/:id", c.RevokeSession)
-
-		// MFA endpoints
+		// MFA verify uses mfa_token, not JWT
 		mfaVerifyHandlers := []gin.HandlerFunc{c.MFAVerify}
 		if mfaLimit != nil {
 			mfaVerifyHandlers = []gin.HandlerFunc{mfaLimit, c.MFAVerify}
 		}
 		auth.POST("/mfa/verify", mfaVerifyHandlers...)
 
-		mfaMgmtHandlers := []gin.HandlerFunc{mfaLimit}
-		if mfaLimit == nil {
-			mfaMgmtHandlers = nil
-		}
-		auth.POST("/mfa/enroll", append(mfaMgmtHandlers, c.MFAEnroll)...)
-		auth.POST("/mfa/activate", append(mfaMgmtHandlers, c.MFAActivate)...)
-		auth.DELETE("/mfa", append(mfaMgmtHandlers, c.MFADisable)...)
-		auth.POST("/mfa/backup-codes", append(mfaMgmtHandlers, c.MFAGenerateBackupCodes)...)
-
-		// Social login endpoints
+		// Social login endpoints (unauthenticated)
 		auth.GET("/social/:provider", c.SocialAuthURL)
 		socialCallbackHandlers := []gin.HandlerFunc{c.SocialCallback}
 		if len(socialLimit) > 0 && socialLimit[0] != nil {
@@ -119,7 +105,7 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.Hand
 		}
 		auth.GET("/social/:provider/callback", socialCallbackHandlers...)
 
-		// Verification endpoints
+		// Verification endpoints (unauthenticated)
 		verifyHandlers := []gin.HandlerFunc{c.SendVerification}
 		if verifyLimit != nil {
 			verifyHandlers = []gin.HandlerFunc{verifyLimit, c.SendVerification}
@@ -142,7 +128,33 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.Hand
 			resetPasswordHandlers = []gin.HandlerFunc{passwordLimit, c.ResetPassword}
 		}
 		auth.POST("/password/reset", resetPasswordHandlers...)
+
+		// JWT-protected endpoints
+		protected := auth.Group("")
+		protected.Use(jwtAuth)
+		{
+			protected.POST("/logout", c.Logout)
+			protected.GET("/session", c.GetSession)
+
+			// Session management
+			protected.GET("/sessions", c.ListSessions)
+			protected.DELETE("/sessions/:id", c.RevokeSession)
+
+			// MFA management (requires JWT + optional rate limiting)
+			protected.POST("/mfa/enroll", append(mfaMgmtHandlers(mfaLimit), c.MFAEnroll)...)
+			protected.POST("/mfa/activate", append(mfaMgmtHandlers(mfaLimit), c.MFAActivate)...)
+			protected.DELETE("/mfa", append(mfaMgmtHandlers(mfaLimit), c.MFADisable)...)
+			protected.POST("/mfa/backup-codes", append(mfaMgmtHandlers(mfaLimit), c.MFAGenerateBackupCodes)...)
+		}
 	}
+}
+
+// mfaMgmtHandlers returns rate limit middleware for MFA management endpoints, or nil if no limit.
+func mfaMgmtHandlers(mfaLimit gin.HandlerFunc) []gin.HandlerFunc {
+	if mfaLimit == nil {
+		return nil
+	}
+	return []gin.HandlerFunc{mfaLimit}
 }
 
 // LoginRequestBody login request body
