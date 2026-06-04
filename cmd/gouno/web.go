@@ -275,6 +275,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
 	}
 	oauth2Ctrl.SetAccountValidator(&accountValidatorAdapter{accountSvc: accountMod.Service})
+	oauth2Ctrl.SetSessionValidator(authMod.SessionService)
 	clientCtrl := oauth2Controller.NewClientController(oauth2ClientSvc, logger)
 	oidcCtrl := oidcController.NewOIDCController(discoverySvc, jwksSvc, userInfoSvc, logoutSvc, clientRepo, tokenSvc, cfg.AuthConfig.Issuer, logger)
 	adminCtrl := adminController.NewAdminController(accountMod.Service, logger)

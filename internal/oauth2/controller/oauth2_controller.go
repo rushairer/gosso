@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 
@@ -20,6 +21,7 @@ import (
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
+	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
@@ -28,6 +30,7 @@ type TokenManager interface {
 	GenerateAccessToken(claims *tokenDomain.AccessTokenClaims) (string, error)
 	GenerateRefreshToken(ctx context.Context, accountID, clientID, sessionID, scope string) (*tokenDomain.RefreshToken, error)
 	ValidateRefreshToken(ctx context.Context, token string) (*tokenDomain.RefreshToken, error)
+	ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*tokenDomain.AccessTokenClaims, error)
 	RotateRefreshToken(ctx context.Context, oldToken string) (*tokenDomain.RefreshToken, error)
 	RevokeRefreshToken(ctx context.Context, token string) error
 	IntrospectToken(ctx context.Context, tokenString string) (map[string]any, error)
@@ -50,6 +53,11 @@ type AccountValidator interface {
 	IsAccountActive(ctx context.Context, accountID string) bool
 }
 
+// SessionValidator checks whether a session is still active.
+type SessionValidator interface {
+	ValidateSession(ctx context.Context, sessionID uuid.UUID) (*sessionDomain.Session, error)
+}
+
 //go:embed template/consent.html
 var consentTemplateFS embed.FS
 
@@ -65,6 +73,7 @@ type OAuth2Controller struct {
 	idTokenSvc        *oidcService.IDTokenService
 	deviceCodeSvc     DeviceCodeManager
 	accountValidator  AccountValidator
+	sessionValidator  SessionValidator
 	issuer            string
 	consentTmpl       *template.Template
 	deviceTmpl        *template.Template
@@ -109,11 +118,58 @@ func (c *OAuth2Controller) SetAccountValidator(v AccountValidator) {
 	c.accountValidator = v
 }
 
+// SetSessionValidator sets the session validator dependency (setter injection).
+func (c *OAuth2Controller) SetSessionValidator(v SessionValidator) {
+	c.sessionValidator = v
+}
+
+// authenticateRequest extracts and validates the access token from the request.
+// It tries the Authorization header first, then falls back to a form field.
+// Returns the account ID on success, or an empty string and writes an error response on failure.
+func (c *OAuth2Controller) authenticateRequest(ctx *gin.Context) (string, bool) {
+	tokenString := ""
+	if authHeader := ctx.GetHeader("Authorization"); authHeader != "" {
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			tokenString = parts[1]
+		}
+	}
+	if tokenString == "" {
+		tokenString = ctx.PostForm("access_token")
+	}
+	if tokenString == "" {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return "", false
+	}
+
+	claims, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx.Request.Context(), tokenString)
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return "", false
+	}
+	if claims.Scope != "" {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "forbidden", "error_description": "scoped token not allowed"})
+		return "", false
+	}
+	if c.sessionValidator != nil && claims.SessionID != "" {
+		sessionUUID, err := uuid.Parse(claims.SessionID)
+		if err != nil {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return "", false
+		}
+		if _, err := c.sessionValidator.ValidateSession(ctx.Request.Context(), sessionUUID); err != nil {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return "", false
+		}
+	}
+	return claims.AccountID, true
+}
+
 // RegisterRoutes registers OAuth2 routes.
 // introspectLimit and deviceCodeLimit are optional rate limit middleware for CPU-intensive endpoints.
 func (c *OAuth2Controller) RegisterRoutes(rg *gin.RouterGroup, authMiddleware, introspectLimit, deviceCodeLimit gin.HandlerFunc) {
 	rg.GET("/authorize", authMiddleware, c.Authorize)
-	rg.POST("/authorize", authMiddleware, c.SubmitConsent)
+	rg.POST("/authorize", c.SubmitConsent)
 	rg.POST("/token", c.Token)
 	rg.POST("/revoke", authMiddleware, c.Revoke)
 
@@ -130,7 +186,7 @@ func (c *OAuth2Controller) RegisterRoutes(rg *gin.RouterGroup, authMiddleware, i
 	rg.POST("/device/code", deviceCodeHandlers...)
 
 	rg.GET("/device", authMiddleware, c.DeviceUserPage)
-	rg.POST("/device", authMiddleware, c.DeviceUserSubmit)
+	rg.POST("/device", c.DeviceUserSubmit)
 }
 
 // Authorize GET /oauth2/authorize
@@ -176,6 +232,8 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
+	accessTokenStr, _ := ctx.Get("jwt_token_string")
+
 	existingConsent, consentErr := c.consentSvc.GetConsent(ctx, accountIDStr, clientID)
 	if consentErr != nil {
 		c.logger.Warn("Failed to get consent, showing consent page", zap.Error(consentErr), zap.String("account_id", accountIDStr), zap.String("client_id", clientID))
@@ -193,6 +251,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 				"Scopes": requestedScopes, "Scope": scope, "State": state,
 				"RedirectURI": redirectURI, "CodeChallenge": codeChallenge,
 				"CodeChallengeMethod": codeChallengeMethod, "Nonce": nonce,
+				"AccessToken": accessTokenStr,
 			}); err != nil {
 				c.logger.Error("Failed to render consent template", zap.Error(err))
 				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -221,6 +280,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		"CodeChallenge":       codeChallenge,
 		"CodeChallengeMethod": codeChallengeMethod,
 		"Nonce":               nonce,
+		"AccessToken":         accessTokenStr,
 	}); err != nil {
 		c.logger.Error("Failed to render consent template", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -253,14 +313,8 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	approved := ctx.PostForm("approved")
 	req.Approved = approved == "true"
 
-	accountID, exists := ctx.Get(middleware.ContextKeyAccountID)
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	accountIDStr, ok := accountID.(string)
-	if !ok || accountIDStr == "" {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	accountIDStr, ok := c.authenticateRequest(ctx)
+	if !ok {
 		return
 	}
 
@@ -728,6 +782,7 @@ func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
 // DeviceUserPage GET /oauth2/device
 func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 	userCode := ctx.Query("user_code")
+	accessTokenStr, _ := ctx.Get("jwt_token_string")
 
 	if userCode == "" {
 		var buf bytes.Buffer
@@ -783,6 +838,7 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 		"DeviceCode": dc.DeviceCode,
 		"ClientName": client.Name,
 		"Scopes":     dc.Scopes,
+		"AccessToken": accessTokenStr,
 	}); err != nil {
 		c.logger.Error("Failed to render device template", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -806,14 +862,8 @@ func (c *OAuth2Controller) DeviceUserSubmit(ctx *gin.Context) {
 		return
 	}
 
-	accountID, exists := ctx.Get(middleware.ContextKeyAccountID)
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	accountIDStr, ok := accountID.(string)
-	if !ok || accountIDStr == "" {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	accountIDStr, ok := c.authenticateRequest(ctx)
+	if !ok {
 		return
 	}
 

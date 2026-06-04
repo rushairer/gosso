@@ -107,6 +107,10 @@ func (m *mockTokenMgr) ValidateRefreshToken(_ context.Context, _ string) (*token
 	return &tokenDomain.RefreshToken{Token: "valid-refresh", ClientID: "cid-test", AccountID: "account-001"}, nil
 }
 
+func (m *mockTokenMgr) ValidateAccessTokenWithContext(_ context.Context, _ string) (*tokenDomain.AccessTokenClaims, error) {
+	return &tokenDomain.AccessTokenClaims{AccountID: "account-001"}, nil
+}
+
 type mockDeviceCodeMgr struct {
 	createFn        func() (*oauth2Domain.DeviceCode, error)
 	getFn           func() (*oauth2Domain.DeviceCode, error)

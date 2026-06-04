@@ -65,6 +65,7 @@ func JWTAuthMiddleware(tokenSvc *tokenService.TokenService, sessionValidator Ses
 
 		ctx.Set(ContextKeyAccountID, claims.AccountID)
 		ctx.Set(ContextKeyClaims, claims)
+		ctx.Set("jwt_token_string", tokenString)
 		ctx.Next()
 	}
 }
