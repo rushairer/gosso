@@ -125,7 +125,11 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, loginLimit gin.Hand
 			verifyHandlers = []gin.HandlerFunc{verifyLimit, c.SendVerification}
 		}
 		auth.POST("/verify/send", verifyHandlers...)
-		auth.POST("/verify/confirm", c.ConfirmVerification)
+		confirmHandlers := []gin.HandlerFunc{c.ConfirmVerification}
+		if verifyLimit != nil {
+			confirmHandlers = []gin.HandlerFunc{verifyLimit, c.ConfirmVerification}
+		}
+		auth.POST("/verify/confirm", confirmHandlers...)
 
 		// Password reset endpoints (unauthenticated)
 		passwordHandlers := []gin.HandlerFunc{c.ForgotPassword}
