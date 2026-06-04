@@ -385,6 +385,16 @@ func (c *OAuth2Controller) Token(ctx *gin.Context) {
 		return
 	}
 
+	// Support client_secret_basic (RFC 6749 §2.3.1): parse Authorization: Basic header
+	if clientID, clientSecret, ok := ctx.Request.BasicAuth(); ok {
+		if req.ClientID == "" {
+			req.ClientID = clientID
+		}
+		if req.ClientSecret == "" {
+			req.ClientSecret = clientSecret
+		}
+	}
+
 	switch req.GrantType {
 	case "authorization_code":
 		c.handleAuthorizationCodeGrant(ctx, &req)
