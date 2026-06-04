@@ -217,7 +217,8 @@ func (c *GoUnoConfig) Validate() error {
 		return fmt.Errorf("auth: device_code_interval must be positive")
 	}
 	if c.WebServerConfig.RateLimits.Login <= 0 || c.WebServerConfig.RateLimits.Token <= 0 ||
-		c.WebServerConfig.RateLimits.Passkey <= 0 || c.WebServerConfig.RateLimits.API <= 0 {
+		c.WebServerConfig.RateLimits.Passkey <= 0 || c.WebServerConfig.RateLimits.API <= 0 ||
+		c.WebServerConfig.RateLimits.Introspect <= 0 || c.WebServerConfig.RateLimits.DeviceCode <= 0 {
 		return fmt.Errorf("web_server: rate_limits values must be positive")
 	}
 	if c.SMTPConfig.Host != "" {
