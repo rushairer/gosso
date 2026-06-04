@@ -19,6 +19,8 @@ import (
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+
+	"github.com/rushairer/gosso/internal/auth/middleware"
 )
 
 // ──────────────────────────────────────────────
@@ -207,8 +209,13 @@ func setupOAuth2Router(clientSvc *mockOAuth2ClientSvcForOAuth2, tokenSvc *mockTo
 	}
 
 	// Register token and revoke routes (no Redis dependency)
+	// authCtx simulates JWTAuthMiddleware by injecting account_id into context
+	authCtx := func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctx.Next()
+	}
 	engine.POST("/oauth2/token", ctrl.Token)
-	engine.POST("/oauth2/revoke", ctrl.Revoke)
+	engine.POST("/oauth2/revoke", authCtx, ctrl.Revoke)
 	engine.POST("/oauth2/introspect", ctrl.Introspect)
 	engine.POST("/oauth2/device/code", ctrl.DeviceCodeRequest)
 
@@ -543,6 +550,29 @@ func TestRevoke_MissingToken(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestRevoke_Forbidden(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl := &OAuth2Controller{
+		tokenSvc:         &mockTokenMgr{},
+		accountValidator: &mockAccountValidatorAlwaysActive{},
+		logger:           zap.NewNop(),
+	}
+	// Auth context with a different account ID than the token owner
+	engine.POST("/oauth2/revoke", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "other-account")
+		ctx.Next()
+	}, ctrl.Revoke)
+
+	body := `{"token":"some-refresh-token"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/revoke", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
 }
 
 // ──────────────────────────────────────────────

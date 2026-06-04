@@ -575,6 +575,22 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 		return
 	}
 
+	// Verify the refresh token belongs to the authenticated user before revoking.
+	accountID, exists := ctx.Get(middleware.ContextKeyAccountID)
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	rt, err := c.tokenSvc.ValidateRefreshToken(ctx, req.Token)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_token"})
+		return
+	}
+	if rt.AccountID != accountID.(string) {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
 	if err := c.tokenSvc.RevokeRefreshToken(ctx, req.Token); err != nil {
 		c.logger.Error("Failed to revoke token", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
