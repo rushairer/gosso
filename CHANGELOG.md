@@ -104,6 +104,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: `SuspendAccount` now revokes all sessions and refresh tokens — prevents suspended users from retaining API access through existing tokens for up to 7 days (`internal/account/service/account_service.go`).
 - Password reset token Redis deletion now retries once on failure with Error-level logging — previously a single Redis failure left the token reusable until TTL with only a Warn log (`internal/auth/service/password_reset_service.go`).
 - Password reset session revocation semaphore-full scenario now logged at Error level — was previously Warn, underreporting a security-relevant skip (`internal/auth/service/password_reset_service.go`).
+- **Security**: `SocialCallback` now checks `RequiresMFA` before accessing `result.Session` — prevents nil pointer panic when a social login user has MFA enabled (`internal/auth/controller/auth_controller.go`).
+- **Security**: Refresh token grant now verifies account is active BEFORE consuming the old token — prevents suspended accounts from losing all tokens when old token is consumed but new token is revoked (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Authorization code grant now validates account is active before issuing tokens — consistent with refresh token and device code flows (`internal/oauth2/controller/oauth2_controller.go`).
 
 ### Changed
 
