@@ -954,6 +954,18 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		return
 	}
 
+	// Verify account is still active BEFORE claiming the device code.
+	// If checked after claim, an inactive account would waste the device code.
+	if c.accountValidator == nil {
+		c.logger.Error("OAuth2Controller: accountValidator not configured")
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+	if !c.accountValidator.IsAccountActive(ctx, dc.AccountID) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "account is not active"})
+		return
+	}
+
 	// Atomically claim the device code (status authorized→used) to prevent double-use.
 	// The Lua script handles all status validation atomically, so no non-atomic
 	// status check is needed before this call.
@@ -965,17 +977,6 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 
 	// Use claimedDC for token issuance
 	dc = claimedDC
-
-	// Verify account is still active before issuing tokens
-	if c.accountValidator == nil {
-		c.logger.Error("OAuth2Controller: accountValidator not configured")
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-		return
-	}
-	if !c.accountValidator.IsAccountActive(ctx, dc.AccountID) {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "account is not active"})
-		return
-	}
 
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		AccountID: dc.AccountID,
