@@ -110,6 +110,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: Auth controller protected endpoints (logout, sessions, MFA management) now have JWT authentication — previously `RegisterRoutes` did not accept or apply `jwtAuth` middleware, causing all protected auth endpoints to always return 401 (`internal/auth/controller/auth_controller.go`, `router/web.go`).
 - **Security**: OAuth2 consent and device authorization form submissions now work without `Authorization` header — HTML forms cannot set custom headers; the access token is embedded as a hidden field and validated on POST (`internal/oauth2/controller/oauth2_controller.go`, `internal/auth/middleware/auth_middleware.go`).
 - **Security**: Token endpoint now supports `client_secret_basic` authentication — aligns implementation with OIDC discovery document that advertises both `client_secret_post` and `client_secret_basic` per RFC 6749 §2.3.1 (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Password reset session revocation now falls back to synchronous execution when the goroutine semaphore is full — previously session revocation was silently skipped, leaving old sessions active (`internal/auth/service/password_reset_service.go`).
+- **Security**: `RevokeAllForSession` now deletes individual refresh tokens before the session index — prevents orphaned tokens from remaining usable if index deletion succeeds but token deletion fails (`internal/token/service/token_service.go`).
 
 ### Changed
 
