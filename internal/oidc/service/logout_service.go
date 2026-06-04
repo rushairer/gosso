@@ -81,10 +81,16 @@ func (s *LogoutService) LogoutByAccountID(ctx context.Context, accountID string)
 		return fmt.Errorf("revoke all sessions for account: %w", err)
 	}
 
-	// TODO: Blacklist all active access tokens for this account.
-	// Currently relies on JWTAuthMiddleware's session existence check to reject orphaned access tokens,
-	// but there is a brief window between session deletion and token expiry where access tokens remain valid.
-	// Requires an account→JTI index in Redis or a "revoke after" timestamp check in the JWT middleware.
+	// Revoke all outstanding access tokens for this account.
+	// Uses a "revoke after" timestamp — tokens issued before this time will be
+	// rejected by ValidateAccessTokenWithContext.
+	if err := s.tokenSvc.RevokeAccountTokens(ctx, accountID); err != nil {
+		s.logger.Warn("Failed to revoke access tokens for account during logout",
+			zap.String("account_id", accountID), zap.Error(err))
+		// Non-fatal: sessions and refresh tokens are already revoked above.
+		// The JWT middleware's session check provides a secondary defense.
+	}
+
 	s.logger.Info("Account logout successful", zap.String("account_id", accountID))
 	return nil
 }

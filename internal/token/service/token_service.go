@@ -122,6 +122,20 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 		return nil, ErrTokenRevoked
 	}
 
+	// Account-level revocation check — rejects all tokens issued before the
+	// account's revocation timestamp (e.g., after OIDC logout).
+	if claims.IssuedAt != nil && claims.AccountID != "" {
+		revokedAfter, err := s.blacklist.GetAccountRevokedAfter(ctx, claims.AccountID)
+		if err != nil {
+			s.logger.Error("Failed to check account revoked-after, rejecting token",
+				zap.Error(err), zap.String("account_id", claims.AccountID))
+			return nil, ErrBlacklistUnavailable
+		}
+		if !revokedAfter.IsZero() && claims.IssuedAt.Time.Before(revokedAfter) {
+			return nil, ErrTokenRevoked
+		}
+	}
+
 	return claims, nil
 }
 
@@ -346,6 +360,23 @@ func (s *TokenService) RevokeAccessToken(ctx context.Context, jti string, expire
 		return nil
 	}
 	return s.blacklist.RevokeToken(ctx, jti, "logout", expiresAt)
+}
+
+// RevokeAccountTokens marks all access tokens for the given account as revoked.
+// Tokens issued before this call will be rejected by ValidateAccessTokenWithContext.
+// The revocation record automatically expires after accessExpiry duration.
+func (s *TokenService) RevokeAccountTokens(ctx context.Context, accountID string) error {
+	if s.blacklist == nil {
+		s.logger.Warn("RevokeAccountTokens called but blacklist is nil", zap.String("account_id", accountID))
+		return nil
+	}
+
+	ttl := s.accessExpiry
+	if ttl <= 0 {
+		ttl = 15 * time.Minute
+	}
+
+	return s.blacklist.SetAccountRevokedAfter(ctx, accountID, time.Now(), ttl)
 }
 
 func (s *TokenService) buildRefreshTokenKey(token string) string {

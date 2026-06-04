@@ -112,6 +112,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: Token endpoint now supports `client_secret_basic` authentication — aligns implementation with OIDC discovery document that advertises both `client_secret_post` and `client_secret_basic` per RFC 6749 §2.3.1 (`internal/oauth2/controller/oauth2_controller.go`).
 - **Security**: Password reset session revocation now falls back to synchronous execution when the goroutine semaphore is full — previously session revocation was silently skipped, leaving old sessions active (`internal/auth/service/password_reset_service.go`).
 - **Security**: `RevokeAllForSession` now deletes individual refresh tokens before the session index — prevents orphaned tokens from remaining usable if index deletion succeeds but token deletion fails (`internal/token/service/token_service.go`).
+- **Security**: `RevokeAllForAccount` now uses a Lua script to atomically read and delete the session index — eliminates TOCTOU race where new sessions created between `SMembers` and `Del` would be orphaned (`internal/session/service/session_service.go`).
+- **Security**: OIDC `LogoutByAccountID` now revokes all outstanding access tokens via a "revoke after" timestamp — `ValidateAccessTokenWithContext` rejects tokens issued before the account's revocation time, closing the window where access tokens remain valid after session deletion (`internal/token/service/token_service.go`, `internal/token/service/blacklist_service.go`, `internal/oidc/service/logout_service.go`).
 
 ### Changed
 

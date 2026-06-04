@@ -16,6 +16,9 @@ import (
 const (
 	// BlacklistKeyPrefix is the Redis key prefix for token blacklist
 	BlacklistKeyPrefix = "blacklist:token:"
+	// AccountRevokedAfterPrefix is the Redis key prefix for account-level token revocation.
+	// Stores the unix timestamp after which all access tokens for the account are considered revoked.
+	AccountRevokedAfterPrefix = "account_revoked_after:"
 )
 
 // BlacklistService handles token blacklist operations
@@ -121,6 +124,58 @@ func (s *BlacklistService) RemoveFromBlacklist(ctx context.Context, jti string) 
 // buildBlacklistKey constructs the Redis key
 func (s *BlacklistService) buildBlacklistKey(jti string) string {
 	return fmt.Sprintf("%s%s", BlacklistKeyPrefix, jti)
+}
+
+// SetAccountRevokedAfter records that all access tokens issued before the given
+// timestamp should be considered revoked for the given account. The key
+// automatically expires after the specified duration (should be >= access token
+// expiry to ensure all pre-revocation tokens have naturally expired).
+func (s *BlacklistService) SetAccountRevokedAfter(ctx context.Context, accountID string, revokedAt time.Time, ttl time.Duration) error {
+	key := s.buildAccountRevokedAfterKey(accountID)
+	timestamp := revokedAt.Unix()
+
+	if err := s.redis.Set(ctx, key, timestamp, ttl); err != nil {
+		s.logger.Error("Failed to set account revoked-after timestamp",
+			zap.String("account_id", accountID), zap.Error(err))
+		return fmt.Errorf("set account revoked after: %w", err)
+	}
+
+	s.logger.Info("Account tokens revoked after timestamp",
+		zap.String("account_id", accountID),
+		zap.Time("revoked_at", revokedAt),
+		zap.Duration("ttl", ttl))
+
+	return nil
+}
+
+// GetAccountRevokedAfter returns the timestamp after which all access tokens
+// for the given account should be considered revoked.
+// Returns (time.Time{}, nil) if no revocation record exists.
+func (s *BlacklistService) GetAccountRevokedAfter(ctx context.Context, accountID string) (time.Time, error) {
+	key := s.buildAccountRevokedAfterKey(accountID)
+	val, err := s.redis.Get(ctx, key)
+	if err == cache.ErrKeyNotFound {
+		return time.Time{}, nil
+	}
+	if err != nil {
+		s.logger.Error("Failed to get account revoked-after timestamp",
+			zap.String("account_id", accountID), zap.Error(err))
+		return time.Time{}, fmt.Errorf("get account revoked after: %w", err)
+	}
+
+	var unixTimestamp int64
+	if _, parseErr := fmt.Sscanf(val, "%d", &unixTimestamp); parseErr != nil {
+		s.logger.Error("Failed to parse account revoked-after timestamp",
+			zap.String("account_id", accountID), zap.String("value", val), zap.Error(parseErr))
+		return time.Time{}, fmt.Errorf("parse account revoked after: %w", parseErr)
+	}
+
+	return time.Unix(unixTimestamp, 0), nil
+}
+
+// buildAccountRevokedAfterKey constructs the Redis key for account-level revocation.
+func (s *BlacklistService) buildAccountRevokedAfterKey(accountID string) string {
+	return fmt.Sprintf("%s%s", AccountRevokedAfterPrefix, accountID)
 }
 
 // Error definitions
