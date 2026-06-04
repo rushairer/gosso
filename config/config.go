@@ -248,5 +248,11 @@ func (c *GoUnoConfig) Validate() error {
 	if c.AuthConfig.MaxSessions < 0 {
 		return fmt.Errorf("auth: max_sessions must not be negative")
 	}
+	if c.WebServerConfig.MaxBodySize <= 0 {
+		return fmt.Errorf("web_server: max_body_size must be positive (got %d)", c.WebServerConfig.MaxBodySize)
+	}
+	if c.RedisConfig.MaxActiveConns <= 0 {
+		return fmt.Errorf("redis: max_active_conns must be positive (got %d)", c.RedisConfig.MaxActiveConns)
+	}
 	return nil
 }
