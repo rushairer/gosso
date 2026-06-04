@@ -390,7 +390,18 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 		return err
 	}
 
-	// 5. Audit log
+	// 5. Revoke all existing sessions so that any attacker with a stolen session is kicked out
+	if s.sessionRevoker != nil {
+		if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
+			s.logger.Error("Failed to revoke sessions after password change",
+				zap.String("account_id", accountID), zap.Error(revokeErr))
+		}
+	} else {
+		s.logger.Warn("SessionRevoker not set, skipping session revocation on password change",
+			zap.String("account_id", accountID))
+	}
+
+	// 6. Audit log
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionPasswordChange,
 		audit.IPFromContext(ctx),
