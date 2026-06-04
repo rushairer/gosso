@@ -142,9 +142,10 @@ func (s *AuthService) ValidateMFAToken(ctx context.Context, mfaToken string) (*t
 	return claims, nil
 }
 
-// MarkPasskeyMFAVerified marks passkey MFA as verified
-func (s *AuthService) MarkPasskeyMFAVerified(ctx context.Context, accountID string) error {
-	key := fmt.Sprintf("webauthn:mfa_verified:%s", accountID)
+// MarkPasskeyMFAVerified marks passkey MFA as verified for a specific MFA attempt.
+// The key is namespaced by the MFA token JTI to prevent concurrent login interference.
+func (s *AuthService) MarkPasskeyMFAVerified(ctx context.Context, mfaTokenJTI string) error {
+	key := fmt.Sprintf("webauthn:mfa_verified:%s", mfaTokenJTI)
 	return s.redis.Set(ctx, key, "1", s.mfaVerificationTTL)
 }
 

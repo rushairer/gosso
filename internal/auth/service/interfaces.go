@@ -20,7 +20,7 @@ type AuthOrchestrator interface {
 	ListSessions(ctx context.Context, accountID string) ([]*sessionDomain.Session, error)
 	RevokeSession(ctx context.Context, accountID, sessionID string) error
 	ValidateMFAToken(ctx context.Context, mfaToken string) (*tokenDomain.AccessTokenClaims, error)
-	MarkPasskeyMFAVerified(ctx context.Context, accountID string) error
+	MarkPasskeyMFAVerified(ctx context.Context, mfaTokenJTI string) error
 	CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip, userAgent string) (*LoginResult, error)
 	MFAService() *MFAService
 	PasskeyService() *PasskeyService

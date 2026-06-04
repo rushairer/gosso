@@ -166,7 +166,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	accountID := claims.AccountID
 
 	// 2. Verify based on MFA type
-	if err := s.verifyMFACode(ctx, mfaType, accountID, mfaCode); err != nil {
+	if err := s.verifyMFACode(ctx, mfaType, accountID, mfaCode, claims.ID); err != nil {
 		return nil, err
 	}
 
@@ -234,7 +234,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	accountID := claims.AccountID
 
 	// 2. Verify passkey MFA flag (set by CompleteMFALogin in the passkey controller)
-	passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", accountID)
+	passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", claims.ID) // namespaced by MFA token JTI
 	verified, verr := s.redis.GetDel(ctx, passkeyKey)
 	if verr != nil {
 		s.logger.Error("Redis GetDel failed for passkey MFA verification",
@@ -435,13 +435,13 @@ func (s *AuthService) CheckMFA(ctx context.Context, account *accountDomain.Accou
 }
 
 // verifyMFACode verifies MFA code based on the MFA type.
-func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfaCode string) error {
+func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfaCode, mfaTokenJTI string) error {
 	switch mfaType {
 	case "passkey":
 		if s.passkeySvc == nil {
 			return ErrPasskeyNotAvailable
 		}
-		passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", accountID)
+		passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", mfaTokenJTI) // namespaced by MFA token JTI
 		verified, verr := s.redis.GetDel(ctx, passkeyKey)
 		if verr != nil {
 			s.logger.Error("Redis GetDel failed for passkey MFA verification",
