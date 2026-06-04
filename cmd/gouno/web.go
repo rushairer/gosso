@@ -347,8 +347,8 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 	engine.Use(
 		cors.New(corsConfig),
 		middleware.RequestIDMiddleware(),
-		middleware.ZapLoggerMiddleware(logger),
 		middleware.RecoveryMiddleware(logger),
+		middleware.ZapLoggerMiddleware(logger),
 		middleware.SecurityHeadersMiddleware(),
 		middleware.MaxBodySizeMiddleware(cfg.WebServerConfig.MaxBodySize),
 		middleware.TimeoutMiddleware(cfg.WebServerConfig.RequestTimeout),
