@@ -240,5 +240,13 @@ func (c *GoUnoConfig) Validate() error {
 			return fmt.Errorf("auth: webauthn_rp_origin is required when webauthn_rp_id is set")
 		}
 	}
+	if c.DatabaseConfig.MaxIdleConns > 0 && c.DatabaseConfig.MaxOpenConns > 0 &&
+		c.DatabaseConfig.MaxIdleConns > c.DatabaseConfig.MaxOpenConns {
+		return fmt.Errorf("database: max_idle_conns (%d) must not exceed max_open_conns (%d)",
+			c.DatabaseConfig.MaxIdleConns, c.DatabaseConfig.MaxOpenConns)
+	}
+	if c.AuthConfig.MaxSessions < 0 {
+		return fmt.Errorf("auth: max_sessions must not be negative")
+	}
 	return nil
 }
