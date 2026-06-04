@@ -315,13 +315,10 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 		return fmt.Errorf("get session tokens: %w", err)
 	}
 
-	// Delete the session index FIRST, then delete individual tokens.
-	// If individual deletion partially fails, tokens will expire naturally via TTL.
-	// Deleting the index first prevents orphaned tokens from being discoverable.
-	if err := s.redis.Del(ctx, sessionKey); err != nil {
-		s.logger.Warn("Failed to delete session tokens set", zap.String("session_id", sessionID), zap.Error(err))
-	}
-
+	// Delete individual tokens FIRST, then the session index.
+	// If index deletion fails, it points to already-deleted tokens (harmless).
+	// The reverse order would leave usable tokens if individual deletion fails,
+	// since ValidateRefreshToken only checks key existence.
 	if len(hashes) > 0 {
 		keys := make([]string, len(hashes))
 		for i, hash := range hashes {
@@ -331,6 +328,10 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 			s.logger.Warn("Failed to delete refresh tokens during session revoke",
 				zap.String("session_id", sessionID), zap.Error(err))
 		}
+	}
+
+	if err := s.redis.Del(ctx, sessionKey); err != nil {
+		s.logger.Warn("Failed to delete session tokens set", zap.String("session_id", sessionID), zap.Error(err))
 	}
 
 	s.logger.Info("Revoked all refresh tokens for session",
