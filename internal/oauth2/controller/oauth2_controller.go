@@ -650,12 +650,17 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
+	accountIDStr, ok := accountID.(string)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
 	rt, err := c.tokenSvc.ValidateRefreshToken(ctx, req.Token)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_token"})
 		return
 	}
-	if rt.AccountID != accountID.(string) {
+	if rt.AccountID != accountIDStr {
 		ctx.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
