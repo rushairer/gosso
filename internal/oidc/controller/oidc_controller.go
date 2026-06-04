@@ -118,6 +118,17 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 		return
 	}
 
+	// Security: CSRF middleware skips validation when a Bearer header is present.
+	// If the Bearer header is invalid (or a forgery), reject immediately to prevent
+	// CSRF bypass via a fake Authorization header combined with a stolen id_token_hint.
+	if authHeader := ctx.GetHeader("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		if _, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx, tokenString); err != nil {
+			ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid session"))
+			return
+		}
+	}
+
 	var accountID string
 	var clientID string
 	loggedOut := false
