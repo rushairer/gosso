@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `MaxBodySizeMiddleware` limits request body size (default 10MB, configurable via `web_server.max_body_size`) — prevents memory exhaustion from oversized requests (`middleware/middleware.go`, `config/config.go`).
 - Dedicated rate limits for OAuth2 `/introspect` and `/device/code` endpoints (configurable via `web_server.rate_limits.introspect` and `web_server.rate_limits.device_code`) — prevents CPU exhaustion from bcrypt-heavy introspect calls (`router/web.go`, `config/config.go`).
-- `MaxSessions` is now configurable via `auth.max_sessions` config (default: 10) (`config/config.go`, `internal/auth/wire.go`).
+- `MaxSessions` is now configurable via `auth.max_sessions` config (default: 10) (`config/config.go`, `internal/auth/module.go`).
 - Migration 0011 adds `idx_audit_record_created_at` index on `audit_record(created_at DESC)` — optimizes time-range audit queries (`db/migrations/0011_audit_record_created_at_index.up.sql`).
 
 ### Changed
@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - RSA key size for new key generation increased from 2048 to 3072 bits — existing keys are not affected; rotate keys to upgrade (`internal/token/service/key_service.go`).
 - Hardcoded `"admin"` and `"mfa"` strings extracted to `RoleAdmin` and `ScopeMFA` constants (`internal/auth/service/errors.go`).
 - OAuth2 `accountValidator` nil-check changed from skip-on-nil to fail-closed panic — nil validator is now treated as an initialization error (`internal/oauth2/controller/oauth2_controller.go`).
+- Duplicate/inline `errors.New` calls in passkey and social login services consolidated into checkable sentinel errors in `errors.go` — enables reliable `errors.Is` matching (`internal/auth/service/errors.go`, `internal/auth/service/passkey_service.go`, `internal/auth/service/social_login_service.go`).
+- Error wrapping standardized to use `%w` verb where `errors.Is` matching is needed — fixes `ErrUnsupportedProvider` and `ErrAccountNotActive` unwrapping (`internal/auth/service/social_login_service.go`, `internal/auth/service/mfa_service.go`).
+- Duplicate `ErrAccountNotActive` definition removed from `oidc/service` — unified to use the canonical definition from `auth/service` (`internal/oidc/service/userinfo_service.go`).
+- Shared `auditLog` helper extracted to `audit_helper.go` — removes duplication between `AuthService` and `SocialLoginService` (`internal/auth/service/audit_helper.go`, `internal/auth/service/auth_service.go`, `internal/auth/service/social_login_service.go`).
+- `wire.go` renamed to `module.go` in all modules — avoids confusion with Google Wire DI tool (`internal/account/module.go`, `internal/auth/module.go`, `internal/oauth2/module.go`, `internal/oidc/module.go`).
 
 ### Removed
 
@@ -27,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Security**: Social login now requires the matched email credential to be verified before linking a federated identity to an existing account — prevents account takeover via an unverified email from a social provider (`internal/auth/service/social_login_service.go`).
+- **Security**: Passkey MFA verification flag key now namespaced by MFA token JTI instead of account ID — prevents concurrent login requests from consuming each other's MFA verification flag (`internal/auth/service/auth_service.go`, `internal/auth/service/auth_login.go`, `internal/auth/controller/passkey_controller.go`).
+- RSA key file missing warning now logged at Warn level instead of Info — ensures operators notice when all previously issued tokens are invalidated by key regeneration (`internal/token/service/key_service.go`).
+- Passkey service structured log context now includes `account_id` and `credential_id` fields — enables correlation in security audit trails (`internal/auth/service/passkey_service.go`).
+- Credential update failure in `CompleteMFALogin` now logged at Error level with full context — clone detection failures require monitoring visibility (`internal/auth/service/passkey_service.go`).
 - **Security**: Backup code verification and deletion now run in a single transaction with `FOR UPDATE` row locking — prevents concurrent requests from using the same backup code twice (`internal/auth/service/mfa_service.go`, `internal/account/repository/credential_repository.go`).
 - **Security**: Logout now always revokes refresh tokens regardless of access token JTI availability — prevents orphaned refresh tokens when the access token is already blacklisted (`internal/auth/service/auth_login.go`).
 - **Security**: Device code grant now validates account is active before issuing tokens — consistent with all other token grant endpoints (`internal/oauth2/controller/oauth2_controller.go`).
