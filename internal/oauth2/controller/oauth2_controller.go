@@ -384,6 +384,14 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		return
 	}
 
+	if c.accountValidator == nil {
+		panic("OAuth2Controller: accountValidator not set; call SetAccountValidator during init")
+	}
+	if !c.accountValidator.IsAccountActive(ctx, authCode.AccountID) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "account is not active"})
+		return
+	}
+
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		AccountID: authCode.AccountID,
 		Scope:     strings.Join(authCode.Scopes, " "),
@@ -463,23 +471,20 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		}
 	}
 
+	// Verify account is still active BEFORE consuming the old refresh token.
+	// If the account is inactive, reject early so the client retains the old token.
+	if c.accountValidator == nil {
+		panic("OAuth2Controller: accountValidator not set; call SetAccountValidator during init")
+	}
+	if !c.accountValidator.IsAccountActive(ctx, oldRefreshToken.AccountID) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "account is not active"})
+		return
+	}
+
 	// All validations passed — now atomically rotate the token
 	newRefreshToken, err := c.tokenSvc.RotateRefreshToken(ctx, req.RefreshToken)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "invalid refresh token"})
-		return
-	}
-
-	// Verify account is still active (deleted/suspended accounts cannot refresh)
-	if c.accountValidator == nil {
-		panic("OAuth2Controller: accountValidator not set; call SetAccountValidator during init")
-	}
-	if !c.accountValidator.IsAccountActive(ctx, newRefreshToken.AccountID) {
-		// Revoke the orphaned new token since the account is inactive
-		if revokeErr := c.tokenSvc.RevokeRefreshToken(ctx, newRefreshToken.Token); revokeErr != nil {
-			c.logger.Warn("Failed to revoke orphaned refresh token for inactive account", zap.Error(revokeErr))
-		}
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "account is not active"})
 		return
 	}
 
