@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -163,7 +164,14 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 	}
 
 	// Send email
-	resetLink := fmt.Sprintf("%s?token=%s", s.baseURL, token)
+	u, err := url.Parse(s.baseURL)
+	if err != nil {
+		return fmt.Errorf("invalid password reset base URL: %w", err)
+	}
+	q := u.Query()
+	q.Set("token", token)
+	u.RawQuery = q.Encode()
+	resetLink := u.String()
 	if err := s.emailSender.SendPasswordResetLink(ctx, email, resetLink); err != nil {
 		s.logger.Error("Failed to send password reset email", zap.Error(err), zap.String("email", utility.MaskEmail(email)))
 		return fmt.Errorf("send reset email: %w", err)
