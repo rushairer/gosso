@@ -85,6 +85,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `IntrospectToken` now includes `jti` claim — improves RFC 7662 compliance (`internal/token/service/token_service.go`).
 - `MaskPhone` now uses rune indexing — consistent with `MaskEmail`, prevents garbled output for multi-byte characters (`utility/mask.go`).
 - `ColorWriteSyncer.Sync()` now delegates to the underlying file — ensures log data is flushed to disk on crash (`utility/logger.go`).
+- `auth.id_token_expiry` now has a Viper default of `15m` and is declared in all YAML configs — previously missing caused startup failure when YAML omitted it (`config/config_manager.go`, `config/*.yaml`).
+- Recovery middleware now runs before ZapLogger — ensures panic stack traces are logged even when the panic occurs inside the request handler (`cmd/gouno/web.go`).
+- YAML configs now declare `rate_limits.introspect` and `rate_limits.device_code` — operators can see and tune all rate limit endpoints (`config/production.yaml`, `config/development.yaml`).
+- `TestAudit` now asserts that `auditor.Do()` succeeds and queries the DB to verify the audit record was persisted — previously had zero assertions (`internal/audit/service/audit_test.go`).
+- `tests.NewTestConfigManager` and `tests.NewTestDB` now propagate errors instead of panicking — callers can handle the error gracefully (`tests/local_dev_databases.go`, `script/parse-config.go`).
+- `testutil.hashPassword` now uses `bcrypt.MinCost` — speeds up integration tests by ~10x (`internal/testutil/testutil.go`).
+- `testutil.TruncateAll` now includes `audit_entry` table — prevents integration test data leakage (`internal/testutil/testutil.go`).
+- Shutdown log message now says "waiting up to 30s for active requests to finish" — removes misleading "press Ctrl+C again to force" since signal handler is already stopped (`cmd/gouno/web.go`).
 
 ### Changed
 
@@ -98,6 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Sentinel errors in `device_code.go` now use `errors.New` instead of `fmt.Errorf` — consistent with other domain files (`internal/oauth2/domain/device_code.go`).
 - Removed dead code: `ErrMFARequired`, `ErrTokenRevoked` from auth errors; `ErrInvalidRedirectURI`, `ErrUnsupportedGrantType`, `ErrInvalidScope`, `ErrClientSecretMismatch` from OAuth2 client errors.
 - Removed unreachable `map[string]interface{}` type assertion in `GetMap` (`utility/metadata.go`).
+- `SecurityHeadersMiddleware` now accepts `isProduction bool` — HSTS header is only set in production mode, avoiding meaningless `Strict-Transport-Security` over plain HTTP in dev/test (`middleware/middleware.go`, `cmd/gouno/web.go`).
 
 ### Fixed
 
