@@ -238,16 +238,17 @@ type LogoutRequest struct {
 
 // Logout POST /api/auth/logout
 func (c *AuthController) Logout(ctx *gin.Context) {
-	// Attempt to revoke access token (obtained from header)
-	authHeader := ctx.GetHeader("Authorization")
+	// Attempt to revoke access token — use the already-validated token from JWT middleware
 	var accessTokenJTI string
 	var tokenExpiresAt time.Time
-	if len(authHeader) > 7 {
-		claims, err := c.tokenMgr.ValidateAccessTokenWithContext(ctx, authHeader[7:])
-		if err == nil {
-			accessTokenJTI = claims.ID
-			if claims.ExpiresAt != nil {
-				tokenExpiresAt = claims.ExpiresAt.Time
+	if tokenStr, exists := ctx.Get("jwt_token_string"); exists {
+		if tokenString, ok := tokenStr.(string); ok && tokenString != "" {
+			claims, err := c.tokenMgr.ValidateAccessTokenWithContext(ctx, tokenString)
+			if err == nil {
+				accessTokenJTI = claims.ID
+				if claims.ExpiresAt != nil {
+					tokenExpiresAt = claims.ExpiresAt.Time
+				}
 			}
 		}
 	}
