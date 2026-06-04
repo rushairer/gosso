@@ -24,11 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Duplicate `ErrAccountNotActive` definition removed from `oidc/service` — unified to use the canonical definition from `auth/service` (`internal/oidc/service/userinfo_service.go`).
 - Shared `auditLog` helper extracted to `audit_helper.go` — removes duplication between `AuthService` and `SocialLoginService` (`internal/auth/service/audit_helper.go`, `internal/auth/service/auth_service.go`, `internal/auth/service/social_login_service.go`).
 - `wire.go` renamed to `module.go` in all modules — avoids confusion with Google Wire DI tool (`internal/account/module.go`, `internal/auth/module.go`, `internal/oauth2/module.go`, `internal/oidc/module.go`).
+- `isUniqueViolation` now uses `pgconn.PgError` type assertion with SQLSTATE code `23505` instead of fragile string matching (`internal/auth/service/social_login_service.go`).
+- Session index and token index `EXPIRE` failure now logged at Error level — silent failure could leave sets without TTL, accumulating indefinitely in Redis (`internal/session/service/session_service.go`, `internal/token/service/token_service.go`).
 
 ### Removed
 
 - Unused `groups` and `account_groups` tables dropped via migration 0010 — no Go code references these tables (`db/migrations/0010_drop_groups.up.sql`, `internal/testutil/testutil.go`).
 - Unused `OAuth2Client.VerifySecret` method removed — production code uses `bcrypt.CompareHashAndPassword` directly (`internal/oauth2/domain/client.go`).
+- `access_token` hidden form field removed from consent and device authorization templates — JWT was leaking to page source, browser extensions, and proxy logs (`internal/oauth2/controller/template/consent.html`, `internal/oauth2/controller/template/device.html`).
+- `PostForm("access_token")` fallback removed from `authenticateRequest` — only Authorization header is now accepted (`internal/oauth2/controller/oauth2_controller.go`).
+- `JWTSecret` config validation removed — field was validated but never used for RS256 JWT signing (`config/config.go`).
 
 ### Fixed
 
@@ -37,6 +42,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - RSA key file missing warning now logged at Warn level instead of Info — ensures operators notice when all previously issued tokens are invalidated by key regeneration (`internal/token/service/key_service.go`).
 - Passkey service structured log context now includes `account_id` and `credential_id` fields — enables correlation in security audit trails (`internal/auth/service/passkey_service.go`).
 - Credential update failure in `CompleteMFALogin` now logged at Error level with full context — clone detection failures require monitoring visibility (`internal/auth/service/passkey_service.go`).
+- **Security**: Public clients must now provide `code_challenge` (PKCE) in the authorization endpoint — prevents auth code interception attacks on public clients per RFC 7636 Section 4.1 (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: OIDC logout now validates Bearer token before accepting `id_token_hint` — prevents CSRF bypass via a fake Authorization header combined with a stolen expired ID token (`internal/oidc/controller/oidc_controller.go`).
+- **Security**: Login rate limit counter is now cleared only after successful MFA verification, not after correct password — prevents brute-force counter reset on MFA-protected accounts (`internal/auth/service/auth_login.go`).
+- **Security**: `EnforceSessionLimit` now cascades refresh token revocation when evicting sessions — prevents orphaned refresh tokens that survive session eviction (`internal/session/service/session_service.go`).
+- **Security**: Account-level token revocation TTL doubled from `accessExpiry` to `2× accessExpiry` — prevents late-issued tokens from slipping past the revocation window (`internal/token/service/token_service.go`).
+- `createSessionAndTokens` now cleans up the session on token generation failure — prevents orphaned sessions in Redis (`internal/auth/service/auth_service.go`).
+- `PasswordResetService.Wait()` now has a 60-second timeout — prevents indefinite blocking during graceful shutdown when Redis is unreachable (`internal/auth/service/password_reset_service.go`).
 - **Security**: Backup code verification and deletion now run in a single transaction with `FOR UPDATE` row locking — prevents concurrent requests from using the same backup code twice (`internal/auth/service/mfa_service.go`, `internal/account/repository/credential_repository.go`).
 - **Security**: Logout now always revokes refresh tokens regardless of access token JTI availability — prevents orphaned refresh tokens when the access token is already blacklisted (`internal/auth/service/auth_login.go`).
 - **Security**: Device code grant now validates account is active before issuing tokens — consistent with all other token grant endpoints (`internal/oauth2/controller/oauth2_controller.go`).
