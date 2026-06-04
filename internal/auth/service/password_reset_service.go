@@ -259,8 +259,14 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 			}
 		}()
 	default:
-		s.logger.Error("Revoke goroutine limit reached, skipping session revocation after password reset",
+		s.logger.Warn("Revoke goroutine limit reached, falling back to synchronous revocation",
 			zap.String("account_id", data.AccountID))
+		syncCtx, syncCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer syncCancel()
+		if err := s.sessionSvc.RevokeAllForAccount(syncCtx, data.AccountID); err != nil {
+			s.logger.Error("Failed to revoke sessions synchronously after password reset",
+				zap.String("account_id", data.AccountID), zap.Error(err))
+		}
 	}
 
 	s.logger.Info("Password reset successfully", zap.String("account_id", data.AccountID))
