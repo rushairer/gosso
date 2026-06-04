@@ -203,7 +203,7 @@ func runMigrations(db *sql.DB, migrationsPath string) error {
 }
 
 func hashPassword(password string) (string, error) {
-	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
 	if err != nil {
 		return "", err
 	}

@@ -117,7 +117,10 @@ func main() {
 	}
 
 	// Use GlobalConfig directly
-	configManager := tests.NewTestConfigManager()
+	configManager, err := tests.NewTestConfigManager()
+	if err != nil {
+		log.Fatalf("❌ Failed to load test config: %v", err)
+	}
 	cfg := configManager.Config()
 
 	// Get environment configuration

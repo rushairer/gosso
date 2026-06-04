@@ -2,6 +2,7 @@ package tests
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,44 +13,46 @@ import (
 	"github.com/rushairer/gosso/config"
 )
 
-func NewTestDB() *sql.DB {
-	configManager := NewTestConfigManager()
+func NewTestDB() (*sql.DB, error) {
+	configManager, err := NewTestConfigManager()
+	if err != nil {
+		return nil, fmt.Errorf("load test config: %w", err)
+	}
 
 	dsn := configManager.Config().DatabaseConfig.GetDefaultDriver().DSN
 
-	if postgres, err := sql.Open("postgres", dsn); err == nil {
-		if err = postgres.Ping(); err == nil {
-			return postgres
-		} else {
-			log.Panic(err)
-			return nil
-		}
-	} else {
-		log.Panic(err)
-		return nil
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open postgres: %w", err)
 	}
+	if err = db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("ping postgres: %w", err)
+	}
+	return db, nil
 }
 
-func NewTestConfigManager() (configManager *config.ConfigManager) {
+func NewTestConfigManager() (*config.ConfigManager, error) {
 	projectRoot := projectRoot()
 	configPath := filepath.Join(projectRoot, "config")
-	configManager, _ = config.NewConfigManager(nil, configPath, "test")
-	return
+	configManager, err := config.NewConfigManager(nil, configPath, "test")
+	if err != nil {
+		return nil, err
+	}
+	return configManager, nil
 }
 
 func projectRoot() string {
 	_, b, _, _ := runtime.Caller(0)
-	// This will be the directory of the current file (test_engine.go)
 	currentDir := filepath.Dir(b)
 
-	// Traverse up the directory tree to find go.mod
 	for {
 		goModPath := filepath.Join(currentDir, "go.mod")
 		if _, err := os.Stat(goModPath); err == nil {
 			return currentDir
 		}
 		parentDir := filepath.Dir(currentDir)
-		if parentDir == currentDir { // Reached file system root
+		if parentDir == currentDir {
 			log.Fatalf("go.mod not found in any parent directory")
 		}
 		currentDir = parentDir
