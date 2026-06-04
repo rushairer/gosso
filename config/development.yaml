@@ -14,6 +14,8 @@ web_server:
         token: 10
         passkey: 10
         api: 60
+        introspect: 20
+        device_code: 10
 database:
     default: postgres
     drivers:
