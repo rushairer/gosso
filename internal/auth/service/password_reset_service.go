@@ -286,6 +286,14 @@ func (s *PasswordResetService) buildCooldownKey(email string) string {
 
 // Wait blocks until all background goroutines (e.g., session revocation) complete.
 // Call this during graceful shutdown to ensure in-flight operations finish.
+// Returns after 60 seconds even if goroutines are still running, to avoid
+// blocking shutdown indefinitely when Redis is unreachable.
 func (s *PasswordResetService) Wait() {
-	s.wg.Wait()
+	done := make(chan struct{})
+	go func() { s.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(60 * time.Second):
+		s.logger.Warn("Timeout waiting for background password reset goroutines")
+	}
 }

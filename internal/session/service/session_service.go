@@ -110,7 +110,10 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 	if err := s.redis.SAdd(ctx, indexKey, session.ID.String()); err != nil {
 		s.logger.Warn("Failed to index session by account", zap.Error(err), zap.String("session_id", session.ID.String()))
 	}
-	_ = s.redis.Expire(ctx, indexKey, s.sessionTTL)
+	if err := s.redis.Expire(ctx, indexKey, s.sessionTTL); err != nil {
+		s.logger.Error("Failed to set TTL on session index set — may grow unbounded",
+			zap.String("key", indexKey), zap.Error(err))
+	}
 
 	// Enforce maximum concurrent session limit
 	s.EnforceSessionLimit(ctx, session.AccountID.String())

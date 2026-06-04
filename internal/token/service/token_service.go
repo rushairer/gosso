@@ -176,7 +176,10 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 		if err := s.redis.SAdd(ctx, sessionKey, tokenHash); err != nil {
 			s.logger.Warn("Failed to index refresh token by session", zap.Error(err), zap.String("session_id", sessionID))
 		}
-		_ = s.redis.Expire(ctx, sessionKey, s.refreshExpiry)
+		if err := s.redis.Expire(ctx, sessionKey, s.refreshExpiry); err != nil {
+			s.logger.Error("Failed to set TTL on session tokens set — may grow unbounded",
+				zap.String("key", sessionKey), zap.Error(err))
+		}
 	}
 
 	return rt, nil
