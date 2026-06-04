@@ -236,8 +236,12 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 
 	// One-time use: delete token only after successful password update
 	if err := s.redis.Del(ctx, tokenKey); err != nil {
-		s.logger.Warn("Failed to delete reset token from Redis, token may be reusable until TTL",
-			zap.Error(err), zap.String("token_hash", tokenHash))
+		// Retry once after a brief pause — Redis may be momentarily unavailable
+		time.Sleep(100 * time.Millisecond)
+		if retryErr := s.redis.Del(ctx, tokenKey); retryErr != nil {
+			s.logger.Error("Failed to delete reset token from Redis after retry, token may be reusable until TTL",
+				zap.Error(retryErr), zap.String("token_hash", tokenHash))
+		}
 	}
 
 	// Asynchronously revoke all old sessions
@@ -255,7 +259,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 			}
 		}()
 	default:
-		s.logger.Warn("Revoke goroutine limit reached, skipping async session revocation",
+		s.logger.Error("Revoke goroutine limit reached, skipping session revocation after password reset",
 			zap.String("account_id", data.AccountID))
 	}
 
