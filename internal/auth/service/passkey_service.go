@@ -85,7 +85,7 @@ func (s *PasskeyService) BeginRegistration(ctx context.Context, accountID, usern
 	// Find existing credentials for exclusion
 	existingCreds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil {
-		s.logger.Warn("Failed to find existing credentials", zap.Error(err))
+		s.logger.Warn("Failed to find existing credentials", zap.Error(err), zap.String("account_id", accountID))
 		existingCreds = nil
 	}
 
@@ -368,7 +368,10 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, requestID string,
 		return s.credRepo.UpdateCredential(ctx, tx, cred)
 	})
 	if err != nil {
-		s.logger.Warn("Failed to update credential", zap.Error(err))
+		s.logger.Error("Failed to update credential sign count — clone detection may be compromised",
+			zap.Error(err),
+			zap.String("account_id", cred.AccountID),
+			zap.String("credential_id", cred.ID))
 	}
 
 	return nil
