@@ -51,14 +51,13 @@ func NewOIDCController(
 	}
 }
 
-// RegisterRoutes registers OIDC routes
+// RegisterRoutes registers OIDC routes (UserInfo + Logout).
+// .well-known routes are registered at the router layer for independent rate limiting.
 func (c *OIDCController) RegisterRoutes(server *gin.RouterGroup, authMiddleware gin.HandlerFunc) {
-	server.GET("/.well-known/openid-configuration", c.Discovery)
-	server.GET("/.well-known/jwks.json", c.JWKS)
-	server.GET("/oidc/userinfo", authMiddleware, c.UserInfo)
-	server.POST("/oidc/userinfo", authMiddleware, c.UserInfo)
-	server.GET("/oidc/logout", c.Logout)
-	server.POST("/oidc/logout", c.Logout)
+	server.GET("/userinfo", authMiddleware, c.UserInfo)
+	server.POST("/userinfo", authMiddleware, c.UserInfo)
+	server.GET("/logout", c.Logout)
+	server.POST("/logout", c.Logout)
 }
 
 // Discovery GET /.well-known/openid-configuration

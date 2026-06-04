@@ -101,7 +101,18 @@ func RegisterWebRouter(
 	oauth2Ctrl.RegisterRoutes(oauth2, jwtAuth, introspectLimit, deviceCodeLimit)
 
 	// OIDC routes
-	oidcCtrl.RegisterRoutes(&server.RouterGroup, jwtAuth)
+	// .well-known endpoints (Discovery + JWKS) — rate-limited, fail-closed
+	wellKnownLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, false)
+	wellKnown := server.Group("/.well-known")
+	wellKnown.Use(wellKnownLimit)
+	wellKnown.GET("/openid-configuration", oidcCtrl.Discovery)
+	wellKnown.GET("/jwks.json", oidcCtrl.JWKS)
+
+	// /oidc/* endpoints (UserInfo + Logout) — rate-limited, fail-closed
+	oidcLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, false)
+	oidc := server.Group("/oidc")
+	oidc.Use(oidcLimit)
+	oidcCtrl.RegisterRoutes(oidc, jwtAuth)
 }
 
 func registerWebTestRouter(server *gin.Engine) {
