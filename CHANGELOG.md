@@ -107,6 +107,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: `SocialCallback` now checks `RequiresMFA` before accessing `result.Session` — prevents nil pointer panic when a social login user has MFA enabled (`internal/auth/controller/auth_controller.go`).
 - **Security**: Refresh token grant now verifies account is active BEFORE consuming the old token — prevents suspended accounts from losing all tokens when old token is consumed but new token is revoked (`internal/oauth2/controller/oauth2_controller.go`).
 - **Security**: Authorization code grant now validates account is active before issuing tokens — consistent with refresh token and device code flows (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Auth controller protected endpoints (logout, sessions, MFA management) now have JWT authentication — previously `RegisterRoutes` did not accept or apply `jwtAuth` middleware, causing all protected auth endpoints to always return 401 (`internal/auth/controller/auth_controller.go`, `router/web.go`).
+- **Security**: OAuth2 consent and device authorization form submissions now work without `Authorization` header — HTML forms cannot set custom headers; the access token is embedded as a hidden field and validated on POST (`internal/oauth2/controller/oauth2_controller.go`, `internal/auth/middleware/auth_middleware.go`).
+- **Security**: Token endpoint now supports `client_secret_basic` authentication — aligns implementation with OIDC discovery document that advertises both `client_secret_post` and `client_secret_basic` per RFC 6749 §2.3.1 (`internal/oauth2/controller/oauth2_controller.go`).
 
 ### Changed
 
