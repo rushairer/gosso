@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"time"
@@ -79,6 +80,13 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 		u, err := url.Parse(uri)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "redirect_uris must use http or https scheme"))
+			return
+		}
+	}
+
+	if len(req.GrantTypes) > 0 {
+		if err := validateGrantTypes(req.GrantTypes); err != nil {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
 			return
 		}
 	}
@@ -196,6 +204,10 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 		client.RedirectURIs = req.RedirectURIs
 	}
 	if req.GrantTypes != nil {
+		if err := validateGrantTypes(req.GrantTypes); err != nil {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+			return
+		}
 		client.GrantTypes = req.GrantTypes
 	}
 	if req.Scopes != nil {
@@ -261,4 +273,27 @@ func getAccountID(ctx *gin.Context) (string, bool) {
 		return "", false
 	}
 	return accountID, true
+}
+
+var validGrantTypes = []string{
+	oauth2Domain.GrantTypeAuthorizationCode,
+	oauth2Domain.GrantTypeRefreshToken,
+	oauth2Domain.GrantTypeClientCredentials,
+	oauth2Domain.GrantTypeDeviceCode,
+}
+
+func validateGrantTypes(types []string) error {
+	for _, gt := range types {
+		found := false
+		for _, valid := range validGrantTypes {
+			if gt == valid {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("invalid grant_type: %q", gt)
+		}
+	}
+	return nil
 }

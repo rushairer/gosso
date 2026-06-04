@@ -283,6 +283,59 @@ func TestUpdateClient_IDORProtection(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, w.Code)
 }
 
+func TestUpdateClient_InvalidGrantType(t *testing.T) {
+	client := newTestClient("account-001")
+	clientSvc := &mockOAuth2ClientService{
+		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return client, nil
+		},
+	}
+	engine := setupClientController(clientSvc)
+
+	body := `{"grant_types":["authorization_code","magic_unicorn"]}`
+	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/cid-abc123", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUpdateClient_ValidGrantTypes(t *testing.T) {
+	client := newTestClient("account-001")
+	clientSvc := &mockOAuth2ClientService{
+		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return client, nil
+		},
+		updateFn: func() error { return nil },
+	}
+	engine := setupClientController(clientSvc)
+
+	body := `{"grant_types":["authorization_code","refresh_token","client_credentials","urn:ietf:params:oauth:grant-type:device_code"]}`
+	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/cid-abc123", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestRegisterClient_InvalidGrantType(t *testing.T) {
+	clientSvc := &mockOAuth2ClientService{}
+	engine := setupClientController(clientSvc)
+
+	body := `{"name":"Test App","redirect_uris":["https://app.example.com/callback"],"grant_types":["authorization_code","invalid_grant"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/oauth2/clients", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestDeleteClient_Success(t *testing.T) {
 	client := newTestClient("account-001")
 	clientSvc := &mockOAuth2ClientService{
