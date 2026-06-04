@@ -88,12 +88,13 @@ func (s *DeviceCodeService) CreateDeviceCode(ctx context.Context, clientID strin
 	}
 
 	// Store device code and user code mapping atomically
-	dcKey := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCodeStr)
+	dcHash := tokenDomain.HashToken(deviceCodeStr)
+	dcKey := DeviceCodeKeyPrefix + dcHash
 	ucKey := UserCodeKeyPrefix + strings.ToUpper(formattedUserCode)
 	ttlSeconds := int(s.expiry.Seconds())
 	if err := createDeviceCodeScript.Run(ctx, s.redis.GetClient(),
 		[]string{dcKey, ucKey},
-		string(data), ttlSeconds, deviceCodeStr,
+		string(data), ttlSeconds, dcHash,
 	).Err(); err != nil {
 		return nil, fmt.Errorf("store device code: %w", err)
 	}
@@ -125,6 +126,7 @@ func (s *DeviceCodeService) GetDeviceCode(ctx context.Context, deviceCode string
 }
 
 // GetDeviceCodeByUserCode resolves a user code to its device code.
+// The user code mapping stores the device code hash (not the raw value).
 func (s *DeviceCodeService) GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*domain.DeviceCode, error) {
 	normalized := strings.ToUpper(strings.ReplaceAll(userCode, "-", ""))
 	if len(normalized) != 8 {
@@ -133,7 +135,7 @@ func (s *DeviceCodeService) GetDeviceCodeByUserCode(ctx context.Context, userCod
 	formatted := normalized[:4] + "-" + normalized[4:]
 
 	ucKey := UserCodeKeyPrefix + formatted
-	deviceCode, err := s.redis.Get(ctx, ucKey)
+	dcHash, err := s.redis.Get(ctx, ucKey)
 	if err == cache.ErrKeyNotFound {
 		return nil, domain.ErrDeviceCodeNotFound
 	}
@@ -141,7 +143,20 @@ func (s *DeviceCodeService) GetDeviceCodeByUserCode(ctx context.Context, userCod
 		return nil, fmt.Errorf("resolve user code: %w", err)
 	}
 
-	return s.GetDeviceCode(ctx, deviceCode)
+	dcKey := DeviceCodeKeyPrefix + dcHash
+	data, err := s.redis.Get(ctx, dcKey)
+	if err == cache.ErrKeyNotFound {
+		return nil, domain.ErrDeviceCodeNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get device code: %w", err)
+	}
+
+	var dc domain.DeviceCode
+	if err := json.Unmarshal([]byte(data), &dc); err != nil {
+		return nil, fmt.Errorf("unmarshal device code: %w", err)
+	}
+	return &dc, nil
 }
 
 // AuthorizeDeviceCode atomically marks a device code as authorized with the given account ID.
