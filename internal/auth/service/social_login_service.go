@@ -12,12 +12,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
+	"github.com/rushairer/gosso/internal/audit"
+	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
+	auditService "github.com/rushairer/gosso/internal/audit/service"
 	dbutil "github.com/rushairer/gosso/internal/db"
+	"github.com/rushairer/gosso/utility"
 )
 
 // OAuthProviderConfig single OAuth provider configuration
@@ -42,6 +47,7 @@ type SocialLoginService struct {
 	federatedIdentityRepo accountRepo.FederatedIdentityRepository
 	providers             map[string]*OAuthProviderConfig
 	httpClient            *http.Client
+	auditor               *auditService.Auditor
 	logger                *zap.Logger
 }
 
@@ -75,6 +81,11 @@ func NewSocialLoginService(
 // SetMFAChecker sets the MFA checker dependency (setter injection to avoid circular constructor deps).
 func (s *SocialLoginService) SetMFAChecker(checker MFAChecker) {
 	s.mfaChecker = checker
+}
+
+// SetAuditor sets the audit service dependency (setter injection to avoid circular constructor deps).
+func (s *SocialLoginService) SetAuditor(auditor *auditService.Auditor) {
+	s.auditor = auditor
 }
 
 // GetAuthURL gets the third-party authorization URL
@@ -330,6 +341,21 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 		return nil, err
 	}
 
+	// Audit log for social login account creation
+	if s.auditor != nil {
+		accountUUID, _ := uuid.Parse(account.ID)
+		s.auditLog(ctx, &auditDomain.AuditRecord{
+			ID:        uuid.New(),
+			TxID:      uuid.New(),
+			AccountID: &accountUUID,
+			Action:    auditDomain.ActionAccountRegister,
+			Actor:     audit.IPFromContext(ctx),
+			Resource:  utility.MustMarshalJSON(map[string]any{"account_id": account.ID, "provider": provider}),
+			Meta:      utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+			CreatedAt: time.Now(),
+		})
+	}
+
 	// Check if MFA is required (consistency with loginExistingUser)
 	if s.mfaChecker != nil {
 		mfaResult, mfaErr := s.mfaChecker.CheckMFA(ctx, account)
@@ -360,4 +386,12 @@ func isUniqueViolation(err error) bool {
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "duplicate key") || strings.Contains(msg, "unique_violation")
+}
+
+func (s *SocialLoginService) auditLog(ctx context.Context, record *auditDomain.AuditRecord) {
+	if s.auditor != nil {
+		if err := s.auditor.Log(ctx, record); err != nil {
+			s.logger.Warn("Failed to submit audit record", zap.Error(err))
+		}
+	}
 }

@@ -106,6 +106,7 @@ func InitializeAuthModule(
 	if len(providers) > 0 {
 		socialSvc = service.NewSocialLoginService(db, accountSvc, authSvc, accountRepoImpl, credentialRepo, federatedIdentityRepo, providers, logger)
 		socialSvc.SetMFAChecker(authSvc)
+		socialSvc.SetAuditor(auditor)
 	}
 
 	emailSvc := notificationService.NewEmailService(smtpConfig, logger)
