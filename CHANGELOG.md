@@ -93,6 +93,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `testutil.hashPassword` now uses `bcrypt.MinCost` — speeds up integration tests by ~10x (`internal/testutil/testutil.go`).
 - `testutil.TruncateAll` now includes `audit_entry` table — prevents integration test data leakage (`internal/testutil/testutil.go`).
 - Shutdown log message now says "waiting up to 30s for active requests to finish" — removes misleading "press Ctrl+C again to force" since signal handler is already stopped (`cmd/gouno/web.go`).
+- **Security**: `ChangePassword` now revokes all sessions and refresh tokens after a successful password update — prevents attackers with stolen sessions from retaining access after the user changes their password (`internal/account/service/account_service.go`).
+- **Security**: OIDC endpoints (`/.well-known/*`, `/oidc/*`) now have IP-based rate limiting — prevents CPU exhaustion via JWKS RSA operations and abuse of the logout endpoint (`router/web.go`, `internal/oidc/controller/oidc_controller.go`).
+- **Security**: `LogoutBySessionID` now uses `RevokeSession` instead of `DeleteSession` — verifies that the session belongs to the claimed account before deletion, preventing cross-account session deletion (`internal/oidc/service/logout_service.go`).
+- **Security**: `RevokeSession` ownership check error message no longer leaks session existence — returns generic "session not found or access denied" to prevent session enumeration (`internal/session/service/session_service.go`).
+- `Config.Validate()` now checks `max_idle_conns` does not exceed `max_open_conns` and `max_sessions` is not negative — catches misconfiguration at startup (`config/config.go`).
+- `ValidatePasswordStrength` now enforces a 128-character maximum — prevents excessive bcrypt CPU usage from oversized password inputs in service-layer callers (`utility/password.go`).
+- Social login account creation now audit-logged with `ActionAccountRegister` — matches the existing audit pattern for email/password registration and enables compliance tracing (`internal/auth/service/social_login_service.go`).
 
 ### Changed
 
@@ -107,6 +114,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Removed dead code: `ErrMFARequired`, `ErrTokenRevoked` from auth errors; `ErrInvalidRedirectURI`, `ErrUnsupportedGrantType`, `ErrInvalidScope`, `ErrClientSecretMismatch` from OAuth2 client errors.
 - Removed unreachable `map[string]interface{}` type assertion in `GetMap` (`utility/metadata.go`).
 - `SecurityHeadersMiddleware` now accepts `isProduction bool` — HSTS header is only set in production mode, avoiding meaningless `Strict-Transport-Security` over plain HTTP in dev/test (`middleware/middleware.go`, `cmd/gouno/web.go`).
+- OIDC `.well-known` routes now registered at the router layer instead of inside `RegisterRoutes` — enables independent rate limiting for Discovery/JWKS vs UserInfo/Logout (`router/web.go`, `internal/oidc/controller/oidc_controller.go`).
 
 ### Fixed
 
