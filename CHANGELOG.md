@@ -114,6 +114,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: `RevokeAllForSession` now deletes individual refresh tokens before the session index — prevents orphaned tokens from remaining usable if index deletion succeeds but token deletion fails (`internal/token/service/token_service.go`).
 - **Security**: `RevokeAllForAccount` now uses a Lua script to atomically read and delete the session index — eliminates TOCTOU race where new sessions created between `SMembers` and `Del` would be orphaned (`internal/session/service/session_service.go`).
 - **Security**: OIDC `LogoutByAccountID` now revokes all outstanding access tokens via a "revoke after" timestamp — `ValidateAccessTokenWithContext` rejects tokens issued before the account's revocation time, closing the window where access tokens remain valid after session deletion (`internal/token/service/token_service.go`, `internal/token/service/blacklist_service.go`, `internal/oidc/service/logout_service.go`).
+- **Security**: OAuth2 `/revoke` handler now uses safe type assertion for `accountID` — prevents panic when context value type is unexpected (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: Social login federated identity linking now handles unique constraint violations — concurrent social logins with the same email gracefully fall back to existing account login instead of returning 500 (`internal/auth/service/social_login_service.go`).
+- **Security**: Logout handler now uses the JWT middleware-validated token from context instead of re-parsing the Authorization header — ensures the access token is always blacklisted even when the header is missing or corrupted (`internal/auth/controller/auth_controller.go`).
+- **Security**: OIDC Logout now returns 500 when session revocation fails — previously returned success to the user even when sessions remained active (`internal/oidc/controller/oidc_controller.go`).
+- **Security**: Password reset token is now deleted before the password update — eliminates the crash window where the token could be reused after the password was already changed (`internal/auth/service/password_reset_service.go`).
+- `Validate()` now rejects `web_server.max_body_size <= 0` and `redis.max_active_conns <= 0` — prevents misconfiguration that would block all requests or create unbounded connection pools (`config/config.go`).
+- OAuth2 controller `accountValidator` nil checks now return 500 error responses instead of panicking — eliminates noisy recovery middleware stack traces for a simple misconfiguration (`internal/oauth2/controller/oauth2_controller.go`).
 
 ### Changed
 
