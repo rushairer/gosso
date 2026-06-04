@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -98,6 +99,9 @@ type verifyCodeData struct {
 
 // SendCode sends verification code
 func (s *VerificationService) SendCode(ctx context.Context, credType, identifier, accountID string) error {
+	// Normalize identifier to prevent different casings from creating separate cooldown/code keys
+	identifier = strings.ToLower(strings.TrimSpace(identifier))
+
 	// Check cooldown (fail-open: if Redis is down, we still allow the request)
 	cooldownKey := s.buildCooldownKey(credType, identifier)
 	exists, err := s.redis.Exists(ctx, cooldownKey)
@@ -157,6 +161,7 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 
 // VerifyCode verifies verification code, returns accountID upon success
 func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifier, code string) (string, error) {
+	identifier = strings.ToLower(strings.TrimSpace(identifier))
 	codeKey := s.buildCodeKey(credType, identifier)
 
 	// Atomically verify code and increment attempts
