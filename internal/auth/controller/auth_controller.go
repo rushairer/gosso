@@ -510,6 +510,16 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 		return
 	}
 
+	if result.RequiresMFA {
+		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
+			"requires_mfa":   true,
+			"mfa_token":      result.AccessToken,
+			"mfa_token_type": "Bearer",
+			"mfa_types":      result.MFATypes,
+		}))
+		return
+	}
+
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
 		"access_token":  result.AccessToken,
 		"refresh_token": result.RefreshToken,
