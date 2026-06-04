@@ -27,6 +27,18 @@ const (
 	DefaultMaxSessions = 10
 )
 
+// revokeAccountSessionsScript atomically reads all session IDs from the
+// account_sessions set and deletes the set in a single EVAL call.
+// This eliminates the TOCTOU window between SMembers and Del where new
+// sessions can be created and then orphaned.
+// KEYS[1] = account_sessions:{accountID}
+// Returns: array of session ID strings (may be empty)
+var revokeAccountSessionsScript = redis.NewScript(`
+local members = redis.call('SMEMBERS', KEYS[1])
+redis.call('DEL', KEYS[1])
+return members
+`)
+
 // TokenRevoker revokes all tokens for a given session.
 type TokenRevoker interface {
 	RevokeAllForSession(ctx context.Context, sessionID string) error
@@ -258,16 +270,25 @@ func (s *SessionService) buildAccountSessionsKey(accountID string) string {
 }
 
 // RevokeAllForAccount revokes all sessions and tokens for the given account.
+// Uses a Lua script to atomically read the session set and delete the index,
+// preventing a TOCTOU race where new sessions created between SMembers and Del
+// would be orphaned.
 func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID string) error {
 	indexKey := s.buildAccountSessionsKey(accountID)
 
-	sessionIDs, err := s.redis.SMembers(ctx, indexKey)
-	if err != nil {
-		s.logger.Error("Failed to get account sessions", zap.String("account_id", accountID), zap.Error(err))
-		return fmt.Errorf("get account sessions: %w", err)
+	// Atomically read all session IDs and delete the index.
+	// Any sessions created after this point will produce a fresh index entry.
+	result, err := revokeAccountSessionsScript.Run(ctx, s.redis.GetClient(), []string{indexKey}).StringSlice()
+	if err != nil && err != redis.Nil {
+		s.logger.Error("Failed to atomically read and delete account sessions index",
+			zap.String("account_id", accountID), zap.Error(err))
+		return fmt.Errorf("revoke account sessions: %w", err)
 	}
 
-	// Revoke tokens for each session before deleting sessions
+	sessionIDs := result
+
+	// Revoke tokens for each session before deleting session keys.
+	// Token revocation is idempotent — if a session has no tokens, this is a no-op.
 	if s.tokenRevoker != nil {
 		for _, sid := range sessionIDs {
 			if err := s.tokenRevoker.RevokeAllForSession(ctx, sid); err != nil {
@@ -277,6 +298,8 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 		}
 	}
 
+	// Delete individual session keys.
+	// Deleting a key that doesn't exist is a no-op in Redis.
 	if len(sessionIDs) > 0 {
 		keys := make([]string, len(sessionIDs))
 		for i, sid := range sessionIDs {
@@ -286,11 +309,6 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 			s.logger.Error("Failed to delete account sessions", zap.String("account_id", accountID), zap.Error(err))
 			return fmt.Errorf("delete account sessions: %w", err)
 		}
-	}
-
-	// Delete the index itself
-	if err := s.redis.Del(ctx, indexKey); err != nil {
-		s.logger.Warn("Failed to delete account sessions index", zap.String("account_id", accountID), zap.Error(err))
 	}
 
 	s.logger.Info("All sessions revoked for account",
