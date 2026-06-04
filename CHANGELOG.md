@@ -100,6 +100,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Config.Validate()` now checks `max_idle_conns` does not exceed `max_open_conns` and `max_sessions` is not negative — catches misconfiguration at startup (`config/config.go`).
 - `ValidatePasswordStrength` now enforces a 128-character maximum — prevents excessive bcrypt CPU usage from oversized password inputs in service-layer callers (`utility/password.go`).
 - Social login account creation now audit-logged with `ActionAccountRegister` — matches the existing audit pattern for email/password registration and enables compliance tracing (`internal/auth/service/social_login_service.go`).
+- **Security**: `/verify/confirm` endpoint now has rate limiting middleware — previously only `/verify/send` was rate-limited, leaving verification code confirmation exposed to brute-force attacks (`internal/auth/controller/auth_controller.go`).
+- **Security**: `SuspendAccount` now revokes all sessions and refresh tokens — prevents suspended users from retaining API access through existing tokens for up to 7 days (`internal/account/service/account_service.go`).
+- Password reset token Redis deletion now retries once on failure with Error-level logging — previously a single Redis failure left the token reusable until TTL with only a Warn log (`internal/auth/service/password_reset_service.go`).
+- Password reset session revocation semaphore-full scenario now logged at Error level — was previously Warn, underreporting a security-relevant skip (`internal/auth/service/password_reset_service.go`).
 
 ### Changed
 
