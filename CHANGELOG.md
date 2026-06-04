@@ -121,6 +121,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: Password reset token is now deleted before the password update — eliminates the crash window where the token could be reused after the password was already changed (`internal/auth/service/password_reset_service.go`).
 - `Validate()` now rejects `web_server.max_body_size <= 0` and `redis.max_active_conns <= 0` — prevents misconfiguration that would block all requests or create unbounded connection pools (`config/config.go`).
 - OAuth2 controller `accountValidator` nil checks now return 500 error responses instead of panicking — eliminates noisy recovery middleware stack traces for a simple misconfiguration (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: OAuth2 `/revoke` now returns 200 for all tokens regardless of validity — prevents token existence oracle per RFC 7009 §2.1 (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: OIDC Logout Bearer token path now returns 500 when session revocation fails — previously logged the error but returned success to the user (`internal/oidc/controller/oidc_controller.go`).
+- **Security**: GET `/oidc/logout` removed — prevents CSRF via `<img>` tags or link prefetching; clients must use POST (`internal/oidc/controller/oidc_controller.go`).
+- **Security**: Refresh token rotation now generates the access token before rotating the refresh token — prevents client lockout when access token generation fails after the old token is already deleted (`internal/auth/service/auth_session.go`).
+- **Security**: IP-based login rate limit counter is no longer cleared when MFA is required — prevents brute force from the same IP bypassing rate limiting during MFA flows (`internal/auth/service/auth_login.go`).
+- **Security**: Verification code identifier is now normalized (lowercase, trimmed) — prevents different casings of the same email from bypassing cooldown and creating separate verification codes (`internal/auth/service/verification_service.go`).
+- **Security**: Device code grant now validates account status before claiming the device code — prevents inactive accounts from consuming the device code, forcing the user to re-authorize (`internal/oauth2/controller/oauth2_controller.go`).
 
 ### Changed
 
