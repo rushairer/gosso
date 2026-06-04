@@ -109,6 +109,7 @@ func (e *TestEnv) TruncateAll(ctx context.Context) error {
 		"oauth2_clients",
 		"webauthn_credentials",
 		"audit_record",
+		"audit_entry",
 	}
 	for _, t := range tables {
 		if _, err := e.DB.ExecContext(ctx, fmt.Sprintf("TRUNCATE TABLE %s CASCADE", t)); err != nil {
