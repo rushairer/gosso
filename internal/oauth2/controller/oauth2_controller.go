@@ -663,11 +663,14 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 	}
 	rt, err := c.tokenSvc.ValidateRefreshToken(ctx, req.Token)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_token"})
+		// RFC 7009 §2.1: always return 200 for invalid/unknown tokens
+		// to prevent token existence oracle.
+		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 		return
 	}
 	if rt.AccountID != accountIDStr {
-		ctx.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		// Token belongs to a different user — silently skip revocation.
+		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 		return
 	}
 
