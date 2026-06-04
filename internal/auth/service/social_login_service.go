@@ -349,7 +349,7 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 	// Audit log for social login account creation
 	if s.auditor != nil {
 		accountUUID, _ := uuid.Parse(account.ID)
-		s.auditLog(ctx, &auditDomain.AuditRecord{
+		auditLog(ctx, s.auditor, s.logger, &auditDomain.AuditRecord{
 			ID:        uuid.New(),
 			TxID:      uuid.New(),
 			AccountID: &accountUUID,
@@ -391,12 +391,4 @@ func isUniqueViolation(err error) bool {
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "duplicate key") || strings.Contains(msg, "unique_violation")
-}
-
-func (s *SocialLoginService) auditLog(ctx context.Context, record *auditDomain.AuditRecord) {
-	if s.auditor != nil {
-		if err := s.auditor.Log(ctx, record); err != nil {
-			s.logger.Warn("Failed to submit audit record", zap.Error(err))
-		}
-	}
 }

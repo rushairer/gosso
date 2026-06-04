@@ -177,14 +177,6 @@ func (s *AuthService) SetMFAVerificationTTL(d time.Duration) {
 	}
 }
 
-func (s *AuthService) auditLog(ctx context.Context, record *auditDomain.AuditRecord) {
-	if s.auditor != nil {
-		if err := s.auditor.Log(ctx, record); err != nil {
-			s.logger.Warn("Failed to submit audit record", zap.Error(err))
-		}
-	}
-}
-
 // updateCredentialLastUsed updates the last used time of a credential
 func (s *AuthService) updateCredentialLastUsed(ctx context.Context, cred *accountDomain.Credential) error {
 	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
@@ -268,7 +260,7 @@ func (s *AuthService) CreateSessionAndTokens(ctx context.Context, account *accou
 
 // loginAuditLogs logs a login success or failure audit record.
 func (s *AuthService) loginAuditLogs(ctx context.Context, action string, username string, accountID *uuid.UUID, detail map[string]any, meta map[string]any) {
-	s.auditLog(ctx, auditDomain.NewRecord(
+	auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		action,
 		username,
 		accountID,

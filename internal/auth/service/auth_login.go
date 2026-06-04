@@ -382,7 +382,7 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 			acctID = &id
 		}
 	}
-	s.auditLog(ctx, auditDomain.NewRecord(
+	auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionLogout,
 		audit.IPFromContext(ctx),
 		acctID,
