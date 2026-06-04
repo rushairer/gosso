@@ -285,6 +285,10 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 				return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
 			})
 			if linkErr != nil {
+				if isUniqueViolation(linkErr) {
+					// Another concurrent request already linked this identity; proceed with login
+					return s.loginExistingUser(ctx, existingCred.AccountID, ip, userAgent)
+				}
 				return nil, fmt.Errorf("link federated identity: %w", linkErr)
 			}
 			return s.loginExistingUser(ctx, existingCred.AccountID, ip, userAgent)
