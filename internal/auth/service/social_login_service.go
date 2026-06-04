@@ -278,8 +278,9 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 	// and later uses social login with the same email.
 	if email != "" {
 		existingCred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, accountDomain.CredentialTypeEmail, email)
-		if err == nil && existingCred != nil {
-			// Link federated identity to existing account
+		if err == nil && existingCred != nil && existingCred.IsVerified() {
+			// Link federated identity to existing account (only if email is verified,
+			// preventing account takeover via an unverified email from a social provider).
 			identity := accountDomain.NewFederatedIdentity(existingCred.AccountID, accountDomain.Provider(provider), providerUserID, nil)
 			linkErr := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 				return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
@@ -328,7 +329,7 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 		// The DB unique constraint on (credential_type, identifier) caught it — fall back to linking.
 		if email != "" && isUniqueViolation(err) {
 			existingCred, findErr := s.credentialRepo.FindByTypeAndIdentifier(ctx, accountDomain.CredentialTypeEmail, email)
-			if findErr == nil && existingCred != nil {
+			if findErr == nil && existingCred != nil && existingCred.IsVerified() {
 				identity := accountDomain.NewFederatedIdentity(existingCred.AccountID, accountDomain.Provider(provider), providerUserID, nil)
 				linkErr := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 					return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
