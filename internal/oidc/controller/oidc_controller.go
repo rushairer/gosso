@@ -154,6 +154,8 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 
 		if err := c.logoutSvc.LogoutByAccountID(ctx, accountID); err != nil {
 			c.logger.Error("Logout by account ID failed", zap.String("account_id", accountID), zap.Error(err))
+			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout failed"))
+			return
 		}
 		loggedOut = true
 	}
