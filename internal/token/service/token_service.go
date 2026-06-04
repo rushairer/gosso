@@ -371,9 +371,12 @@ func (s *TokenService) RevokeAccountTokens(ctx context.Context, accountID string
 		return nil
 	}
 
-	ttl := s.accessExpiry
+	// Double the TTL to ensure the revocation key outlives even the latest-issued token.
+	// A token issued at T=(accessExpiry - ε) has IssuedAt near the original expiry;
+	// the revocation key must still exist to reject it.
+	ttl := s.accessExpiry * 2
 	if ttl <= 0 {
-		ttl = 15 * time.Minute
+		ttl = 30 * time.Minute
 	}
 
 	return s.blacklist.SetAccountRevokedAfter(ctx, accountID, time.Now(), ttl)
