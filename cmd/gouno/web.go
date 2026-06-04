@@ -128,7 +128,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	<-ctx.Done()
 
 	stop()
-	logger.Sugar().Info("shutting down gracefully, press Ctrl+C again to force")
+	logger.Sugar().Info("shutting down gracefully, waiting up to 30s for active requests to finish")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -349,7 +349,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		middleware.RequestIDMiddleware(),
 		middleware.RecoveryMiddleware(logger),
 		middleware.ZapLoggerMiddleware(logger),
-		middleware.SecurityHeadersMiddleware(),
+		middleware.SecurityHeadersMiddleware(!cfg.WebServerConfig.Debug),
 		middleware.MaxBodySizeMiddleware(cfg.WebServerConfig.MaxBodySize),
 		middleware.TimeoutMiddleware(cfg.WebServerConfig.RequestTimeout),
 		middleware.CSRFMiddleware(!cfg.WebServerConfig.Debug,
