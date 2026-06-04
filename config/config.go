@@ -109,6 +109,8 @@ type LogConfig struct {
 }
 
 type AuthConfig struct {
+	// Deprecated: JWTSecret is not used for RS256 JWT signing (RSA key pairs are used instead).
+	// Retained for backward compatibility with existing config files.
 	JWTSecret               string        `mapstructure:"jwt_secret"`
 	Issuer                  string        `mapstructure:"issuer"`
 	AccessTokenExpiry       time.Duration `mapstructure:"access_token_expiry"`
@@ -179,12 +181,6 @@ func (c *GoUnoConfig) Validate() error {
 	}
 	if c.AuthConfig.Issuer == "" {
 		return fmt.Errorf("auth: issuer is empty")
-	}
-	if c.AuthConfig.JWTSecret == "" {
-		return fmt.Errorf("auth: jwt_secret is empty")
-	}
-	if len(c.AuthConfig.JWTSecret) < 32 {
-		return fmt.Errorf("auth: jwt_secret must be at least 32 characters")
 	}
 	if c.AuthConfig.TOTPEncryptionKey != "" {
 		key, err := hex.DecodeString(c.AuthConfig.TOTPEncryptionKey)

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
@@ -389,6 +390,9 @@ func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "duplicate key") || strings.Contains(msg, "unique_violation")
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505"
+	}
+	return false
 }
