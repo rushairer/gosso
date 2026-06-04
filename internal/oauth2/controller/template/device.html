@@ -42,7 +42,6 @@
         <form method="POST" action="/oauth2/device">
             <input type="hidden" name="device_code" value="{{.DeviceCode}}">
             <input type="hidden" name="user_code" value="{{.UserCode}}">
-            <input type="hidden" name="access_token" value="{{.AccessToken}}">
             <input type="hidden" name="csrf_token" id="csrf_token">
             <div class="actions">
                 <button type="submit" name="approved" value="false" class="btn btn-deny">Deny</button>

@@ -123,8 +123,7 @@ func (c *OAuth2Controller) SetSessionValidator(v SessionValidator) {
 	c.sessionValidator = v
 }
 
-// authenticateRequest extracts and validates the access token from the request.
-// It tries the Authorization header first, then falls back to a form field.
+// authenticateRequest extracts and validates the access token from the Authorization header.
 // Returns the account ID on success, or an empty string and writes an error response on failure.
 func (c *OAuth2Controller) authenticateRequest(ctx *gin.Context) (string, bool) {
 	tokenString := ""
@@ -133,9 +132,6 @@ func (c *OAuth2Controller) authenticateRequest(ctx *gin.Context) (string, bool) 
 		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
 			tokenString = parts[1]
 		}
-	}
-	if tokenString == "" {
-		tokenString = ctx.PostForm("access_token")
 	}
 	if tokenString == "" {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -238,8 +234,6 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
-	accessTokenStr, _ := ctx.Get("jwt_token_string")
-
 	existingConsent, consentErr := c.consentSvc.GetConsent(ctx, accountIDStr, clientID)
 	if consentErr != nil {
 		c.logger.Warn("Failed to get consent, showing consent page", zap.Error(consentErr), zap.String("account_id", accountIDStr), zap.String("client_id", clientID))
@@ -257,7 +251,6 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 				"Scopes": requestedScopes, "Scope": scope, "State": state,
 				"RedirectURI": redirectURI, "CodeChallenge": codeChallenge,
 				"CodeChallengeMethod": codeChallengeMethod, "Nonce": nonce,
-				"AccessToken": accessTokenStr,
 			}); err != nil {
 				c.logger.Error("Failed to render consent template", zap.Error(err))
 				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -286,7 +279,6 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		"CodeChallenge":       codeChallenge,
 		"CodeChallengeMethod": codeChallengeMethod,
 		"Nonce":               nonce,
-		"AccessToken":         accessTokenStr,
 	}); err != nil {
 		c.logger.Error("Failed to render consent template", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -812,7 +804,6 @@ func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
 // DeviceUserPage GET /oauth2/device
 func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 	userCode := ctx.Query("user_code")
-	accessTokenStr, _ := ctx.Get("jwt_token_string")
 
 	if userCode == "" {
 		var buf bytes.Buffer
@@ -868,7 +859,6 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 		"DeviceCode": dc.DeviceCode,
 		"ClientName": client.Name,
 		"Scopes":     dc.Scopes,
-		"AccessToken": accessTokenStr,
 	}); err != nil {
 		c.logger.Error("Failed to render device template", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
