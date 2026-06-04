@@ -213,7 +213,7 @@ func (s *AuthService) buildTokenClaims(ctx context.Context, accountID, sessionID
 }
 
 // createSessionAndTokens creates a session, generates access and refresh tokens.
-func (s *AuthService) createSessionAndTokens(ctx context.Context, account *accountDomain.Account, ip, userAgent string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error) {
+func (s *AuthService) createSessionAndTokens(ctx context.Context, account *accountDomain.Account, ip, userAgent string) (retSession *sessionDomain.Session, retAccessToken string, retRefreshToken *tokenDomain.RefreshToken, retErr error) {
 	now := time.Now()
 	accountID, err := uuid.Parse(account.ID)
 	if err != nil {
@@ -234,6 +234,16 @@ func (s *AuthService) createSessionAndTokens(ctx context.Context, account *accou
 	if err := s.sessionSvc.CreateSession(ctx, session); err != nil {
 		return nil, "", nil, fmt.Errorf("create session: %w", err)
 	}
+
+	// Cleanup orphaned session if any subsequent step fails
+	defer func() {
+		if retErr != nil {
+			if delErr := s.sessionSvc.DeleteSession(ctx, session.ID); delErr != nil {
+				s.logger.Warn("Failed to cleanup orphaned session",
+					zap.String("session_id", session.ID.String()), zap.Error(delErr))
+			}
+		}
+	}()
 
 	claims, err := s.buildTokenClaims(ctx, account.ID, session.ID.String())
 	if err != nil {
