@@ -113,6 +113,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("auth.authorization_code_expiry", "5m")
 	v.SetDefault("auth.device_code_expiry", "10m")
 	v.SetDefault("auth.device_code_interval", "5s")
+	v.SetDefault("auth.id_token_expiry", "15m")
 
 	// Log configuration
 	v.SetDefault("log.level", 0)

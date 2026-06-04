@@ -51,6 +51,7 @@ auth:
     access_token_expiry: 15m
     refresh_token_expiry: 720h
     authorization_code_expiry: 10m
+    id_token_expiry: 15m
     default_scopes:
         - openid
         - profile
