@@ -48,6 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: MFA token blacklisting now fails closed — prevents MFA token reuse when Redis blacklist write fails (`internal/auth/service/auth_login.go`).
 - **Security**: Client Credentials grant now validates account is active before issuing tokens — consistent with refresh_token grant behavior (`internal/oauth2/controller/oauth2_controller.go`).
 - **Security**: Rate limit validation now rejects zero values — prevents `limit=0` from silently blocking all requests for an endpoint (`config/config.go`).
+- **Security**: OAuth2 `/revoke` now verifies the refresh token belongs to the authenticated user before revoking — prevents cross-user token revocation (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: `RegisterClient` and `UpdateClient` now validate `grant_types` against known OAuth2 grant type constants — prevents clients from self-promoting to `client_credentials` or other unauthorized grant types (`internal/oauth2/controller/client_controller.go`).
+- **Security**: Device code user-code-to-device-code Redis mapping now stores SHA-256 hash instead of raw device code — reduces exposure if Redis is compromised (`internal/oauth2/service/device_code_service.go`).
+- **Security**: `Config.Validate()` now checks `Introspect` and `DeviceCode` rate limits are positive — prevents misconfiguration from silently disabling rate limiting on these endpoints (`config/config.go`).
+- Password reset link URL construction now uses `net/url` instead of `fmt.Sprintf` — prevents malformed URLs when base URL already contains query parameters (`internal/auth/service/password_reset_service.go`).
 - **Security**: OAuth2 token endpoint rate limiter now fails closed — prevents brute-force on authorization codes when Redis is unavailable (`router/web.go`).
 - Password reset cooldown can no longer be bypassed by varying email case — email is normalized at the entry point (`internal/auth/service/password_reset_service.go`).
 - `EnforceSessionLimit` now logs a warning when session listing fails — previously failed silently (`internal/session/service/session_service.go`).
