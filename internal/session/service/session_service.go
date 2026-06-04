@@ -374,7 +374,7 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 	}
 
 	if session.AccountID.String() != accountID {
-		return fmt.Errorf("session does not belong to account")
+		return fmt.Errorf("session not found or access denied")
 	}
 
 	// Delete session key
