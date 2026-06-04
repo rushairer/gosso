@@ -49,7 +49,8 @@ func NewKeyService(privateKeyPath string, keyID string, logger *zap.Logger) (*Ke
 			if err != nil {
 				return nil, fmt.Errorf("generate and save key: %w", err)
 			}
-			logger.Info("RSA private key generated and saved", zap.String("path", privateKeyPath))
+			logger.Warn("RSA private key file not found — generating NEW key. All previously issued tokens will be INVALID.",
+				zap.String("path", privateKeyPath))
 		}
 	} else {
 		privateKey, err = generateKey()
