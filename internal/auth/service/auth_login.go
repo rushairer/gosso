@@ -95,9 +95,9 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	// 5. Check if MFA is required
 	mfaResult, mfaErr := s.handleMFARequirement(ctx, account)
 	if mfaResult != nil || mfaErr != nil {
-		// Password was correct — clear email-based rate limit before returning MFA challenge.
+		// Password was correct but MFA is required — do NOT clear rate limit yet.
+		// The counter will be cleared after successful MFA verification.
 		// IP-based counter is intentionally preserved to prevent brute force from the same IP.
-		_ = s.redis.Del(ctx, attemptsKey)
 		return mfaResult, mfaErr
 	}
 
@@ -194,6 +194,12 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 
 	s.logger.Info("MFA login successful", zap.String("account_id", account.ID))
 
+	// Clear login rate limit counters on successful MFA verification
+	if account.Username != nil {
+		_ = s.redis.Del(ctx, fmt.Sprintf("login_attempts:%s:%s", ip, strings.ToLower(*account.Username)))
+	}
+	_ = s.redis.Del(ctx, fmt.Sprintf("login_attempts_ip:%s", ip))
+
 	// 5. Audit log
 	if accountUUID, parseErr := uuid.Parse(account.ID); parseErr == nil {
 		s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, "", &accountUUID,
@@ -268,6 +274,12 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	}
 
 	s.logger.Info("Passkey MFA login successful", zap.String("account_id", account.ID))
+
+	// Clear login rate limit counters on successful MFA verification
+	if account.Username != nil {
+		_ = s.redis.Del(ctx, fmt.Sprintf("login_attempts:%s:%s", ip, strings.ToLower(*account.Username)))
+	}
+	_ = s.redis.Del(ctx, fmt.Sprintf("login_attempts_ip:%s", ip))
 
 	// 5. Audit log
 	if accountUUID, parseErr := uuid.Parse(account.ID); parseErr == nil {
