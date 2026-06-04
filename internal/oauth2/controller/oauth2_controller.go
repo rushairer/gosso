@@ -221,6 +221,12 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
+	// PKCE is mandatory for public clients (RFC 7636 Section 4.1)
+	if !client.IsConfidential && codeChallenge == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "code_challenge is required for public clients"})
+		return
+	}
+
 	accountID, exists := ctx.Get(middleware.ContextKeyAccountID)
 	if !exists {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
