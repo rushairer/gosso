@@ -101,13 +101,11 @@ func (e *TestEnv) Cleanup() {
 // TruncateAll truncates all test data between tests.
 func (e *TestEnv) TruncateAll(ctx context.Context) error {
 	tables := []string{
-		"account_groups",
 		"account_roles",
 		"roles",
 		"federated_identities",
 		"account_credentials",
 		"accounts",
-		"groups",
 		"oauth2_clients",
 		"webauthn_credentials",
 		"audit_record",

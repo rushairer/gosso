@@ -14,7 +14,9 @@ import (
 	"go.uber.org/zap"
 )
 
-const rsaKeyBits = 2048
+// rsaKeyBits is the key size for new RSA key generation.
+// NOTE: Existing keys are not affected; rotate keys to upgrade.
+const rsaKeyBits = 3072
 
 // KeyService manages RSA key pairs for RS256 JWT signing.
 type KeyService struct {

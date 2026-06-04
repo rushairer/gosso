@@ -25,3 +25,9 @@ var (
 	// General input errors
 	ErrInvalidSessionID = errors.New("invalid session id")
 )
+
+// Scope constants for JWT token claims
+const ScopeMFA = "mfa"
+
+// Role constants for RBAC
+const RoleAdmin = "admin"

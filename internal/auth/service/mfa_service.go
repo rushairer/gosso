@@ -342,31 +342,35 @@ func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) 
 	return codes, nil
 }
 
-// VerifyBackupCode verifies backup code (deletes it upon successful verification)
+// VerifyBackupCode verifies backup code (deletes it upon successful verification).
+// The entire find-bcrypt-delete sequence runs in a single transaction with FOR UPDATE locking
+// to prevent a backup code from being used by concurrent requests.
 func (s *MFAService) VerifyBackupCode(ctx context.Context, accountID, code string) (bool, error) {
-	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeBackupCode)
-	if err != nil {
-		return false, fmt.Errorf("find backup codes: %w", err)
-	}
-
-	for _, c := range creds {
-		if c.IsDeleted() || !c.Verified {
-			continue
+	var verified bool
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		creds, err := s.credentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, accountDomain.CredentialTypeBackupCode)
+		if err != nil {
+			return fmt.Errorf("find backup codes: %w", err)
 		}
-		if bcrypt.CompareHashAndPassword([]byte(c.Value), []byte(code)) == nil {
-			// Success, delete the code
-			err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-				return s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now())
-			})
-			if err != nil {
-				s.logger.Error("Failed to soft-delete backup code", zap.String("cred_id", c.ID), zap.Error(err))
-				return false, fmt.Errorf("delete backup code: %w", err)
+
+		for _, c := range creds {
+			if c.IsDeleted() || !c.Verified {
+				continue
 			}
-			return true, nil
+			if bcrypt.CompareHashAndPassword([]byte(c.Value), []byte(code)) == nil {
+				if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
+					return fmt.Errorf("delete backup code: %w", err)
+				}
+				verified = true
+				return nil
+			}
 		}
+		return nil
+	})
+	if err != nil {
+		return false, err
 	}
-
-	return false, nil
+	return verified, nil
 }
 
 func (s *MFAService) deleteUnverifiedTOTP(ctx context.Context, accountID string) error {

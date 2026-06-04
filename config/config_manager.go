@@ -90,10 +90,13 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("web_server.read_header_timeout", "2s")
 	v.SetDefault("web_server.write_timeout", "30s")
 	v.SetDefault("web_server.request_timeout", "10s")
+	v.SetDefault("web_server.max_body_size", 10*1024*1024) // 10MB
 	v.SetDefault("web_server.rate_limits.login", 5)
 	v.SetDefault("web_server.rate_limits.token", 10)
 	v.SetDefault("web_server.rate_limits.passkey", 10)
 	v.SetDefault("web_server.rate_limits.api", 60)
+	v.SetDefault("web_server.rate_limits.introspect", 20)
+	v.SetDefault("web_server.rate_limits.device_code", 10)
 
 	// Database configuration
 	v.SetDefault("database.default", "sqlite")

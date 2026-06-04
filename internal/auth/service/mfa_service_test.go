@@ -53,6 +53,10 @@ func (m *mockCredentialRepo) VerifyFirstUnverifiedTOTP(_ context.Context, _ *sql
 	return false, nil
 }
 
+func (m *mockCredentialRepo) FindByAccountAndTypeForUpdate(_ context.Context, _ *sql.Tx, accountID string, credType accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	return m.FindByAccountAndType(context.Background(), accountID, credType)
+}
+
 func newTestMFAService(credRepo *mockCredentialRepo) *MFAService {
 	return NewMFAService(credRepo, nil, "http://localhost:8080", nil)
 }

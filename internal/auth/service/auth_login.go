@@ -160,7 +160,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	if err != nil {
 		return nil, ErrInvalidMFAToken
 	}
-	if claims.Scope != "mfa" {
+	if claims.Scope != ScopeMFA {
 		return nil, ErrInvalidMFATokenScope
 	}
 	accountID := claims.AccountID
@@ -228,7 +228,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	if err != nil {
 		return nil, ErrInvalidMFAToken
 	}
-	if claims.Scope != "mfa" {
+	if claims.Scope != ScopeMFA {
 		return nil, ErrInvalidMFATokenScope
 	}
 	accountID := claims.AccountID
@@ -359,11 +359,9 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 		s.logger.Warn("Failed to revoke session during logout", zap.Error(err))
 	}
 
-	// 2. Revoke refresh tokens for this session
-	if accessTokenJTI != "" {
-		if err := s.tokenSvc.RevokeAllForSession(ctx, sessionID); err != nil {
-			s.logger.Warn("Failed to revoke refresh tokens", zap.Error(err))
-		}
+	// 2. Revoke refresh tokens for this session (always, regardless of accessTokenJTI)
+	if err := s.tokenSvc.RevokeAllForSession(ctx, sessionID); err != nil {
+		s.logger.Warn("Failed to revoke refresh tokens", zap.Error(err))
 	}
 
 	// 3. Blacklist the access token so it cannot be used after logout (fail-closed)
@@ -418,7 +416,7 @@ func (s *AuthService) handleMFARequirement(ctx context.Context, account *account
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.mfaVerificationTTL)),
 		},
 		AccountID: account.ID,
-		Scope:     "mfa",
+		Scope:     ScopeMFA,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("generate mfa token: %w", err)

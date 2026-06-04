@@ -350,6 +350,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		middleware.ZapLoggerMiddleware(logger),
 		middleware.RecoveryMiddleware(logger),
 		middleware.SecurityHeadersMiddleware(),
+		middleware.MaxBodySizeMiddleware(cfg.WebServerConfig.MaxBodySize),
 		middleware.TimeoutMiddleware(cfg.WebServerConfig.RequestTimeout),
 		middleware.CSRFMiddleware(!cfg.WebServerConfig.Debug,
 			"/api/passkey/login/begin",

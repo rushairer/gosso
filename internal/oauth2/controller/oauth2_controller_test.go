@@ -183,16 +183,27 @@ func (m *mockDeviceCodeMgr) ClaimAuthorizedDeviceCode(_ context.Context, _ strin
 // setupOAuth2Router builds a gin.Engine with the OAuth2 controller routes.
 // Since authCodeSvc/consentSvc/idTokenSvc require Redis, we only test
 // endpoints that rely on clientSvc and tokenSvc (mockable interfaces).
+// ──────────────────────────────────────────────
+// Mock AccountValidator
+// ──────────────────────────────────────────────
+
+type mockAccountValidatorAlwaysActive struct{}
+
+func (m *mockAccountValidatorAlwaysActive) IsAccountActive(_ context.Context, _ string) bool {
+	return true
+}
+
 func setupOAuth2Router(clientSvc *mockOAuth2ClientSvcForOAuth2, tokenSvc *mockTokenMgr, deviceCodeMgr *mockDeviceCodeMgr) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 
 	ctrl := &OAuth2Controller{
-		clientSvc:     clientSvc,
-		tokenSvc:      tokenSvc,
-		deviceCodeSvc: deviceCodeMgr,
-		issuer:        "https://sso.example.com",
-		logger:        zap.NewNop(),
+		clientSvc:        clientSvc,
+		tokenSvc:         tokenSvc,
+		deviceCodeSvc:    deviceCodeMgr,
+		accountValidator: &mockAccountValidatorAlwaysActive{},
+		issuer:           "https://sso.example.com",
+		logger:           zap.NewNop(),
 	}
 
 	// Register token and revoke routes (no Redis dependency)

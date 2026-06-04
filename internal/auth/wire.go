@@ -52,6 +52,9 @@ func InitializeAuthModule(
 	if authConfig.SessionTTL > 0 {
 		sessionSvc.SetSessionTTL(authConfig.SessionTTL)
 	}
+	if authConfig.MaxSessions > 0 {
+		sessionSvc.SetMaxSessions(authConfig.MaxSessions)
+	}
 
 	// PasskeyService (if WebAuthn is configured)
 	var passkeySvc *service.PasskeyService

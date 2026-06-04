@@ -82,35 +82,3 @@ func TestValidateScope_Empty(t *testing.T) {
 	result := c.ValidateScope([]string{})
 	assert.Nil(t, result)
 }
-
-// ──────────────────────────────────────────────
-// VerifySecret
-// ──────────────────────────────────────────────
-
-func TestVerifySecret_ConfidentialWithValidSecret(t *testing.T) {
-	c := newTestClient()
-	verifyFn := func(hashed, plain string) bool {
-		return hashed == "$2a$10$fakehash" && plain == "correct-secret"
-	}
-	assert.True(t, c.VerifySecret("correct-secret", verifyFn))
-}
-
-func TestVerifySecret_ConfidentialWithInvalidSecret(t *testing.T) {
-	c := newTestClient()
-	verifyFn := func(_, _ string) bool { return false }
-	assert.False(t, c.VerifySecret("wrong-secret", verifyFn))
-}
-
-func TestVerifySecret_PublicClient(t *testing.T) {
-	c := newTestClient()
-	c.IsConfidential = false
-	verifyFn := func(_, _ string) bool { return true }
-	assert.False(t, c.VerifySecret("any-secret", verifyFn))
-}
-
-func TestVerifySecret_EmptyHash(t *testing.T) {
-	c := newTestClient()
-	c.ClientSecretHash = ""
-	verifyFn := func(_, _ string) bool { return true }
-	assert.False(t, c.VerifySecret("any-secret", verifyFn))
-}

@@ -39,6 +39,10 @@ type CredentialRepository interface {
 	// SoftDeleteCredential soft deletes a single credential (requires transaction)
 	SoftDeleteCredential(ctx context.Context, tx *sql.Tx, credentialID string, deletedAt time.Time) error
 
+	// FindByAccountAndTypeForUpdate finds credentials by account ID and type with row-level locking (requires transaction).
+	// Used to prevent concurrent operations (e.g., backup code double-use) via SELECT ... FOR UPDATE.
+	FindByAccountAndTypeForUpdate(ctx context.Context, tx *sql.Tx, accountID string, credType domain.CredentialType) ([]*domain.Credential, error)
+
 	// VerifyFirstUnverifiedTOTP atomically verifies the first unverified TOTP credential for an account.
 	// Returns true if a credential was verified, false if no pending enrollment was found.
 	VerifyFirstUnverifiedTOTP(ctx context.Context, tx *sql.Tx, accountID string) (bool, error)
@@ -274,6 +278,60 @@ func (r *credentialRepositoryImpl) SoftDeleteCredential(ctx context.Context, tx 
 	}
 
 	return nil
+}
+
+// FindByAccountAndTypeForUpdate finds credentials by account ID and type with row-level locking.
+func (r *credentialRepositoryImpl) FindByAccountAndTypeForUpdate(ctx context.Context, tx *sql.Tx, accountID string, credType domain.CredentialType) ([]*domain.Credential, error) {
+	query := `
+		SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
+		       metadata, created_at, verified_at, last_used_at, deleted_at
+		FROM account_credentials
+		WHERE account_id = $1 AND credential_type = $2 AND deleted_at IS NULL
+		ORDER BY primary_credential DESC, created_at ASC
+		FOR UPDATE
+	`
+
+	rows, err := tx.QueryContext(ctx, query, accountID, credType)
+	if err != nil {
+		return nil, fmt.Errorf("query credentials for update: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var credentials []*domain.Credential
+	for rows.Next() {
+		cred := &domain.Credential{}
+		var metadataJSON []byte
+
+		err := rows.Scan(
+			&cred.ID,
+			&cred.AccountID,
+			&cred.Type,
+			&cred.Identifier,
+			&cred.Value,
+			&cred.Verified,
+			&cred.PrimaryCredential,
+			&metadataJSON,
+			&cred.CreatedAt,
+			&cred.VerifiedAt,
+			&cred.LastUsedAt,
+			&cred.DeletedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan credential: %w", err)
+		}
+
+		if err := json.Unmarshal(metadataJSON, &cred.Metadata); err != nil {
+			return nil, fmt.Errorf("unmarshal metadata: %w", err)
+		}
+
+		credentials = append(credentials, cred)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate credentials: %w", err)
+	}
+
+	return credentials, nil
 }
 
 // VerifyFirstUnverifiedTOTP atomically verifies the first unverified TOTP credential for an account.

@@ -54,3 +54,12 @@ func SecurityHeadersMiddleware() gin.HandlerFunc {
 		ctx.Next()
 	}
 }
+
+// MaxBodySizeMiddleware limits the request body to the given number of bytes.
+// Returns 413 Request Entity Too Large if the limit is exceeded.
+func MaxBodySizeMiddleware(maxBytes int64) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxBytes)
+		ctx.Next()
+	}
+}

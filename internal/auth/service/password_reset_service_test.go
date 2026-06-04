@@ -256,6 +256,10 @@ func (m *mockCredentialRepoForReset) VerifyFirstUnverifiedTOTP(_ context.Context
 	return false, fmt.Errorf("not implemented")
 }
 
+func (m *mockCredentialRepoForReset) FindByAccountAndTypeForUpdate(_ context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 type mockAccountSvcForReset struct {
 	findByIDFn func(ctx context.Context, accountID string) (*accountDomain.Account, error)
 }

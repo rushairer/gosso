@@ -136,7 +136,7 @@ func (s *AuthService) ValidateMFAToken(ctx context.Context, mfaToken string) (*t
 	if err != nil {
 		return nil, ErrInvalidMFAToken
 	}
-	if claims.Scope != "mfa" {
+	if claims.Scope != ScopeMFA {
 		return nil, ErrInvalidMFATokenScope
 	}
 	return claims, nil

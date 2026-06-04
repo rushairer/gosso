@@ -110,13 +110,25 @@ func (c *OAuth2Controller) SetAccountValidator(v AccountValidator) {
 }
 
 // RegisterRoutes registers OAuth2 routes.
-func (c *OAuth2Controller) RegisterRoutes(rg *gin.RouterGroup, authMiddleware gin.HandlerFunc) {
+// introspectLimit and deviceCodeLimit are optional rate limit middleware for CPU-intensive endpoints.
+func (c *OAuth2Controller) RegisterRoutes(rg *gin.RouterGroup, authMiddleware, introspectLimit, deviceCodeLimit gin.HandlerFunc) {
 	rg.GET("/authorize", authMiddleware, c.Authorize)
 	rg.POST("/authorize", authMiddleware, c.SubmitConsent)
 	rg.POST("/token", c.Token)
 	rg.POST("/revoke", authMiddleware, c.Revoke)
-	rg.POST("/introspect", c.Introspect)
-	rg.POST("/device/code", c.DeviceCodeRequest)
+
+	introspectHandlers := []gin.HandlerFunc{c.Introspect}
+	if introspectLimit != nil {
+		introspectHandlers = []gin.HandlerFunc{introspectLimit, c.Introspect}
+	}
+	rg.POST("/introspect", introspectHandlers...)
+
+	deviceCodeHandlers := []gin.HandlerFunc{c.DeviceCodeRequest}
+	if deviceCodeLimit != nil {
+		deviceCodeHandlers = []gin.HandlerFunc{deviceCodeLimit, c.DeviceCodeRequest}
+	}
+	rg.POST("/device/code", deviceCodeHandlers...)
+
 	rg.GET("/device", authMiddleware, c.DeviceUserPage)
 	rg.POST("/device", authMiddleware, c.DeviceUserSubmit)
 }
@@ -459,7 +471,10 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 	}
 
 	// Verify account is still active (deleted/suspended accounts cannot refresh)
-	if c.accountValidator != nil && !c.accountValidator.IsAccountActive(ctx, newRefreshToken.AccountID) {
+	if c.accountValidator == nil {
+		panic("OAuth2Controller: accountValidator not set; call SetAccountValidator during init")
+	}
+	if !c.accountValidator.IsAccountActive(ctx, newRefreshToken.AccountID) {
 		// Revoke the orphaned new token since the account is inactive
 		if revokeErr := c.tokenSvc.RevokeRefreshToken(ctx, newRefreshToken.Token); revokeErr != nil {
 			c.logger.Warn("Failed to revoke orphaned refresh token for inactive account", zap.Error(revokeErr))
@@ -524,7 +539,10 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 	}
 
 	// Verify account is still active (deleted/suspended clients cannot get new tokens)
-	if c.accountValidator != nil && !c.accountValidator.IsAccountActive(ctx, client.AccountID) {
+	if c.accountValidator == nil {
+		panic("OAuth2Controller: accountValidator not set; call SetAccountValidator during init")
+	}
+	if !c.accountValidator.IsAccountActive(ctx, client.AccountID) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client", "error_description": "account is not active"})
 		return
 	}
@@ -854,7 +872,10 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 	dc = claimedDC
 
 	// Verify account is still active before issuing tokens
-	if c.accountValidator != nil && !c.accountValidator.IsAccountActive(ctx, dc.AccountID) {
+	if c.accountValidator == nil {
+		panic("OAuth2Controller: accountValidator not set; call SetAccountValidator during init")
+	}
+	if !c.accountValidator.IsAccountActive(ctx, dc.AccountID) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "account is not active"})
 		return
 	}

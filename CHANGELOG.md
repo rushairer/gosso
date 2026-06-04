@@ -7,8 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `MaxBodySizeMiddleware` limits request body size (default 10MB, configurable via `web_server.max_body_size`) — prevents memory exhaustion from oversized requests (`middleware/middleware.go`, `config/config.go`).
+- Dedicated rate limits for OAuth2 `/introspect` and `/device/code` endpoints (configurable via `web_server.rate_limits.introspect` and `web_server.rate_limits.device_code`) — prevents CPU exhaustion from bcrypt-heavy introspect calls (`router/web.go`, `config/config.go`).
+- `MaxSessions` is now configurable via `auth.max_sessions` config (default: 10) (`config/config.go`, `internal/auth/wire.go`).
+- Migration 0011 adds `idx_audit_record_created_at` index on `audit_record(created_at DESC)` — optimizes time-range audit queries (`db/migrations/0011_audit_record_created_at_index.up.sql`).
+
+### Changed
+
+- RSA key size for new key generation increased from 2048 to 3072 bits — existing keys are not affected; rotate keys to upgrade (`internal/token/service/key_service.go`).
+- Hardcoded `"admin"` and `"mfa"` strings extracted to `RoleAdmin` and `ScopeMFA` constants (`internal/auth/service/errors.go`).
+- OAuth2 `accountValidator` nil-check changed from skip-on-nil to fail-closed panic — nil validator is now treated as an initialization error (`internal/oauth2/controller/oauth2_controller.go`).
+
+### Removed
+
+- Unused `groups` and `account_groups` tables dropped via migration 0010 — no Go code references these tables (`db/migrations/0010_drop_groups.up.sql`, `internal/testutil/testutil.go`).
+- Unused `OAuth2Client.VerifySecret` method removed — production code uses `bcrypt.CompareHashAndPassword` directly (`internal/oauth2/domain/client.go`).
+
 ### Fixed
 
+- **Security**: Backup code verification and deletion now run in a single transaction with `FOR UPDATE` row locking — prevents concurrent requests from using the same backup code twice (`internal/auth/service/mfa_service.go`, `internal/account/repository/credential_repository.go`).
+- **Security**: Logout now always revokes refresh tokens regardless of access token JTI availability — prevents orphaned refresh tokens when the access token is already blacklisted (`internal/auth/service/auth_login.go`).
 - **Security**: Device code grant now validates account is active before issuing tokens — consistent with all other token grant endpoints (`internal/oauth2/controller/oauth2_controller.go`).
 - **Security**: Device code request now requires client authentication for confidential clients — prevents unauthorized device code enumeration per RFC 8628 §3.1 (`internal/oauth2/controller/oauth2_controller.go`).
 - **Security**: Device code grant removed non-atomic status check before `ClaimAuthorizedDeviceCode` Lua script — eliminates TOCTOU race condition; atomic script handles all status validation (`internal/oauth2/controller/oauth2_controller.go`).

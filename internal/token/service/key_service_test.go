@@ -17,7 +17,7 @@ func TestNewKeyService_Generate(t *testing.T) {
 	assert.NotNil(t, svc.PrivateKey())
 	assert.NotNil(t, svc.PublicKey())
 	assert.NotEmpty(t, svc.KeyID())
-	assert.Equal(t, 2048, svc.PrivateKey().N.BitLen())
+	assert.Equal(t, 3072, svc.PrivateKey().N.BitLen())
 }
 
 func TestNewKeyService_CreateFile(t *testing.T) {

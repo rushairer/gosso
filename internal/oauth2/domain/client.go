@@ -78,14 +78,6 @@ func (c *OAuth2Client) ValidateScope(requestedScopes []string) []string {
 	return valid
 }
 
-// VerifySecret verifies the client secret (via bcrypt verification)
-func (c *OAuth2Client) VerifySecret(secret string, verifyFn func(hashed, plain string) bool) bool {
-	if !c.IsConfidential || c.ClientSecretHash == "" {
-		return false
-	}
-	return verifyFn(c.ClientSecretHash, secret)
-}
-
 // Grant Type constants
 const (
 	GrantTypeAuthorizationCode = "authorization_code"

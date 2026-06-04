@@ -107,6 +107,9 @@ func (m *mockCredentialRepo) SoftDeleteCredential(_ context.Context, _ *sql.Tx, 
 func (m *mockCredentialRepo) VerifyFirstUnverifiedTOTP(_ context.Context, _ *sql.Tx, _ string) (bool, error) {
 	return false, nil
 }
+func (m *mockCredentialRepo) FindByAccountAndTypeForUpdate(_ context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	return nil, nil
+}
 
 func setupTestIDTokenService(t *testing.T) (*IDTokenService, *cache.RedisClient) {
 	logger := zap.NewNop()

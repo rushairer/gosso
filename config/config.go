@@ -28,15 +28,18 @@ type WebServerConfig struct {
 	ReadHeaderTimeout  time.Duration    `mapstructure:"read_header_timeout"`
 	WriteTimeout       time.Duration    `mapstructure:"write_timeout"`
 	RequestTimeout     time.Duration    `mapstructure:"request_timeout"`
+	MaxBodySize        int64            `mapstructure:"max_body_size"`
 	RateLimits         RateLimitsConfig `mapstructure:"rate_limits"`
 }
 
 // RateLimitsConfig per-endpoint rate limit configuration (requests per minute)
 type RateLimitsConfig struct {
-	Login   int `mapstructure:"login"`   // Login endpoint, default 5
-	Token   int `mapstructure:"token"`   // Token endpoint, default 10
-	Passkey int `mapstructure:"passkey"` // Passkey endpoint, default 10
-	API     int `mapstructure:"api"`     // General API, default 60
+	Login      int `mapstructure:"login"`       // Login endpoint, default 5
+	Token      int `mapstructure:"token"`       // Token endpoint, default 10
+	Passkey    int `mapstructure:"passkey"`     // Passkey endpoint, default 10
+	API        int `mapstructure:"api"`         // General API, default 60
+	Introspect int `mapstructure:"introspect"`  // Introspect endpoint, default 20
+	DeviceCode int `mapstructure:"device_code"` // Device code endpoint, default 10
 }
 
 type DatabaseConfigDriverName string
@@ -111,6 +114,7 @@ type AuthConfig struct {
 	AccessTokenExpiry       time.Duration `mapstructure:"access_token_expiry"`
 	RefreshTokenExpiry      time.Duration `mapstructure:"refresh_token_expiry"`
 	SessionTTL              time.Duration `mapstructure:"session_ttl"`
+	MaxSessions             int           `mapstructure:"max_sessions"`
 	AuthorizationCodeExpiry time.Duration `mapstructure:"authorization_code_expiry"`
 	DeviceCodeExpiry        time.Duration `mapstructure:"device_code_expiry"`
 	DeviceCodeInterval      time.Duration `mapstructure:"device_code_interval"`

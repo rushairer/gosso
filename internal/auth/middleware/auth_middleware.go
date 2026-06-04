@@ -10,6 +10,7 @@ import (
 	"github.com/rushairer/gouno"
 
 	"github.com/rushairer/gosso/internal/audit"
+	authService "github.com/rushairer/gosso/internal/auth/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
@@ -96,7 +97,7 @@ func AdminRequiredMiddleware() gin.HandlerFunc {
 		}
 
 		for _, role := range claims.Roles {
-			if role == "admin" {
+			if role == authService.RoleAdmin {
 				ctx.Next()
 				return
 			}
