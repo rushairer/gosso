@@ -203,7 +203,8 @@ func TestEnforceSessionLimit(t *testing.T) {
 	}
 
 	// Enforce limit
-	svc.EnforceSessionLimit(ctx, accountID)
+	err := svc.EnforceSessionLimit(ctx, accountID)
+	require.NoError(t, err)
 
 	// Should have only 3 sessions remaining (oldest evicted)
 	remaining, err := svc.ListSessionsByAccount(ctx, accountID)

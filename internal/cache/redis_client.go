@@ -43,6 +43,7 @@ func NewRedisClient(dsn string, maxActiveConns int, poolTimeout time.Duration, l
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
+		client.Close()
 		return nil, fmt.Errorf("ping redis: %w", err)
 	}
 
@@ -203,6 +204,19 @@ func (r *RedisClient) SAdd(ctx context.Context, key string, members ...interface
 	if err != nil {
 		r.logger.Error("Redis SADD failed", zap.String("key", key), zap.Error(err))
 		return fmt.Errorf("sadd key %s: %w", key, err)
+	}
+	return nil
+}
+
+// SAddWithTTL atomically adds a member to a set and sets a TTL using a Lua script.
+// This prevents the partial-failure scenario where SADD succeeds but EXPIRE fails,
+// leaving the set without a TTL and allowing unbounded growth.
+func (r *RedisClient) SAddWithTTL(ctx context.Context, key string, member string, ttl time.Duration) error {
+	script := redis.NewScript(`redis.call('SADD', KEYS[1], ARGV[1]); return redis.call('EXPIRE', KEYS[1], ARGV[2])`)
+	_, err := script.Run(ctx, r.client, []string{key}, member, int(ttl.Seconds())).Result()
+	if err != nil {
+		r.logger.Error("Redis SADD+EXPIRE failed", zap.String("key", key), zap.Error(err))
+		return fmt.Errorf("sadd_with_ttl key %s: %w", key, err)
 	}
 	return nil
 }

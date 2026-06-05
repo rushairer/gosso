@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 
@@ -37,16 +38,24 @@ func NewConfigManager(
 	// Bind CLI flags to the local viper instance
 	if cmd != nil {
 		if f := cmd.Flags().Lookup("address"); f != nil {
-			_ = v.BindPFlag("web_server.address", f)
+			if err := v.BindPFlag("web_server.address", f); err != nil {
+				log.Printf("Warning: failed to bind flag 'address': %v", err)
+			}
 		}
 		if f := cmd.Flags().Lookup("port"); f != nil {
-			_ = v.BindPFlag("web_server.port", f)
+			if err := v.BindPFlag("web_server.port", f); err != nil {
+				log.Printf("Warning: failed to bind flag 'port': %v", err)
+			}
 		}
 		if f := cmd.Flags().Lookup("debug"); f != nil {
-			_ = v.BindPFlag("web_server.debug", f)
+			if err := v.BindPFlag("web_server.debug", f); err != nil {
+				log.Printf("Warning: failed to bind flag 'debug': %v", err)
+			}
 		}
 		if f := cmd.Flags().Lookup("env"); f != nil {
-			_ = v.BindPFlag("gouno_env", f)
+			if err := v.BindPFlag("gouno_env", f); err != nil {
+				log.Printf("Warning: failed to bind flag 'env': %v", err)
+			}
 		}
 	}
 

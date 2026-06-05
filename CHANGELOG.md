@@ -205,6 +205,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Removed unreachable `map[string]interface{}` type assertion in `GetMap` (`utility/metadata.go`).
 - `SecurityHeadersMiddleware` now accepts `isProduction bool` — HSTS header is only set in production mode, avoiding meaningless `Strict-Transport-Security` over plain HTTP in dev/test (`middleware/middleware.go`, `cmd/gouno/web.go`).
 - OIDC `.well-known` routes now registered at the router layer instead of inside `RegisterRoutes` — enables independent rate limiting for Discovery/JWKS vs UserInfo/Logout (`router/web.go`, `internal/oidc/controller/oidc_controller.go`).
+- `RedisClient.SAddWithTTL` now uses Lua script for atomic SADD+EXPIRE — prevents session index sets from growing without TTL when EXPIRE fails independently (`internal/cache/redis_client.go`).
+- `EnforceSessionLimit` now returns `error` instead of silently ignoring failures — callers log the error instead of silently skipping session limit enforcement (`internal/session/service/session_service.go`).
+- Session index maintenance in `CreateSession` now uses `SAddWithTTL` for atomicity — replaces separate SADD + EXPIRE calls that could leave sets without TTL (`internal/session/service/session_service.go`).
 
 ### Fixed
 
@@ -426,6 +429,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: ID Token email lookup fixed — uses `FindByAccountAndType(accountID)` instead of `FindByTypeAndIdentifier("")` (`internal/oidc/service/id_token_service.go`).
 - **Security**: Verification code comparison now uses `crypto/subtle.ConstantTimeCompare` to prevent timing attacks (`internal/auth/service/verification_service.go`).
 - **Security**: Captcha generation now uses `crypto/rand` instead of `math/rand` for unpredictable codes (`internal/captcha/service/captcha_service.go`).
+- Redis client now closes the connection when `Ping` fails — prevents connection pool and goroutine leak on startup retry (`internal/cache/redis_client.go`).
+- **Security**: OIDC Logout `id_token_hint` path now also blacklists the current access token when a Bearer header is present — previously only session revocation was performed, leaving the access token valid until natural expiry (`internal/oidc/controller/oidc_controller.go`).
+- `engine.SetTrustedProxies` now fails fast on invalid CIDR entries — prevents silent fallback to trusting all proxies which would break `ClientIP()` accuracy (`cmd/gouno/web.go`).
+- Device code `generateUserCode` now validates exact 8-character length before slicing — defensive check against unexpected return values (`internal/oauth2/service/device_code_service.go`).
+- `ConfigManager` now logs `BindPFlag` errors instead of silently discarding them — aids debugging when CLI flag binding fails internally (`config/config_manager.go`).
+- **Security**: Introspect endpoint now logs a Warn when called by a public client — increases audit visibility for token introspection by non-confidential clients (`internal/oauth2/controller/oauth2_controller.go`).
 - **Security**: `config.Validate()` now checks that `JWTSecret` is non-empty (`config/config.go`).
 - Replace `logger.Fatal` with `logger.Error` for graceful shutdown in web server (`cmd/gouno/web.go`).
 - Remove dead code: redundant `os.Exit(1)` after `log.Fatalf` in `cmd/gouno/root.go`.
@@ -553,6 +562,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 
 - Remove unused `Group` struct and related methods from `internal/account/domain/role.go`.
+- Remove dead code `ctx.Set("jwt_token_string", tokenString)` from JWT middleware — no consumer existed; storing the raw JWT in context risked accidental log exposure (`internal/auth/middleware/auth_middleware.go`).
 - Remove `buildMessage` method from `EmailService` (replaced by gomail).
 - Remove `buildMessage` tests from `internal/notification/service/notification_service_test.go`.
 - Remove unused `internal/db/db.go` wrapper (`DB` struct, `NewDB` constructor) — services use `*sql.DB` directly.

@@ -718,6 +718,8 @@ func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 			return
 		}
+	} else {
+		c.logger.Warn("Introspect called by public client", zap.String("client_id", clientID))
 	}
 
 	result, err := c.tokenSvc.IntrospectToken(ctx, req.Token)

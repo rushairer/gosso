@@ -173,6 +173,13 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 			return
 		}
 		loggedOut = true
+		// Blacklist the current access token if a Bearer header was also provided
+		if bearerClaims != nil && bearerClaims.ExpiresAt != nil {
+			if err := c.tokenSvc.RevokeAccessToken(ctx, bearerClaims.ID, bearerClaims.ExpiresAt.Time); err != nil {
+				c.logger.Warn("Failed to blacklist access token during id_token_hint logout",
+					zap.String("jti", bearerClaims.ID), zap.Error(err))
+			}
+		}
 		}
 	}
 

@@ -111,18 +111,17 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 		return fmt.Errorf("create session: %w", err)
 	}
 
-	// Maintain account session index
+	// Maintain account session index (SADD + EXPIRE atomically via Lua)
 	indexKey := s.buildAccountSessionsKey(session.AccountID.String())
-	if err := s.redis.SAdd(ctx, indexKey, session.ID.String()); err != nil {
+	if err := s.redis.SAddWithTTL(ctx, indexKey, session.ID.String(), s.sessionTTL); err != nil {
 		s.logger.Warn("Failed to index session by account", zap.Error(err), zap.String("session_id", session.ID.String()))
-	}
-	if err := s.redis.Expire(ctx, indexKey, s.sessionTTL); err != nil {
-		s.logger.Error("Failed to set TTL on session index set — may grow unbounded",
-			zap.String("key", indexKey), zap.Error(err))
 	}
 
 	// Enforce maximum concurrent session limit
-	s.EnforceSessionLimit(ctx, session.AccountID.String())
+	if err := s.EnforceSessionLimit(ctx, session.AccountID.String()); err != nil {
+		s.logger.Warn("Failed to enforce session limit", zap.Error(err),
+			zap.String("account_id", session.AccountID.String()))
+	}
 
 	s.logger.Info("Session created",
 		zap.String("session_id", session.ID.String()),
@@ -439,19 +438,18 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 
 // EnforceSessionLimit checks and enforces the maximum concurrent session limit.
 // When the limit is exceeded, the oldest sessions are revoked.
-func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID string) {
+func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID string) error {
 	if s.maxSessions <= 0 {
-		return
+		return nil
 	}
 
 	sessions, err := s.ListSessionsByAccount(ctx, accountID)
 	if err != nil {
-		s.logger.Warn("Failed to list sessions for limit enforcement", zap.String("account_id", accountID), zap.Error(err))
-		return
+		return fmt.Errorf("list sessions: %w", err)
 	}
 
 	if len(sessions) <= s.maxSessions {
-		return
+		return nil
 	}
 
 	// Sort by LastActiveAt and revoke the oldest
@@ -467,6 +465,7 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 			zap.String("account_id", accountID))
 		_ = s.RevokeSession(ctx, accountID, sessions[i].ID)
 	}
+	return nil
 }
 
 // Error definitions

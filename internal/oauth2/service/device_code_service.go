@@ -68,6 +68,9 @@ func (s *DeviceCodeService) CreateDeviceCode(ctx context.Context, clientID strin
 	if err != nil {
 		return nil, fmt.Errorf("generate user code: %w", err)
 	}
+	if len(userCode) != 8 {
+		return nil, fmt.Errorf("unexpected user code length: %d", len(userCode))
+	}
 	formattedUserCode := userCode[:4] + "-" + userCode[4:]
 
 	now := time.Now()
