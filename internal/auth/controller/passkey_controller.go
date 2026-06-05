@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
@@ -149,8 +151,16 @@ func (c *PasskeyController) LoginBegin(ctx *gin.Context) {
 	}
 
 	if req.AccountID != "" {
+		if _, err := uuid.Parse(req.AccountID); err != nil {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid account_id format"))
+			return
+		}
 		options, requestID, err := c.passkeySvc.BeginLogin(ctx, req.AccountID)
 		if err != nil {
+			if errors.Is(err, authService.ErrPasskeyNotFound) {
+				ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "no passkey found for this account"))
+				return
+			}
 			c.logger.Error("Failed to begin passkey login", zap.Error(err))
 			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to begin login"))
 			return

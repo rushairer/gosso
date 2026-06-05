@@ -183,6 +183,10 @@ func (c *GoUnoConfig) Validate() error {
 	if c.AuthConfig.Issuer == "" {
 		return fmt.Errorf("auth: issuer is empty")
 	}
+	issuerURL, err := url.Parse(c.AuthConfig.Issuer)
+	if err != nil || (issuerURL.Scheme != "http" && issuerURL.Scheme != "https") {
+		return fmt.Errorf("auth: issuer must be a valid URL with http or https scheme")
+	}
 	if c.AuthConfig.TOTPEncryptionKey != "" {
 		key, err := hex.DecodeString(c.AuthConfig.TOTPEncryptionKey)
 		if err != nil {
@@ -227,6 +231,10 @@ func (c *GoUnoConfig) Validate() error {
 		}
 		if c.AuthConfig.PasswordResetBaseURL == "" {
 			return fmt.Errorf("auth: password_reset_base_url is required when SMTP is configured")
+		}
+		resetURL, err := url.Parse(c.AuthConfig.PasswordResetBaseURL)
+		if err != nil || (resetURL.Scheme != "http" && resetURL.Scheme != "https") {
+			return fmt.Errorf("auth: password_reset_base_url must be a valid URL with http or https scheme")
 		}
 	}
 	if c.AuthConfig.WebAuthnRPID != "" {

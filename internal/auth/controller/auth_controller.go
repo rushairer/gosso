@@ -542,7 +542,7 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 // SendVerificationRequest send verification code request body
 type SendVerificationRequest struct {
 	Type       string `json:"type" binding:"required"`       // "email" or "phone"
-	Identifier string `json:"identifier" binding:"required"` // email address or phone number
+	Identifier string `json:"identifier" binding:"required,max=255"` // email address or phone number
 }
 
 // SendVerification POST /api/auth/verify/send
@@ -607,7 +607,7 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 // ConfirmVerificationRequest confirm verification code request body
 type ConfirmVerificationRequest struct {
 	Type       string `json:"type" binding:"required"`
-	Identifier string `json:"identifier" binding:"required"`
+	Identifier string `json:"identifier" binding:"required,max=255"`
 	Code       string `json:"code" binding:"required"`
 }
 
@@ -653,6 +653,7 @@ func (c *AuthController) ConfirmVerification(ctx *gin.Context) {
 
 	cred, err := c.credentialRepo.FindByTypeAndIdentifier(ctx, credType, req.Identifier)
 	if err != nil {
+		c.logger.Warn("Failed to find credential for verification confirmation", zap.Error(err), zap.String("type", req.Type), zap.String("identifier", req.Identifier))
 		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "credential not found"))
 		return
 	}
@@ -709,7 +710,7 @@ func (c *AuthController) ResetPassword(ctx *gin.Context) {
 	}
 
 	if err := c.passwordResetSvc.VerifyAndReset(ctx, req.Token, req.NewPassword); err != nil {
-		c.logger.Debug("Password reset failed", zap.Error(err))
+		c.logger.Warn("Password reset failed", zap.Error(err))
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid or expired reset token"))
 		return
 	}

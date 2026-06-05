@@ -10,6 +10,7 @@ type DiscoveryService struct {
 	endSessionEndpoint          string
 	deviceAuthorizationEndpoint string
 	revocationEndpoint          string
+	introspectionEndpoint       string
 }
 
 // NewDiscoveryService creates a new instance of DiscoveryService
@@ -23,6 +24,7 @@ func NewDiscoveryService(issuer string) *DiscoveryService {
 		endSessionEndpoint:          issuer + "/oidc/logout",
 		deviceAuthorizationEndpoint: issuer + "/oauth2/device/code",
 		revocationEndpoint:          issuer + "/oauth2/revoke",
+		introspectionEndpoint:       issuer + "/oauth2/introspect",
 	}
 }
 
@@ -55,7 +57,7 @@ func (s *DiscoveryService) GetDiscoveryDocument() map[string]any {
 			"RS256",
 		},
 		"token_endpoint_auth_methods_supported": []string{
-			"client_secret_post", "client_secret_basic",
+			"client_secret_post", "client_secret_basic", "none",
 		},
 		"claims_supported": []string{
 			"sub", "iss", "aud", "exp", "iat", "auth_time", "nonce",
@@ -71,5 +73,10 @@ func (s *DiscoveryService) GetDiscoveryDocument() map[string]any {
 		"revocation_endpoint_auth_methods_supported": []string{
 			"client_secret_post", "client_secret_basic",
 		},
+		"introspection_endpoint": s.introspectionEndpoint,
+		"introspection_endpoint_auth_methods_supported": []string{
+			"client_secret_post", "client_secret_basic",
+		},
+		"authorization_response_iss_parameter_supported": true,
 	}
 }

@@ -374,13 +374,18 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 		return errors.New("incorrect old password")
 	}
 
-	// 3. Hash new password
+	// 3. Validate new password strength
+	if err := utility.ValidatePasswordStrength(newPassword); err != nil {
+		return err
+	}
+
+	// 4. Hash new password
 	newPasswordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("hash new password: %w", err)
 	}
 
-	// 4. Update password
+	// 5. Update password
 	passwordCred.Value = string(newPasswordHash)
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
@@ -390,7 +395,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 		return err
 	}
 
-	// 5. Revoke all existing sessions so that any attacker with a stolen session is kicked out
+	// 6. Revoke all existing sessions so that any attacker with a stolen session is kicked out
 	if s.sessionRevoker != nil {
 		if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
 			s.logger.Error("Failed to revoke sessions after password change",
@@ -401,7 +406,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 			zap.String("account_id", accountID))
 	}
 
-	// 6. Audit log
+	// 7. Audit log
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionPasswordChange,
 		audit.IPFromContext(ctx),

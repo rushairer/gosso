@@ -121,12 +121,15 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 	// Security: CSRF middleware skips validation when a Bearer header is present.
 	// If the Bearer header is invalid (or a forgery), reject immediately to prevent
 	// CSRF bypass via a fake Authorization header combined with a stolen id_token_hint.
+	var bearerClaims *tokenDomain.AccessTokenClaims
 	if authHeader := ctx.GetHeader("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		if _, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx, tokenString); err != nil {
+		claims, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx, tokenString)
+		if err != nil {
 			ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid session"))
 			return
 		}
+		bearerClaims = claims
 	}
 
 	var accountID string
@@ -173,30 +176,22 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 		loggedOut = true
 	}
 
-	// 2. Fallback: try Bearer token
-	if !loggedOut {
-		authHeader := ctx.GetHeader("Authorization")
-		if strings.HasPrefix(authHeader, "Bearer ") {
-			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-			tokenClaims, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx, tokenString)
-			if err == nil && tokenClaims != nil {
-				clientID = tokenClaims.ClientID
-				if err := c.logoutSvc.LogoutBySessionID(ctx, tokenClaims.AccountID, tokenClaims.SessionID); err != nil {
-					c.logger.Error("Logout by session ID failed", zap.String("session_id", tokenClaims.SessionID), zap.Error(err))
-					ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout failed"))
-					return
-				}
-				// Blacklist the current access token so it cannot be reused
-				if tokenClaims.ExpiresAt != nil {
-					if err := c.tokenSvc.RevokeAccessToken(ctx, tokenClaims.ID, tokenClaims.ExpiresAt.Time); err != nil {
-						c.logger.Warn("Failed to blacklist access token during logout", zap.String("jti", tokenClaims.ID), zap.Error(err))
-					}
-				}
-				loggedOut = true
-			} else {
-				c.logger.Debug("Bearer token validation failed during logout", zap.Error(err))
+	// 2. Fallback: try cached Bearer token claims
+	if !loggedOut && bearerClaims != nil {
+		tokenClaims := bearerClaims
+		clientID = tokenClaims.ClientID
+		if err := c.logoutSvc.LogoutBySessionID(ctx, tokenClaims.AccountID, tokenClaims.SessionID); err != nil {
+			c.logger.Error("Logout by session ID failed", zap.String("session_id", tokenClaims.SessionID), zap.Error(err))
+			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout failed"))
+			return
+		}
+		// Blacklist the current access token so it cannot be reused
+		if tokenClaims.ExpiresAt != nil {
+			if err := c.tokenSvc.RevokeAccessToken(ctx, tokenClaims.ID, tokenClaims.ExpiresAt.Time); err != nil {
+				c.logger.Warn("Failed to blacklist access token during logout", zap.String("jti", tokenClaims.ID), zap.Error(err))
 			}
 		}
+		loggedOut = true
 	}
 
 	// 3. Post-logout redirect

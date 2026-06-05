@@ -30,6 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CSRF middleware doc comment corrected from "prefix match" to "exact match" to match actual behavior (`middleware/csrf.go`).
 - Magic numbers `100ms` and `5s` in password reset service extracted to named constants `PasswordResetRetryDelay` and `PasswordResetSyncRevokeTimeout` (`internal/auth/service/password_reset_service.go`).
 - `WebAuthnRPOrigin` config validation now checks URL format with `http`/`https` scheme in addition to non-empty check (`config/config.go`).
+- `Issuer` and `PasswordResetBaseURL` config validation now checks URL format with `http`/`https` scheme — prevents silent OIDC discovery and password reset failures from malformed URLs (`config/config.go`).
+- `SendVerification` and `ConfirmVerification` request `Identifier` field now has `max=255` binding — prevents oversized input from reaching the service layer (`internal/auth/controller/auth_controller.go`).
+- `ConfirmVerification` credential lookup failure now logged at Warn level with context — previously silently returned 404, hiding infrastructure errors (`internal/auth/controller/auth_controller.go`).
+- Password reset failure log level changed from Debug to Warn — consistent with `ForgotPassword` failure logging (`internal/auth/controller/auth_controller.go`).
+- OIDC Discovery now includes `introspection_endpoint`, `"none"` in `token_endpoint_auth_methods_supported`, and `authorization_response_iss_parameter_supported` — reflects actual server capabilities and RFC 9207 compliance (`internal/oidc/service/discovery_service.go`).
+- Social login `loginExistingUser` failure paths now emit audit logs — `FindAccountByID` errors and `ErrAccountNotActive` were previously unaudited (`internal/auth/service/social_login_service.go`).
+- OIDC Logout Bearer token now validated once and cached — eliminates redundant `ValidateAccessTokenWithContext` call for the same token (`internal/oidc/controller/oidc_controller.go`).
 - `SessionService.SetSessionTTL` and `SetMaxSessions` now reject invalid values (non-positive TTL, negative max sessions) instead of silently accepting them (`internal/session/service/session_service.go`).
 - `OAuth2Module` and `OIDCModule` `Initialize` functions now return a struct instead of 5 separate values — improves readability and maintainability (`internal/oauth2/module.go`, `internal/oidc/module.go`, `cmd/gouno/web.go`).
 - Login failure, token refresh failure, and MFA verification failure now logged at Warn level instead of Debug — production default hides Debug, losing security audit signals (`internal/auth/controller/auth_controller.go`).
@@ -87,6 +94,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Passkey sign count update failure now logged at Error level with credential context — clone detection failures require monitoring visibility (`internal/auth/service/passkey_service.go`).
 - **Security**: `fetchUserInfo` now uses safe type assertions for provider user ID — prevents panic when Google/GitHub returns `id` as string or missing (`internal/auth/service/social_login_service.go`).
 - **Security**: Passkey MFA verification flag now uses atomic `GETDEL` instead of separate `GET` + `DEL` — prevents TOCTOU race that allowed double-use of a single MFA verification (`internal/auth/service/auth_login.go`, `internal/cache/redis_client.go`).
+- **Security**: `ChangePassword` now validates new password strength via `ValidatePasswordStrength` before hashing — consistent with `RegisterAccount` (`internal/account/service/account_service.go`).
+- **Security**: Passkey `LoginBegin` now validates `account_id` is a valid UUID and returns 404 for `ErrPasskeyNotFound` instead of 500 — prevents invalid input from reaching the service layer and gives correct HTTP status codes (`internal/auth/controller/passkey_controller.go`).
+- Refresh token grant response now includes `scope` field — RFC 6749 §5.1 compliance (`internal/oauth2/controller/oauth2_controller.go`).
 - **Security**: MFA token blacklisting now fails closed — prevents MFA token reuse when Redis blacklist write fails (`internal/auth/service/auth_login.go`).
 - **Security**: Client Credentials grant now validates account is active before issuing tokens — consistent with refresh_token grant behavior (`internal/oauth2/controller/oauth2_controller.go`).
 - **Security**: Rate limit validation now rejects zero values — prevents `limit=0` from silently blocking all requests for an endpoint (`config/config.go`).

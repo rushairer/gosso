@@ -242,7 +242,20 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 	return providerUserID, email, name, nil
 }
 
-func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, ip, userAgent string) (*LoginResult, error) {
+func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, ip, userAgent string) (result *LoginResult, err error) {
+	defer func() {
+		if err != nil {
+			accountUUID, _ := uuid.Parse(accountID)
+			auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+				auditDomain.ActionLoginFailure,
+				audit.IPFromContext(ctx),
+				&accountUUID,
+				utility.MustMarshalJSON(map[string]any{"method": "social", "account_id": accountID}),
+				utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx), "reason": err.Error()}),
+			))
+		}
+	}()
+
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("find account: %w", err)

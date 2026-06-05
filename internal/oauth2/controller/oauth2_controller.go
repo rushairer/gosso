@@ -572,6 +572,7 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		"refresh_token": newRefreshToken.Token,
 		"token_type":    "Bearer",
 		"expires_in":    int(c.tokenSvc.AccessExpiry().Seconds()),
+		"scope":         newRefreshToken.Scope,
 	})
 }
 
