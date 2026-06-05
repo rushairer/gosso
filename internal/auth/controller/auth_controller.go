@@ -3,7 +3,6 @@ package controller
 import (
 	"crypto/rand"
 	"crypto/subtle"
-	"database/sql"
 	"encoding/hex"
 	"errors"
 	"net/http"
@@ -17,7 +16,6 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	authService "github.com/rushairer/gosso/internal/auth/service"
-	dbutil "github.com/rushairer/gosso/internal/db"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/utility"
@@ -31,7 +29,6 @@ type AuthController struct {
 	verificationSvc  *authService.VerificationService
 	passwordResetSvc *authService.PasswordResetService
 	credentialRepo   accountRepo.CredentialRepository
-	db               *sql.DB
 	secureCookie     bool
 	logger           *zap.Logger
 }
@@ -59,7 +56,6 @@ func NewAuthController(
 	verificationSvc *authService.VerificationService,
 	passwordResetSvc *authService.PasswordResetService,
 	credentialRepo accountRepo.CredentialRepository,
-	db *sql.DB,
 	secureCookie bool,
 	logger *zap.Logger,
 ) *AuthController {
@@ -70,7 +66,6 @@ func NewAuthController(
 		verificationSvc:  verificationSvc,
 		passwordResetSvc: passwordResetSvc,
 		credentialRepo:   credentialRepo,
-		db:               db,
 		secureCookie:     secureCookie,
 		logger:           logger,
 	}
@@ -652,31 +647,10 @@ func (c *AuthController) ConfirmVerification(ctx *gin.Context) {
 		return
 	}
 
-	// Find credential and mark it as verified
-	var credType accountDomain.CredentialType
-	if req.Type == "email" {
-		credType = accountDomain.CredentialTypeEmail
-	} else {
-		credType = accountDomain.CredentialTypePhone
-	}
-
-	cred, err := c.credentialRepo.FindByTypeAndIdentifier(ctx, credType, req.Identifier)
-	if err != nil {
-		c.logger.Warn("Failed to find credential for verification confirmation", zap.Error(err), zap.String("type", req.Type), zap.String("identifier", utility.MaskIdentifier(req.Type, req.Identifier)))
+	// Find credential and mark it as verified via service layer
+	if err := c.authSvc.ConfirmVerificationCredential(ctx, req.Type, req.Identifier, tc.AccountID); err != nil {
+		c.logger.Warn("Failed to confirm verification credential", zap.Error(err), zap.String("type", req.Type), zap.String("identifier", utility.MaskIdentifier(req.Type, req.Identifier)))
 		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "credential not found"))
-		return
-	}
-
-	if cred.AccountID != tc.AccountID {
-		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "credential does not belong to this account"))
-		return
-	}
-
-	cred.Verify()
-	if err := dbutil.RunInTransaction(ctx, c.db, func(tx *sql.Tx) error {
-		return c.credentialRepo.UpdateCredential(ctx, tx, cred)
-	}); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to update credential"))
 		return
 	}
 

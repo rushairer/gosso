@@ -22,6 +22,7 @@ type AuthOrchestrator interface {
 	ValidateMFAToken(ctx context.Context, mfaToken string) (*tokenDomain.AccessTokenClaims, error)
 	MarkPasskeyMFAVerified(ctx context.Context, mfaTokenJTI string) error
 	CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip, userAgent string) (*LoginResult, error)
+	ConfirmVerificationCredential(ctx context.Context, credType, identifier, accountID string) error
 	MFAService() *MFAService
 	PasskeyService() *PasskeyService
 }

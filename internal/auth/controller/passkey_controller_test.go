@@ -87,6 +87,10 @@ func (m *mockAuthOrchForPasskey) CompletePasskeyMFALogin(_ context.Context, _, _
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *mockAuthOrchForPasskey) ConfirmVerificationCredential(_ context.Context, _, _, _ string) error {
+	return fmt.Errorf("not implemented")
+}
+
 type mockTokenMgrForPasskey struct{}
 
 func (m *mockTokenMgrForPasskey) GenerateAccessToken(_ *tokenDomain.AccessTokenClaims) (string, error) {

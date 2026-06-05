@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -119,6 +120,34 @@ func NewAuthService(
 // MFAService returns the MFA service instance
 func (s *AuthService) MFAService() *MFAService {
 	return s.mfaSvc
+}
+
+// ConfirmVerificationCredential confirms a verification code and marks the credential as verified.
+// It verifies that the credential belongs to the specified account before updating.
+func (s *AuthService) ConfirmVerificationCredential(ctx context.Context, credType, identifier, accountID string) error {
+	var domainCredType accountDomain.CredentialType
+	switch credType {
+	case "email":
+		domainCredType = accountDomain.CredentialTypeEmail
+	case "phone":
+		domainCredType = accountDomain.CredentialTypePhone
+	default:
+		return fmt.Errorf("unsupported credential type: %s", credType)
+	}
+
+	cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, domainCredType, identifier)
+	if err != nil {
+		return fmt.Errorf("find credential: %w", err)
+	}
+
+	if cred.AccountID != accountID {
+		return errors.New("credential does not belong to this account")
+	}
+
+	cred.Verify()
+	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.credentialRepo.UpdateCredential(ctx, tx, cred)
+	})
 }
 
 // PasskeyService returns the Passkey service instance
