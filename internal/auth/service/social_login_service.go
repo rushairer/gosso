@@ -80,11 +80,13 @@ func NewSocialLoginService(
 }
 
 // SetMFAChecker sets the MFA checker dependency (setter injection to avoid circular constructor deps).
+// Must be called during initialization; not safe for concurrent use.
 func (s *SocialLoginService) SetMFAChecker(checker MFAChecker) {
 	s.mfaChecker = checker
 }
 
 // SetAuditor sets the audit service dependency (setter injection to avoid circular constructor deps).
+// Must be called during initialization; not safe for concurrent use.
 func (s *SocialLoginService) SetAuditor(auditor *auditService.Auditor) {
 	s.auditor = auditor
 }

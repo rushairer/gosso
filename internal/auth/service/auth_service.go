@@ -180,6 +180,7 @@ func (s *AuthService) MarkPasskeyMFAVerified(ctx context.Context, mfaTokenJTI st
 }
 
 // SetLoginRateLimitWindow overrides the login rate limit window (for config-driven setup).
+// Must be called during initialization; not safe for concurrent use.
 func (s *AuthService) SetLoginRateLimitWindow(d time.Duration) {
 	if d > 0 {
 		s.loginRateLimitWindow = d
@@ -187,6 +188,7 @@ func (s *AuthService) SetLoginRateLimitWindow(d time.Duration) {
 }
 
 // SetLoginMaxAttempts overrides the max login attempts per username+IP.
+// Must be called during initialization; not safe for concurrent use.
 func (s *AuthService) SetLoginMaxAttempts(n int) {
 	if n > 0 {
 		s.loginMaxAttempts = n
@@ -194,6 +196,7 @@ func (s *AuthService) SetLoginMaxAttempts(n int) {
 }
 
 // SetLoginMaxAttemptsPerIP overrides the max login attempts per IP.
+// Must be called during initialization; not safe for concurrent use.
 func (s *AuthService) SetLoginMaxAttemptsPerIP(n int) {
 	if n > 0 {
 		s.loginMaxAttemptsPerIP = n
@@ -201,6 +204,7 @@ func (s *AuthService) SetLoginMaxAttemptsPerIP(n int) {
 }
 
 // SetMFAVerificationTTL overrides the MFA verification flag TTL.
+// Must be called during initialization; not safe for concurrent use.
 func (s *AuthService) SetMFAVerificationTTL(d time.Duration) {
 	if d > 0 {
 		s.mfaVerificationTTL = d

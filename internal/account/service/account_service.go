@@ -127,12 +127,16 @@ func NewAccountService(
 	}
 }
 
-// SetSessionRevoker sets the session revoker dependency (setter injection).
+// SetSessionRevoker sets the session revoker dependency.
+// Setter injection is used here to break the circular dependency between AccountModule and AuthModule.
+// Must be called during initialization; not safe for concurrent use.
 func (s *accountServiceImpl) SetSessionRevoker(revoker SessionRevoker) {
 	s.sessionRevoker = revoker
 }
 
-// SetOAuth2ClientDeleter sets the OAuth2 client deleter dependency (setter injection).
+// SetOAuth2ClientDeleter sets the OAuth2 client deleter dependency.
+// Setter injection is used here to break the circular dependency between AccountModule and OAuth2Module.
+// Must be called during initialization; not safe for concurrent use.
 func (s *accountServiceImpl) SetOAuth2ClientDeleter(deleter OAuth2ClientDeleter) {
 	s.oauth2ClientDeleter = deleter
 }

@@ -68,11 +68,13 @@ func NewSessionService(redis *cache.RedisClient, logger *zap.Logger) *SessionSer
 }
 
 // SetTokenRevoker sets the token revoker for cascading token revocation.
+// Must be called during initialization; not safe for concurrent use.
 func (s *SessionService) SetTokenRevoker(revoker TokenRevoker) {
 	s.tokenRevoker = revoker
 }
 
 // SetMaxSessions sets the maximum concurrent sessions per account.
+// Must be called during initialization; not safe for concurrent use.
 func (s *SessionService) SetMaxSessions(n int) {
 	if n < 0 {
 		return
@@ -81,6 +83,7 @@ func (s *SessionService) SetMaxSessions(n int) {
 }
 
 // SetSessionTTL sets the session expiry duration.
+// Must be called during initialization; not safe for concurrent use.
 func (s *SessionService) SetSessionTTL(ttl time.Duration) {
 	if ttl <= 0 {
 		return

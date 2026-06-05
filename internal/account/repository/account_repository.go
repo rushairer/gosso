@@ -231,6 +231,13 @@ func (r *accountRepositoryImpl) SoftDeleteAccount(ctx context.Context, tx *sql.T
 	return nil
 }
 
+// validStatuses is a whitelist of allowed status values for FindAll filtering.
+var validStatuses = map[string]bool{
+	string(domain.AccountStatusActive):    true,
+	string(domain.AccountStatusSuspended): true,
+	string(domain.AccountStatusDeleted):   true,
+}
+
 // FindAll queries accounts with pagination
 func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error) {
 	if page < 1 {
@@ -240,6 +247,10 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 		pageSize = 20
 	}
 	offset := (page - 1) * pageSize
+
+	if status != "" && !validStatuses[status] {
+		return nil, 0, fmt.Errorf("invalid status filter: %q", status)
+	}
 
 	// Build WHERE clause with consistent parameter numbering
 	where := "deleted_at IS NULL"
