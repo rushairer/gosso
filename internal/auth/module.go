@@ -20,7 +20,7 @@ import (
 
 // AuthModule holds all services and repositories for the authentication module.
 type AuthModule struct {
-	AuthService          *service.AuthService
+	AuthService          service.AuthOrchestrator
 	SocialLoginService   *service.SocialLoginService
 	VerificationService  *service.VerificationService
 	PasswordResetService *service.PasswordResetService
