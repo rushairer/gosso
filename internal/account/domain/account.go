@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,22 +61,40 @@ func (a *Account) IsSuspended() bool {
 	return a.Status == AccountStatusSuspended
 }
 
-// SoftDelete soft-deletes the account.
-func (a *Account) SoftDelete() {
+// SoftDelete soft-deletes the account. Returns an error if already deleted.
+func (a *Account) SoftDelete() error {
+	if a.IsDeleted() {
+		return errors.New("account is already deleted")
+	}
 	now := time.Now()
 	a.DeletedAt = &now
 	a.Status = AccountStatusDeleted
 	a.UpdatedAt = now
+	return nil
 }
 
-// Suspend suspends the account.
-func (a *Account) Suspend() {
+// Suspend suspends the account. Only active accounts can be suspended.
+func (a *Account) Suspend() error {
+	if a.IsDeleted() {
+		return errors.New("cannot suspend a deleted account")
+	}
+	if a.Status != AccountStatusActive {
+		return fmt.Errorf("cannot suspend account in %q status", a.Status)
+	}
 	a.Status = AccountStatusSuspended
 	a.UpdatedAt = time.Now()
+	return nil
 }
 
-// Activate reactivates the account.
-func (a *Account) Activate() {
+// Activate reactivates the account. Only suspended accounts can be activated.
+func (a *Account) Activate() error {
+	if a.IsDeleted() {
+		return errors.New("cannot activate a deleted account")
+	}
+	if a.Status != AccountStatusSuspended {
+		return fmt.Errorf("cannot activate account in %q status", a.Status)
+	}
 	a.Status = AccountStatusActive
 	a.UpdatedAt = time.Now()
+	return nil
 }

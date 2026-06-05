@@ -446,7 +446,7 @@ func TestRequestReset_AccountInactive(t *testing.T) {
 	}
 	acctSvc.findByIDFn = func(_ context.Context, _ string) (*accountDomain.Account, error) {
 		acct := accountDomain.NewAccount("Inactive User")
-		acct.Suspend()
+		_ = acct.Suspend()
 		return acct, nil
 	}
 
