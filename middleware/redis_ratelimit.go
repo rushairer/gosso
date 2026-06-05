@@ -65,6 +65,19 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context)
 			return
 		}
 
+		if len(result) < 2 {
+			if failOpen {
+				ctx.Next()
+			} else {
+				ctx.JSON(http.StatusServiceUnavailable, gin.H{
+					"code":    503,
+					"message": "rate limit service unavailable",
+				})
+				ctx.Abort()
+			}
+			return
+		}
+
 		allowed := result[0] == 1
 		remaining := result[1]
 

@@ -84,10 +84,9 @@ func RegisterWebRouter(
 		admin.Use(adminLimit, jwtAuth, authMiddleware.AdminRequiredMiddleware())
 		adminCtrl.RegisterRoutes(admin)
 
-		// Passkey routes (with rate limiting)
+		// Passkey routes (MFA endpoints have their own rate limiting inside RegisterRoutes)
 		if passkeyCtrl != nil {
 			passkeyGroup := api.Group("")
-			passkeyGroup.Use(passkeyLimit)
 			passkeyCtrl.RegisterRoutes(passkeyGroup, jwtAuth, passkeyLimit)
 		}
 	}

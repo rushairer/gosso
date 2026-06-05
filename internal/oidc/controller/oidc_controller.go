@@ -160,6 +160,14 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 		}
 
 		accountID = claims.Subject
+
+		// When both id_token_hint and Bearer token are present, verify identity match
+		if bearerClaims != nil && bearerClaims.AccountID != accountID {
+			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden,
+				"id_token_hint subject does not match authenticated user"))
+			return
+		}
+
 		if len(claims.Audience) > 0 {
 			clientID = claims.Audience[0]
 		}

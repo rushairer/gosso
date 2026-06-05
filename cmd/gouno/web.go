@@ -209,7 +209,18 @@ func listenAuditErrors(ctx context.Context, auditor *auditService.Auditor, logge
 			}
 			logger.Error("Audit batch error", zap.Error(err))
 		case <-ctx.Done():
-			return
+			// Drain remaining buffered errors before exiting
+			for {
+				select {
+				case err, ok := <-auditor.ErrorChan():
+					if !ok {
+						return
+					}
+					logger.Error("Audit batch error (draining)", zap.Error(err))
+				default:
+					return
+				}
+			}
 		}
 	}
 }

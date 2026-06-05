@@ -435,6 +435,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Device code `generateUserCode` now validates exact 8-character length before slicing — defensive check against unexpected return values (`internal/oauth2/service/device_code_service.go`).
 - `ConfigManager` now logs `BindPFlag` errors instead of silently discarding them — aids debugging when CLI flag binding fails internally (`config/config_manager.go`).
 - **Security**: Introspect endpoint now logs a Warn when called by a public client — increases audit visibility for token introspection by non-confidential clients (`internal/oauth2/controller/oauth2_controller.go`).
+- Passkey `DeleteCredential` now returns 403 Forbidden for ownership mismatch instead of 400 — consistent with `RevokeSession` error handling (`internal/auth/controller/passkey_controller.go`).
+- Passkey `CompleteMFALogin` and `DeleteCredential` now return `ErrCredentialNotFound` sentinel instead of ad-hoc `errors.New("credential not found")` — enables callers to use `errors.Is()` for error discrimination (`internal/auth/service/passkey_service.go`).
+- Passkey `MFABegin` now logs `ValidateMFAToken` failures at Warn level — aligns with `MFAVerify` logging and aids security incident response (`internal/auth/controller/passkey_controller.go`).
+- Admin `DisableAccount`/`EnableAccount` now return 404 for not-found and 409 for invalid status transitions instead of blanket 500 — enables clients to distinguish operational errors from infrastructure failures (`internal/admin/controller/admin_controller.go`).
+- Passkey MFA endpoints no longer double rate-limited — removed group-level `passkeyLimit` middleware that was applied in addition to the per-MFA-subgroup limiter, effectively halving the intended rate limit (`router/web.go`).
+- **Security**: OIDC Logout now verifies `id_token_hint` subject matches the Bearer token's AccountID when both are present — prevents cross-account session revocation via a stolen `id_token_hint` combined with the attacker's own Bearer token (`internal/oidc/controller/oidc_controller.go`).
+- `listenAuditErrors` now drains buffered errors on context cancellation — prevents audit batch errors from being silently discarded during graceful shutdown (`cmd/gouno/web.go`).
+- Rate limiter Lua script result now has bounds check before accessing elements — prevents panic on unexpected Redis response structure (`middleware/redis_ratelimit.go`).
 - **Security**: `config.Validate()` now checks that `JWTSecret` is non-empty (`config/config.go`).
 - Replace `logger.Fatal` with `logger.Error` for graceful shutdown in web server (`cmd/gouno/web.go`).
 - Remove dead code: redundant `os.Exit(1)` after `log.Fatalf` in `cmd/gouno/root.go`.

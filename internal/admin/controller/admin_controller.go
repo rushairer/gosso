@@ -158,6 +158,14 @@ func (c *AdminController) DisableAccount(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.SuspendAccount(ctx, accountID); err != nil {
+		if errors.Is(err, accountRepository.ErrAccountNotFound) {
+			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "account not found"))
+			return
+		}
+		if errors.Is(err, accountRepository.ErrInvalidStatusTransition) {
+			ctx.JSON(http.StatusConflict, gouno.NewErrorResponse(http.StatusConflict, "invalid account status transition"))
+			return
+		}
 		c.logger.Error("Failed to disable account", zap.Error(err), zap.String("account_id", accountID))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
 		return
@@ -179,6 +187,14 @@ func (c *AdminController) EnableAccount(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.ActivateAccount(ctx, accountID); err != nil {
+		if errors.Is(err, accountRepository.ErrAccountNotFound) {
+			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "account not found"))
+			return
+		}
+		if errors.Is(err, accountRepository.ErrInvalidStatusTransition) {
+			ctx.JSON(http.StatusConflict, gouno.NewErrorResponse(http.StatusConflict, "invalid account status transition"))
+			return
+		}
 		c.logger.Error("Failed to enable account", zap.Error(err), zap.String("account_id", accountID))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
 		return

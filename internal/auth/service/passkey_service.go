@@ -342,7 +342,7 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, requestID string,
 	credID := parsedResponse.RawID
 	cred, err := s.credRepo.FindByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credID))
 	if err != nil {
-		return errors.New("credential not found")
+		return ErrCredentialNotFound
 	}
 
 	if cred.AccountID != accountID {
@@ -411,7 +411,7 @@ func (s *PasskeyService) ListCredentials(ctx context.Context, accountID string) 
 func (s *PasskeyService) DeleteCredential(ctx context.Context, accountID, credentialID string) error {
 	cred, err := s.credRepo.FindByCredentialID(ctx, credentialID)
 	if err != nil {
-		return errors.New("credential not found")
+		return ErrCredentialNotFound
 	}
 
 	if cred.AccountID != accountID {

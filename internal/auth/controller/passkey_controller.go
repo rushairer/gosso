@@ -254,6 +254,7 @@ func (c *PasskeyController) MFABegin(ctx *gin.Context) {
 	// Validate mfa token via authSvc and retrieve accountID
 	claims, err := c.authSvc.ValidateMFAToken(ctx, req.MFAToken)
 	if err != nil {
+		c.logger.Warn("Invalid MFA token for passkey begin", zap.Error(err))
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid mfa token"))
 		return
 	}
@@ -357,6 +358,10 @@ func (c *PasskeyController) DeleteCredential(ctx *gin.Context) {
 	}
 
 	if err := c.passkeySvc.DeleteCredential(ctx, accountID, credentialID); err != nil {
+		if errors.Is(err, authService.ErrCredentialOwnership) {
+			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "credential does not belong to account"))
+			return
+		}
 		c.logger.Error("Failed to delete passkey", zap.Error(err))
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "credential not found"))
 		return
