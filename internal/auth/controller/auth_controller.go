@@ -178,7 +178,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		UserAgent: ctx.Request.UserAgent(),
 	})
 	if err != nil {
-		c.logger.Debug("Login failed", zap.Error(err))
+		c.logger.Warn("Login failed", zap.Error(err))
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid credentials"))
 		return
 	}
@@ -217,7 +217,7 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 
 	result, err := c.authSvc.RefreshTokens(ctx, req.RefreshToken)
 	if err != nil {
-		c.logger.Debug("Token refresh failed", zap.Error(err))
+		c.logger.Warn("Token refresh failed", zap.Error(err))
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid refresh token"))
 		return
 	}
@@ -238,22 +238,6 @@ type LogoutRequest struct {
 
 // Logout POST /api/auth/logout
 func (c *AuthController) Logout(ctx *gin.Context) {
-	// Attempt to revoke access token — use the already-validated token from JWT middleware
-	var accessTokenJTI string
-	var tokenExpiresAt time.Time
-	if tokenStr, exists := ctx.Get("jwt_token_string"); exists {
-		if tokenString, ok := tokenStr.(string); ok && tokenString != "" {
-			claims, err := c.tokenMgr.ValidateAccessTokenWithContext(ctx, tokenString)
-			if err == nil {
-				accessTokenJTI = claims.ID
-				if claims.ExpiresAt != nil {
-					tokenExpiresAt = claims.ExpiresAt.Time
-				}
-			}
-		}
-	}
-
-	// Get session_id from claims
 	jwtClaims, exists := ctx.Get("jwt_claims")
 	if !exists {
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
@@ -264,6 +248,13 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
 		return
 	}
+
+	accessTokenJTI := tc.ID
+	var tokenExpiresAt time.Time
+	if tc.ExpiresAt != nil {
+		tokenExpiresAt = tc.ExpiresAt.Time
+	}
+
 	if err := c.authSvc.Logout(ctx, tc.AccountID, tc.SessionID, accessTokenJTI, tokenExpiresAt); err != nil {
 		c.logger.Error("Logout error", zap.String("account_id", tc.AccountID), zap.String("session_id", tc.SessionID), zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout incomplete"))
@@ -327,7 +318,7 @@ func (c *AuthController) RevokeSession(ctx *gin.Context) {
 
 	if err := c.authSvc.RevokeSession(ctx, tc.AccountID, sessionID); err != nil {
 		c.logger.Error("Failed to revoke session", zap.Error(err))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid session"))
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "session not found or access denied"))
 		return
 	}
 
@@ -356,7 +347,7 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 
 	result, err := c.authSvc.VerifyMFALogin(ctx, req.MFAToken, req.Code, req.Type, ctx.ClientIP(), ctx.Request.UserAgent())
 	if err != nil {
-		c.logger.Debug("MFA verification failed", zap.Error(err))
+		c.logger.Warn("MFA verification failed", zap.Error(err))
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid or expired MFA token"))
 		return
 	}
@@ -561,6 +552,15 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 		return
 	}
 
+	if len(req.Identifier) > 255 {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "identifier too long"))
+		return
+	}
+	if req.Type == "email" && !containsAtSign(req.Identifier) {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid email format"))
+		return
+	}
+
 	tc, ok := getClaimsFromContext(ctx)
 	if !ok {
 		return
@@ -590,7 +590,8 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 	}
 
 	if err := c.verificationSvc.SendCode(ctx, req.Type, req.Identifier, tc.AccountID); err != nil {
-		ctx.JSON(http.StatusTooManyRequests, gouno.NewErrorResponse(http.StatusTooManyRequests, err.Error()))
+		c.logger.Warn("Failed to send verification code", zap.String("type", req.Type), zap.Error(err))
+		ctx.JSON(http.StatusTooManyRequests, gouno.NewErrorResponse(http.StatusTooManyRequests, "too many requests, please try again later"))
 		return
 	}
 
@@ -708,4 +709,14 @@ func (c *AuthController) ResetPassword(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("password has been reset successfully"))
+}
+
+// containsAtSign checks if s contains '@' — a minimal email format gate.
+func containsAtSign(s string) bool {
+	for _, c := range s {
+		if c == '@' {
+			return true
+		}
+	}
+	return false
 }

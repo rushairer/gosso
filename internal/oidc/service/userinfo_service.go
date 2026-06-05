@@ -73,7 +73,11 @@ func (s *UserInfoService) GetUserInfo(ctx context.Context, accountID string, sco
 
 func (s *UserInfoService) addEmailInfo(ctx context.Context, accountID string, info map[string]any) {
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeEmail)
-	if err == nil && len(creds) > 0 && creds[0].Identifier != nil {
+	if err != nil {
+		s.logger.Warn("Failed to query email credentials for userinfo", zap.String("account_id", accountID), zap.Error(err))
+		return
+	}
+	if len(creds) > 0 && creds[0].Identifier != nil {
 		info["email"] = *creds[0].Identifier
 		info["email_verified"] = creds[0].IsVerified()
 	}
@@ -81,7 +85,11 @@ func (s *UserInfoService) addEmailInfo(ctx context.Context, accountID string, in
 
 func (s *UserInfoService) addPhoneInfo(ctx context.Context, accountID string, info map[string]any) {
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypePhone)
-	if err == nil && len(creds) > 0 && creds[0].Identifier != nil {
+	if err != nil {
+		s.logger.Warn("Failed to query phone credentials for userinfo", zap.String("account_id", accountID), zap.Error(err))
+		return
+	}
+	if len(creds) > 0 && creds[0].Identifier != nil {
 		info["phone_number"] = *creds[0].Identifier
 		info["phone_number_verified"] = creds[0].IsVerified()
 	}

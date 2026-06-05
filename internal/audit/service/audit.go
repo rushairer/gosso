@@ -57,6 +57,18 @@ func (a *Auditor) Close() {
 	}
 }
 
+// Wait cancels the batchflow context and waits for the drain grace period to
+// elapse, ensuring all in-flight audit batches are flushed. Call this during
+// graceful shutdown instead of Close() when you need to guarantee writes complete.
+func (a *Auditor) Wait() {
+	if a.cancel != nil {
+		a.cancel()
+	}
+	// batchflow uses a hardcoded 2s drain grace period on context cancel.
+	// Sleep slightly longer to ensure all in-flight batches are flushed.
+	time.Sleep(2500 * time.Millisecond)
+}
+
 func (a *Auditor) Do(
 	ctx context.Context,
 	businessFunc func(innerCtx context.Context, db *sql.DB) (*domain.AuditRecord, error),

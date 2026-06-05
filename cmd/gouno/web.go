@@ -95,7 +95,6 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	defer func() { _ = redis.Close() }()
 
 	auditAuditor := auditService.NewAuditor(ctx, db)
-	defer auditAuditor.Close()
 	go listenAuditErrors(ctx, auditAuditor, logger)
 
 	modules, err := initModules(ctx, db, redis, logger, globalConfig, auditAuditor)
@@ -138,6 +137,9 @@ func startWebServer(cmd *cobra.Command, args []string) {
 
 	// Wait for background goroutines (e.g., session revocation after password reset) to complete
 	modules.passwordResetSvc.Wait()
+
+	// Drain in-flight audit batches before exiting
+	auditAuditor.Wait()
 
 	logger.Sugar().Info("server exiting")
 }

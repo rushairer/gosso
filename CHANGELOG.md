@@ -32,6 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `WebAuthnRPOrigin` config validation now checks URL format with `http`/`https` scheme in addition to non-empty check (`config/config.go`).
 - `SessionService.SetSessionTTL` and `SetMaxSessions` now reject invalid values (non-positive TTL, negative max sessions) instead of silently accepting them (`internal/session/service/session_service.go`).
 - `OAuth2Module` and `OIDCModule` `Initialize` functions now return a struct instead of 5 separate values — improves readability and maintainability (`internal/oauth2/module.go`, `internal/oidc/module.go`, `cmd/gouno/web.go`).
+- Login failure, token refresh failure, and MFA verification failure now logged at Warn level instead of Debug — production default hides Debug, losing security audit signals (`internal/auth/controller/auth_controller.go`).
+- Logout handler now uses JWT claims from middleware context instead of re-validating the access token — eliminates redundant `ValidateAccessTokenWithContext` call (`internal/auth/controller/auth_controller.go`).
+- `ValidateAccessToken` marked as deprecated in favor of `ValidateAccessTokenWithContext` — the no-context variant bypasses request-scoped context propagation (`internal/token/service/token_service.go`).
+- `Auditor.Wait()` now explicitly drains in-flight audit batches during graceful shutdown instead of relying on deferred `Close()` — ensures audit writes complete before process exit (`internal/audit/service/audit.go`, `cmd/gouno/web.go`).
 
 ### Removed
 
@@ -156,6 +160,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: IP-based login rate limit counter is no longer cleared when MFA is required — prevents brute force from the same IP bypassing rate limiting during MFA flows (`internal/auth/service/auth_login.go`).
 - **Security**: Verification code identifier is now normalized (lowercase, trimmed) — prevents different casings of the same email from bypassing cooldown and creating separate verification codes (`internal/auth/service/verification_service.go`).
 - **Security**: Device code grant now validates account status before claiming the device code — prevents inactive accounts from consuming the device code, forcing the user to re-authorize (`internal/oauth2/controller/oauth2_controller.go`).
+- Verification code send error no longer leaks internal error details to the client — returns generic "too many requests, please try again later" message (`internal/auth/controller/auth_controller.go`).
+- `SendVerification` identifier now validated for maximum length (255) and `@` presence for email type — prevents abuse of oversized or malformed identifiers (`internal/auth/controller/auth_controller.go`).
+- `RevokeSession` now returns 403 Forbidden instead of 400 Bad Request for authorization errors — correctly signals access denial vs malformed request (`internal/auth/controller/auth_controller.go`).
+- OIDC UserInfo service now logs database credential query failures at Warn level — errors in `addEmailInfo`/`addPhoneInfo` were silently swallowed (`internal/oidc/service/userinfo_service.go`).
 
 ### Changed
 

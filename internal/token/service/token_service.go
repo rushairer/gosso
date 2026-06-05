@@ -87,7 +87,9 @@ func (s *TokenService) AccessExpiry() time.Duration {
 	return s.accessExpiry
 }
 
-// ValidateAccessToken validates a JWT access token (with blacklist check, RS256 only)
+// ValidateAccessToken validates a JWT access token (with blacklist check, RS256 only).
+//
+// Deprecated: Use ValidateAccessTokenWithContext instead.
 func (s *TokenService) ValidateAccessToken(tokenString string) (*domain.AccessTokenClaims, error) {
 	return s.ValidateAccessTokenWithContext(context.Background(), tokenString)
 }
