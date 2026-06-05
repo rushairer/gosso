@@ -176,11 +176,11 @@ func TestSoftDeleteByID_Success(t *testing.T) {
 
 	deletedAt := time.Now()
 	mock.ExpectExec("UPDATE federated_identities").
-		WithArgs(deletedAt, "fid-001").
+		WithArgs(deletedAt, "fid-001", "account-001").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewFederatedIdentityRepository(db)
-	err = repo.SoftDeleteByID(context.Background(), tx, "fid-001", deletedAt)
+	err = repo.SoftDeleteByID(context.Background(), tx, "account-001", "fid-001", deletedAt)
 
 	require.NoError(t, err)
 }
@@ -195,11 +195,11 @@ func TestSoftDeleteByID_NotFound(t *testing.T) {
 
 	deletedAt := time.Now()
 	mock.ExpectExec("UPDATE federated_identities").
-		WithArgs(deletedAt, "nonexistent").
+		WithArgs(deletedAt, "nonexistent", "account-001").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	repo := NewFederatedIdentityRepository(db)
-	err = repo.SoftDeleteByID(context.Background(), tx, "nonexistent", deletedAt)
+	err = repo.SoftDeleteByID(context.Background(), tx, "account-001", "nonexistent", deletedAt)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "federated identity not found")

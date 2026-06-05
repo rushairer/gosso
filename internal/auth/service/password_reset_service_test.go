@@ -299,7 +299,7 @@ func (m *mockAccountSvcForReset) BindFederatedIdentity(_ context.Context, _ stri
 	return fmt.Errorf("not implemented")
 }
 
-func (m *mockAccountSvcForReset) UnbindFederatedIdentity(_ context.Context, _ string) error {
+func (m *mockAccountSvcForReset) UnbindFederatedIdentity(_ context.Context, _, _ string) error {
 	return fmt.Errorf("not implemented")
 }
 

@@ -163,7 +163,7 @@ func (m *mockAccountSvcForPasskey) VerifyCredential(_ context.Context, _ string)
 func (m *mockAccountSvcForPasskey) BindFederatedIdentity(_ context.Context, _ string, _ accountDomain.Provider, _ string, _ map[string]interface{}) error {
 	return fmt.Errorf("not implemented")
 }
-func (m *mockAccountSvcForPasskey) UnbindFederatedIdentity(_ context.Context, _ string) error {
+func (m *mockAccountSvcForPasskey) UnbindFederatedIdentity(_ context.Context, _, _ string) error {
 	return fmt.Errorf("not implemented")
 }
 

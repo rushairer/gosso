@@ -84,6 +84,13 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 			return
 		}
 	}
+	for _, uri := range req.PostLogoutRedirectURIs {
+		u, err := url.Parse(uri)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "post_logout_redirect_uris must use http or https scheme"))
+			return
+		}
+	}
 
 	if len(req.GrantTypes) > 0 {
 		if err := validateGrantTypes(req.GrantTypes); err != nil {
@@ -216,6 +223,13 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 		client.Scopes = req.Scopes
 	}
 	if req.PostLogoutRedirectURIs != nil {
+		for _, uri := range req.PostLogoutRedirectURIs {
+			u, err := url.Parse(uri)
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+				ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "post_logout_redirect_uris must use http or https scheme"))
+				return
+			}
+		}
 		client.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
 	}
 	client.UpdatedAt = time.Now()

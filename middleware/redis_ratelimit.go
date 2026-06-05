@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/cache"
 )
@@ -32,7 +33,6 @@ if count < limit then
     end
     return {1, limit - count - 1}
 end
-redis.call('EXPIRE', key, ARGV[1])
 return {0, 0}
 `)
 
@@ -42,7 +42,7 @@ return {0, 0}
 // window: time window duration.
 // failOpen: if true, allows requests when Redis is unavailable (fail-open);
 // if false, rejects requests with 503 when Redis is unavailable (fail-closed).
-func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context) string, limit int, window time.Duration, failOpen bool) gin.HandlerFunc {
+func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context) string, limit int, window time.Duration, failOpen bool, logger *zap.Logger) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		key := fmt.Sprintf("rate_limit:%s", keyFunc(ctx))
 
@@ -53,6 +53,9 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context)
 		).Int64Slice()
 
 		if err != nil {
+			if logger != nil {
+				logger.Error("Rate limiter Redis error", zap.String("key", key), zap.Error(err))
+			}
 			if failOpen {
 				ctx.Next()
 			} else {

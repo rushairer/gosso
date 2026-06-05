@@ -190,6 +190,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: `LoginByPasskey` now returns `ErrInvalidCredentials` instead of `ErrAccountNotFound` when account lookup fails — consistent with `LoginByUsernamePassword`, prevents user enumeration (`internal/auth/service/auth_login.go`).
 - **Security**: `verifyMFACode` now rejects unknown MFA types with an explicit error — previously unknown types silently fell through to TOTP verification (`internal/auth/service/auth_login.go`).
 - Authorization code `ExpiresAt` and `AuthTime` now derived from a single `time.Now()` call — eliminates second-boundary inconsistency (`internal/oauth2/service/auth_code_service.go`).
+- **Security**: `UnbindFederatedIdentity` now enforces ownership — SQL `WHERE` clause includes `account_id` to prevent any user from unbinding another user's federated identity via known identity ID (`internal/account/service/account_service.go`, `internal/account/repository/federated_identity_repository.go`).
+- Passkey `DeleteCredential` now returns 404 for missing credentials and 500 for infrastructure errors — previously all non-ownership errors returned 400, masking database failures (`internal/auth/controller/passkey_controller.go`).
+- **Security**: Refresh token grant now validates requested scope is a subset of originally granted scope per RFC 6749 §6 — previously `req.Scope` was read but never checked, allowing scope escalation (`internal/oauth2/controller/oauth2_controller.go`).
+- **Security**: `RegisterClient` and `UpdateClient` now validate `post_logout_redirect_uris` use `http` or `https` scheme — previously only `redirect_uris` were validated, allowing `javascript:` or `data:` URIs in post-logout redirects (`internal/oauth2/controller/client_controller.go`).
+- Rate limiter Lua script removed redundant `EXPIRE` call on rejected path — key TTL was already set on first insertion, so the extra call wasted a Redis round-trip on every rejected request (`middleware/redis_ratelimit.go`).
+- Rate limiter Redis errors are now logged at Error level with key context — previously failed silently, making Redis infrastructure issues invisible in production (`middleware/redis_ratelimit.go`, `router/web.go`).
+- `Config.Validate()` now rejects negative `conn_max_lifetime_sec` and `conn_max_idle_time_sec` — negative values cause undefined behavior in `database/sql` connection pool management (`config/config.go`).
 
 ### Changed
 

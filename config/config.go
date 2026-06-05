@@ -223,6 +223,12 @@ func (c *GoUnoConfig) Validate() error {
 		c.WebServerConfig.RateLimits.Introspect <= 0 || c.WebServerConfig.RateLimits.DeviceCode <= 0 {
 		return fmt.Errorf("web_server: rate_limits values must be positive")
 	}
+	if c.DatabaseConfig.ConnMaxLifetimeSec < 0 {
+		return fmt.Errorf("database: conn_max_lifetime_sec must not be negative (got %d)", c.DatabaseConfig.ConnMaxLifetimeSec)
+	}
+	if c.DatabaseConfig.ConnMaxIdleTimeSec < 0 {
+		return fmt.Errorf("database: conn_max_idle_time_sec must not be negative (got %d)", c.DatabaseConfig.ConnMaxIdleTimeSec)
+	}
 	if c.SMTPConfig.Host != "" {
 		if c.SMTPConfig.Port <= 0 {
 			return fmt.Errorf("smtp: port must be positive when host is configured")

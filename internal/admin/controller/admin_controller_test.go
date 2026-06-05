@@ -60,7 +60,7 @@ func (m *mockAccountService) ChangePassword(_ context.Context, _, _, _ string) e
 func (m *mockAccountService) BindFederatedIdentity(_ context.Context, _ string, _ accountDomain.Provider, _ string, _ map[string]interface{}) error {
 	return nil
 }
-func (m *mockAccountService) UnbindFederatedIdentity(_ context.Context, _ string) error {
+func (m *mockAccountService) UnbindFederatedIdentity(_ context.Context, _, _ string) error {
 	return nil
 }
 func (m *mockAccountService) AssignRole(_ context.Context, _, _ string) error {

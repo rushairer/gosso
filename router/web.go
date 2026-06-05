@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
+	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/config"
 	"github.com/rushairer/gosso/docs"
@@ -36,6 +37,7 @@ func RegisterWebRouter(
 	rateLimits config.RateLimitsConfig,
 	debug bool,
 	sessionValidator authMiddleware.SessionValidator,
+	logger *zap.Logger,
 ) {
 	// Health check (no auth, no rate limiting)
 	registerHealthRoutes(server, db, redis)
@@ -56,14 +58,14 @@ func RegisterWebRouter(
 
 	// Per-endpoint rate limiting middleware
 	// Security-sensitive endpoints fail-closed (reject if Redis is unavailable)
-	loginLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Login, time.Minute, false)
-	mfaLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute, false)
-	passkeyLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Passkey, time.Minute, false)
-	refreshLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute, false)
+	loginLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Login, time.Minute, false, logger)
+	mfaLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute, false, logger)
+	passkeyLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Passkey, time.Minute, false, logger)
+	refreshLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute, false, logger)
 	// Non-security endpoints fail-open (allow if Redis is unavailable)
-	passwordLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, true)
-	verifyLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, true)
-	socialLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, true)
+	passwordLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, true, logger)
+	verifyLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, true, logger)
+	socialLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, true, logger)
 
 	// /api/* routes
 	api := server.Group("/api")
@@ -73,14 +75,14 @@ func RegisterWebRouter(
 		authCtrl.RegisterRoutes(api, jwtAuth, loginLimit, mfaLimit, passwordLimit, refreshLimit, verifyLimit, socialLimit)
 
 		// Client management routes (require JWT authentication + rate limiting)
-		clientLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, true)
+		clientLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, true, logger)
 		clientGroup := api.Group("")
 		clientGroup.Use(clientLimit)
 		clientCtrl.RegisterRoutes(clientGroup, jwtAuth)
 
 		// Admin routes (require JWT authentication + admin role + rate limiting)
 		admin := api.Group("/admin")
-		adminLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, false)
+		adminLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, false, logger)
 		admin.Use(adminLimit, jwtAuth, authMiddleware.AdminRequiredMiddleware())
 		adminCtrl.RegisterRoutes(admin)
 
@@ -92,23 +94,23 @@ func RegisterWebRouter(
 	}
 
 	// OAuth2 protocol routes (with rate limiting for token endpoint)
-	tokenLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute, false)
-	introspectLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Introspect, time.Minute, false)
-	deviceCodeLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.DeviceCode, time.Minute, false)
+	tokenLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Token, time.Minute, false, logger)
+	introspectLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.Introspect, time.Minute, false, logger)
+	deviceCodeLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.DeviceCode, time.Minute, false, logger)
 	oauth2 := server.Group("/oauth2")
 	oauth2.Use(tokenLimit)
 	oauth2Ctrl.RegisterRoutes(oauth2, jwtAuth, introspectLimit, deviceCodeLimit)
 
 	// OIDC routes
 	// .well-known endpoints (Discovery + JWKS) — rate-limited, fail-closed
-	wellKnownLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, false)
+	wellKnownLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, false, logger)
 	wellKnown := server.Group("/.well-known")
 	wellKnown.Use(wellKnownLimit)
 	wellKnown.GET("/openid-configuration", oidcCtrl.Discovery)
 	wellKnown.GET("/jwks.json", oidcCtrl.JWKS)
 
 	// /oidc/* endpoints (UserInfo + Logout) — rate-limited, fail-closed
-	oidcLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, false)
+	oidcLimit := middleware.RedisRateLimitMiddleware(redis, middleware.IPKeyFunc, rateLimits.API, time.Minute, false, logger)
 	oidc := server.Group("/oidc")
 	oidc.Use(oidcLimit)
 	oidcCtrl.RegisterRoutes(oidc, jwtAuth)

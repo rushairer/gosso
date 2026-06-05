@@ -381,7 +381,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		),
 	)
 
-	router.RegisterWebRouter(engine, db, m.authCtrl, m.oauth2Ctrl, m.clientCtrl, m.oidcCtrl, m.adminCtrl, m.tokenSvc, m.passkeyCtrl, redis, cfg.WebServerConfig.RateLimits, cfg.WebServerConfig.Debug, m.sessionSvc)
+	router.RegisterWebRouter(engine, db, m.authCtrl, m.oauth2Ctrl, m.clientCtrl, m.oidcCtrl, m.adminCtrl, m.tokenSvc, m.passkeyCtrl, redis, cfg.WebServerConfig.RateLimits, cfg.WebServerConfig.Debug, m.sessionSvc, logger)
 
 	return engine
 }

@@ -30,8 +30,9 @@ type FederatedIdentityRepository interface {
 	// SoftDeleteByAccountID soft deletes all federated identities of an account (requires transaction)
 	SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
 
-	// SoftDeleteByID soft deletes a single federated identity (requires transaction)
-	SoftDeleteByID(ctx context.Context, tx *sql.Tx, identityID string, deletedAt time.Time) error
+	// SoftDeleteByID soft deletes a single federated identity (requires transaction).
+	// accountID enforces ownership: only the identity's owner can delete it.
+	SoftDeleteByID(ctx context.Context, tx *sql.Tx, accountID, identityID string, deletedAt time.Time) error
 }
 
 type federatedIdentityRepositoryImpl struct {
@@ -173,14 +174,14 @@ func (r *federatedIdentityRepositoryImpl) SoftDeleteByAccountID(ctx context.Cont
 }
 
 // SoftDeleteByID soft deletes a single federated identity
-func (r *federatedIdentityRepositoryImpl) SoftDeleteByID(ctx context.Context, tx *sql.Tx, identityID string, deletedAt time.Time) error {
+func (r *federatedIdentityRepositoryImpl) SoftDeleteByID(ctx context.Context, tx *sql.Tx, accountID, identityID string, deletedAt time.Time) error {
 	query := `
 		UPDATE federated_identities
 		SET deleted_at = $1, updated_at = $1
-		WHERE id = $2 AND deleted_at IS NULL
+		WHERE id = $2 AND account_id = $3 AND deleted_at IS NULL
 	`
 
-	result, err := tx.ExecContext(ctx, query, deletedAt, identityID)
+	result, err := tx.ExecContext(ctx, query, deletedAt, identityID, accountID)
 	if err != nil {
 		return fmt.Errorf("soft delete federated identity: %w", err)
 	}

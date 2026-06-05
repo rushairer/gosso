@@ -48,7 +48,7 @@ type AccountService interface {
 	BindFederatedIdentity(ctx context.Context, accountID string, provider domain.Provider, providerUserID string, profile map[string]interface{}) error
 
 	// UnbindFederatedIdentity unbinds a third-party identity from the account.
-	UnbindFederatedIdentity(ctx context.Context, identityID string) error
+	UnbindFederatedIdentity(ctx context.Context, accountID, identityID string) error
 
 	// AssignRole assigns a role to the account.
 	AssignRole(ctx context.Context, accountID, roleID string) error
@@ -443,11 +443,11 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 }
 
 // UnbindFederatedIdentity unbinds a third-party identity.
-func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, identityID string) error {
+func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accountID, identityID string) error {
 	now := time.Now()
 
 	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.federatedIdentityRepo.SoftDeleteByID(ctx, tx, identityID, now)
+		return s.federatedIdentityRepo.SoftDeleteByID(ctx, tx, accountID, identityID, now)
 	})
 }
 

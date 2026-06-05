@@ -362,8 +362,12 @@ func (c *PasskeyController) DeleteCredential(ctx *gin.Context) {
 			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "credential does not belong to account"))
 			return
 		}
+		if errors.Is(err, authService.ErrCredentialNotFound) {
+			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "credential not found"))
+			return
+		}
 		c.logger.Error("Failed to delete passkey", zap.Error(err))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "credential not found"))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
 		return
 	}
 

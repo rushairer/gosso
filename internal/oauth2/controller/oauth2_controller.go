@@ -549,6 +549,18 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		return
 	}
 
+	// RFC 6749 Section 6: requested scope must be a subset of originally granted scope
+	if req.Scope != "" {
+		requested := splitScope(req.Scope)
+		granted := splitScope(oldRefreshToken.Scope)
+		for _, s := range requested {
+			if !slices.Contains(granted, s) {
+				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_scope", "error_description": "requested scope exceeds originally granted scope"})
+				return
+			}
+		}
+	}
+
 	// All validations passed — now atomically rotate the token
 	newRefreshToken, err := c.tokenSvc.RotateRefreshToken(ctx, req.RefreshToken)
 	if err != nil {
