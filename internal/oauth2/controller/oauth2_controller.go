@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -15,7 +16,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/rushairer/gosso/internal/auth/middleware"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
@@ -72,6 +72,7 @@ type OAuth2Controller struct {
 	tokenSvc          TokenManager
 	idTokenSvc        *oidcService.IDTokenService
 	deviceCodeSvc     DeviceCodeManager
+	clientAuth        oauth2Service.ClientAuthenticator
 	accountValidator  AccountValidator
 	sessionValidator  SessionValidator
 	issuer            string
@@ -421,16 +422,14 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		return
 	}
 
-	if client.IsConfidential {
-		if req.ClientSecret == "" {
+	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
+		if errors.Is(err, oauth2Service.ErrClientSecretRequired) {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client_secret required"})
-			return
-		}
-		if err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecretHash), []byte(req.ClientSecret)); err != nil {
+		} else {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "invalid client_secret"})
-			return
 		}
-	} else if req.CodeVerifier == "" {
+		return
+	} else if !client.IsConfidential && req.CodeVerifier == "" {
 		// Public clients MUST use PKCE (RFC 7636)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "code_verifier required for public clients"})
 		return
@@ -526,15 +525,13 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "client is not authorized for refresh_token grant"})
 		return
 	}
-	if client.IsConfidential {
-		if req.ClientSecret == "" {
+	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
+		if errors.Is(err, oauth2Service.ErrClientSecretRequired) {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client_secret required for confidential clients"})
-			return
-		}
-		if err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecretHash), []byte(req.ClientSecret)); err != nil {
+		} else {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "invalid client_secret"})
-			return
 		}
+		return
 	}
 
 	// Verify account is still active BEFORE consuming the old refresh token.
@@ -610,7 +607,7 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 		return
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecretHash), []byte(req.ClientSecret)); err != nil {
+	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "invalid client_secret"})
 		return
 	}
@@ -725,12 +722,10 @@ func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}
-	if client.IsConfidential {
-		if err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecretHash), []byte(clientSecret)); err != nil {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
-			return
-		}
-	} else {
+	if err := c.clientAuth.AuthenticateClient(client, clientSecret); err != nil {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
+		return
+	} else if !client.IsConfidential {
 		c.logger.Warn("Introspect called by public client", zap.String("client_id", clientID))
 	}
 
@@ -777,15 +772,13 @@ func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
 	}
 
 	// Client authentication for confidential clients (RFC 8628 §3.1)
-	if client.IsConfidential {
-		if req.ClientSecret == "" {
+	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
+		if errors.Is(err, oauth2Service.ErrClientSecretRequired) {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client_secret required for confidential client"})
-			return
-		}
-		if err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecretHash), []byte(req.ClientSecret)); err != nil {
+		} else {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "invalid client_secret"})
-			return
 		}
+		return
 	}
 
 	scopes := splitScope(req.Scope)
@@ -940,15 +933,13 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 	}
 
 	// Client authentication for confidential clients
-	if client.IsConfidential {
-		if req.ClientSecret == "" {
+	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
+		if errors.Is(err, oauth2Service.ErrClientSecretRequired) {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client_secret required"})
-			return
-		}
-		if err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecretHash), []byte(req.ClientSecret)); err != nil {
+		} else {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "invalid client_secret"})
-			return
 		}
+		return
 	}
 
 	dc, err := c.deviceCodeSvc.GetDeviceCode(ctx, req.DeviceCode)
