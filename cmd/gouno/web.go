@@ -156,23 +156,10 @@ func initDatabase(cfg config.GoUnoConfig, logger *zap.Logger) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(3 * time.Minute)
-
-	if cfg.DatabaseConfig.MaxOpenConns > 0 {
-		db.SetMaxOpenConns(cfg.DatabaseConfig.MaxOpenConns)
-	}
-	if cfg.DatabaseConfig.MaxIdleConns > 0 {
-		db.SetMaxIdleConns(cfg.DatabaseConfig.MaxIdleConns)
-	}
-	if cfg.DatabaseConfig.ConnMaxLifetimeSec > 0 {
-		db.SetConnMaxLifetime(time.Duration(cfg.DatabaseConfig.ConnMaxLifetimeSec) * time.Second)
-	}
-	if cfg.DatabaseConfig.ConnMaxIdleTimeSec > 0 {
-		db.SetConnMaxIdleTime(time.Duration(cfg.DatabaseConfig.ConnMaxIdleTimeSec) * time.Second)
-	}
+	db.SetMaxOpenConns(cfg.DatabaseConfig.MaxOpenConns)
+	db.SetMaxIdleConns(cfg.DatabaseConfig.MaxIdleConns)
+	db.SetConnMaxLifetime(time.Duration(cfg.DatabaseConfig.ConnMaxLifetimeSec) * time.Second)
+	db.SetConnMaxIdleTime(time.Duration(cfg.DatabaseConfig.ConnMaxIdleTimeSec) * time.Second)
 
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
@@ -394,6 +381,7 @@ func buildCORSConfig(cfg config.GoUnoConfig) cors.Config {
 	if len(cfg.CORSConfig.AllowedOrigins) > 0 {
 		corsConfig.AllowOrigins = cfg.CORSConfig.AllowedOrigins
 	} else {
+		// Development fallback — production should configure allowed_origins explicitly
 		corsConfig.AllowOrigins = []string{"http://localhost:8080"}
 	}
 	if len(cfg.CORSConfig.AllowedMethods) > 0 {
