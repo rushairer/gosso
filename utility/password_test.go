@@ -9,7 +9,7 @@ func TestValidatePasswordStrength(t *testing.T) {
 	}{
 		{"ValidP@ss1", false},
 		{"Short1A", true},            // too short
-		{"alllowercase1A", false},    // has upper? no - wait, this has no uppercase
+		{"alllowercase1A", false},    // valid: has upper 'A', lower, digit '1', 15 chars
 		{"ALLUPPERCASE1A", true},     // no lowercase
 		{"NoDigitHereAa", true},      // no digit
 		{"12345678Aa", false},        // valid

@@ -41,7 +41,7 @@ func NewPasskeyController(
 }
 
 // RegisterRoutes registers Passkey routes.
-func (c *PasskeyController) RegisterRoutes(rg *gin.RouterGroup, jwtAuth gin.HandlerFunc) {
+func (c *PasskeyController) RegisterRoutes(rg *gin.RouterGroup, jwtAuth gin.HandlerFunc, passkeyRateLimit gin.HandlerFunc) {
 	passkey := rg.Group("/passkey")
 	{
 		// Passkey registration (requires authentication)
@@ -62,6 +62,7 @@ func (c *PasskeyController) RegisterRoutes(rg *gin.RouterGroup, jwtAuth gin.Hand
 
 	// Passkey MFA (no JWT required, but requires mfa_token)
 	mfaPasskey := rg.Group("/passkey/mfa")
+	mfaPasskey.Use(passkeyRateLimit)
 	{
 		mfaPasskey.POST("/begin", c.MFABegin)
 		mfaPasskey.POST("/complete", c.MFAComplete)

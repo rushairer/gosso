@@ -129,7 +129,7 @@ func (s *SocialLoginService) HandleCallback(ctx context.Context, provider, code,
 	}
 
 	// 2. Fetch user info
-	providerUserID, email, name, err := s.fetchUserInfo(ctx, provider, p, accessToken)
+	providerUserID, email, name, emailVerified, err := s.fetchUserInfo(ctx, provider, p, accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("fetch user info: %w", err)
 	}
@@ -142,7 +142,7 @@ func (s *SocialLoginService) HandleCallback(ctx context.Context, provider, code,
 	}
 
 	// 4. New user -> create account + bind identity
-	return s.createNewUser(ctx, provider, providerUserID, email, name, ip, userAgent)
+	return s.createNewUser(ctx, provider, providerUserID, email, name, emailVerified, ip, userAgent)
 }
 
 func (s *SocialLoginService) exchangeCode(ctx context.Context, p *OAuthProviderConfig, code string) (string, error) {
@@ -189,31 +189,31 @@ func (s *SocialLoginService) exchangeCode(ctx context.Context, p *OAuthProviderC
 	return tokenResp.AccessToken, nil
 }
 
-func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string, p *OAuthProviderConfig, accessToken string) (providerUserID, email, name string, err error) {
+func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string, p *OAuthProviderConfig, accessToken string) (providerUserID, email, name string, emailVerified bool, err error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", p.UserInfoURL, nil)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", false, err
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return "", "", "", fmt.Errorf("userinfo request: %w", err)
+		return "", "", "", false, fmt.Errorf("userinfo request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return "", "", "", fmt.Errorf("read userinfo: %w", err)
+		return "", "", "", false, fmt.Errorf("read userinfo: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", "", "", fmt.Errorf("userinfo request failed: %d", resp.StatusCode)
+		return "", "", "", false, fmt.Errorf("userinfo request failed: %d", resp.StatusCode)
 	}
 
 	var userInfo map[string]any
 	if err := json.Unmarshal(body, &userInfo); err != nil {
-		return "", "", "", fmt.Errorf("parse userinfo: %w", err)
+		return "", "", "", false, fmt.Errorf("parse userinfo: %w", err)
 	}
 
 	switch provider {
@@ -223,23 +223,25 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 		} else if idStr, ok := userInfo["id"].(string); ok {
 			providerUserID = idStr
 		} else {
-			return "", "", "", fmt.Errorf("%s: missing or invalid id field", provider)
+			return "", "", "", false, fmt.Errorf("%s: missing or invalid id field", provider)
 		}
 		email, _ = userInfo["email"].(string)
 		name, _ = userInfo["name"].(string)
+		emailVerified, _ = userInfo["email_verified"].(bool)
 	case "wechat":
 		openid, ok := userInfo["openid"].(string)
 		if !ok || openid == "" {
-			return "", "", "", fmt.Errorf("wechat: missing or empty openid")
+			return "", "", "", false, fmt.Errorf("wechat: missing or empty openid")
 		}
 		providerUserID = openid
 		nickname, _ := userInfo["nickname"].(string)
 		name = nickname
+		// WeChat does not provide email_verified; default false
 	default:
-		return "", "", "", fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
+		return "", "", "", false, fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
 	}
 
-	return providerUserID, email, name, nil
+	return providerUserID, email, name, emailVerified, nil
 }
 
 func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, ip, userAgent string) (result *LoginResult, err error) {
@@ -251,7 +253,7 @@ func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, i
 				audit.IPFromContext(ctx),
 				&accountUUID,
 				utility.MustMarshalJSON(map[string]any{"method": "social", "account_id": accountID}),
-				utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx), "reason": err.Error()}),
+				utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx), "reason": safeAuditReason(err)}),
 			))
 		}
 	}()
@@ -286,7 +288,7 @@ func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, i
 	}, nil
 }
 
-func (s *SocialLoginService) createNewUser(ctx context.Context, provider, providerUserID, email, name, ip, userAgent string) (*LoginResult, error) {
+func (s *SocialLoginService) createNewUser(ctx context.Context, provider, providerUserID, email, name string, emailVerified bool, ip, userAgent string) (*LoginResult, error) {
 	// If email is provided, check if an account already exists with that email.
 	// This prevents duplicate accounts when a user registers via email/password first
 	// and later uses social login with the same email.
@@ -324,7 +326,9 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 		if email != "" {
 			emailCred := accountDomain.NewEmailCredential(account.ID, email)
 			emailCred.PrimaryCredential = true
-			emailCred.Verify()
+			if emailVerified {
+				emailCred.Verify()
+			}
 			if err := s.credentialRepo.CreateCredentials(ctx, tx, []*accountDomain.Credential{emailCred}); err != nil {
 				return fmt.Errorf("create email credential: %w", err)
 			}

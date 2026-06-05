@@ -19,6 +19,7 @@ import (
 	dbutil "github.com/rushairer/gosso/internal/db"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	"github.com/rushairer/gosso/utility"
 )
 
 // AuthController authentication controller
@@ -229,6 +230,7 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 		"refresh_token": result.RefreshToken,
 		"token_type":    "Bearer",
 		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
+		"session_id":    result.SessionID,
 	}))
 }
 
@@ -348,6 +350,10 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 
 	if req.Type != "passkey" && req.Code == "" {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "code is required"))
+		return
+	}
+	if req.Type != "" && req.Type != "totp" && req.Type != "passkey" {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "unsupported mfa type"))
 		return
 	}
 
@@ -566,6 +572,10 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid email format"))
 		return
 	}
+	if req.Type == "phone" && !utility.ValidatePhoneFormat(req.Identifier) {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid phone format"))
+		return
+	}
 
 	tc, ok := getClaimsFromContext(ctx)
 	if !ok {
@@ -653,7 +663,7 @@ func (c *AuthController) ConfirmVerification(ctx *gin.Context) {
 
 	cred, err := c.credentialRepo.FindByTypeAndIdentifier(ctx, credType, req.Identifier)
 	if err != nil {
-		c.logger.Warn("Failed to find credential for verification confirmation", zap.Error(err), zap.String("type", req.Type), zap.String("identifier", req.Identifier))
+		c.logger.Warn("Failed to find credential for verification confirmation", zap.Error(err), zap.String("type", req.Type), zap.String("identifier", utility.MaskIdentifier(req.Type, req.Identifier)))
 		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "credential not found"))
 		return
 	}

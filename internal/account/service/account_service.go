@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
-	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -546,8 +545,6 @@ func (s *accountServiceImpl) GetAccountRoles(ctx context.Context, accountID stri
 }
 
 // validateRegistration validates the registration request.
-var phoneRegex = regexp.MustCompile(`^\+?[1-9]\d{6,14}$`)
-
 func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) error {
 	if req.Password == "" {
 		return errors.New("password is required")
@@ -574,7 +571,7 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 
 	// Validate phone format
 	if req.Phone != "" {
-		if !phoneRegex.MatchString(req.Phone) {
+		if !utility.ValidatePhoneFormat(req.Phone) {
 			return errors.New("invalid phone format")
 		}
 	}

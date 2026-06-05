@@ -113,6 +113,10 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, *sql.DB, error) {
 	// Get schema parameter
 	schemaName := cmd.Flag("schema").Value.String()
 
+	if defaultDriver.Driver != "postgres" {
+		return nil, nil, fmt.Errorf("unsupported database driver: %q (only postgres is supported for migrations)", defaultDriver.Driver)
+	}
+
 	// Create postgres driver instance
 	driver, err := postgres.WithInstance(db, &postgres.Config{
 		MigrationsTable: "schema_migrations",

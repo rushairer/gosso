@@ -158,7 +158,7 @@ func setupAuthController(authSvc *mockAuthOrchestrator, tokenMgr *mockTokenManag
 	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, nil, nil, false, zap.NewNop())
 
 	api := engine.Group("/api")
-	ctrl.RegisterRoutes(api, nil, nil, nil, nil, nil)
+	ctrl.RegisterRoutes(api, nil, nil, nil, nil, nil, nil)
 
 	return engine, ctrl
 }
@@ -173,7 +173,7 @@ func setupAuthControllerWithClaims(authSvc *mockAuthOrchestrator, tokenMgr *mock
 
 	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, nil, nil, false, zap.NewNop())
 	api := engine.Group("/api")
-	ctrl.RegisterRoutes(api, nil, nil, nil, nil, nil)
+	ctrl.RegisterRoutes(api, nil, nil, nil, nil, nil, nil)
 
 	return engine
 }

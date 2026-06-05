@@ -450,7 +450,7 @@ func TestToken_RefreshToken_Success(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh"}`
+	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -556,7 +556,7 @@ func TestRevoke_MissingToken(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestRevoke_Forbidden(t *testing.T) {
+func TestRevoke_DifferentAccount_ReturnsOK(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	ctrl := &OAuth2Controller{
@@ -576,7 +576,7 @@ func TestRevoke_Forbidden(t *testing.T) {
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 // ──────────────────────────────────────────────

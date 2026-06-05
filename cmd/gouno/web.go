@@ -343,7 +343,7 @@ func defaultIfEmpty(value, defaultValue string) string {
 // setupEngine configures the Gin engine: middleware + routes
 func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger, m *appModules, db *sql.DB, redis *cache.RedisClient) *gin.Engine {
 	engine := gin.New()
-	_ = engine.SetTrustedProxies(nil)
+	_ = engine.SetTrustedProxies(cfg.WebServerConfig.TrustedProxies)
 
 	corsConfig := buildCORSConfig(cfg)
 

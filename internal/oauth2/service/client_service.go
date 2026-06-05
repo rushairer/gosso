@@ -17,14 +17,15 @@ import (
 
 // RegisterClientRequest represents a request to register an OAuth2 client
 type RegisterClientRequest struct {
-	AccountID      string
-	Name           string
-	Description    string
-	RedirectURIs   []string
-	GrantTypes     []string
-	Scopes         []string
-	IsConfidential bool
-	Metadata       map[string]any
+	AccountID              string
+	Name                   string
+	Description            string
+	RedirectURIs           []string
+	PostLogoutRedirectURIs []string
+	GrantTypes             []string
+	Scopes                 []string
+	IsConfidential         bool
+	Metadata               map[string]any
 }
 
 // OAuth2ClientService is the OAuth2 client service interface
@@ -79,16 +80,17 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 	}
 
 	client := &domain.OAuth2Client{
-		AccountID:        req.AccountID,
-		ClientID:         clientID,
-		ClientSecretHash: secretHash,
-		Name:             req.Name,
-		Description:      req.Description,
-		RedirectURIs:     req.RedirectURIs,
-		GrantTypes:       grantTypes,
-		Scopes:           scopes,
-		IsConfidential:   req.IsConfidential,
-		Metadata:         req.Metadata,
+		AccountID:              req.AccountID,
+		ClientID:               clientID,
+		ClientSecretHash:       secretHash,
+		Name:                   req.Name,
+		Description:            req.Description,
+		RedirectURIs:           req.RedirectURIs,
+		PostLogoutRedirectURIs: req.PostLogoutRedirectURIs,
+		GrantTypes:             grantTypes,
+		Scopes:                 scopes,
+		IsConfidential:         req.IsConfidential,
+		Metadata:               req.Metadata,
 	}
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {

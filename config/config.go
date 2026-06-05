@@ -30,6 +30,7 @@ type WebServerConfig struct {
 	WriteTimeout       time.Duration    `mapstructure:"write_timeout"`
 	RequestTimeout     time.Duration    `mapstructure:"request_timeout"`
 	MaxBodySize        int64            `mapstructure:"max_body_size"`
+	TrustedProxies     []string         `mapstructure:"trusted_proxies"`
 	RateLimits         RateLimitsConfig `mapstructure:"rate_limits"`
 }
 
@@ -262,6 +263,9 @@ func (c *GoUnoConfig) Validate() error {
 	}
 	if c.RedisConfig.MaxActiveConns <= 0 {
 		return fmt.Errorf("redis: max_active_conns must be positive (got %d)", c.RedisConfig.MaxActiveConns)
+	}
+	if c.RedisConfig.PoolTimeoutSeconds <= 0 {
+		return fmt.Errorf("redis: pool_timeout_seconds must be positive (got %d)", c.RedisConfig.PoolTimeoutSeconds)
 	}
 	return nil
 }

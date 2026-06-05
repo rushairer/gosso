@@ -88,7 +88,7 @@ func RegisterWebRouter(
 		if passkeyCtrl != nil {
 			passkeyGroup := api.Group("")
 			passkeyGroup.Use(passkeyLimit)
-			passkeyCtrl.RegisterRoutes(passkeyGroup, jwtAuth)
+			passkeyCtrl.RegisterRoutes(passkeyGroup, jwtAuth, passkeyLimit)
 		}
 	}
 

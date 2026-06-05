@@ -140,10 +140,9 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 	if req.IDTokenHint != "" {
 		claims, err := c.logoutSvc.ValidateIDTokenHint(req.IDTokenHint)
 		if err != nil {
-			c.logger.Debug("id_token_hint validation failed", zap.Error(err))
-			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid id_token_hint"))
-			return
-		}
+			// id_token_hint is optional — skip it and fall through to Bearer/anonymous path
+			c.logger.Debug("id_token_hint validation failed, skipping", zap.Error(err))
+		} else {
 
 		// If client_id is provided, verify it matches the ID token audience
 		if req.ClientID != "" {
@@ -174,6 +173,7 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 			return
 		}
 		loggedOut = true
+		}
 	}
 
 	// 2. Fallback: try cached Bearer token claims

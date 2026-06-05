@@ -41,12 +41,13 @@ func (c *ClientController) RegisterRoutes(rg *gin.RouterGroup, authMiddleware gi
 
 // RegisterClientRequest is the request body for registering a client
 type RegisterClientRequest struct {
-	Name           string   `json:"name" binding:"required,max=255"`
-	Description    string   `json:"description" binding:"max=2000"`
-	RedirectURIs   []string `json:"redirect_uris" binding:"required,min=1"`
-	GrantTypes     []string `json:"grant_types"`
-	Scopes         []string `json:"scopes"`
-	IsConfidential bool     `json:"is_confidential"`
+	Name                   string   `json:"name" binding:"required,max=255"`
+	Description            string   `json:"description" binding:"max=2000"`
+	RedirectURIs           []string `json:"redirect_uris" binding:"required,min=1"`
+	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
+	GrantTypes             []string `json:"grant_types"`
+	Scopes                 []string `json:"scopes"`
+	IsConfidential         bool     `json:"is_confidential"`
 }
 
 // RegisterClientResponse is the response body for registering a client
@@ -92,13 +93,14 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 	}
 
 	client, secret, err := c.clientSvc.RegisterClient(ctx, &oauth2Service.RegisterClientRequest{
-		AccountID:      accountID,
-		Name:           req.Name,
-		Description:    req.Description,
-		RedirectURIs:   req.RedirectURIs,
-		GrantTypes:     req.GrantTypes,
-		Scopes:         req.Scopes,
-		IsConfidential: req.IsConfidential,
+		AccountID:              accountID,
+		Name:                   req.Name,
+		Description:            req.Description,
+		RedirectURIs:           req.RedirectURIs,
+		PostLogoutRedirectURIs: req.PostLogoutRedirectURIs,
+		GrantTypes:             req.GrantTypes,
+		Scopes:                 req.Scopes,
+		IsConfidential:         req.IsConfidential,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to register client"))
@@ -213,6 +215,9 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 	if req.Scopes != nil {
 		client.Scopes = req.Scopes
 	}
+	if req.PostLogoutRedirectURIs != nil {
+		client.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
+	}
 	client.UpdatedAt = time.Now()
 
 	if err := c.clientSvc.UpdateClient(ctx, client); err != nil {
@@ -225,11 +230,12 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 
 // UpdateClientRequest is the request body for updating a client
 type UpdateClientRequest struct {
-	Name         string   `json:"name"`
-	Description  string   `json:"description"`
-	RedirectURIs []string `json:"redirect_uris"`
-	GrantTypes   []string `json:"grant_types"`
-	Scopes       []string `json:"scopes"`
+	Name                   string   `json:"name"`
+	Description            string   `json:"description"`
+	RedirectURIs           []string `json:"redirect_uris"`
+	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
+	GrantTypes             []string `json:"grant_types"`
+	Scopes                 []string `json:"scopes"`
 }
 
 // DeleteClient DELETE /api/oauth2/clients/:client_id

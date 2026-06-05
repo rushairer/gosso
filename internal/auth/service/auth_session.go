@@ -62,6 +62,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	return &RefreshResult{
 		AccessToken:  accessToken,
 		RefreshToken: newRefreshToken.Token,
+		SessionID:    session.ID.String(),
 	}, nil
 }
 

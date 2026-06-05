@@ -510,9 +510,9 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		return
 	}
 
-	// Verify client binding before rotation
-	if req.ClientID != "" && req.ClientID != oldRefreshToken.ClientID {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "client_id mismatch"})
+	// Verify client binding before rotation (RFC 6749 §6: client_id MUST match)
+	if req.ClientID != oldRefreshToken.ClientID {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "client_id mismatch or missing"})
 		return
 	}
 
@@ -971,7 +971,12 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 	// status check is needed before this call.
 	claimedDC, err := c.deviceCodeSvc.ClaimAuthorizedDeviceCode(ctx, req.DeviceCode)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "device code already consumed"})
+		// Distinguish expired vs consumed per RFC 8628 §3.5
+		errorDesc := "device code already consumed"
+		if lookupDC, lookupErr := c.deviceCodeSvc.GetDeviceCode(ctx, req.DeviceCode); lookupErr == nil && lookupDC.IsExpired() {
+			errorDesc = "device code has expired"
+		}
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": errorDesc})
 		return
 	}
 

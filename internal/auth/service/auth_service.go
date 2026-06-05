@@ -56,6 +56,7 @@ type LoginResult struct {
 type RefreshResult struct {
 	AccessToken  string
 	RefreshToken string
+	SessionID    string
 }
 
 // AuthService authentication orchestration service
