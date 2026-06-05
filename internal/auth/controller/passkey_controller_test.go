@@ -99,9 +99,6 @@ func (m *mockTokenMgrForPasskey) GenerateAccessToken(_ *tokenDomain.AccessTokenC
 func (m *mockTokenMgrForPasskey) GenerateRefreshToken(_ context.Context, _, _, _, _ string) (*tokenDomain.RefreshToken, error) {
 	return &tokenDomain.RefreshToken{Token: "mock-refresh"}, nil
 }
-func (m *mockTokenMgrForPasskey) ValidateAccessToken(_ string) (*tokenDomain.AccessTokenClaims, error) {
-	return &tokenDomain.AccessTokenClaims{AccountID: "account-001"}, nil
-}
 func (m *mockTokenMgrForPasskey) ValidateAccessTokenWithContext(_ context.Context, _ string) (*tokenDomain.AccessTokenClaims, error) {
 	return &tokenDomain.AccessTokenClaims{AccountID: "account-001"}, nil
 }

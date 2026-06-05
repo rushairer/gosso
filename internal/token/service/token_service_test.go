@@ -65,7 +65,7 @@ func TestGenerateAccessToken_RS256(t *testing.T) {
 	assert.Equal(t, svc.KeyService().KeyID(), token.Header["kid"])
 
 	// Verify token contents
-	parsed, err := svc.ValidateAccessToken(tokenString)
+	parsed, err := svc.ValidateAccessTokenWithContext(context.Background(), tokenString)
 	require.NoError(t, err)
 	assert.Equal(t, "account-001", parsed.AccountID)
 	assert.Equal(t, []string{"admin"}, parsed.Roles)
@@ -75,7 +75,7 @@ func TestGenerateAccessToken_RS256(t *testing.T) {
 	assert.NotNil(t, parsed.IssuedAt)
 }
 
-func TestValidateAccessToken_HS256Fallback(t *testing.T) {
+func TestValidateAccessTokenWithContext_HS256Rejected(t *testing.T) {
 	svc, redis := setupTestTokenService(t)
 	defer redis.Close()
 
@@ -94,13 +94,12 @@ func TestValidateAccessToken_HS256Fallback(t *testing.T) {
 	hs256Token, err := token.SignedString(secret)
 	require.NoError(t, err)
 
-	// Verify HS256 token still works with ValidateAccessToken (backward compatibility)
-	parsed, err := svc.ValidateAccessToken(hs256Token)
-	require.NoError(t, err)
-	assert.Equal(t, "account-hs256", parsed.AccountID)
+	// Verify HS256 token is rejected by ValidateAccessTokenWithContext (only RS256 accepted)
+	_, err = svc.ValidateAccessTokenWithContext(context.Background(), hs256Token)
+	assert.Error(t, err)
 }
 
-func TestValidateAccessToken_WrongKey(t *testing.T) {
+func TestValidateAccessTokenWithContext_WrongKey(t *testing.T) {
 	svc, redis := setupTestTokenService(t)
 	defer redis.Close()
 
@@ -123,11 +122,11 @@ func TestValidateAccessToken_WrongKey(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify failure (signature mismatch)
-	_, err = svc.ValidateAccessToken(wrongToken)
+	_, err = svc.ValidateAccessTokenWithContext(context.Background(), wrongToken)
 	assert.Error(t, err)
 }
 
-func TestValidateAccessToken_Revoked(t *testing.T) {
+func TestValidateAccessTokenWithContext_Revoked(t *testing.T) {
 	svc, redis := setupTestTokenService(t)
 	defer redis.Close()
 
@@ -142,7 +141,7 @@ func TestValidateAccessToken_Revoked(t *testing.T) {
 	require.NoError(t, err)
 
 	// Validate normal token
-	parsed, err := svc.ValidateAccessToken(tokenString)
+	parsed, err := svc.ValidateAccessTokenWithContext(ctx, tokenString)
 	require.NoError(t, err)
 
 	// Add to blacklist
@@ -150,7 +149,7 @@ func TestValidateAccessToken_Revoked(t *testing.T) {
 	require.NoError(t, err)
 
 	// Validate again should fail
-	_, err = svc.ValidateAccessToken(tokenString)
+	_, err = svc.ValidateAccessTokenWithContext(ctx, tokenString)
 	assert.Error(t, err)
 
 	// Clean up

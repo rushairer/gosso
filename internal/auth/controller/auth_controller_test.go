@@ -119,15 +119,11 @@ func (m *mockTokenManager) GenerateRefreshToken(_ context.Context, _, _, _, _ st
 	return &tokenDomain.RefreshToken{Token: "mock-refresh-token"}, nil
 }
 
-func (m *mockTokenManager) ValidateAccessToken(_ string) (*tokenDomain.AccessTokenClaims, error) {
+func (m *mockTokenManager) ValidateAccessTokenWithContext(_ context.Context, _ string) (*tokenDomain.AccessTokenClaims, error) {
 	return &tokenDomain.AccessTokenClaims{
 		AccountID: "account-001",
 		SessionID: "session-001",
 	}, nil
-}
-
-func (m *mockTokenManager) ValidateAccessTokenWithContext(_ context.Context, _ string) (*tokenDomain.AccessTokenClaims, error) {
-	return m.ValidateAccessToken("")
 }
 
 func (m *mockTokenManager) ValidateRefreshToken(_ context.Context, _ string) (*tokenDomain.RefreshToken, error) {

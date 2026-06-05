@@ -31,7 +31,6 @@ type AuthOrchestrator interface {
 type TokenManager interface {
 	GenerateAccessToken(claims *tokenDomain.AccessTokenClaims) (string, error)
 	GenerateRefreshToken(ctx context.Context, accountID, clientID, sessionID, scope string) (*tokenDomain.RefreshToken, error)
-	ValidateAccessToken(tokenString string) (*tokenDomain.AccessTokenClaims, error)
 	ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*tokenDomain.AccessTokenClaims, error)
 	ValidateRefreshToken(ctx context.Context, token string) (*tokenDomain.RefreshToken, error)
 	RotateRefreshToken(ctx context.Context, oldToken string) (*tokenDomain.RefreshToken, error)

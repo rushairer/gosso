@@ -88,13 +88,6 @@ func (s *TokenService) AccessExpiry() time.Duration {
 	return s.accessExpiry
 }
 
-// ValidateAccessToken validates a JWT access token (with blacklist check, RS256 only).
-//
-// Deprecated: Use ValidateAccessTokenWithContext instead.
-func (s *TokenService) ValidateAccessToken(tokenString string) (*domain.AccessTokenClaims, error) {
-	return s.ValidateAccessTokenWithContext(context.Background(), tokenString)
-}
-
 // ValidateAccessTokenWithContext validates a JWT access token using the request context
 func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*domain.AccessTokenClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &domain.AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
