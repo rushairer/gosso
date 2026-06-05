@@ -283,12 +283,10 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	}
 
 	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, authMod.CredentialRepo, !cfg.WebServerConfig.Debug, logger)
-	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, cfg.AuthConfig.Issuer, logger)
+	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &accountValidatorAdapter{accountSvc: accountMod.Service}, authMod.SessionService, cfg.AuthConfig.Issuer, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
 	}
-	oauth2Ctrl.SetAccountValidator(&accountValidatorAdapter{accountSvc: accountMod.Service})
-	oauth2Ctrl.SetSessionValidator(authMod.SessionService)
 	clientCtrl := oauth2Controller.NewClientController(oauth2Mod.ClientService, logger)
 	oidcCtrl := oidcController.NewOIDCController(oidcMod.DiscoveryService, oidcMod.JWKSService, oidcMod.UserInfoService, oidcMod.LogoutService, oauth2Mod.ClientRepo, tokenSvc, cfg.AuthConfig.Issuer, logger)
 	adminCtrl := adminController.NewAdminController(accountMod.Service, logger)

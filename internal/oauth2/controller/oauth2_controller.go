@@ -89,6 +89,8 @@ func NewOAuth2Controller(
 	tokenSvc TokenManager,
 	idTokenSvc *oidcService.IDTokenService,
 	deviceCodeSvc DeviceCodeManager,
+	accountValidator AccountValidator,
+	sessionValidator SessionValidator,
 	issuer string,
 	logger *zap.Logger,
 ) (*OAuth2Controller, error) {
@@ -101,27 +103,20 @@ func NewOAuth2Controller(
 		return nil, fmt.Errorf("failed to parse device template: %w", err)
 	}
 	return &OAuth2Controller{
-		clientSvc:     clientSvc,
-		authCodeSvc:   authCodeSvc,
-		consentSvc:    consentSvc,
-		tokenSvc:      tokenSvc,
-		idTokenSvc:    idTokenSvc,
-		deviceCodeSvc: deviceCodeSvc,
-		issuer:        issuer,
-		consentTmpl:   consentTmpl,
-		deviceTmpl:    deviceTmpl,
-		logger:        logger,
+		clientSvc:        clientSvc,
+		authCodeSvc:      authCodeSvc,
+		consentSvc:       consentSvc,
+		tokenSvc:         tokenSvc,
+		idTokenSvc:       idTokenSvc,
+		deviceCodeSvc:    deviceCodeSvc,
+		clientAuth:       oauth2Service.ClientAuthenticator{},
+		accountValidator: accountValidator,
+		sessionValidator: sessionValidator,
+		issuer:           issuer,
+		consentTmpl:      consentTmpl,
+		deviceTmpl:       deviceTmpl,
+		logger:           logger,
 	}, nil
-}
-
-// SetAccountValidator sets the account validator dependency (setter injection).
-func (c *OAuth2Controller) SetAccountValidator(v AccountValidator) {
-	c.accountValidator = v
-}
-
-// SetSessionValidator sets the session validator dependency (setter injection).
-func (c *OAuth2Controller) SetSessionValidator(v SessionValidator) {
-	c.sessionValidator = v
 }
 
 // authenticateRequest extracts and validates the access token from the Authorization header.
@@ -447,11 +442,6 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		return
 	}
 
-	if c.accountValidator == nil {
-		c.logger.Error("OAuth2Controller: accountValidator not configured")
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-		return
-	}
 	if !c.accountValidator.IsAccountActive(ctx, authCode.AccountID) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "account is not active"})
 		return
@@ -536,11 +526,6 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 
 	// Verify account is still active BEFORE consuming the old refresh token.
 	// If the account is inactive, reject early so the client retains the old token.
-	if c.accountValidator == nil {
-		c.logger.Error("OAuth2Controller: accountValidator not configured")
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-		return
-	}
 	if !c.accountValidator.IsAccountActive(ctx, oldRefreshToken.AccountID) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "account is not active"})
 		return
@@ -622,11 +607,6 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 	}
 
 	// Verify account is still active (deleted/suspended clients cannot get new tokens)
-	if c.accountValidator == nil {
-		c.logger.Error("OAuth2Controller: accountValidator not configured")
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-		return
-	}
 	if !c.accountValidator.IsAccountActive(ctx, client.AccountID) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client", "error_description": "account is not active"})
 		return
@@ -961,11 +941,6 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 
 	// Verify account is still active BEFORE claiming the device code.
 	// If checked after claim, an inactive account would waste the device code.
-	if c.accountValidator == nil {
-		c.logger.Error("OAuth2Controller: accountValidator not configured")
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-		return
-	}
 	if !c.accountValidator.IsAccountActive(ctx, dc.AccountID) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "account is not active"})
 		return
