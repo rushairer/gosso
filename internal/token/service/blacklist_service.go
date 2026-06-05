@@ -109,8 +109,8 @@ func (s *BlacklistService) GetRevokeInfo(ctx context.Context, jti string) (*doma
 	return &blacklist, nil
 }
 
-// RemoveFromBlacklist removes a token from the blacklist (use with caution, typically for testing or special scenarios only)
-func (s *BlacklistService) RemoveFromBlacklist(ctx context.Context, jti string) error {
+// removeFromBlacklist removes a token from the blacklist (testing only)
+func (s *BlacklistService) removeFromBlacklist(ctx context.Context, jti string) error {
 	key := s.buildBlacklistKey(jti)
 	if err := s.redis.Del(ctx, key); err != nil {
 		s.logger.Error("Failed to remove token from blacklist", zap.Error(err), zap.String("jti", jti))

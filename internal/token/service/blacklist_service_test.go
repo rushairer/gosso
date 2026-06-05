@@ -45,7 +45,7 @@ func TestBlacklistService_RevokeToken(t *testing.T) {
 	assert.True(t, revoked)
 
 	// Clean up
-	_ = service.RemoveFromBlacklist(ctx, jti)
+	_ = service.removeFromBlacklist(ctx, jti)
 }
 
 func TestBlacklistService_IsTokenRevoked(t *testing.T) {
@@ -71,7 +71,7 @@ func TestBlacklistService_IsTokenRevoked(t *testing.T) {
 	assert.True(t, revoked)
 
 	// Clean up
-	_ = service.RemoveFromBlacklist(ctx, jti)
+	_ = service.removeFromBlacklist(ctx, jti)
 }
 
 func TestBlacklistService_GetRevokeInfo(t *testing.T) {
@@ -96,7 +96,7 @@ func TestBlacklistService_GetRevokeInfo(t *testing.T) {
 	assert.True(t, info.ExpiresAt.After(time.Now()))
 
 	// Clean up
-	_ = service.RemoveFromBlacklist(ctx, jti)
+	_ = service.removeFromBlacklist(ctx, jti)
 }
 
 func TestBlacklistService_RevokeExpiredToken(t *testing.T) {
@@ -118,7 +118,7 @@ func TestBlacklistService_RevokeExpiredToken(t *testing.T) {
 	assert.False(t, revoked)
 }
 
-func TestBlacklistService_RemoveFromBlacklist(t *testing.T) {
+func TestBlacklistService_removeFromBlacklist(t *testing.T) {
 	service := setupTestBlacklistService(t)
 	defer service.redis.Close()
 
@@ -131,7 +131,7 @@ func TestBlacklistService_RemoveFromBlacklist(t *testing.T) {
 	require.NoError(t, err)
 
 	// Remove from blacklist
-	err = service.RemoveFromBlacklist(ctx, jti)
+	err = service.removeFromBlacklist(ctx, jti)
 	require.NoError(t, err)
 
 	// Check if it has been removed

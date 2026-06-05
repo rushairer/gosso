@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rushairer/gouno"
 )
 
 const (
@@ -50,10 +51,7 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 		// Validate CSRF token
 		cookie, err := ctx.Cookie(csrfCookieName)
 		if err != nil || cookie == "" {
-			ctx.JSON(http.StatusForbidden, gin.H{
-				"code":    403,
-				"message": "CSRF token missing",
-			})
+			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "CSRF token missing"))
 			ctx.Abort()
 			return
 		}
@@ -64,10 +62,7 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 			header = ctx.PostForm("csrf_token")
 		}
 		if header == "" || subtle.ConstantTimeCompare([]byte(header), []byte(cookie)) != 1 {
-			ctx.JSON(http.StatusForbidden, gin.H{
-				"code":    403,
-				"message": "CSRF token mismatch",
-			})
+			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "CSRF token mismatch"))
 			ctx.Abort()
 			return
 		}
@@ -84,7 +79,7 @@ func setCSRFCookie(ctx *gin.Context, secure bool) {
 		var err error
 		cookie, err = generateCSRFToken()
 		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
 			ctx.Abort()
 			return
 		}

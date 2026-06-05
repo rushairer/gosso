@@ -678,12 +678,12 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 	if err != nil {
 		// RFC 7009 §2.1: always return 200 for invalid/unknown tokens
 		// to prevent token existence oracle.
-		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+		ctx.Status(http.StatusOK)
 		return
 	}
 	if rt.AccountID != accountIDStr {
 		// Token belongs to a different user — silently skip revocation.
-		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+		ctx.Status(http.StatusOK)
 		return
 	}
 
@@ -692,7 +692,7 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+	ctx.Status(http.StatusOK)
 }
 
 // IntrospectRequest is the token introspection request body.

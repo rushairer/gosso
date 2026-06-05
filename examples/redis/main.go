@@ -251,7 +251,6 @@ func blacklistExample(ctx context.Context, redisClient *cache.RedisClient, logge
 		zap.Time("revoked_at", info.RevokedAt),
 		zap.Time("expires_at", info.ExpiresAt))
 
-	// 清理
-	_ = blacklistSvc.RemoveFromBlacklist(ctx, jti)
-	logger.Info("Token removed from blacklist")
+	// 清理 — 注意: removeFromBlacklist 已降级为 unexported，仅限包内测试使用
+	logger.Info("Token blacklist check completed")
 }

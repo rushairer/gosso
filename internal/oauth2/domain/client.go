@@ -53,13 +53,20 @@ func (c *OAuth2Client) ValidatePostLogoutRedirectURI(uri string) bool {
 	return false
 }
 
-// isValidRedirectScheme checks that the URI uses http or https scheme
+// isValidRedirectScheme checks that the URI uses http or https scheme and has no fragment.
+// RFC 6749 §3.1.2: authorization endpoint MUST NOT redirect to a URI with a fragment component.
 func isValidRedirectScheme(uri string) bool {
 	u, err := url.Parse(uri)
 	if err != nil {
 		return false
 	}
-	return u.Scheme == "http" || u.Scheme == "https"
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	if u.Fragment != "" {
+		return false
+	}
+	return true
 }
 
 // HasGrantType checks whether the specified grant type is supported

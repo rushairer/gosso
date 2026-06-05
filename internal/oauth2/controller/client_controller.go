@@ -76,18 +76,18 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 		return
 	}
 
-	// Validate redirect URI schemes
+	// Validate redirect URI schemes (no fragments per RFC 6749 §3.1.2)
 	for _, uri := range req.RedirectURIs {
 		u, err := url.Parse(uri)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "redirect_uris must use http or https scheme"))
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Fragment != "" {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "redirect_uris must use http or https scheme without fragment"))
 			return
 		}
 	}
 	for _, uri := range req.PostLogoutRedirectURIs {
 		u, err := url.Parse(uri)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "post_logout_redirect_uris must use http or https scheme"))
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Fragment != "" {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "post_logout_redirect_uris must use http or https scheme without fragment"))
 			return
 		}
 	}
@@ -205,8 +205,8 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 	if req.RedirectURIs != nil {
 		for _, uri := range req.RedirectURIs {
 			u, err := url.Parse(uri)
-			if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-				ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "redirect_uris must use http or https scheme"))
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Fragment != "" {
+				ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "redirect_uris must use http or https scheme without fragment"))
 				return
 			}
 		}
@@ -225,8 +225,8 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 	if req.PostLogoutRedirectURIs != nil {
 		for _, uri := range req.PostLogoutRedirectURIs {
 			u, err := url.Parse(uri)
-			if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-				ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "post_logout_redirect_uris must use http or https scheme"))
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Fragment != "" {
+				ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "post_logout_redirect_uris must use http or https scheme without fragment"))
 				return
 			}
 		}

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"net/mail"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -564,13 +565,11 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 		return
 	}
 
-	if len(req.Identifier) > 255 {
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "identifier too long"))
-		return
-	}
-	if req.Type == "email" && !containsAtSign(req.Identifier) {
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid email format"))
-		return
+	if req.Type == "email" {
+		if _, err := mail.ParseAddress(req.Identifier); err != nil {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid email format"))
+			return
+		}
 	}
 	if req.Type == "phone" && !utility.ValidatePhoneFormat(req.Identifier) {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid phone format"))
@@ -726,14 +725,4 @@ func (c *AuthController) ResetPassword(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("password has been reset successfully"))
-}
-
-// containsAtSign checks if s contains '@' — a minimal email format gate.
-func containsAtSign(s string) bool {
-	for _, c := range s {
-		if c == '@' {
-			return true
-		}
-	}
-	return false
 }

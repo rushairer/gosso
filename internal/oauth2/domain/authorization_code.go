@@ -33,6 +33,11 @@ func (a *AuthorizationCode) VerifyPKCE(verifier string) bool {
 		return true // No PKCE requirement, pass through
 	}
 
+	// RFC 7636 §4.1: code_verifier must be 43-128 characters
+	if len(verifier) < 43 || len(verifier) > 128 {
+		return false
+	}
+
 	switch a.CodeChallengeMethod {
 	case "S256":
 		h := sha256.Sum256([]byte(verifier))

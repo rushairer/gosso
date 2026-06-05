@@ -154,7 +154,7 @@ func TestValidateAccessToken_Revoked(t *testing.T) {
 	assert.Error(t, err)
 
 	// Clean up
-	_ = svc.blacklist.RemoveFromBlacklist(ctx, parsed.ID)
+	_ = svc.blacklist.removeFromBlacklist(ctx, parsed.ID)
 }
 
 func TestGenerateAndValidateRefreshToken(t *testing.T) {

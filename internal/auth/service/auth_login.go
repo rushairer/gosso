@@ -468,7 +468,7 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 		if verr != nil {
 			s.logger.Error("Redis GetDel failed for passkey MFA verification",
 				zap.Error(verr), zap.String("account_id", accountID))
-			return fmt.Errorf("verify passkey mfa: %w", verr)
+			return ErrPasskeyNotVerified
 		}
 		if verified != "1" {
 			return ErrPasskeyNotVerified
