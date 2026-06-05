@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rushairer/batchflow"
+	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/audit"
 	"github.com/rushairer/gosso/internal/audit/domain"
@@ -17,11 +18,15 @@ type Auditor struct {
 	batchflow    *batchflow.BatchFlow
 	recordSchema *batchflow.SQLSchema
 	cancel       context.CancelFunc
+	logger       *zap.Logger
 }
 
-func NewAuditor(_ context.Context, db *sql.DB) *Auditor {
+func NewAuditor(_ context.Context, db *sql.DB, logger *zap.Logger) *Auditor {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	auditorCtx, cancel := context.WithCancel(context.Background())
-	auditor := Auditor{db: db, cancel: cancel}
+	auditor := Auditor{db: db, cancel: cancel, logger: logger}
 	auditor.batchflow = batchflow.NewPostgreSQLBatchFlow(auditorCtx, db, batchflow.PipelineConfig{
 		BufferSize:    100,                    // Buffer size
 		FlushSize:     50,                     // Batch flush size
@@ -114,15 +119,31 @@ func (a *Auditor) Log(ctx context.Context, record *domain.AuditRecord) error {
 	if requestID := audit.RequestIDFromContext(ctx); requestID != "" {
 		var meta map[string]any
 		if record.Meta != nil {
-			_ = json.Unmarshal(record.Meta, &meta)
+			if err := json.Unmarshal(record.Meta, &meta); err != nil {
+				a.logger.Warn("Failed to unmarshal audit meta, preserving original",
+					zap.Error(err), zap.String("request_id", requestID))
+				// Don't overwrite record.Meta — preserve the original
+				return a.submit(ctx, record)
+			}
 		}
 		if meta == nil {
 			meta = make(map[string]any)
 		}
 		meta["request_id"] = requestID
-		record.Meta, _ = json.Marshal(meta)
+		marshaled, err := json.Marshal(meta)
+		if err != nil {
+			a.logger.Warn("Failed to marshal enriched audit meta, preserving original",
+				zap.Error(err), zap.String("request_id", requestID))
+			return a.submit(ctx, record)
+		}
+		record.Meta = marshaled
 	}
 
+	return a.submit(ctx, record)
+}
+
+// submit builds a batchflow request from an audit record and submits it.
+func (a *Auditor) submit(ctx context.Context, record *domain.AuditRecord) error {
 	request := batchflow.NewRequest(a.recordSchema).
 		Set("id", record.ID).
 		Set("tx_id", record.TxID).

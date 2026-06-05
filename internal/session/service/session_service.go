@@ -401,7 +401,18 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 	}
 
 	if session.AccountID.String() != accountID {
-		return fmt.Errorf("session not found or access denied")
+		return ErrSessionAccessDenied
+	}
+
+	// Revoke refresh tokens for this session before deleting the session key.
+	// Prevents orphaned tokens that could still be rotated after session deletion.
+	if s.tokenRevoker != nil {
+		if err := s.tokenRevoker.RevokeAllForSession(ctx, sessionID.String()); err != nil {
+			s.logger.Warn("Failed to revoke tokens for session during revocation",
+				zap.String("session_id", sessionID.String()),
+				zap.String("account_id", accountID),
+				zap.Error(err))
+		}
 	}
 
 	// Delete session key
@@ -470,6 +481,7 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 
 // Error definitions
 var (
-	ErrSessionNotFound = errors.New("session not found")
-	ErrSessionExpired  = errors.New("session expired")
+	ErrSessionNotFound     = errors.New("session not found")
+	ErrSessionExpired      = errors.New("session expired")
+	ErrSessionAccessDenied = errors.New("session not found or access denied")
 )

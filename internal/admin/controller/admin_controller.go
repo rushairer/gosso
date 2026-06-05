@@ -91,6 +91,18 @@ func validateUUID(ctx *gin.Context, value, paramName string) (string, bool) {
 	return value, true
 }
 
+// isSelfAccount checks if the current admin is operating on their own account.
+// Uses UUID parsing to handle format differences (e.g., with/without braces).
+func isSelfAccount(ctx *gin.Context, accountID string) bool {
+	currentAdminID := ctx.GetString(middleware.ContextKeyAccountID)
+	a, err1 := uuid.Parse(currentAdminID)
+	b, err2 := uuid.Parse(accountID)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return a == b
+}
+
 // GetAccount GET /api/admin/accounts/:account_id
 func (c *AdminController) GetAccount(ctx *gin.Context) {
 	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
@@ -119,8 +131,7 @@ func (c *AdminController) DeleteAccount(ctx *gin.Context) {
 		return
 	}
 
-	currentAdminID := ctx.GetString(middleware.ContextKeyAccountID)
-	if currentAdminID == accountID {
+	if isSelfAccount(ctx, accountID) {
 		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "cannot perform this operation on your own account"))
 		return
 	}
@@ -141,8 +152,7 @@ func (c *AdminController) DisableAccount(ctx *gin.Context) {
 		return
 	}
 
-	currentAdminID := ctx.GetString(middleware.ContextKeyAccountID)
-	if currentAdminID == accountID {
+	if isSelfAccount(ctx, accountID) {
 		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "cannot perform this operation on your own account"))
 		return
 	}
@@ -163,8 +173,7 @@ func (c *AdminController) EnableAccount(ctx *gin.Context) {
 		return
 	}
 
-	currentAdminID := ctx.GetString(middleware.ContextKeyAccountID)
-	if currentAdminID == accountID {
+	if isSelfAccount(ctx, accountID) {
 		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "cannot perform this operation on your own account"))
 		return
 	}

@@ -36,6 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Logout handler now uses JWT claims from middleware context instead of re-validating the access token — eliminates redundant `ValidateAccessTokenWithContext` call (`internal/auth/controller/auth_controller.go`).
 - `ValidateAccessToken` marked as deprecated in favor of `ValidateAccessTokenWithContext` — the no-context variant bypasses request-scoped context propagation (`internal/token/service/token_service.go`).
 - `Auditor.Wait()` now explicitly drains in-flight audit batches during graceful shutdown instead of relying on deferred `Close()` — ensures audit writes complete before process exit (`internal/audit/service/audit.go`, `cmd/gouno/web.go`).
+- `RevokeSession` now cascades refresh token revocation before deleting the session — consistent with `EnforceSessionLimit` and `RevokeAllForAccount` (`internal/session/service/session_service.go`).
+- `Auditor` now accepts a `*zap.Logger` — `Log` method preserves original audit Meta on JSON unmarshal/marshal failure instead of silently discarding it (`internal/audit/service/audit.go`).
+- Admin self-operation check now uses `uuid.Parse` comparison instead of string `==` — prevents bypass when UUID formats differ between middleware and URL parameter (`internal/admin/controller/admin_controller.go`).
+- `RevokeSession` now returns `ErrSessionAccessDenied` sentinel error — enables callers to distinguish permission errors (403) from infrastructure errors (500) (`internal/session/service/session_service.go`, `internal/auth/controller/auth_controller.go`).
+- Account-level token revocation TTL now has a 5-minute minimum floor — prevents misconfigured small `accessExpiry` from defeating OIDC logout revocation (`internal/token/service/token_service.go`).
 
 ### Removed
 
@@ -164,6 +169,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `SendVerification` identifier now validated for maximum length (255) and `@` presence for email type — prevents abuse of oversized or malformed identifiers (`internal/auth/controller/auth_controller.go`).
 - `RevokeSession` now returns 403 Forbidden instead of 400 Bad Request for authorization errors — correctly signals access denial vs malformed request (`internal/auth/controller/auth_controller.go`).
 - OIDC UserInfo service now logs database credential query failures at Warn level — errors in `addEmailInfo`/`addPhoneInfo` were silently swallowed (`internal/oidc/service/userinfo_service.go`).
+- **Security**: Passkey MFA `MarkPasskeyMFAVerified` Redis failure now returns 500 instead of silently continuing — previously the subsequent `CompletePasskeyMFALogin` would always fail with a misleading "MFA verification failed" error (`internal/auth/controller/passkey_controller.go`).
+- Captcha `CreatedAt`, `ExpiresAt`, and `ExpiresAtUnix` now derived from a single `time.Now()` call — eliminates second-boundary inconsistency between Go and Redis Lua script expiry checks (`internal/captcha/service/captcha_service.go`).
+- OIDC Logout now returns HTTP 200 when no session is found — conforms to OIDC RP-Initiated Logout 1.0 specification (`internal/oidc/controller/oidc_controller.go`).
 
 ### Changed
 

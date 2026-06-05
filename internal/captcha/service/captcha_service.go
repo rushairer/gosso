@@ -95,13 +95,14 @@ func (s *CaptchaService) GenerateMathCaptcha(ctx context.Context) (*domain.Captc
 	question := fmt.Sprintf("%d + %d = ?", a, b)
 	answer := fmt.Sprintf("%d", a+b)
 
+	now := time.Now()
 	captcha := &domain.Captcha{
 		ID:            uuid.New(),
 		Type:          domain.CaptchaTypeMath,
 		Answer:        answer,
-		CreatedAt:     time.Now(),
-		ExpiresAt:     time.Now().Add(s.captchaTTL),
-		ExpiresAtUnix: time.Now().Add(s.captchaTTL).Unix(),
+		CreatedAt:     now,
+		ExpiresAt:     now.Add(s.captchaTTL),
+		ExpiresAtUnix: now.Add(s.captchaTTL).Unix(),
 		Used:          false,
 	}
 
@@ -122,13 +123,14 @@ func (s *CaptchaService) GenerateDigitCaptcha(ctx context.Context) (*domain.Capt
 	}
 	code := fmt.Sprintf("%06d", r)
 
+	now := time.Now()
 	captcha := &domain.Captcha{
 		ID:            uuid.New(),
 		Type:          domain.CaptchaTypeDigit,
 		Answer:        code,
-		CreatedAt:     time.Now(),
-		ExpiresAt:     time.Now().Add(s.captchaTTL),
-		ExpiresAtUnix: time.Now().Add(s.captchaTTL).Unix(),
+		CreatedAt:     now,
+		ExpiresAt:     now.Add(s.captchaTTL),
+		ExpiresAtUnix: now.Add(s.captchaTTL).Unix(),
 		Used:          false,
 	}
 

@@ -289,9 +289,11 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 	// Mark passkey MFA as verified (consumed by CompletePasskeyMFALogin below).
 	// Key is namespaced by MFA token JTI to prevent concurrent login interference.
 	if err := c.authSvc.MarkPasskeyMFAVerified(ctx, claims.ID); err != nil {
-		c.logger.Warn("Failed to mark passkey MFA verified",
+		c.logger.Error("Failed to mark passkey MFA verified",
 			zap.Error(err),
 			zap.String("account_id", claims.AccountID))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
+		return
 	}
 
 	// Complete login directly — no separate /mfa/verify call needed

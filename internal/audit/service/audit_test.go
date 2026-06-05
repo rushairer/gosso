@@ -30,7 +30,7 @@ func TestAudit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	auditor := service.NewAuditor(ctx, db)
+	auditor := service.NewAuditor(ctx, db, nil)
 
 	testAccountID := uuid.New()
 

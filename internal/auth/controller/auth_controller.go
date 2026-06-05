@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	dbutil "github.com/rushairer/gosso/internal/db"
+	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
@@ -317,8 +319,12 @@ func (c *AuthController) RevokeSession(ctx *gin.Context) {
 	}
 
 	if err := c.authSvc.RevokeSession(ctx, tc.AccountID, sessionID); err != nil {
-		c.logger.Error("Failed to revoke session", zap.Error(err))
-		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "session not found or access denied"))
+		if errors.Is(err, sessionService.ErrSessionAccessDenied) {
+			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "session not found or access denied"))
+		} else {
+			c.logger.Error("Failed to revoke session", zap.Error(err))
+			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
+		}
 		return
 	}
 

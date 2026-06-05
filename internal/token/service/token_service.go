@@ -18,9 +18,10 @@ import (
 )
 
 const (
-	RefreshTokenKeyPrefix  = "refresh_token:"
-	SessionTokensKeyPrefix = "session_tokens:"
-	RefreshTokenLength     = 32 // 32 bytes = 64 hex chars
+	RefreshTokenKeyPrefix      = "refresh_token:"
+	SessionTokensKeyPrefix     = "session_tokens:"
+	RefreshTokenLength         = 32 // 32 bytes = 64 hex chars
+	MinAccountRevocationTTL    = 5 * time.Minute
 )
 
 // TokenService JWT and refresh token service
@@ -380,8 +381,8 @@ func (s *TokenService) RevokeAccountTokens(ctx context.Context, accountID string
 	// A token issued at T=(accessExpiry - ε) has IssuedAt near the original expiry;
 	// the revocation key must still exist to reject it.
 	ttl := s.accessExpiry * 2
-	if ttl <= 0 {
-		ttl = 30 * time.Minute
+	if ttl < MinAccountRevocationTTL {
+		ttl = MinAccountRevocationTTL
 	}
 
 	return s.blacklist.SetAccountRevokedAfter(ctx, accountID, time.Now(), ttl)

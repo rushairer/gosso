@@ -44,7 +44,7 @@ func setupAuthTest(t *testing.T) (context.Context, *testutil.TestEnv) {
 func initAuthService(t *testing.T, e *testutil.TestEnv) *service.AuthService {
 	t.Helper()
 	ctx := context.Background()
-	auditor := auditService.NewAuditor(ctx, e.DB)
+	auditor := auditService.NewAuditor(ctx, e.DB, e.Logger)
 	accountMod := accountModule.InitializeAccountModule(e.DB, auditor, e.Logger)
 	keySvc, err := tokenService.NewKeyService("", "test-key", e.Logger)
 	require.NoError(t, err)

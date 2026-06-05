@@ -94,7 +94,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	}
 	defer func() { _ = redis.Close() }()
 
-	auditAuditor := auditService.NewAuditor(ctx, db)
+	auditAuditor := auditService.NewAuditor(ctx, db, logger)
 	go listenAuditErrors(ctx, auditAuditor, logger)
 
 	modules, err := initModules(ctx, db, redis, logger, globalConfig, auditAuditor)
