@@ -403,7 +403,7 @@ func (c *AuthController) MFAActivate(ctx *gin.Context) {
 	}
 
 	if err := c.authSvc.MFAService().ActivateTOTP(ctx, tc.AccountID, req.Code); err != nil {
-		c.logger.Debug("MFA activation failed", zap.Error(err))
+		c.logger.Warn("MFA activation failed", zap.Error(err))
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid activation code"))
 		return
 	}
@@ -632,7 +632,7 @@ func (c *AuthController) ConfirmVerification(ctx *gin.Context) {
 	// Validate verification code
 	accountID, err := c.verificationSvc.VerifyCode(ctx, req.Type, req.Identifier, req.Code)
 	if err != nil {
-		c.logger.Debug("Verification code failed", zap.Error(err))
+		c.logger.Warn("Verification code failed", zap.Error(err))
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid verification code"))
 		return
 	}

@@ -223,10 +223,5 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 		}
 	}
 
-	// 4. Default response
-	if loggedOut {
-		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{"status": "logged_out"}))
-	} else {
-		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{"status": "logged_out"}))
-	}
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{"status": "logged_out"}))
 }

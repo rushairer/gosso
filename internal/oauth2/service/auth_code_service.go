@@ -53,6 +53,7 @@ func (s *AuthCodeService) GenerateCode(
 	}
 	codeString := hex.EncodeToString(bytes)
 
+	now := time.Now()
 	ac := &domain.AuthorizationCode{
 		Code:                codeString,
 		ClientID:            clientID,
@@ -62,8 +63,8 @@ func (s *AuthCodeService) GenerateCode(
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: codeChallengeMethod,
 		Nonce:               nonce,
-		ExpiresAt:           time.Now().Add(s.expiry),
-		AuthTime:            time.Now(), // User just authenticated/consented
+		ExpiresAt:           now.Add(s.expiry),
+		AuthTime:            now, // User just authenticated/consented
 	}
 
 	data, err := json.Marshal(ac)

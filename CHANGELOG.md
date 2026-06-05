@@ -41,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Admin self-operation check now uses `uuid.Parse` comparison instead of string `==` — prevents bypass when UUID formats differ between middleware and URL parameter (`internal/admin/controller/admin_controller.go`).
 - `RevokeSession` now returns `ErrSessionAccessDenied` sentinel error — enables callers to distinguish permission errors (403) from infrastructure errors (500) (`internal/session/service/session_service.go`, `internal/auth/controller/auth_controller.go`).
 - Account-level token revocation TTL now has a 5-minute minimum floor — prevents misconfigured small `accessExpiry` from defeating OIDC logout revocation (`internal/token/service/token_service.go`).
+- OIDC Logout dead code removed — `if loggedOut` / `else` branches returned identical responses after Round 3 fix; simplified to single return (`internal/oidc/controller/oidc_controller.go`).
+- `EnforceSessionLimit` redundant token revocation removed — `RevokeSession` already cascades token revocation after Round 3 fix (`internal/session/service/session_service.go`).
+- MFA failure audit logs now include `accountID` extracted from validated MFA token — previously logged empty identity, hindering security incident investigation (`internal/auth/service/auth_login.go`).
+- Verification code failure and MFA activation failure now logged at Warn level instead of Debug — production log config typically hides Debug, making brute-force attempts invisible (`internal/auth/controller/auth_controller.go`).
+- Social login `createNewUser` audit record now uses `auditDomain.NewRecord()` helper — consistent with all other audit call sites; removed redundant `if s.auditor != nil` guard (`internal/auth/service/social_login_service.go`).
 
 ### Removed
 
@@ -172,6 +177,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: Passkey MFA `MarkPasskeyMFAVerified` Redis failure now returns 500 instead of silently continuing — previously the subsequent `CompletePasskeyMFALogin` would always fail with a misleading "MFA verification failed" error (`internal/auth/controller/passkey_controller.go`).
 - Captcha `CreatedAt`, `ExpiresAt`, and `ExpiresAtUnix` now derived from a single `time.Now()` call — eliminates second-boundary inconsistency between Go and Redis Lua script expiry checks (`internal/captcha/service/captcha_service.go`).
 - OIDC Logout now returns HTTP 200 when no session is found — conforms to OIDC RP-Initiated Logout 1.0 specification (`internal/oidc/controller/oidc_controller.go`).
+- **Security**: `LoginByPasskey` now returns `ErrInvalidCredentials` instead of `ErrAccountNotFound` when account lookup fails — consistent with `LoginByUsernamePassword`, prevents user enumeration (`internal/auth/service/auth_login.go`).
+- **Security**: `verifyMFACode` now rejects unknown MFA types with an explicit error — previously unknown types silently fell through to TOTP verification (`internal/auth/service/auth_login.go`).
+- Authorization code `ExpiresAt` and `AuthTime` now derived from a single `time.Now()` call — eliminates second-boundary inconsistency (`internal/oauth2/service/auth_code_service.go`).
 
 ### Changed
 

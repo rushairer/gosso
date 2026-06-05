@@ -146,9 +146,11 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 
 // VerifyMFALogin completes login after MFA verification
 func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfaType, ip, userAgent string) (result *LoginResult, err error) {
+	// Captured after MFA token validation; used in failure audit logs.
+	var mfaAccountID *uuid.UUID
 	defer func() {
 		if err != nil {
-			s.loginAuditLogs(ctx, auditDomain.ActionMFALoginFailure, "", nil,
+			s.loginAuditLogs(ctx, auditDomain.ActionMFALoginFailure, "", mfaAccountID,
 				map[string]any{"reason": safeAuditReason(err)},
 				map[string]any{"ip": ip, "user_agent": userAgent},
 			)
@@ -164,6 +166,9 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 		return nil, ErrInvalidMFATokenScope
 	}
 	accountID := claims.AccountID
+	if id, parseErr := uuid.Parse(accountID); parseErr == nil {
+		mfaAccountID = &id
+	}
 
 	// 2. Verify based on MFA type
 	if err := s.verifyMFACode(ctx, mfaType, accountID, mfaCode, claims.ID); err != nil {
@@ -220,9 +225,11 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 // CompletePasskeyMFALogin completes MFA login directly after passkey verification,
 // avoiding the extra round-trip to /mfa/verify. The MFA token is validated here.
 func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip, userAgent string) (result *LoginResult, err error) {
+	// Captured after MFA token validation; used in failure audit logs.
+	var mfaAccountID *uuid.UUID
 	defer func() {
 		if err != nil {
-			s.loginAuditLogs(ctx, auditDomain.ActionMFALoginFailure, "", nil,
+			s.loginAuditLogs(ctx, auditDomain.ActionMFALoginFailure, "", mfaAccountID,
 				map[string]any{"reason": safeAuditReason(err)},
 				map[string]any{"ip": ip, "user_agent": userAgent},
 			)
@@ -238,6 +245,9 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 		return nil, ErrInvalidMFATokenScope
 	}
 	accountID := claims.AccountID
+	if id, parseErr := uuid.Parse(accountID); parseErr == nil {
+		mfaAccountID = &id
+	}
 
 	// 2. Verify passkey MFA flag (set by CompleteMFALogin in the passkey controller)
 	passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", claims.ID) // namespaced by MFA token JTI
@@ -312,7 +322,7 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 	// 1. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
-		return nil, ErrAccountNotFound
+		return nil, ErrInvalidCredentials
 	}
 
 	// 2. Check account status
@@ -463,7 +473,7 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 		if verified != "1" {
 			return ErrPasskeyNotVerified
 		}
-	default:
+	case "totp", "":
 		// TOTP / backup code
 		valid, verr := s.mfaSvc.VerifyTOTP(ctx, accountID, mfaCode)
 		if verr != nil {
@@ -479,6 +489,8 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 			return ErrInvalidMFACode
 		}
 		return nil
+	default:
+		return fmt.Errorf("unsupported mfa type: %s", mfaType)
 	}
 	return nil
 }

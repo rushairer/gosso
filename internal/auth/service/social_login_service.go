@@ -348,19 +348,14 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 	}
 
 	// Audit log for social login account creation
-	if s.auditor != nil {
-		accountUUID, _ := uuid.Parse(account.ID)
-		auditLog(ctx, s.auditor, s.logger, &auditDomain.AuditRecord{
-			ID:        uuid.New(),
-			TxID:      uuid.New(),
-			AccountID: &accountUUID,
-			Action:    auditDomain.ActionAccountRegister,
-			Actor:     audit.IPFromContext(ctx),
-			Resource:  utility.MustMarshalJSON(map[string]any{"account_id": account.ID, "provider": provider}),
-			Meta:      utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
-			CreatedAt: time.Now(),
-		})
-	}
+	accountUUID, _ := uuid.Parse(account.ID)
+	auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+		auditDomain.ActionAccountRegister,
+		audit.IPFromContext(ctx),
+		&accountUUID,
+		utility.MustMarshalJSON(map[string]any{"account_id": account.ID, "provider": provider}),
+		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+	))
 
 	// Check if MFA is required (consistency with loginExistingUser)
 	if s.mfaChecker != nil {

@@ -465,16 +465,6 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 		s.logger.Info("Revoking old session due to limit",
 			zap.String("session_id", sessions[i].ID.String()),
 			zap.String("account_id", accountID))
-		// Revoke refresh tokens before deleting the session to prevent
-		// orphaned tokens that can still be rotated after session eviction.
-		if s.tokenRevoker != nil {
-			if err := s.tokenRevoker.RevokeAllForSession(ctx, sessions[i].ID.String()); err != nil {
-				s.logger.Warn("Failed to revoke tokens for evicted session",
-					zap.String("session_id", sessions[i].ID.String()),
-					zap.String("account_id", accountID),
-					zap.Error(err))
-			}
-		}
 		_ = s.RevokeSession(ctx, accountID, sessions[i].ID)
 	}
 }
