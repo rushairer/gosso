@@ -146,7 +146,7 @@ func (s *CaptchaService) GenerateDigitCaptcha(ctx context.Context) (*domain.Capt
 func (s *CaptchaService) VerifyCaptcha(ctx context.Context, captchaID uuid.UUID, answer string) error {
 	key := s.buildCaptchaKey(captchaID)
 
-	result, err := verifyCaptchaScript.Run(ctx, s.redis.GetClient(), []string{key}, answer).Result()
+	result, err := s.redis.RunScript(ctx, verifyCaptchaScript, []string{key}, answer).Result()
 	if err != nil {
 		s.logger.Error("Captcha verification script error", zap.Error(err), zap.String("captcha_id", captchaID.String()))
 		return fmt.Errorf("verify captcha: %w", err)

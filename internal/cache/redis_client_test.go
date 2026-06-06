@@ -5,29 +5,29 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
-// Note: these tests require a running Redis service
-// You can start the test environment via docker-compose
-
-func setupTestRedisClient(t *testing.T) *RedisClient {
+func setupTestRedisClient(t *testing.T) (*RedisClient, *miniredis.Miniredis) {
+	t.Helper()
 	logger := zap.NewNop()
-	dsn := "redis://localhost:6379/15" // Use DB 15 for testing
 
-	client, err := NewRedisClient(dsn, 10, 5*time.Second, logger)
+	mr := miniredis.RunT(t)
+	client, err := NewRedisClient("redis://"+mr.Addr(), 10, 5*time.Second, logger)
 	if err != nil {
-		t.Skip("Redis not available, skipping test:", err)
+		mr.Close()
+		t.Fatalf("failed to create test redis client: %v", err)
 	}
 
-	return client
+	return client, mr
 }
 
 func TestRedisClient_SetGet(t *testing.T) {
-	client := setupTestRedisClient(t)
-	defer client.Close()
+	client, mr := setupTestRedisClient(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 	key := "test:key"
@@ -47,8 +47,8 @@ func TestRedisClient_SetGet(t *testing.T) {
 }
 
 func TestRedisClient_KeyNotFound(t *testing.T) {
-	client := setupTestRedisClient(t)
-	defer client.Close()
+	client, mr := setupTestRedisClient(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 	key := "test:nonexistent"
@@ -58,8 +58,8 @@ func TestRedisClient_KeyNotFound(t *testing.T) {
 }
 
 func TestRedisClient_Expiration(t *testing.T) {
-	client := setupTestRedisClient(t)
-	defer client.Close()
+	client, mr := setupTestRedisClient(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 	key := "test:expire"
@@ -74,8 +74,8 @@ func TestRedisClient_Expiration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, value, result)
 
-	// Wait for expiration
-	time.Sleep(2 * time.Second)
+	// Fast-forward miniredis time to trigger expiration
+	mr.FastForward(2 * time.Second)
 
 	// Should have expired
 	_, err = client.Get(ctx, key)
@@ -83,8 +83,8 @@ func TestRedisClient_Expiration(t *testing.T) {
 }
 
 func TestRedisClient_Incr(t *testing.T) {
-	client := setupTestRedisClient(t)
-	defer client.Close()
+	client, mr := setupTestRedisClient(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 	key := "test:counter"
@@ -104,8 +104,8 @@ func TestRedisClient_Incr(t *testing.T) {
 }
 
 func TestRedisClient_Hash(t *testing.T) {
-	client := setupTestRedisClient(t)
-	defer client.Close()
+	client, mr := setupTestRedisClient(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 	key := "test:hash"
@@ -131,8 +131,8 @@ func TestRedisClient_Hash(t *testing.T) {
 }
 
 func TestRedisClient_Set(t *testing.T) {
-	client := setupTestRedisClient(t)
-	defer client.Close()
+	client, mr := setupTestRedisClient(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 	key := "test:set"

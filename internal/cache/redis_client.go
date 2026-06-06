@@ -261,9 +261,15 @@ func (r *RedisClient) TTL(ctx context.Context, key string) (time.Duration, error
 	return ttl, nil
 }
 
-// GetClient returns the underlying Redis client (for advanced operations)
+// GetClient returns the underlying Redis client (for advanced operations).
+// Prefer RunScript for Lua script execution and other wrapper methods when possible.
 func (r *RedisClient) GetClient() *redis.Client {
 	return r.client
+}
+
+// RunScript executes a Redis Lua script, providing encapsulation for direct client access.
+func (r *RedisClient) RunScript(ctx context.Context, script *redis.Script, keys []string, args ...interface{}) *redis.Cmd {
+	return script.Run(ctx, r.client, keys, args...)
 }
 
 // IncrWithExpiry atomically increments a counter and sets an expiration time (only on first creation)

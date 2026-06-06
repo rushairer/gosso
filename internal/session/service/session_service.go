@@ -290,7 +290,7 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 
 	// Atomically read all session IDs and delete the index.
 	// Any sessions created after this point will produce a fresh index entry.
-	result, err := revokeAccountSessionsScript.Run(ctx, s.redis.GetClient(), []string{indexKey}).StringSlice()
+	result, err := s.redis.RunScript(ctx, revokeAccountSessionsScript, []string{indexKey}).StringSlice()
 	if err != nil && err != redis.Nil {
 		s.logger.Error("Failed to atomically read and delete account sessions index",
 			zap.String("account_id", accountID), zap.Error(err))
@@ -308,6 +308,8 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 					zap.String("session_id", sid), zap.Error(err))
 			}
 		}
+	} else {
+		return fmt.Errorf("TokenRevoker not configured; cannot revoke tokens on account revocation")
 	}
 
 	// Delete individual session keys.
@@ -418,6 +420,8 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 				zap.String("account_id", accountID),
 				zap.Error(err))
 		}
+	} else {
+		return fmt.Errorf("TokenRevoker not configured; cannot revoke tokens on session revocation")
 	}
 
 	// Delete session key
@@ -478,6 +482,8 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 				s.logger.Warn("Failed to revoke tokens for session during limit enforcement",
 					zap.String("session_id", sid), zap.Error(err))
 			}
+		} else {
+			return fmt.Errorf("TokenRevoker not configured; cannot revoke tokens during session limit enforcement")
 		}
 		keys = append(keys, s.buildSessionKey(sid))
 	}

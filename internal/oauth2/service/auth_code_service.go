@@ -99,7 +99,7 @@ func (s *AuthCodeService) ValidateCode(ctx context.Context, code, clientID, redi
 	key := AuthCodeKeyPrefix + tokenDomain.HashToken(code)
 
 	// Atomically GET + DELETE the authorization code
-	result, err := getAndDeleteScript.Run(ctx, s.redis.GetClient(), []string{key}).Result()
+	result, err := s.redis.RunScript(ctx, getAndDeleteScript, []string{key}).Result()
 	if err == redis.Nil || result == nil {
 		return nil, domain.ErrCodeNotFound
 	}

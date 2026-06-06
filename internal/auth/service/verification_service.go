@@ -13,6 +13,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
+	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/utility"
 )
@@ -67,10 +69,11 @@ type SMSSender interface {
 
 // VerificationService verification code management service
 type VerificationService struct {
-	redis    *cache.RedisClient
-	emailSvc EmailSender
-	smsSvc   SMSSender
-	logger   *zap.Logger
+	redis        *cache.RedisClient
+	emailSvc     EmailSender
+	smsSvc       SMSSender
+	credentialRepo accountRepo.CredentialRepository
+	logger       *zap.Logger
 }
 
 // NewVerificationService creates a new verification service instance
@@ -78,14 +81,16 @@ func NewVerificationService(
 	redis *cache.RedisClient,
 	emailSvc EmailSender,
 	smsSvc SMSSender,
+	credentialRepo accountRepo.CredentialRepository,
 	logger *zap.Logger,
 ) *VerificationService {
 	logger = utility.EnsureLogger(logger)
 	return &VerificationService{
-		redis:    redis,
-		emailSvc: emailSvc,
-		smsSvc:   smsSvc,
-		logger:   logger,
+		redis:          redis,
+		emailSvc:       emailSvc,
+		smsSvc:         smsSvc,
+		credentialRepo: credentialRepo,
+		logger:         logger,
 	}
 }
 
@@ -163,7 +168,7 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 	codeKey := s.buildCodeKey(credType, identifier)
 
 	// Atomically verify code and increment attempts
-	resultJSON, err := verifyAndIncrementScript.Run(ctx, s.redis.GetClient(), []string{codeKey},
+	resultJSON, err := s.redis.RunScript(ctx, verifyAndIncrementScript, []string{codeKey},
 		code, VerifyCodeAttempts, int(VerifyCodeTTL.Seconds())).Result()
 	if err != nil {
 		return "", fmt.Errorf("verify code: %w", err)
@@ -214,4 +219,31 @@ func generateNumericCode(length int) (string, error) {
 // maskIdentifier masks PII for logging (e.g., "user@example.com" -> "u***@e***.com")
 func maskIdentifier(credType, identifier string) string {
 	return utility.MaskIdentifier(credType, identifier)
+}
+
+// ValidateCredentialOwnership checks that the given identifier belongs to the specified account.
+// Returns nil if ownership is confirmed, an error otherwise.
+func (s *VerificationService) ValidateCredentialOwnership(ctx context.Context, accountID, credType, identifier string) error {
+	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialType(credType))
+	if err != nil {
+		return fmt.Errorf("lookup credentials: %w", err)
+	}
+	for _, cred := range creds {
+		if cred.Identifier != nil && *cred.Identifier == identifier {
+			return nil
+		}
+	}
+	return errors.New("identifier not associated with this account")
+}
+
+// VerifyCodeForAccount verifies a code and checks that it belongs to the expected account.
+func (s *VerificationService) VerifyCodeForAccount(ctx context.Context, credType, identifier, code, expectedAccountID string) error {
+	accountID, err := s.VerifyCode(ctx, credType, identifier, code)
+	if err != nil {
+		return err
+	}
+	if accountID != expectedAccountID {
+		return errors.New("verification code does not belong to this account")
+	}
+	return nil
 }

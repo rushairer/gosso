@@ -192,7 +192,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	tokenKey := s.buildTokenKey(tokenHash)
 
 	// Atomically check attempts, increment counter, and get data
-	result, err := checkAndIncrementAttemptsScript.Run(ctx, s.redis.GetClient(), []string{tokenKey},
+	result, err := s.redis.RunScript(ctx, checkAndIncrementAttemptsScript, []string{tokenKey},
 		PasswordResetMaxAttempts, int(PasswordResetTokenTTL.Seconds())).Result()
 	if err == redis.Nil || result == nil {
 		return errors.New("invalid or expired reset token")
