@@ -111,9 +111,6 @@ type LogConfig struct {
 }
 
 type AuthConfig struct {
-	// Deprecated: JWTSecret is not used for RS256 JWT signing (RSA key pairs are used instead).
-	// Retained for backward compatibility with existing config files.
-	JWTSecret               string        `mapstructure:"jwt_secret"`
 	Issuer                  string        `mapstructure:"issuer"`
 	AccessTokenExpiry       time.Duration `mapstructure:"access_token_expiry"`
 	RefreshTokenExpiry      time.Duration `mapstructure:"refresh_token_expiry"`
@@ -231,7 +228,7 @@ func (c *GoUnoConfig) Validate() error {
 	}
 	if c.SMTPConfig.Host != "" {
 		if c.SMTPConfig.Port <= 0 {
-			return fmt.Errorf("smtp: port must be positive when host is configured")
+			return fmt.Errorf("smtp: port must be positive when host is configured (check GOUNO_SMTP_PORT environment variable)")
 		}
 		if c.SMTPConfig.From == "" {
 			return fmt.Errorf("smtp: from address is required when host is configured")

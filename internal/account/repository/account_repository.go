@@ -332,11 +332,9 @@ func (r *accountRepositoryImpl) ActivateAccount(ctx context.Context, tx *sql.Tx,
 
 // transitionAccountStatus is a shared helper for status transitions.
 func (r *accountRepositoryImpl) transitionAccountStatus(ctx context.Context, tx *sql.Tx, accountID, fromStatus, toStatus string) error {
-	query := fmt.Sprintf(`
-		UPDATE accounts SET status = '%s', updated_at = $1
-		WHERE id = $2 AND status = '%s' AND deleted_at IS NULL
-	`, toStatus, fromStatus)
-	result, err := tx.ExecContext(ctx, query, time.Now(), accountID)
+	query := `UPDATE accounts SET status = $3, updated_at = $1
+		WHERE id = $2 AND status = $4 AND deleted_at IS NULL`
+	result, err := tx.ExecContext(ctx, query, time.Now(), accountID, toStatus, fromStatus)
 	if err != nil {
 		return fmt.Errorf("%s account: %w", toStatus, err)
 	}

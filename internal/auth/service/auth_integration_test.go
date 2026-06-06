@@ -160,14 +160,14 @@ func TestLoginAndLogout(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	session, err := authSvc.ValidateSession(ctx, loginResult.Session.ID.String())
+	session, err := authSvc.ValidateSession(ctx, loginResult.Session.ID)
 	require.NoError(t, err)
 	assert.NotNil(t, session)
 
-	err = authSvc.Logout(ctx, loginResult.Account.ID, loginResult.Session.ID.String(), "", loginResult.Session.CreatedAt)
+	err = authSvc.Logout(ctx, loginResult.Account.ID, loginResult.Session.ID, "", loginResult.Session.CreatedAt)
 	require.NoError(t, err)
 
-	_, err = authSvc.ValidateSession(ctx, loginResult.Session.ID.String())
+	_, err = authSvc.ValidateSession(ctx, loginResult.Session.ID)
 	assert.Error(t, err)
 }
 
@@ -223,11 +223,11 @@ func TestSessionListAndRevoke(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, sessions, 2)
 
-	err = authSvc.RevokeSession(ctx, accountID, login1.Session.ID.String())
+	err = authSvc.RevokeSession(ctx, accountID, login1.Session.ID)
 	require.NoError(t, err)
 
 	sessions, err = authSvc.ListSessions(ctx, accountID)
 	require.NoError(t, err)
 	assert.Len(t, sessions, 1)
-	assert.Equal(t, login2.Session.ID.String(), sessions[0].ID.String())
+	assert.Equal(t, login2.Session.ID, sessions[0].ID)
 }

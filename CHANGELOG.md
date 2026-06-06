@@ -64,9 +64,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - MFA verification token TTL silently overwritten by access token expiry — `GenerateAccessToken` unconditionally overwrites caller-provided `ExpiresAt`, causing MFA tokens to live 3x longer than intended (e.g., 15min vs 5min), expanding the TOTP brute-force window. Fixed by introducing `GenerateShortLivedToken` that respects caller-provided expiry (`internal/token/service/token_service.go`, `internal/auth/service/auth_login.go`).
+- `transitionAccountStatus` used `fmt.Sprintf` to interpolate status values directly into SQL — replaced with parameterized `$3`/`$4` placeholders to match project-wide query convention (`internal/account/repository/account_repository.go`).
+- SMTP port validation error message now mentions `GOUNO_SMTP_PORT` environment variable — helps diagnose production config errors when env var is unset (`config/config.go`).
+- Integration tests `TestLoginAndLogout` and `TestSessionListAndRevoke` called `.String()` on `Session.ID` which is already a `string` type — removed 5 invalid `.String()` calls (`internal/auth/service/auth_integration_test.go`).
+- Deprecated `JWTSecret` field removed from `AuthConfig` and all YAML configs — project uses RS256 RSA key pairs exclusively; field was never read at runtime (`config/config.go`, `config/development.yaml`, `config/production.yaml`, `config/test.yaml`).
 
 ### Changed
 
+- `RegisterWebRouter` now accepts a `RouterDeps` struct instead of 13 individual parameters — improves readability and reduces call-site errors (`router/web.go`, `cmd/gouno/web.go`).
 - RSA key size for new key generation increased from 2048 to 3072 bits — existing keys are not affected; rotate keys to upgrade (`internal/token/service/key_service.go`).
 - Hardcoded `"admin"` and `"mfa"` strings extracted to `RoleAdmin` and `ScopeMFA` constants (`internal/auth/service/errors.go`).
 - OAuth2 `accountValidator` nil-check changed from skip-on-nil to fail-closed panic — nil validator is now treated as an initialization error (`internal/oauth2/controller/oauth2_controller.go`).
