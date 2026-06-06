@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/rsa"
 	"testing"
 	"time"
@@ -11,19 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/testutil"
 	"github.com/rushairer/gosso/internal/token/domain"
 )
 
-func setupTestTokenService(t *testing.T) (*TokenService, *cache.RedisClient) {
+func setupTestTokenService(t *testing.T) (*TokenService, func()) {
 	t.Helper()
 	logger := zap.NewNop()
-	dsn := "redis://localhost:6379/15"
 
-	redisClient, err := cache.NewRedisClient(dsn, 10, 5*time.Second, logger)
-	if err != nil {
-		t.Skip("Redis not available, skipping test:", err)
-	}
+	redisClient, mr := testutil.SetupTestRedis(t)
+	cleanup := mr.Close
 
 	keySvc, err := NewKeyService("", "", logger)
 	require.NoError(t, err)
@@ -39,12 +37,12 @@ func setupTestTokenService(t *testing.T) (*TokenService, *cache.RedisClient) {
 		logger,
 	)
 
-	return svc, redisClient
+	return svc, cleanup
 }
 
 func TestGenerateAccessToken_RS256(t *testing.T) {
-	svc, redis := setupTestTokenService(t)
-	defer redis.Close()
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
 
 	claims := &domain.AccessTokenClaims{
 		AccountID: "account-001",
@@ -76,8 +74,8 @@ func TestGenerateAccessToken_RS256(t *testing.T) {
 }
 
 func TestValidateAccessTokenWithContext_HS256Rejected(t *testing.T) {
-	svc, redis := setupTestTokenService(t)
-	defer redis.Close()
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
 
 	// Sign a token with the old HS256 secret key
 	secret := []byte("test-secret-key-for-jwt")
@@ -100,11 +98,11 @@ func TestValidateAccessTokenWithContext_HS256Rejected(t *testing.T) {
 }
 
 func TestValidateAccessTokenWithContext_WrongKey(t *testing.T) {
-	svc, redis := setupTestTokenService(t)
-	defer redis.Close()
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
 
 	// Sign token with a different RSA key
-	otherKey, err := rsa.GenerateKey(nil, 2048)
+	otherKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	claims := &domain.AccessTokenClaims{
@@ -127,8 +125,8 @@ func TestValidateAccessTokenWithContext_WrongKey(t *testing.T) {
 }
 
 func TestValidateAccessTokenWithContext_Revoked(t *testing.T) {
-	svc, redis := setupTestTokenService(t)
-	defer redis.Close()
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -157,8 +155,8 @@ func TestValidateAccessTokenWithContext_Revoked(t *testing.T) {
 }
 
 func TestGenerateAndValidateRefreshToken(t *testing.T) {
-	svc, redis := setupTestTokenService(t)
-	defer redis.Close()
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -174,15 +172,16 @@ func TestGenerateAndValidateRefreshToken(t *testing.T) {
 	validated, err := svc.ValidateRefreshToken(ctx, rt.Token)
 	require.NoError(t, err)
 	assert.Equal(t, rt.AccountID, validated.AccountID)
-	assert.Equal(t, rt.Token, validated.Token)
+	assert.Equal(t, rt.ClientID, validated.ClientID)
+	assert.Equal(t, rt.SessionID, validated.SessionID)
 
 	// Clean up
 	_ = svc.RevokeRefreshToken(ctx, rt.Token)
 }
 
 func TestRotateRefreshToken(t *testing.T) {
-	svc, redis := setupTestTokenService(t)
-	defer redis.Close()
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -210,8 +209,8 @@ func TestRotateRefreshToken(t *testing.T) {
 }
 
 func TestRevokeRefreshToken(t *testing.T) {
-	svc, redis := setupTestTokenService(t)
-	defer redis.Close()
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -228,8 +227,8 @@ func TestRevokeRefreshToken(t *testing.T) {
 }
 
 func TestValidateRefreshToken_NotFound(t *testing.T) {
-	svc, redis := setupTestTokenService(t)
-	defer redis.Close()
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -238,8 +237,8 @@ func TestValidateRefreshToken_NotFound(t *testing.T) {
 }
 
 func TestKeyService(t *testing.T) {
-	svc, redis := setupTestTokenService(t)
-	defer redis.Close()
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
 
 	keySvc := svc.KeyService()
 	assert.NotNil(t, keySvc)

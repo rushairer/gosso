@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/rushairer/gosso/internal/testutil"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
 
@@ -18,7 +19,8 @@ func setupTestLogoutService(t *testing.T) (*LogoutService, *tokenService.KeyServ
 	keySvc, err := tokenService.NewKeyService("", "", logger)
 	require.NoError(t, err)
 
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, logger)
+	redisClient, _ := testutil.SetupTestRedis(t)
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, logger)
 	logoutSvc := NewLogoutService(tokenSvc, nil, "https://sso.example.com", logger)
 
 	return logoutSvc, keySvc

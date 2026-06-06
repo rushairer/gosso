@@ -14,7 +14,7 @@ import (
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountService "github.com/rushairer/gosso/internal/account/service"
-	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/testutil"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
 
@@ -111,14 +111,12 @@ func (m *mockCredentialRepo) FindByAccountAndTypeForUpdate(_ context.Context, _ 
 	return nil, nil
 }
 
-func setupTestIDTokenService(t *testing.T) (*IDTokenService, *cache.RedisClient) {
+func setupTestIDTokenService(t *testing.T) (*IDTokenService, func()) {
+	t.Helper()
 	logger := zap.NewNop()
-	dsn := "redis://localhost:6379/15"
 
-	redisClient, err := cache.NewRedisClient(dsn, 10, 5*time.Second, logger)
-	if err != nil {
-		t.Skip("Redis not available, skipping test:", err)
-	}
+	redisClient, mr := testutil.SetupTestRedis(t)
+	cleanup := mr.Close
 
 	blacklist := tokenService.NewBlacklistService(redisClient, logger)
 	keySvc, err := tokenService.NewKeyService("", "", logger)
@@ -173,14 +171,14 @@ func setupTestIDTokenService(t *testing.T) (*IDTokenService, *cache.RedisClient)
 	}
 
 	svc := NewIDTokenService(tokenSvc, "http://localhost:8080", accountSvc, credRepo, 0, logger)
-	return svc, redisClient
+	return svc, cleanup
 }
 
 func strPtr(s string) *string { return &s }
 
 func TestGenerateIDToken_OpenID(t *testing.T) {
-	svc, redis := setupTestIDTokenService(t)
-	defer redis.Close()
+	svc, cleanup := setupTestIDTokenService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -208,8 +206,8 @@ func TestGenerateIDToken_OpenID(t *testing.T) {
 }
 
 func TestGenerateIDToken_ProfileScope(t *testing.T) {
-	svc, redis := setupTestIDTokenService(t)
-	defer redis.Close()
+	svc, cleanup := setupTestIDTokenService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -230,8 +228,8 @@ func TestGenerateIDToken_ProfileScope(t *testing.T) {
 }
 
 func TestGenerateIDToken_EmailScope(t *testing.T) {
-	svc, redis := setupTestIDTokenService(t)
-	defer redis.Close()
+	svc, cleanup := setupTestIDTokenService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -250,8 +248,8 @@ func TestGenerateIDToken_EmailScope(t *testing.T) {
 }
 
 func TestGenerateIDToken_PhoneScope(t *testing.T) {
-	svc, redis := setupTestIDTokenService(t)
-	defer redis.Close()
+	svc, cleanup := setupTestIDTokenService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -270,8 +268,8 @@ func TestGenerateIDToken_PhoneScope(t *testing.T) {
 }
 
 func TestGenerateIDToken_RS256(t *testing.T) {
-	svc, redis := setupTestIDTokenService(t)
-	defer redis.Close()
+	svc, cleanup := setupTestIDTokenService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 

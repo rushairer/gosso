@@ -5,30 +5,29 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/testutil"
 )
 
-func setupTestBlacklistService(t *testing.T) *BlacklistService {
+func setupTestBlacklistService(t *testing.T) (*BlacklistService, func(), *miniredis.Miniredis) {
+	t.Helper()
 	logger := zap.NewNop()
-	dsn := "redis://localhost:6379/15"
 
-	redisClient, err := cache.NewRedisClient(dsn, 10, 5*time.Second, logger)
-	if err != nil {
-		t.Skip("Redis not available, skipping test:", err)
-	}
+	redisClient, mr := testutil.SetupTestRedis(t)
+	cleanup := mr.Close
 
 	service := NewBlacklistService(redisClient, logger)
 
-	return service
+	return service, cleanup, mr
 }
 
 func TestBlacklistService_RevokeToken(t *testing.T) {
-	service := setupTestBlacklistService(t)
-	defer service.redis.Close()
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 	jti := "test-token-123"
@@ -49,8 +48,8 @@ func TestBlacklistService_RevokeToken(t *testing.T) {
 }
 
 func TestBlacklistService_IsTokenRevoked(t *testing.T) {
-	service := setupTestBlacklistService(t)
-	defer service.redis.Close()
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 	jti := "test-token-456"
@@ -75,8 +74,8 @@ func TestBlacklistService_IsTokenRevoked(t *testing.T) {
 }
 
 func TestBlacklistService_GetRevokeInfo(t *testing.T) {
-	service := setupTestBlacklistService(t)
-	defer service.redis.Close()
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 	jti := "test-token-789"
@@ -100,8 +99,8 @@ func TestBlacklistService_GetRevokeInfo(t *testing.T) {
 }
 
 func TestBlacklistService_RevokeExpiredToken(t *testing.T) {
-	service := setupTestBlacklistService(t)
-	defer service.redis.Close()
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 	jti := "test-expired-token"
@@ -119,8 +118,8 @@ func TestBlacklistService_RevokeExpiredToken(t *testing.T) {
 }
 
 func TestBlacklistService_removeFromBlacklist(t *testing.T) {
-	service := setupTestBlacklistService(t)
-	defer service.redis.Close()
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 	jti := "test-token-remove"
@@ -141,8 +140,8 @@ func TestBlacklistService_removeFromBlacklist(t *testing.T) {
 }
 
 func TestBlacklistService_AutoExpiration(t *testing.T) {
-	service := setupTestBlacklistService(t)
-	defer service.redis.Close()
+	service, cleanup, mr := setupTestBlacklistService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 	jti := "test-token-auto-expire"
@@ -158,8 +157,8 @@ func TestBlacklistService_AutoExpiration(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, revoked)
 
-	// Wait for expiration
-	time.Sleep(3 * time.Second)
+	// Fast-forward miniredis past expiration
+	mr.FastForward(3 * time.Second)
 
 	// After expiration, it should be automatically removed from the blacklist
 	revoked, err = service.IsTokenRevoked(ctx, jti)

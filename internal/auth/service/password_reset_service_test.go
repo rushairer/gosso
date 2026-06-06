@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -14,6 +15,7 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/testutil"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
@@ -26,15 +28,12 @@ func (s *stubPasswordResetEmailSender) SendPasswordResetLink(_ context.Context, 
 	return nil
 }
 
-func setupTestPasswordResetService(t *testing.T) (*PasswordResetService, *cache.RedisClient, *stubPasswordResetEmailSender) {
+func setupTestPasswordResetService(t *testing.T) (*PasswordResetService, *cache.RedisClient, *miniredis.Miniredis, *stubPasswordResetEmailSender) {
 	t.Helper()
 	logger := zap.NewNop()
-	dsn := "redis://localhost:6379/15"
 
-	redisClient, err := cache.NewRedisClient(dsn, 10, 5*time.Second, logger)
-	if err != nil {
-		t.Skip("Redis not available, skipping test:", err)
-	}
+	redisClient, mr := setupTestMiniredis(t)
+	testutil.SkipIfNoCJSON(t, redisClient)
 
 	emailSvc := &stubPasswordResetEmailSender{}
 	svc := &PasswordResetService{
@@ -44,12 +43,26 @@ func setupTestPasswordResetService(t *testing.T) (*PasswordResetService, *cache.
 		logger:      logger,
 	}
 
-	return svc, redisClient, emailSvc
+	return svc, redisClient, mr, emailSvc
+}
+
+func setupTestMiniredis(t *testing.T) (*cache.RedisClient, *miniredis.Miniredis) {
+	t.Helper()
+	logger := zap.NewNop()
+
+	mr := miniredis.RunT(t)
+	redisClient, err := cache.NewRedisClient("redis://"+mr.Addr(), 10, 5*time.Second, logger)
+	if err != nil {
+		mr.Close()
+		t.Fatalf("failed to create test redis client: %v", err)
+	}
+
+	return redisClient, mr
 }
 
 func TestPasswordReset_Success(t *testing.T) {
-	svc, redis, _ := setupTestPasswordResetService(t)
-	defer redis.Close()
+	svc, redis, mr, _ := setupTestPasswordResetService(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 
@@ -76,8 +89,8 @@ func TestPasswordReset_Success(t *testing.T) {
 }
 
 func TestPasswordReset_Cooldown(t *testing.T) {
-	svc, redis, _ := setupTestPasswordResetService(t)
-	defer redis.Close()
+	svc, redis, mr, _ := setupTestPasswordResetService(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 	email := "cooldown@example.com"
@@ -94,8 +107,8 @@ func TestPasswordReset_Cooldown(t *testing.T) {
 }
 
 func TestPasswordReset_InvalidToken(t *testing.T) {
-	svc, redis, _ := setupTestPasswordResetService(t)
-	defer redis.Close()
+	svc, redis, mr, _ := setupTestPasswordResetService(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 
@@ -109,8 +122,8 @@ func TestPasswordReset_InvalidToken(t *testing.T) {
 }
 
 func TestPasswordReset_ExpiredToken(t *testing.T) {
-	svc, redis, _ := setupTestPasswordResetService(t)
-	defer redis.Close()
+	svc, redis, mr, _ := setupTestPasswordResetService(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 
@@ -131,8 +144,8 @@ func TestPasswordReset_ExpiredToken(t *testing.T) {
 }
 
 func TestPasswordReset_TokenExhausted(t *testing.T) {
-	svc, redis, _ := setupTestPasswordResetService(t)
-	defer redis.Close()
+	svc, redis, mr, _ := setupTestPasswordResetService(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 
@@ -154,8 +167,8 @@ func TestPasswordReset_TokenExhausted(t *testing.T) {
 }
 
 func TestPasswordReset_TokenReuse(t *testing.T) {
-	svc, redis, _ := setupTestPasswordResetService(t)
-	defer redis.Close()
+	svc, redis, mr, _ := setupTestPasswordResetService(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 
@@ -180,8 +193,8 @@ func TestPasswordReset_TokenReuse(t *testing.T) {
 }
 
 func TestPasswordReset_EmailNotFound(t *testing.T) {
-	svc, redis, emailSvc := setupTestPasswordResetService(t)
-	defer redis.Close()
+	svc, redis, mr, emailSvc := setupTestPasswordResetService(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 
@@ -340,15 +353,12 @@ func (s *stubEmailSenderForReset) SendPasswordResetLink(_ context.Context, _, li
 	return nil
 }
 
-func setupTestPasswordResetServiceFull(t *testing.T) (*PasswordResetService, *cache.RedisClient, *stubEmailSenderForReset, *mockCredentialRepoForReset, *mockAccountSvcForReset) {
+func setupTestPasswordResetServiceFull(t *testing.T) (*PasswordResetService, *cache.RedisClient, *miniredis.Miniredis, *stubEmailSenderForReset, *mockCredentialRepoForReset, *mockAccountSvcForReset) {
 	t.Helper()
 	logger := zap.NewNop()
-	dsn := "redis://localhost:6379/15"
 
-	redisClient, err := cache.NewRedisClient(dsn, 10, 5*time.Second, logger)
-	if err != nil {
-		t.Skip("Redis not available, skipping test:", err)
-	}
+	redisClient, mr := setupTestMiniredis(t)
+	testutil.SkipIfNoCJSON(t, redisClient)
 
 	emailSvc := &stubEmailSenderForReset{}
 	credRepo := &mockCredentialRepoForReset{}
@@ -363,7 +373,7 @@ func setupTestPasswordResetServiceFull(t *testing.T) (*PasswordResetService, *ca
 		logger:         logger,
 	}
 
-	return svc, redisClient, emailSvc, credRepo, acctSvc
+	return svc, redisClient, mr, emailSvc, credRepo, acctSvc
 }
 
 // ──────────────────────────────────────────────
@@ -371,8 +381,8 @@ func setupTestPasswordResetServiceFull(t *testing.T) (*PasswordResetService, *ca
 // ──────────────────────────────────────────────
 
 func TestRequestReset_Success(t *testing.T) {
-	svc, redis, emailSvc, credRepo, acctSvc := setupTestPasswordResetServiceFull(t)
-	defer redis.Close()
+	svc, _, mr, emailSvc, credRepo, acctSvc := setupTestPasswordResetServiceFull(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 
@@ -397,8 +407,8 @@ func TestRequestReset_Success(t *testing.T) {
 }
 
 func TestRequestReset_CooldownActive(t *testing.T) {
-	svc, redis, emailSvc, _, _ := setupTestPasswordResetServiceFull(t)
-	defer redis.Close()
+	svc, redis, mr, emailSvc, _, _ := setupTestPasswordResetServiceFull(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 	email := "cooldown@example.com"
@@ -415,8 +425,8 @@ func TestRequestReset_CooldownActive(t *testing.T) {
 }
 
 func TestRequestReset_EmailNotFound(t *testing.T) {
-	svc, redis, emailSvc, credRepo, _ := setupTestPasswordResetServiceFull(t)
-	defer redis.Close()
+	svc, _, mr, emailSvc, credRepo, _ := setupTestPasswordResetServiceFull(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 
@@ -430,8 +440,8 @@ func TestRequestReset_EmailNotFound(t *testing.T) {
 }
 
 func TestRequestReset_AccountInactive(t *testing.T) {
-	svc, redis, emailSvc, credRepo, acctSvc := setupTestPasswordResetServiceFull(t)
-	defer redis.Close()
+	svc, _, mr, emailSvc, credRepo, acctSvc := setupTestPasswordResetServiceFull(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 	email := "inactive@example.com"
@@ -456,8 +466,8 @@ func TestRequestReset_AccountInactive(t *testing.T) {
 }
 
 func TestRequestReset_EmailSendFailure(t *testing.T) {
-	svc, redis, emailSvc, credRepo, acctSvc := setupTestPasswordResetServiceFull(t)
-	defer redis.Close()
+	svc, _, mr, emailSvc, credRepo, acctSvc := setupTestPasswordResetServiceFull(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 	email := "sendfail@example.com"
@@ -485,30 +495,30 @@ func TestRequestReset_EmailSendFailure(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestVerifyAndReset_PasswordTooShort(t *testing.T) {
-	svc, redis, _, _, _ := setupTestPasswordResetServiceFull(t)
-	defer redis.Close()
+	svc, _, mr, _, _, _ := setupTestPasswordResetServiceFull(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 
 	err := svc.VerifyAndReset(ctx, "any-token", "short")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "password must be at least 8 characters")
+	assert.Contains(t, err.Error(), "password must be at least 8 bytes")
 }
 
 func TestVerifyAndReset_InvalidToken(t *testing.T) {
-	svc, redis, _, _, _ := setupTestPasswordResetServiceFull(t)
-	defer redis.Close()
+	svc, _, mr, _, _, _ := setupTestPasswordResetServiceFull(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 
-	err := svc.VerifyAndReset(ctx, "nonexistent-token", "newpassword123")
+	err := svc.VerifyAndReset(ctx, "nonexistent-token", "NewPassword123")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid or expired reset token")
 }
 
 func TestVerifyAndReset_TokenExhausted(t *testing.T) {
-	svc, redis, _, _, _ := setupTestPasswordResetServiceFull(t)
-	defer redis.Close()
+	svc, redis, mr, _, _, _ := setupTestPasswordResetServiceFull(t)
+	defer mr.Close()
 
 	ctx := context.Background()
 
@@ -519,7 +529,7 @@ func TestVerifyAndReset_TokenExhausted(t *testing.T) {
 	err := redis.Set(ctx, tokenKey, []byte(data), PasswordResetTokenTTL)
 	require.NoError(t, err)
 
-	err = svc.VerifyAndReset(ctx, "exhausted-token", "newpassword123")
+	err = svc.VerifyAndReset(ctx, "exhausted-token", "NewPassword123")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "exhausted")
 }

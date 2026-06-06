@@ -3,13 +3,13 @@ package service
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/testutil"
 )
 
 // stubEmailService captures the code instead of sending email
@@ -29,26 +29,24 @@ func (s *stubSMSService) SendVerificationCode(_ context.Context, _, _ string) er
 	return nil
 }
 
-func setupTestVerificationService(t *testing.T) (*VerificationService, *cache.RedisClient, *stubEmailService) {
+func setupTestVerificationService(t *testing.T) (*VerificationService, *cache.RedisClient, func(), *stubEmailService) {
 	t.Helper()
 	logger := zap.NewNop()
-	dsn := "redis://localhost:6379/15"
 
-	redisClient, err := cache.NewRedisClient(dsn, 10, 5*time.Second, logger)
-	if err != nil {
-		t.Skip("Redis not available, skipping test:", err)
-	}
+	redisClient, mr := testutil.SetupTestRedis(t)
+	testutil.SkipIfNoCJSON(t, redisClient)
+	cleanup := mr.Close
 
 	emailSvc := &stubEmailService{}
 	smsSvc := &stubSMSService{}
-	svc := NewVerificationService(redisClient, emailSvc, smsSvc, logger)
+	svc := NewVerificationService(redisClient, emailSvc, smsSvc, nil, logger)
 
-	return svc, redisClient, emailSvc
+	return svc, redisClient, cleanup, emailSvc
 }
 
 func TestVerifyCode_Success(t *testing.T) {
-	svc, redis, emailSvc := setupTestVerificationService(t)
-	defer redis.Close()
+	svc, _, cleanup, emailSvc := setupTestVerificationService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -65,8 +63,8 @@ func TestVerifyCode_Success(t *testing.T) {
 }
 
 func TestVerifyCode_Wrong(t *testing.T) {
-	svc, redis, _ := setupTestVerificationService(t)
-	defer redis.Close()
+	svc, _, cleanup, _ := setupTestVerificationService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -81,8 +79,8 @@ func TestVerifyCode_Wrong(t *testing.T) {
 }
 
 func TestVerifyCode_Exhausted(t *testing.T) {
-	svc, redis, _ := setupTestVerificationService(t)
-	defer redis.Close()
+	svc, _, cleanup, _ := setupTestVerificationService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -102,8 +100,8 @@ func TestVerifyCode_Exhausted(t *testing.T) {
 }
 
 func TestVerifyCode_Expired(t *testing.T) {
-	svc, redis, emailSvc := setupTestVerificationService(t)
-	defer redis.Close()
+	svc, redis, cleanup, emailSvc := setupTestVerificationService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -122,8 +120,8 @@ func TestVerifyCode_Expired(t *testing.T) {
 }
 
 func TestSendCode_Cooldown(t *testing.T) {
-	svc, redis, _ := setupTestVerificationService(t)
-	defer redis.Close()
+	svc, _, cleanup, _ := setupTestVerificationService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -138,8 +136,8 @@ func TestSendCode_Cooldown(t *testing.T) {
 }
 
 func TestVerifyCode_CodeReuse(t *testing.T) {
-	svc, redis, emailSvc := setupTestVerificationService(t)
-	defer redis.Close()
+	svc, _, cleanup, emailSvc := setupTestVerificationService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 

@@ -6,18 +6,49 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/rushairer/gosso/config"
 	"github.com/rushairer/gosso/internal/cache"
 )
+
+// SetupTestRedis starts a miniredis instance and returns a RedisClient connected to it.
+// The caller must defer mr.Close() to clean up the miniredis server.
+func SetupTestRedis(t *testing.T) (*cache.RedisClient, *miniredis.Miniredis) {
+	t.Helper()
+	logger := zap.NewNop()
+
+	mr := miniredis.RunT(t)
+
+	redisClient, err := cache.NewRedisClient("redis://"+mr.Addr(), 10, 5*time.Second, logger)
+	if err != nil {
+		mr.Close()
+		t.Fatalf("failed to create test redis client: %v", err)
+	}
+
+	return redisClient, mr
+}
+
+// SkipIfNoCJSON probes whether the Redis instance supports the Lua cjson module.
+// Miniredis does not support cjson, so tests that rely on cjson-based Lua scripts
+// are skipped when running against miniredis.
+func SkipIfNoCJSON(t *testing.T, rds *cache.RedisClient) {
+	t.Helper()
+	probe := redis.NewScript(`local cjson = require('cjson'); return cjson.encode({ok=true})`)
+	if err := probe.Run(context.Background(), rds.GetClient(), nil).Err(); err != nil {
+		t.Skip("Skipping: Redis does not support cjson Lua module (miniredis)")
+	}
+}
 
 // TestEnv holds shared test infrastructure connections.
 type TestEnv struct {

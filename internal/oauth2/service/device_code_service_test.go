@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -10,23 +9,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/oauth2/domain"
+	"github.com/rushairer/gosso/internal/testutil"
 )
 
 func setupDeviceCodeService(t *testing.T) *DeviceCodeService {
 	t.Helper()
 
-	redisDSN := os.Getenv("GOUNO_REDIS_DSN")
-	if redisDSN == "" {
-		redisDSN = "127.0.0.1:6379"
-	}
-
-	redis, err := cache.NewRedisClient(redisDSN, 10, 5*time.Second, zap.NewNop())
-	if err != nil {
-		t.Skipf("Redis not available at %s: %v", redisDSN, err)
-	}
-	t.Cleanup(func() { redis.Close() })
+	redis, mr := testutil.SetupTestRedis(t)
+	testutil.SkipIfNoCJSON(t, redis)
+	t.Cleanup(mr.Close)
 
 	return NewDeviceCodeService(redis, zap.NewNop(), 10*time.Minute, 5*time.Second)
 }

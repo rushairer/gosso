@@ -9,25 +9,23 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/oauth2/domain"
+	"github.com/rushairer/gosso/internal/testutil"
 )
 
-func setupTestAuthCodeService(t *testing.T) *AuthCodeService {
+func setupTestAuthCodeService(t *testing.T) (*AuthCodeService, func()) {
+	t.Helper()
 	logger := zap.NewNop()
-	dsn := "redis://localhost:6379/15"
 
-	redisClient, err := cache.NewRedisClient(dsn, 10, 5*time.Second, logger)
-	if err != nil {
-		t.Skip("Redis not available, skipping test:", err)
-	}
+	redisClient, mr := testutil.SetupTestRedis(t)
+	cleanup := mr.Close
 
-	return NewAuthCodeService(redisClient, logger, 5*time.Minute)
+	return NewAuthCodeService(redisClient, logger, 5*time.Minute), cleanup
 }
 
 func TestGenerateCode(t *testing.T) {
-	svc := setupTestAuthCodeService(t)
-	defer svc.redis.Close()
+	svc, cleanup := setupTestAuthCodeService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -45,8 +43,8 @@ func TestGenerateCode(t *testing.T) {
 }
 
 func TestValidateCode_Success(t *testing.T) {
-	svc := setupTestAuthCodeService(t)
-	defer svc.redis.Close()
+	svc, cleanup := setupTestAuthCodeService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -61,8 +59,8 @@ func TestValidateCode_Success(t *testing.T) {
 }
 
 func TestValidateCode_SingleUse(t *testing.T) {
-	svc := setupTestAuthCodeService(t)
-	defer svc.redis.Close()
+	svc, cleanup := setupTestAuthCodeService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -80,8 +78,8 @@ func TestValidateCode_SingleUse(t *testing.T) {
 }
 
 func TestValidateCode_ClientMismatch(t *testing.T) {
-	svc := setupTestAuthCodeService(t)
-	defer svc.redis.Close()
+	svc, cleanup := setupTestAuthCodeService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -94,8 +92,8 @@ func TestValidateCode_ClientMismatch(t *testing.T) {
 }
 
 func TestValidateCode_URIMismatch(t *testing.T) {
-	svc := setupTestAuthCodeService(t)
-	defer svc.redis.Close()
+	svc, cleanup := setupTestAuthCodeService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -108,38 +106,38 @@ func TestValidateCode_URIMismatch(t *testing.T) {
 }
 
 func TestValidateCode_PKCE_Success(t *testing.T) {
-	svc := setupTestAuthCodeService(t)
-	defer svc.redis.Close()
+	svc, cleanup := setupTestAuthCodeService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
-	// code_verifier = "test-verifier-123"
-	// code_challenge = base64url(sha256("test-verifier-123"))
-	codeChallenge := domain.HashPKCEVerifier("test-verifier-123")
+	// code_verifier must be 43-128 chars per RFC 7636
+	// code_challenge = base64url(sha256(verifier))
+	codeChallenge := domain.HashPKCEVerifier("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
 
 	code, err := svc.GenerateCode(ctx, "client-006", "account-006", "http://localhost/callback",
 		[]string{"openid"}, codeChallenge, "S256", "")
 	require.NoError(t, err)
 
-	verifier := "test-verifier-123"
+	verifier := "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
 	validated, err := svc.ValidateCode(ctx, code.Code, "client-006", "http://localhost/callback", &verifier)
 	require.NoError(t, err)
 	assert.Equal(t, "account-006", validated.AccountID)
 }
 
 func TestValidateCode_PKCE_Fail(t *testing.T) {
-	svc := setupTestAuthCodeService(t)
-	defer svc.redis.Close()
+	svc, cleanup := setupTestAuthCodeService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
-	codeChallenge := domain.HashPKCEVerifier("correct-verifier")
+	codeChallenge := domain.HashPKCEVerifier("correct-verifier-must-be-at-least-43-characters-long")
 
 	code, err := svc.GenerateCode(ctx, "client-007", "account-007", "http://localhost/callback",
 		[]string{"openid"}, codeChallenge, "S256", "")
 	require.NoError(t, err)
 
-	wrongVerifier := "wrong-verifier"
+	wrongVerifier := "wrong-verifier-must-be-at-least-43-characters-long"
 	_, err = svc.ValidateCode(ctx, code.Code, "client-007", "http://localhost/callback", &wrongVerifier)
 	assert.ErrorIs(t, err, domain.ErrPKCEVerificationFailed)
 }

@@ -11,28 +11,27 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/captcha/domain"
+	"github.com/rushairer/gosso/internal/testutil"
 )
 
-func setupTestCaptchaService(t *testing.T) *CaptchaService {
+func setupTestCaptchaService(t *testing.T) (*CaptchaService, func()) {
+	t.Helper()
 	logger := zap.NewNop()
-	dsn := "redis://localhost:6379/15"
 
-	redisClient, err := cache.NewRedisClient(dsn, 10, 5*time.Second, logger)
-	if err != nil {
-		t.Skip("Redis not available, skipping test:", err)
-	}
+	redisClient, mr := testutil.SetupTestRedis(t)
+	testutil.SkipIfNoCJSON(t, redisClient)
+	cleanup := mr.Close
 
 	service := NewCaptchaService(redisClient, logger)
 	service.SetCaptchaTTL(10 * time.Second) // Short expiration time for testing
 
-	return service
+	return service, cleanup
 }
 
 func TestCaptchaService_GenerateMathCaptcha(t *testing.T) {
-	service := setupTestCaptchaService(t)
-	defer service.redis.Close()
+	service, cleanup := setupTestCaptchaService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -51,8 +50,8 @@ func TestCaptchaService_GenerateMathCaptcha(t *testing.T) {
 }
 
 func TestCaptchaService_GenerateDigitCaptcha(t *testing.T) {
-	service := setupTestCaptchaService(t)
-	defer service.redis.Close()
+	service, cleanup := setupTestCaptchaService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -71,8 +70,8 @@ func TestCaptchaService_GenerateDigitCaptcha(t *testing.T) {
 }
 
 func TestCaptchaService_VerifyCaptcha_Success(t *testing.T) {
-	service := setupTestCaptchaService(t)
-	defer service.redis.Close()
+	service, cleanup := setupTestCaptchaService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -90,8 +89,8 @@ func TestCaptchaService_VerifyCaptcha_Success(t *testing.T) {
 }
 
 func TestCaptchaService_VerifyCaptcha_WrongAnswer(t *testing.T) {
-	service := setupTestCaptchaService(t)
-	defer service.redis.Close()
+	service, cleanup := setupTestCaptchaService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -108,8 +107,8 @@ func TestCaptchaService_VerifyCaptcha_WrongAnswer(t *testing.T) {
 }
 
 func TestCaptchaService_VerifyCaptcha_NotFound(t *testing.T) {
-	service := setupTestCaptchaService(t)
-	defer service.redis.Close()
+	service, cleanup := setupTestCaptchaService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -119,8 +118,8 @@ func TestCaptchaService_VerifyCaptcha_NotFound(t *testing.T) {
 }
 
 func TestCaptchaService_VerifyCaptcha_Expired(t *testing.T) {
-	service := setupTestCaptchaService(t)
-	defer service.redis.Close()
+	service, cleanup := setupTestCaptchaService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -140,8 +139,8 @@ func TestCaptchaService_VerifyCaptcha_Expired(t *testing.T) {
 }
 
 func TestCaptchaService_VerifyCaptcha_AlreadyUsed(t *testing.T) {
-	service := setupTestCaptchaService(t)
-	defer service.redis.Close()
+	service, cleanup := setupTestCaptchaService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
