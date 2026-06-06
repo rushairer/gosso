@@ -47,6 +47,12 @@ func NewTokenService(
 	logger *zap.Logger,
 ) *TokenService {
 	logger = utility.EnsureLogger(logger)
+	if keySvc == nil {
+		panic("token service: keySvc is required")
+	}
+	if redis == nil {
+		panic("token service: redis client is required")
+	}
 	return &TokenService{
 		keySvc:        keySvc,
 		issuer:        issuer,
@@ -306,7 +312,7 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 		sessionKey = s.buildSessionTokensKey(newRT.SessionID)
 	}
 
-	result, err := rotateTokenScript.Run(ctx, s.redis.GetClient(),
+	result, err := s.redis.RunScript(ctx, rotateTokenScript,
 		[]string{oldKey, newKey, sessionKey},
 		newData, expirySeconds, oldHash, newHash,
 	).Result()
@@ -324,7 +330,7 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 func (s *TokenService) RevokeRefreshToken(ctx context.Context, token string) error {
 	key := s.buildRefreshTokenKey(token)
 
-	data, err := rotateAndDeleteScript.Run(ctx, s.redis.GetClient(), []string{key}).Result()
+	data, err := s.redis.RunScript(ctx, rotateAndDeleteScript, []string{key}).Result()
 	if err != nil && err != redis.Nil {
 		return fmt.Errorf("revoke refresh token: %w", err)
 	}
