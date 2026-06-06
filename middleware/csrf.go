@@ -45,10 +45,14 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 			return
 		}
 
-		// Skip Bearer auth (JWT is not affected by CSRF)
-		if strings.HasPrefix(ctx.GetHeader("Authorization"), "Bearer ") {
-			ctx.Next()
-			return
+		// Skip Bearer auth (JWT is not affected by CSRF).
+		// Validate that the token has plausible JWT format (3 dot-separated segments)
+		// to prevent attackers from bypassing CSRF with a garbage "Bearer " prefix.
+		if auth := ctx.GetHeader("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+			if isPlausibleJWT(strings.TrimPrefix(auth, "Bearer ")) {
+				ctx.Next()
+				return
+			}
 		}
 
 		// Skip specified paths (prefix match)
@@ -119,4 +123,10 @@ func generateCSRFToken() (string, error) {
 		return "", fmt.Errorf("generate csrf token: %w", err)
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// isPlausibleJWT checks if a token has the basic JWT format (three non-empty dot-separated segments).
+func isPlausibleJWT(token string) bool {
+	parts := strings.Split(token, ".")
+	return len(parts) == 3 && len(parts[0]) > 0 && len(parts[1]) > 0 && len(parts[2]) > 0
 }

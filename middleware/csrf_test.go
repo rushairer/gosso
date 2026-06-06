@@ -46,7 +46,7 @@ func TestCSRF_BearerAuth_Skipped(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/test", nil)
-	req.Header.Set("Authorization", "Bearer some-jwt-token")
+	req.Header.Set("Authorization", "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature")
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
