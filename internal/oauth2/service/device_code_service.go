@@ -94,7 +94,7 @@ func (s *DeviceCodeService) CreateDeviceCode(ctx context.Context, clientID strin
 	dcKey := DeviceCodeKeyPrefix + dcHash
 	ucKey := UserCodeKeyPrefix + strings.ToUpper(formattedUserCode)
 	ttlSeconds := int(s.expiry.Seconds())
-	if err := createDeviceCodeScript.Run(ctx, s.redis.GetClient(),
+	if err := s.redis.RunScript(ctx, createDeviceCodeScript,
 		[]string{dcKey, ucKey},
 		string(data), ttlSeconds, dcHash,
 	).Err(); err != nil {
@@ -174,7 +174,7 @@ func (s *DeviceCodeService) AuthorizeDeviceCode(ctx context.Context, deviceCode,
 	}
 
 	authorizedAt := time.Now().Format(time.RFC3339)
-	result, err := authorizeDeviceCodeScript.Run(ctx, s.redis.GetClient(), []string{key},
+	result, err := s.redis.RunScript(ctx, authorizeDeviceCodeScript, []string{key},
 		accountID, authorizedAt, fmt.Sprintf("%d", int(remaining.Seconds())),
 	).Result()
 	if err == redis.Nil || result == nil {
@@ -201,7 +201,7 @@ func (s *DeviceCodeService) DenyDeviceCode(ctx context.Context, deviceCode strin
 		return domain.ErrDeviceCodeNotFound
 	}
 
-	result, err := denyDeviceCodeScript.Run(ctx, s.redis.GetClient(), []string{key},
+	result, err := s.redis.RunScript(ctx, denyDeviceCodeScript, []string{key},
 		fmt.Sprintf("%d", int(remaining.Seconds())),
 	).Result()
 	if err == redis.Nil || result == nil {
@@ -227,27 +227,27 @@ func (s *DeviceCodeService) DenyDeviceCode(ctx context.Context, deviceCode strin
 
 // checkAndUpdatePollRateScript atomically checks the poll interval and updates LastPollAt.
 // KEYS[1] = device code key
+// KEYS[2] = poll epoch tracking key (separate from domain JSON to avoid polluting stored data)
 // ARGV[1] = TTL in seconds
 // ARGV[2] = current epoch seconds (integer)
 // ARGV[3] = interval in seconds
 // Returns 1 if poll allowed, 0 if too fast (slow down), nil if not found.
 var checkAndUpdatePollRateScript = redis.NewScript(`
-local cjson = require('cjson')
 local data = redis.call('GET', KEYS[1])
 if not data then
     return nil
 end
-local dc = cjson.decode(data)
 local now = tonumber(ARGV[2])
 local interval = tonumber(ARGV[3])
-local lastEpoch = dc._last_poll_epoch or 0
+local lastEpoch = tonumber(redis.call('GET', KEYS[2]) or '0')
 if lastEpoch > 0 and (now - lastEpoch) < interval then
     return 0
 end
-dc._last_poll_epoch = now
+redis.call('SET', KEYS[2], now, 'EX', ARGV[1])
+local cjson = require('cjson')
+local dc = cjson.decode(data)
 dc.last_poll_at = os.date("!%Y-%m-%dT%H:%M:%SZ", now)
-local updated = cjson.encode(dc)
-redis.call('SET', KEYS[1], updated, 'EX', ARGV[1])
+redis.call('SET', KEYS[1], cjson.encode(dc), 'EX', ARGV[1])
 return 1
 `)
 
@@ -255,6 +255,7 @@ return 1
 // Returns ErrSlowDown if the client polls too fast.
 func (s *DeviceCodeService) CheckAndUpdatePollRate(ctx context.Context, deviceCode string) error {
 	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
+	pollKey := DeviceCodeKeyPrefix + "poll:" + tokenDomain.HashToken(deviceCode)
 
 	remaining, err := s.redis.TTL(ctx, key)
 	if err != nil {
@@ -265,7 +266,7 @@ func (s *DeviceCodeService) CheckAndUpdatePollRate(ctx context.Context, deviceCo
 	}
 
 	now := time.Now().Unix()
-	result, err := checkAndUpdatePollRateScript.Run(ctx, s.redis.GetClient(), []string{key},
+	result, err := s.redis.RunScript(ctx, checkAndUpdatePollRateScript, []string{key, pollKey},
 		fmt.Sprintf("%d", int(remaining.Seconds())),
 		fmt.Sprintf("%d", now),
 		fmt.Sprintf("%d", int(s.interval.Seconds())),
@@ -362,7 +363,7 @@ return updated
 func (s *DeviceCodeService) ClaimAuthorizedDeviceCode(ctx context.Context, deviceCode string) (*domain.DeviceCode, error) {
 	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
 
-	result, err := claimAuthorizedScript.Run(ctx, s.redis.GetClient(), []string{key}).Result()
+	result, err := s.redis.RunScript(ctx, claimAuthorizedScript, []string{key}).Result()
 	if err == redis.Nil || result == nil {
 		return nil, domain.ErrDeviceCodeNotFound
 	}
