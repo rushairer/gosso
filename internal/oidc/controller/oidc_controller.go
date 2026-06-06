@@ -111,6 +111,11 @@ type logoutRequest struct {
 }
 
 // Logout handles POST /oidc/logout per OpenID Connect RP-Initiated Logout 1.0.
+//
+// CSRF note: CSRF middleware skips requests with a Bearer Authorization header,
+// so if a Bearer token is present it MUST be validated here (not just forwarded).
+// An invalid Bearer header is rejected immediately to prevent CSRF bypass via
+// a forged Authorization header combined with a stolen id_token_hint.
 func (c *OIDCController) Logout(ctx *gin.Context) {
 	var req logoutRequest
 	if err := ctx.ShouldBind(&req); err != nil {

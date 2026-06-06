@@ -68,7 +68,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `TOTPEncryptionKey` is now required when `WebAuthnRPID` is configured — prevents runtime panic from missing encryption key (`config/config.go`).
 - CSRF middleware skip paths now use prefix matching instead of exact matching — `/.well-known` now correctly skips both `/.well-known/openid-configuration` and `/.well-known/jwks.json` (`middleware/csrf.go`).
 - CSRF middleware no longer sets the CSRF cookie for Bearer token requests — eliminates unnecessary cookie for API-only clients (`middleware/csrf.go`).
-- `JWTAuthMiddleware` now logs a warning when `SessionValidator` is nil — operators can detect misconfigured middleware that disables session-based token revocation (`internal/auth/middleware/auth_middleware.go`).
+- `JWTAuthMiddleware` now panics when `SessionValidator` is nil — previously logged a warning and silently skipped session validation, allowing revoked sessions to remain valid (`internal/auth/middleware/auth_middleware.go`).
+- `SessionValidator` interface extracted to `session/domain` package — eliminates duplication between `auth/middleware` and `oauth2/controller` (`internal/session/domain/session.go`, `internal/auth/middleware/auth_middleware.go`, `internal/oauth2/controller/oauth2_controller.go`, `router/web.go`).
+- `EnforceSessionLimit` now batches session key deletions into a single Redis DEL call — reduces N+1 Redis round-trips when evicting excess sessions (`internal/session/service/session_service.go`).
+- Pipeline error handling in `ListSessionsByAccount` upgraded from Warn to Error with early return — network errors now fail fast instead of silently producing partial results (`internal/session/service/session_service.go`).
+- MFA token blacklist logic extracted to `blacklistMFAToken` helper — removes duplication between `VerifyMFALogin` and `CompletePasskeyMFALogin` (`internal/auth/service/auth_login.go`).
+- Introspection public client log level changed from Warn to Debug — public client introspection is valid behavior, not an anomaly (`internal/oauth2/controller/oauth2_controller.go`).
+- `AuditMetadataMiddleware` now uses proper type assertion with ok check — prevents potential nil dereference if `request_id` context value is wrong type (`internal/auth/middleware/auth_middleware.go`).
+- `ForgotPassword` error logging elevated from Warn to Error — infrastructure failures (SMTP, Redis) require actionable alerting (`internal/auth/controller/auth_controller.go`).
+- OAuth state cookie `SameSite=Lax` choice documented — required for cross-site OAuth callback redirects (`internal/auth/controller/auth_controller.go`).
+- CSRF/Bearer middleware ordering dependency documented — CSRFMiddleware must run before JWTAuthMiddleware (`middleware/csrf.go`).
+- OIDC logout CSRF design decision documented — Bearer token must be validated inline to prevent CSRF bypass (`internal/oidc/controller/oidc_controller.go`).
+- OAuth2 `authenticateRequest` duplication documented — intentional inline auth for mixed authenticated/unauthenticated flows (`internal/oauth2/controller/oauth2_controller.go`).
+- Rate limiting fail-open and MFA fail-closed strategies documented — clarifies security posture on Redis unavailability (`internal/auth/service/auth_login.go`).
+- Social login HTTP client TLS behavior documented — Go's default config enforces TLS 1.2+ with certificate verification (`internal/auth/service/social_login_service.go`).
 
 ### Removed
 
@@ -80,6 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Security**: `LoginByPasskey` now clears username-level rate limit counter in addition to IP-level — previously only cleared `login_attempts_ip`, leaving per-username counter active after successful passkey login (`internal/auth/service/auth_login.go`).
+- `isUniqueViolation` now detects SQLite `UNIQUE constraint failed` errors in addition to PostgreSQL code 23505 — fixes silent duplicate failures when running with SQLite (`internal/auth/service/social_login_service.go`).
 - **Security**: Social login now requires the matched email credential to be verified before linking a federated identity to an existing account — prevents account takeover via an unverified email from a social provider (`internal/auth/service/social_login_service.go`).
 - **Security**: Passkey MFA verification flag key now namespaced by MFA token JTI instead of account ID — prevents concurrent login requests from consuming each other's MFA verification flag (`internal/auth/service/auth_service.go`, `internal/auth/service/auth_login.go`, `internal/auth/controller/passkey_controller.go`).
 - RSA key file missing warning now logged at Warn level instead of Info — ensures operators notice when all previously issued tokens are invalidated by key regeneration (`internal/token/service/key_service.go`).

@@ -71,8 +71,12 @@ func NewSocialLoginService(
 		credentialRepo:        credentialRepo,
 		federatedIdentityRepo: federatedIdentityRepo,
 		providers:             providers,
-		httpClient:            &http.Client{Timeout: 10 * time.Second},
-		logger:                logger,
+		httpClient: &http.Client{
+			Timeout: 10 * time.Second,
+			// Uses Go's default TLS config which enforces TLS 1.2+ and verifies certificates.
+			// All configured OAuth provider URLs (Google, GitHub, WeChat) serve over HTTPS.
+		},
+		logger: logger,
 	}
 }
 
@@ -392,9 +396,8 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 	}, nil
 }
 
-// isUniqueViolation checks if an error is a PostgreSQL unique constraint violation.
-// This handles race conditions where concurrent requests pass an existence check
-// but the DB constraint catches the duplicate.
+// isUniqueViolation checks if an error is a database unique constraint violation.
+// Handles PostgreSQL (code 23505) and SQLite (UNIQUE constraint failed).
 func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false
@@ -403,5 +406,5 @@ func isUniqueViolation(err error) bool {
 	if errors.As(err, &pgErr) {
 		return pgErr.Code == "23505"
 	}
-	return false
+	return strings.Contains(err.Error(), "UNIQUE constraint failed")
 }

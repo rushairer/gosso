@@ -1,8 +1,6 @@
 package middleware
 
 import (
-	"context"
-	"log"
 	"net/http"
 	"strings"
 
@@ -16,11 +14,6 @@ import (
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
 
-// SessionValidator checks whether a session is still active.
-type SessionValidator interface {
-	ValidateSession(ctx context.Context, sessionID string) (*sessionDomain.Session, error)
-}
-
 const (
 	// ContextKeyAccountID stores the account ID in gin.Context
 	ContextKeyAccountID = "account_id"
@@ -29,10 +22,11 @@ const (
 )
 
 // JWTAuthMiddleware is the JWT authentication middleware.
-// sessionValidator is optional; when provided, it verifies the session still exists in Redis.
-func JWTAuthMiddleware(tokenSvc *tokenService.TokenService, sessionValidator SessionValidator) gin.HandlerFunc {
+// sessionValidator is required — it verifies the session still exists in Redis,
+// ensuring revoked sessions (e.g. after account deletion or suspension) are rejected.
+func JWTAuthMiddleware(tokenSvc *tokenService.TokenService, sessionValidator sessionDomain.SessionValidator) gin.HandlerFunc {
 	if sessionValidator == nil {
-		log.Println("WARNING: SessionValidator is nil in JWTAuthMiddleware. Token revocation checks based on sessions are disabled.")
+		panic("JWTAuthMiddleware: sessionValidator must not be nil — session validation is required for security")
 	}
 	return func(ctx *gin.Context) {
 		tokenString := extractBearerToken(ctx)
@@ -54,7 +48,7 @@ func JWTAuthMiddleware(tokenSvc *tokenService.TokenService, sessionValidator Ses
 		}
 
 		// Verify the session still exists (invalidates tokens after account deletion/suspension)
-		if sessionValidator != nil && claims.SessionID != "" {
+		if claims.SessionID != "" {
 			if _, err := sessionValidator.ValidateSession(ctx.Request.Context(), claims.SessionID); err != nil {
 				ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "session expired or revoked"))
 				return
@@ -108,8 +102,10 @@ func AdminRequiredMiddleware() gin.HandlerFunc {
 // AuditMetadataMiddleware stores client IP, user agent, and request ID in request context for audit logging.
 func AuditMetadataMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		requestID, _ := ctx.Get("request_id")
-		requestIDStr, _ := requestID.(string)
+		var requestIDStr string
+		if v, ok := ctx.Get("request_id"); ok {
+			requestIDStr, _ = v.(string)
+		}
 		ctx.Request = ctx.Request.WithContext(
 			audit.SetMetadata(ctx.Request.Context(), ctx.ClientIP(), ctx.Request.UserAgent(), requestIDStr),
 		)

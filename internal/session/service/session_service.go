@@ -364,8 +364,12 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 	for i, entry := range entries {
 		cmds[i] = pipe.Get(ctx, entry.key)
 	}
+	// Pipeline batch GET — pipe.Exec returns the first per-command error,
+	// but individual command results are checked below. A non-redis.Nil error
+	// here typically means a network/connection problem affecting all commands.
 	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
-		s.logger.Warn("Pipeline session fetch had errors", zap.Error(err))
+		s.logger.Error("Pipeline session fetch failed", zap.Error(err), zap.String("account_id", accountID))
+		return nil, fmt.Errorf("pipeline session fetch: %w", err)
 	}
 
 	var sessions []*domain.Session
@@ -440,6 +444,7 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 
 // EnforceSessionLimit checks and enforces the maximum concurrent session limit.
 // When the limit is exceeded, the oldest sessions are revoked.
+// Session key deletions are batched into a single Redis DEL call for efficiency.
 func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID string) error {
 	if s.maxSessions <= 0 {
 		return nil
@@ -459,14 +464,41 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 		return sessions[i].LastActiveAt.Before(sessions[j].LastActiveAt)
 	})
 
-	// Revoke excess old sessions
 	toRemove := len(sessions) - s.maxSessions
+	keys := make([]string, 0, toRemove)
+
 	for i := 0; i < toRemove; i++ {
+		sid := sessions[i].ID
 		s.logger.Info("Revoking old session due to limit",
-			zap.String("session_id", sessions[i].ID),
+			zap.String("session_id", sid),
 			zap.String("account_id", accountID))
-		_ = s.RevokeSession(ctx, accountID, sessions[i].ID)
+
+		if s.tokenRevoker != nil {
+			if err := s.tokenRevoker.RevokeAllForSession(ctx, sid); err != nil {
+				s.logger.Warn("Failed to revoke tokens for session during limit enforcement",
+					zap.String("session_id", sid), zap.Error(err))
+			}
+		}
+		keys = append(keys, s.buildSessionKey(sid))
 	}
+
+	// Batch delete all excess session keys in a single Redis call
+	if len(keys) > 0 {
+		if err := s.redis.Del(ctx, keys...); err != nil {
+			s.logger.Error("Failed to batch delete sessions", zap.String("account_id", accountID), zap.Error(err))
+			return fmt.Errorf("batch delete sessions: %w", err)
+		}
+	}
+
+	// Remove excess sessions from the account index
+	indexKey := s.buildAccountSessionsKey(accountID)
+	for i := 0; i < toRemove; i++ {
+		if err := s.redis.SRem(ctx, indexKey, sessions[i].ID); err != nil {
+			s.logger.Warn("Failed to remove session from account index",
+				zap.String("session_id", sessions[i].ID), zap.Error(err))
+		}
+	}
+
 	return nil
 }
 

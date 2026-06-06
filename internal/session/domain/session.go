@@ -1,8 +1,14 @@
 package domain
 
 import (
+	"context"
 	"time"
 )
+
+// SessionValidator checks whether a session is still active.
+type SessionValidator interface {
+	ValidateSession(ctx context.Context, sessionID string) (*Session, error)
+}
 
 // Session is the session entity.
 type Session struct {

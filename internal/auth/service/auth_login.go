@@ -51,7 +51,8 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		}
 	}()
 
-	// 0. Check rate limit for login failures (keyed on IP + normalized username)
+	// 0. Check rate limit for login failures (keyed on IP + normalized username).
+	// Fail-open: if Redis is unavailable, login proceeds to avoid total lockout.
 	normalizedUsername := strings.ToLower(req.Username)
 	attemptsKey := fmt.Sprintf("login_attempts:%s:%s", req.IP, normalizedUsername)
 	count, incrErr := s.redis.CheckAndIncr(ctx, attemptsKey, s.loginMaxAttempts, s.loginRateLimitWindow)
@@ -170,10 +171,8 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	}
 
 	// 2.5. Blacklist MFA token to prevent reuse
-	if claims.ID != "" {
-		if err := s.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); err != nil {
-			return nil, fmt.Errorf("blacklist mfa token: %w", err)
-		}
+	if err := s.blacklistMFAToken(ctx, claims); err != nil {
+		return nil, err
 	}
 
 	// 3. Find account
@@ -258,10 +257,8 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	}
 
 	// 2.5. Blacklist MFA token to prevent reuse
-	if claims.ID != "" {
-		if err := s.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); err != nil {
-			return nil, fmt.Errorf("blacklist mfa token: %w", err)
-		}
+	if err := s.blacklistMFAToken(ctx, claims); err != nil {
+		return nil, err
 	}
 
 	// 3. Find account
@@ -352,7 +349,13 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 		map[string]any{"ip": ip, "user_agent": userAgent},
 	)
 
-	// 6. Clear IP rate-limit counters on successful passkey login
+	// 6. Clear rate-limit counters on successful passkey login
+	if account.Username != nil {
+		key := fmt.Sprintf("login_attempts:%s:%s", ip, strings.ToLower(*account.Username))
+		if err := s.redis.Del(ctx, key); err != nil {
+			s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key", key), zap.Error(err))
+		}
+	}
 	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", ip)
 	if err := s.redis.Del(ctx, ipAttemptsKey); err != nil {
 		s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key", ipAttemptsKey), zap.Error(err))
@@ -412,6 +415,7 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 
 // handleMFARequirement checks if MFA is required for the account and returns an MFA result if so.
 // Returns nil, nil if MFA is not required.
+// Fail-closed: if the MFA status check fails, login is denied rather than bypassed.
 func (s *AuthService) handleMFARequirement(ctx context.Context, account *accountDomain.Account) (*LoginResult, error) {
 	mfaEnabled, err := s.mfaSvc.IsMFAEnabled(ctx, account.ID)
 	if err != nil {
@@ -444,6 +448,17 @@ func (s *AuthService) handleMFARequirement(ctx context.Context, account *account
 // CheckMFA implements the MFAChecker interface for use by SocialLoginService.
 func (s *AuthService) CheckMFA(ctx context.Context, account *accountDomain.Account) (*LoginResult, error) {
 	return s.handleMFARequirement(ctx, account)
+}
+
+// blacklistMFAToken revokes an MFA token to prevent reuse after successful verification.
+func (s *AuthService) blacklistMFAToken(ctx context.Context, claims *tokenDomain.AccessTokenClaims) error {
+	if claims.ID == "" {
+		return nil
+	}
+	if err := s.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); err != nil {
+		return fmt.Errorf("blacklist mfa token: %w", err)
+	}
+	return nil
 }
 
 // verifyMFACode verifies MFA code based on the MFA type.

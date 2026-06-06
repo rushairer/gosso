@@ -21,6 +21,11 @@ const (
 
 // CSRFMiddleware double-submit cookie CSRF protection middleware.
 // Skips: Bearer auth, GET/HEAD/OPTIONS, skipPaths exact match.
+//
+// IMPORTANT: CSRFMiddleware must run BEFORE JWTAuthMiddleware in the middleware chain.
+// The Bearer skip relies on the raw Authorization header — if JWTAuthMiddleware
+// runs first and strips/rewrites the header, CSRF would be enforced on API calls
+// that should be exempt.
 func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		// Skip idempotent methods

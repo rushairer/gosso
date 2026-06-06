@@ -52,11 +52,6 @@ type AccountValidator interface {
 	IsAccountActive(ctx context.Context, accountID string) bool
 }
 
-// SessionValidator checks whether a session is still active.
-type SessionValidator interface {
-	ValidateSession(ctx context.Context, sessionID string) (*sessionDomain.Session, error)
-}
-
 //go:embed template/consent.html
 var consentTemplateFS embed.FS
 
@@ -73,7 +68,7 @@ type OAuth2Controller struct {
 	deviceCodeSvc     DeviceCodeManager
 	clientAuth        oauth2Service.ClientAuthenticator
 	accountValidator  AccountValidator
-	sessionValidator  SessionValidator
+	sessionValidator  sessionDomain.SessionValidator
 	issuer            string
 	consentTmpl       *template.Template
 	deviceTmpl        *template.Template
@@ -89,7 +84,7 @@ func NewOAuth2Controller(
 	idTokenSvc *oidcService.IDTokenService,
 	deviceCodeSvc DeviceCodeManager,
 	accountValidator AccountValidator,
-	sessionValidator SessionValidator,
+	sessionValidator sessionDomain.SessionValidator,
 	issuer string,
 	logger *zap.Logger,
 ) (*OAuth2Controller, error) {
@@ -120,6 +115,11 @@ func NewOAuth2Controller(
 
 // authenticateRequest extracts and validates the access token from the Authorization header.
 // Returns the account ID on success, or an empty string and writes an error response on failure.
+//
+// This intentionally duplicates JWTAuthMiddleware logic because OAuth2 endpoints
+// need inline authentication within handler methods (e.g. consent, device authorization)
+// rather than pre-handler middleware — the same endpoint may serve both authenticated
+// and unauthenticated flows.
 func (c *OAuth2Controller) authenticateRequest(ctx *gin.Context) (string, bool) {
 	tokenString := ""
 	if authHeader := ctx.GetHeader("Authorization"); authHeader != "" {
@@ -700,7 +700,7 @@ func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	} else if !client.IsConfidential {
-		c.logger.Warn("Introspect called by public client", zap.String("client_id", clientID))
+		c.logger.Debug("Introspect called by public client", zap.String("client_id", clientID))
 	}
 
 	result, err := c.tokenSvc.IntrospectToken(ctx, req.Token)

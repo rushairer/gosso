@@ -471,6 +471,9 @@ func (c *AuthController) SocialAuthURL(ctx *gin.Context) {
 		MaxAge:   600,
 		HttpOnly: true,
 		Secure:   c.secureCookie,
+		// Lax is required here: the OAuth callback is a cross-site redirect from
+		// the provider, so Strict would drop the cookie. Lax allows top-level
+		// navigations while still blocking embedded cross-site requests.
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -671,7 +674,7 @@ func (c *AuthController) ForgotPassword(ctx *gin.Context) {
 	}
 
 	if err := c.passwordResetSvc.RequestReset(ctx, req.Email); err != nil {
-		c.logger.Warn("Password reset request error", zap.Error(err))
+		c.logger.Error("Password reset request failed", zap.String("email", req.Email), zap.Error(err))
 	}
 
 	// Always return 200 to prevent email enumeration

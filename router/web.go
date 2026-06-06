@@ -18,6 +18,7 @@ import (
 	"github.com/rushairer/gosso/internal/cache"
 	oauth2Controller "github.com/rushairer/gosso/internal/oauth2/controller"
 	oidcController "github.com/rushairer/gosso/internal/oidc/controller"
+	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 	"github.com/rushairer/gosso/middleware"
 )
@@ -36,7 +37,7 @@ func RegisterWebRouter(
 	redis *cache.RedisClient,
 	rateLimits config.RateLimitsConfig,
 	debug bool,
-	sessionValidator authMiddleware.SessionValidator,
+	sessionValidator sessionDomain.SessionValidator,
 	logger *zap.Logger,
 ) {
 	// Health check (no auth, no rate limiting)
