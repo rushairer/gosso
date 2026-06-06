@@ -125,3 +125,41 @@ func TestCSRF_EmptyHeader_403(t *testing.T) {
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 }
+
+func TestCSRF_SecureMode_UsesHostPrefix(t *testing.T) {
+	r := setupCSRFTestRouter(true)
+	r.GET("/test", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/test", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	cookies := w.Header().Values("Set-Cookie")
+	found := false
+	for _, c := range cookies {
+		if len(c) >= len(csrfSecureCookieName) && c[:len(csrfSecureCookieName)] == csrfSecureCookieName {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "__Host-csrf_token cookie should be set in secure mode")
+}
+
+func TestCSRF_SecureMode_Match_200(t *testing.T) {
+	r := setupCSRFTestRouter(true)
+	r.POST("/test", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	token := "valid-csrf-token-1234567890123456"
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/test", nil)
+	req.Header.Set("Cookie", csrfSecureCookieName+"="+token)
+	req.Header.Set(csrfHeaderName, token)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}

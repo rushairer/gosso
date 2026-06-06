@@ -40,11 +40,6 @@ func TestRegisterAccount(t *testing.T) {
 	// 2. Begin transaction
 	mock.ExpectBegin()
 
-	// 2b. Expect querying whether username exists (executed inside transaction)
-	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE username").
-		WithArgs("testuser").
-		WillReturnError(sql.ErrNoRows)
-
 	// 3. Expect inserting account
 	mock.ExpectExec("INSERT INTO accounts").
 		WillReturnResult(sqlmock.NewResult(1, 1))
@@ -197,6 +192,20 @@ func TestSoftDeleteAccount(t *testing.T) {
 	accountID := "test-account-id"
 
 	// Set mock expectations
+
+	// Expect FindByID for idempotency check (account not deleted)
+	now := time.Now()
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		accountID, "testuser", "Test User", nil, domain.AccountStatusActive,
+		"en", "UTC", []byte("{}"), now, now, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs(accountID).
+		WillReturnRows(accountRows)
+
 	mock.ExpectBegin()
 
 	// Expect soft deleting credentials

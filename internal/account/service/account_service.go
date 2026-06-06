@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/account/repository"
@@ -179,20 +179,13 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	}
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		if req.Username != "" {
-			existing, err := s.FindAccountByUsername(ctx, req.Username)
-			if err == nil && existing != nil {
-				return fmt.Errorf("username already taken")
-			}
-		}
-
 		if err := s.accountRepo.CreateAccount(ctx, tx, account); err != nil {
 			return err
 		}
 
 		var credentials []*domain.Credential
 
-		passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		passwordHash, err := domain.HashPassword(req.Password)
 		if err != nil {
 			return fmt.Errorf("hash password: %w", err)
 		}
@@ -240,6 +233,10 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		return s.credentialRepo.CreateCredentials(ctx, tx, credentials)
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, errors.New("username already taken")
+		}
 		return nil, err
 	}
 
@@ -275,16 +272,26 @@ func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.
 }
 
 // SoftDeleteAccount soft-deletes an account (cascades to all related data).
+// Idempotent: returns nil if the account is already deleted.
 func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID string) error {
 	// 1. Validate request
 	if accountID == "" {
 		return errors.New("account ID is required")
 	}
 
-	// 2. Soft-delete in transaction
+	// 2. Check if already deleted (idempotent)
+	account, err := s.accountRepo.FindByID(ctx, accountID)
+	if err != nil {
+		return fmt.Errorf("find account: %w", err)
+	}
+	if account.DeletedAt != nil {
+		return nil
+	}
+
+	// 3. Soft-delete in transaction
 	now := time.Now()
 
-	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		if err := s.credentialRepo.SoftDeleteCredentialsByAccount(ctx, tx, accountID, now); err != nil {
 			return err
 		}
@@ -307,7 +314,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		return err
 	}
 
-	// 3. Revoke all active sessions and refresh tokens.
+	// 4. Revoke all active sessions and refresh tokens.
 	// Access tokens are invalidated by the JWT middleware's session existence check
 	// (JWTAuthMiddleware validates sessions on every authenticated request), so explicit
 	// blacklisting of access token JTIs is not required here.
@@ -319,7 +326,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		s.logger.Warn("SessionRevoker not set, skipping session revocation on account deletion", zap.String("account_id", accountID))
 	}
 
-	// 4. Audit log
+	// 5. Audit log
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountDelete,
 		audit.IPFromContext(ctx),
@@ -382,7 +389,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	}
 
 	// 4. Hash new password
-	newPasswordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	newPasswordHash, err := domain.HashPassword(newPassword)
 	if err != nil {
 		return fmt.Errorf("hash new password: %w", err)
 	}

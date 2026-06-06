@@ -17,6 +17,10 @@ const (
 	CredentialTypeTOTP       CredentialType = "totp"
 	CredentialTypeWebAuthn   CredentialType = "webauthn"
 	CredentialTypeBackupCode CredentialType = "backup_code"
+
+	// BcryptCost is the bcrypt cost factor for password hashing.
+	// 12 provides a good balance between security and performance (2026 recommendation).
+	BcryptCost = 12
 )
 
 // Credential is the credential domain model.
@@ -132,7 +136,7 @@ func (c *Credential) VerifyPassword(plainPassword string) bool {
 
 // HashPassword hashes a plaintext password using bcrypt.
 func HashPassword(password string) (string, error) {
-	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), BcryptCost)
 	if err != nil {
 		return "", err
 	}

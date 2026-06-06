@@ -60,6 +60,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CI added 50% coverage threshold check to prevent silent regression (`.github/workflows/ci.yml`).
 - Linter config restored `govet` and `staticcheck` for test files — catches real bugs in test code (`.golangci.yml`).
 - Logout handler refactored to use `getClaimsFromContext` helper — consistent with all other authenticated handlers (`internal/auth/controller/auth_controller.go`).
+- Login rate-limit counter cleanup extracted to `clearLoginRateLimits` method — eliminates 4 duplicate code blocks (`internal/auth/service/auth_login.go`).
+- Bcrypt cost increased from 10 (`DefaultCost`) to 12 — new `BcryptCost` constant in domain layer; `RegisterAccount` and `ChangePassword` now use `domain.HashPassword` instead of direct `bcrypt.GenerateFromPassword` (`internal/account/domain/credential.go`, `internal/account/service/account_service.go`).
+- `RegisterAccount` now detects PostgreSQL unique violations (SQLSTATE `23505`) instead of TOCTOU-prone `FindByUsername` query inside the transaction (`internal/account/service/account_service.go`).
+- OIDC Logout refactored into `validateBearerToken`, `tryLogoutByIDTokenHint`, `tryLogoutByBearerToken`, and `handlePostLogoutRedirect` — eliminates deeply nested if/else and inconsistent indentation (`internal/oidc/controller/oidc_controller.go`).
+- TOTP verification error log level raised from Warn to Error in `verifyMFACode` — service failures should be distinguished from business-level failures (`internal/auth/service/auth_login.go`).
+- CSRF cookie now uses `__Host-` prefix in production mode (`secure=true`) — browser enforces `Secure`, `Path=/`, and no `Domain` attributes (`middleware/csrf.go`).
+- `SoftDeleteAccount` returns nil immediately if the account is already deleted (idempotent) — avoids unnecessary DB writes and audit logs on repeated calls (`internal/account/service/account_service.go`).
+- `Auditor.Wait()` drain grace period extracted to a configurable struct field with `SetDrainGracePeriod` method — decouples from hardcoded sleep value (`internal/audit/service/audit.go`).
 
 ### Fixed
 

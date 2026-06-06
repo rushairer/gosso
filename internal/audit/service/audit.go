@@ -31,17 +31,18 @@ const (
 )
 
 type Auditor struct {
-	db           *sql.DB
-	batchflow    *batchflow.BatchFlow
-	recordSchema *batchflow.SQLSchema
-	cancel       context.CancelFunc
-	logger       *zap.Logger
+	db              *sql.DB
+	batchflow       *batchflow.BatchFlow
+	recordSchema    *batchflow.SQLSchema
+	cancel          context.CancelFunc
+	logger          *zap.Logger
+	drainGracePeriod time.Duration
 }
 
 func NewAuditor(_ context.Context, db *sql.DB, logger *zap.Logger) *Auditor {
 	logger = utility.EnsureLogger(logger)
 	auditorCtx, cancel := context.WithCancel(context.Background())
-	auditor := Auditor{db: db, cancel: cancel, logger: logger}
+	auditor := Auditor{db: db, cancel: cancel, logger: logger, drainGracePeriod: auditDrainGracePeriod}
 	auditor.batchflow = batchflow.NewPostgreSQLBatchFlow(auditorCtx, db, batchflow.PipelineConfig{
 		BufferSize:    auditBufferSize,
 		FlushSize:     auditFlushSize,
@@ -79,13 +80,20 @@ func (a *Auditor) Close() {
 // Wait cancels the batchflow context and waits for the drain grace period to
 // elapse, ensuring all in-flight audit batches are flushed. Call this during
 // graceful shutdown instead of Close() when you need to guarantee writes complete.
+//
+// The drain grace period must exceed batchflow's internal drain timeout (hardcoded
+// at 2s). It is configurable via SetDrainGracePeriod for testing or custom deployments.
 func (a *Auditor) Wait() {
 	if a.cancel != nil {
 		a.cancel()
 	}
-	// batchflow uses a hardcoded 2s drain grace period on context cancel.
-	// Sleep slightly longer to ensure all in-flight batches are flushed.
-	time.Sleep(auditDrainGracePeriod)
+	time.Sleep(a.drainGracePeriod)
+}
+
+// SetDrainGracePeriod overrides the default drain grace period. Must be called
+// before Wait(). Useful for testing with shorter timeouts.
+func (a *Auditor) SetDrainGracePeriod(d time.Duration) {
+	a.drainGracePeriod = d
 }
 
 func (a *Auditor) Do(

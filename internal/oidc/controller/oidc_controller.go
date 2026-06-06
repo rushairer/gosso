@@ -126,117 +126,159 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 	// Security: CSRF middleware skips validation when a Bearer header is present.
 	// If the Bearer header is invalid (or a forgery), reject immediately to prevent
 	// CSRF bypass via a fake Authorization header combined with a stolen id_token_hint.
-	var bearerClaims *tokenDomain.AccessTokenClaims
-	if authHeader := ctx.GetHeader("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		claims, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx, tokenString)
-		if err != nil {
-			ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid session"))
-			return
-		}
-		bearerClaims = claims
+	bearerClaims := c.validateBearerToken(ctx)
+	if ctx.IsAborted() {
+		return
 	}
 
-	var accountID string
+	// Try logout paths in order: id_token_hint → Bearer token → anonymous
 	var clientID string
-	loggedOut := false
 
-	// 1. Try id_token_hint first
 	if req.IDTokenHint != "" {
-		claims, err := c.logoutSvc.ValidateIDTokenHint(req.IDTokenHint)
-		if err != nil {
-			// id_token_hint is optional — skip it and fall through to Bearer/anonymous path
-			c.logger.Debug("id_token_hint validation failed, skipping", zap.Error(err))
-		} else {
-
-		// If client_id is provided, verify it matches the ID token audience
-		if req.ClientID != "" {
-			audMatch := false
-			for _, aud := range claims.Audience {
-				if aud == req.ClientID {
-					audMatch = true
-					break
-				}
-			}
-			if !audMatch {
-				ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "client_id does not match id_token_hint audience"))
-				return
-			}
+		if cid, ok := c.tryLogoutByIDTokenHint(ctx, req, bearerClaims); ok {
+			clientID = cid
 		}
-
-		accountID = claims.Subject
-
-		// When both id_token_hint and Bearer token are present, verify identity match
-		if bearerClaims != nil && bearerClaims.AccountID != accountID {
-			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden,
-				"id_token_hint subject does not match authenticated user"))
+		if ctx.IsAborted() {
 			return
-		}
-
-		if len(claims.Audience) > 0 {
-			clientID = claims.Audience[0]
-		}
-		if req.ClientID != "" {
-			clientID = req.ClientID
-		}
-
-		if err := c.logoutSvc.LogoutByAccountID(ctx, accountID); err != nil {
-			c.logger.Error("Logout by account ID failed", zap.String("account_id", accountID), zap.Error(err))
-			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout failed"))
-			return
-		}
-		loggedOut = true
-		// Blacklist the current access token if a Bearer header was also provided
-		if bearerClaims != nil && bearerClaims.ExpiresAt != nil {
-			if err := c.tokenSvc.RevokeAccessToken(ctx, bearerClaims.ID, bearerClaims.ExpiresAt.Time); err != nil {
-				c.logger.Warn("Failed to blacklist access token during id_token_hint logout",
-					zap.String("jti", bearerClaims.ID), zap.Error(err))
-			}
-		}
 		}
 	}
 
-	// 2. Fallback: try cached Bearer token claims
-	if !loggedOut && bearerClaims != nil {
-		tokenClaims := bearerClaims
-		clientID = tokenClaims.ClientID
-		if err := c.logoutSvc.LogoutBySessionID(ctx, tokenClaims.AccountID, tokenClaims.SessionID); err != nil {
-			c.logger.Error("Logout by session ID failed", zap.String("session_id", tokenClaims.SessionID), zap.Error(err))
-			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout failed"))
+	if clientID == "" && bearerClaims != nil {
+		clientID = c.tryLogoutByBearerToken(ctx, bearerClaims)
+		if ctx.IsAborted() {
 			return
 		}
-		// Blacklist the current access token so it cannot be reused
-		if tokenClaims.ExpiresAt != nil {
-			if err := c.tokenSvc.RevokeAccessToken(ctx, tokenClaims.ID, tokenClaims.ExpiresAt.Time); err != nil {
-				c.logger.Warn("Failed to blacklist access token during logout", zap.String("jti", tokenClaims.ID), zap.Error(err))
-			}
-		}
-		loggedOut = true
 	}
 
-	// 3. Post-logout redirect
+	// Post-logout redirect
 	if req.PostLogoutRedirectURI != "" && clientID != "" {
-		client, err := c.clientRepo.FindByClientID(ctx, clientID)
-		if err != nil {
-			c.logger.Debug("Client lookup failed for post-logout redirect", zap.String("client_id", clientID), zap.Error(err))
-		} else if client.ValidatePostLogoutRedirectURI(req.PostLogoutRedirectURI) {
-			redirectURI := req.PostLogoutRedirectURI
-			if req.State != "" {
-				params := url.Values{}
-				params.Set("state", req.State)
-				separator := "?"
-				if u, err := url.Parse(redirectURI); err == nil && u.RawQuery != "" {
-					separator = "&"
-				}
-				redirectURI = redirectURI + separator + params.Encode()
-			}
-			ctx.Redirect(http.StatusFound, redirectURI)
-			return
-		} else {
-			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid post_logout_redirect_uri"))
-			return
-		}
+		c.handlePostLogoutRedirect(ctx, req, clientID)
+		return
 	}
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{"status": "logged_out"}))
+}
+
+// validateBearerToken validates the Bearer token from the Authorization header.
+// Returns nil if no Bearer header is present. Aborts the request if the token is invalid.
+func (c *OIDCController) validateBearerToken(ctx *gin.Context) *tokenDomain.AccessTokenClaims {
+	authHeader := ctx.GetHeader("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return nil
+	}
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	claims, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx, tokenString)
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid session"))
+		ctx.Abort()
+		return nil
+	}
+	return claims
+}
+
+// tryLogoutByIDTokenHint attempts logout using the id_token_hint parameter.
+// Returns the resolved clientID and true on success, or ("", false) to fall through.
+func (c *OIDCController) tryLogoutByIDTokenHint(ctx *gin.Context, req logoutRequest, bearerClaims *tokenDomain.AccessTokenClaims) (string, bool) {
+	claims, err := c.logoutSvc.ValidateIDTokenHint(req.IDTokenHint)
+	if err != nil {
+		c.logger.Debug("id_token_hint validation failed, skipping", zap.Error(err))
+		return "", false
+	}
+
+	// If client_id is provided, verify it matches the ID token audience
+	if req.ClientID != "" {
+		audMatch := false
+		for _, aud := range claims.Audience {
+			if aud == req.ClientID {
+				audMatch = true
+				break
+			}
+		}
+		if !audMatch {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "client_id does not match id_token_hint audience"))
+			ctx.Abort()
+			return "", true // handled (with error)
+		}
+	}
+
+	accountID := claims.Subject
+
+	// When both id_token_hint and Bearer token are present, verify identity match
+	if bearerClaims != nil && bearerClaims.AccountID != accountID {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden,
+			"id_token_hint subject does not match authenticated user"))
+		ctx.Abort()
+		return "", true // handled (with error)
+	}
+
+	if err := c.logoutSvc.LogoutByAccountID(ctx, accountID); err != nil {
+		c.logger.Error("Logout by account ID failed", zap.String("account_id", accountID), zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout failed"))
+		ctx.Abort()
+		return "", true
+	}
+
+	// Blacklist the current access token if a Bearer header was also provided
+	if bearerClaims != nil && bearerClaims.ExpiresAt != nil {
+		if err := c.tokenSvc.RevokeAccessToken(ctx, bearerClaims.ID, bearerClaims.ExpiresAt.Time); err != nil {
+			c.logger.Warn("Failed to blacklist access token during id_token_hint logout",
+				zap.String("jti", bearerClaims.ID), zap.Error(err))
+		}
+	}
+
+	clientID := ""
+	if len(claims.Audience) > 0 {
+		clientID = claims.Audience[0]
+	}
+	if req.ClientID != "" {
+		clientID = req.ClientID
+	}
+	return clientID, true
+}
+
+// tryLogoutByBearerToken attempts logout using the validated Bearer token claims.
+// Returns the resolved clientID, or "" if no logout was performed.
+func (c *OIDCController) tryLogoutByBearerToken(ctx *gin.Context, claims *tokenDomain.AccessTokenClaims) string {
+	if err := c.logoutSvc.LogoutBySessionID(ctx, claims.AccountID, claims.SessionID); err != nil {
+		c.logger.Error("Logout by session ID failed", zap.String("session_id", claims.SessionID), zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout failed"))
+		ctx.Abort()
+		return ""
+	}
+
+	// Blacklist the current access token so it cannot be reused
+	if claims.ExpiresAt != nil {
+		if err := c.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); err != nil {
+			c.logger.Warn("Failed to blacklist access token during logout", zap.String("jti", claims.ID), zap.Error(err))
+		}
+	}
+
+	return claims.ClientID
+}
+
+// handlePostLogoutRedirect validates and performs the post-logout redirect.
+func (c *OIDCController) handlePostLogoutRedirect(ctx *gin.Context, req logoutRequest, clientID string) {
+	client, err := c.clientRepo.FindByClientID(ctx, clientID)
+	if err != nil {
+		c.logger.Debug("Client lookup failed for post-logout redirect", zap.String("client_id", clientID), zap.Error(err))
+		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{"status": "logged_out"}))
+		return
+	}
+
+	if !client.ValidatePostLogoutRedirectURI(req.PostLogoutRedirectURI) {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid post_logout_redirect_uri"))
+		return
+	}
+
+	redirectURI := req.PostLogoutRedirectURI
+	if req.State != "" {
+		params := url.Values{}
+		params.Set("state", req.State)
+		separator := "?"
+		if u, err := url.Parse(redirectURI); err == nil && u.RawQuery != "" {
+			separator = "&"
+		}
+		redirectURI = redirectURI + separator + params.Encode()
+	}
+	ctx.Redirect(http.StatusFound, redirectURI)
 }

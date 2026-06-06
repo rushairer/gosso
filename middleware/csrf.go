@@ -14,24 +14,33 @@ import (
 )
 
 const (
-	csrfCookieName = "csrf_token"
-	csrfHeaderName = "X-CSRF-Token"
-	csrfTokenLen   = 32
+	csrfCookieName       = "csrf_token"
+	csrfSecureCookieName = "__Host-csrf_token"
+	csrfHeaderName       = "X-CSRF-Token"
+	csrfTokenLen         = 32
 )
 
 // CSRFMiddleware double-submit cookie CSRF protection middleware.
 // Skips: Bearer auth, GET/HEAD/OPTIONS, skipPaths exact match.
+//
+// When secure=true, the cookie uses the __Host- prefix (__Host-csrf_token)
+// which enforces Secure, Path=/, and no Domain via the browser.
 //
 // IMPORTANT: CSRFMiddleware must run BEFORE JWTAuthMiddleware in the middleware chain.
 // The Bearer skip relies on the raw Authorization header — if JWTAuthMiddleware
 // runs first and strips/rewrites the header, CSRF would be enforced on API calls
 // that should be exempt.
 func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
+	cookieName := csrfCookieName
+	if secure {
+		cookieName = csrfSecureCookieName
+	}
+
 	return func(ctx *gin.Context) {
 		// Skip idempotent methods
 		method := ctx.Request.Method
 		if method == "GET" || method == "HEAD" || method == "OPTIONS" {
-			setCSRFCookie(ctx, secure)
+			setCSRFCookie(ctx, cookieName, secure)
 			ctx.Next()
 			return
 		}
@@ -46,14 +55,14 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 		path := ctx.Request.URL.Path
 		for _, sp := range skipPaths {
 			if strings.HasPrefix(path, sp) {
-				setCSRFCookie(ctx, secure)
+				setCSRFCookie(ctx, cookieName, secure)
 				ctx.Next()
 				return
 			}
 		}
 
 		// Validate CSRF token
-		cookie, err := ctx.Cookie(csrfCookieName)
+		cookie, err := ctx.Cookie(cookieName)
 		if err != nil || cookie == "" {
 			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "CSRF token missing"))
 			ctx.Abort()
@@ -71,14 +80,14 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 			return
 		}
 
-		setCSRFCookie(ctx, secure)
+		setCSRFCookie(ctx, cookieName, secure)
 		ctx.Next()
 	}
 }
 
 // setCSRFCookie sets the CSRF token cookie (generates one if absent).
-func setCSRFCookie(ctx *gin.Context, secure bool) {
-	cookie, _ := ctx.Cookie(csrfCookieName)
+func setCSRFCookie(ctx *gin.Context, cookieName string, secure bool) {
+	cookie, _ := ctx.Cookie(cookieName)
 	if cookie == "" {
 		var err error
 		cookie, err = generateCSRFToken()
@@ -90,7 +99,7 @@ func setCSRFCookie(ctx *gin.Context, secure bool) {
 	}
 
 	http.SetCookie(ctx.Writer, &http.Cookie{
-		Name:     csrfCookieName,
+		Name:     cookieName,
 		Value:    cookie,
 		Path:     "/",
 		MaxAge:   int((4 * time.Hour).Seconds()),
