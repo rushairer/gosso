@@ -3,31 +3,28 @@ package service
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/oauth2/domain"
+	"github.com/rushairer/gosso/internal/testutil"
 )
 
-func setupTestConsentService(t *testing.T) *ConsentService {
+func setupTestConsentService(t *testing.T) (*ConsentService, func()) {
+	t.Helper()
 	logger := zap.NewNop()
-	dsn := "redis://localhost:6379/15"
 
-	redisClient, err := cache.NewRedisClient(dsn, 10, 5*time.Second, logger)
-	if err != nil {
-		t.Skip("Redis not available, skipping test:", err)
-	}
+	redisClient, mr := testutil.SetupTestRedis(t)
+	cleanup := mr.Close
 
-	return NewConsentService(redisClient, logger)
+	return NewConsentService(nil, redisClient, logger), cleanup
 }
 
 func TestSaveAndGetConsent(t *testing.T) {
-	svc := setupTestConsentService(t)
-	defer svc.redis.Close()
+	svc, cleanup := setupTestConsentService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -54,8 +51,8 @@ func TestSaveAndGetConsent(t *testing.T) {
 }
 
 func TestGetConsent_NotFound(t *testing.T) {
-	svc := setupTestConsentService(t)
-	defer svc.redis.Close()
+	svc, cleanup := setupTestConsentService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -65,8 +62,8 @@ func TestGetConsent_NotFound(t *testing.T) {
 }
 
 func TestDeleteConsent(t *testing.T) {
-	svc := setupTestConsentService(t)
-	defer svc.redis.Close()
+	svc, cleanup := setupTestConsentService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
