@@ -180,13 +180,15 @@ func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Sess
 		return fmt.Errorf("update session: %w", err)
 	}
 	if !ok {
-		s.logger.Warn("Session expired during update, skipping", zap.String("session_id", session.ID))
+		s.logger.Debug("Session expired during update, skipping", zap.String("session_id", session.ID))
 		return fmt.Errorf("session %s no longer exists", session.ID)
 	}
 
 	// Refresh the account sessions index TTL to prevent it from expiring before the session
 	indexKey := s.buildAccountSessionsKey(session.AccountID)
-	_ = s.redis.Expire(ctx, indexKey, s.sessionTTL)
+	if err := s.redis.Expire(ctx, indexKey, s.sessionTTL); err != nil {
+		s.logger.Warn("Failed to refresh account sessions index TTL", zap.String("account_id", session.AccountID), zap.Error(err))
+	}
 
 	s.logger.Debug("Session updated", zap.String("session_id", session.ID))
 	return nil
@@ -384,7 +386,9 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 
 	// Clean up stale index entries
 	for _, sid := range staleIDs {
-		_ = s.redis.SRem(ctx, indexKey, sid)
+		if err := s.redis.SRem(ctx, indexKey, sid); err != nil {
+			s.logger.Warn("Failed to remove stale session index entry", zap.String("session_id", sid), zap.Error(err))
+		}
 	}
 
 	return sessions, nil

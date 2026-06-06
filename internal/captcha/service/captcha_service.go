@@ -159,7 +159,9 @@ func (s *CaptchaService) VerifyCaptcha(ctx context.Context, captchaID uuid.UUID,
 
 	switch status {
 	case "ok":
-		_ = s.redis.Del(ctx, key)
+		if err := s.redis.Del(ctx, key); err != nil {
+			s.logger.Warn("Failed to delete captcha after successful verification", zap.String("captcha_id", captchaID.String()), zap.Error(err))
+		}
 		s.logger.Info("Captcha verified successfully", zap.String("captcha_id", captchaID.String()))
 		return nil
 	case "not_found":

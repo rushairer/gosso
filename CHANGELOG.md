@@ -234,6 +234,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Transaction rollback failures are now aggregated via `errors.Join` — callers can inspect both the original error and the rollback failure (`internal/db/transaction.go`).
 - OIDC `LogoutByAccountID` and `LogoutBySessionID` now gracefully handle nil session service — logs a warning and continues instead of returning an error that blocks the logout response (`internal/oidc/service/logout_service.go`).
 - OIDC controller tests now align with spec-compliant behavior — invalid `id_token_hint` falls through to anonymous logout (200), invalid Bearer returns 401, post-logout redirect tests verify actual redirect logic (`internal/oidc/controller/oidc_controller_test.go`).
+- Login rate limit counter cleanup (`redis.Del`) now logs at Warn level on failure — previously failed silently, making rate-limit lockout debugging impossible (`internal/auth/service/auth_login.go`).
+- `UpdateSession` account index TTL refresh (`redis.Expire`) now logs at Warn level on failure — a failed refresh can let the index expire before the session, orphaning session data (`internal/session/service/session_service.go`).
+- `ListSessionsByAccount` stale index cleanup (`redis.SRem`) now logs at Warn level on failure — dead references could accumulate in the account session set (`internal/session/service/session_service.go`).
+- `VerifyCaptcha` post-verification cleanup (`redis.Del`) now logs at Warn level on failure — captcha is already atomically marked `used` by Lua script, but cleanup failure should be observable (`internal/captcha/service/captcha_service.go`).
+- "Session expired during update" log level downgraded from Warn to Debug — this is a normal operational condition under load, not an actionable warning (`internal/session/service/session_service.go`).
 
 ### Changed
 

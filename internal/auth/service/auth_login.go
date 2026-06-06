@@ -118,8 +118,12 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		zap.String("session_id", session.ID))
 
 	// Clear login failures count
-	_ = s.redis.Del(ctx, attemptsKey)
-	_ = s.redis.Del(ctx, ipAttemptsKey)
+	if err := s.redis.Del(ctx, attemptsKey); err != nil {
+		s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key", attemptsKey), zap.Error(err))
+	}
+	if err := s.redis.Del(ctx, ipAttemptsKey); err != nil {
+		s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key", ipAttemptsKey), zap.Error(err))
+	}
 
 	// 8. Audit log
 	s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, req.Username, &account.ID,
@@ -191,9 +195,15 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 
 	// Clear login rate limit counters on successful MFA verification
 	if account.Username != nil {
-		_ = s.redis.Del(ctx, fmt.Sprintf("login_attempts:%s:%s", ip, strings.ToLower(*account.Username)))
+		key := fmt.Sprintf("login_attempts:%s:%s", ip, strings.ToLower(*account.Username))
+		if err := s.redis.Del(ctx, key); err != nil {
+			s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key", key), zap.Error(err))
+		}
 	}
-	_ = s.redis.Del(ctx, fmt.Sprintf("login_attempts_ip:%s", ip))
+	ipKey := fmt.Sprintf("login_attempts_ip:%s", ip)
+	if err := s.redis.Del(ctx, ipKey); err != nil {
+		s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key", ipKey), zap.Error(err))
+	}
 
 	// 5. Audit log
 	s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, "", &account.ID,
@@ -273,9 +283,15 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 
 	// Clear login rate limit counters on successful MFA verification
 	if account.Username != nil {
-		_ = s.redis.Del(ctx, fmt.Sprintf("login_attempts:%s:%s", ip, strings.ToLower(*account.Username)))
+		key := fmt.Sprintf("login_attempts:%s:%s", ip, strings.ToLower(*account.Username))
+		if err := s.redis.Del(ctx, key); err != nil {
+			s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key", key), zap.Error(err))
+		}
 	}
-	_ = s.redis.Del(ctx, fmt.Sprintf("login_attempts_ip:%s", ip))
+	ipKey := fmt.Sprintf("login_attempts_ip:%s", ip)
+	if err := s.redis.Del(ctx, ipKey); err != nil {
+		s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key", ipKey), zap.Error(err))
+	}
 
 	// 5. Audit log
 	s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, "", &account.ID,
@@ -338,7 +354,9 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 
 	// 6. Clear IP rate-limit counters on successful passkey login
 	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", ip)
-	_ = s.redis.Del(ctx, ipAttemptsKey)
+	if err := s.redis.Del(ctx, ipAttemptsKey); err != nil {
+		s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key", ipAttemptsKey), zap.Error(err))
+	}
 
 	return &LoginResult{
 		Account:      account,
