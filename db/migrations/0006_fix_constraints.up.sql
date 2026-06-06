@@ -5,10 +5,18 @@
 -- 外键约束（0002 缺失）
 -- ================================================
 
+-- 清理孤儿数据：删除 account_credentials 中引用不存在的 account 的记录
+DELETE FROM account_credentials ac
+WHERE NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = ac.account_id);
+
 -- account_credentials → accounts
 ALTER TABLE account_credentials
     ADD CONSTRAINT fk_account_credentials_account
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE;
+
+-- 清理孤儿数据：删除 federated_identities 中引用不存在的 account 的记录
+DELETE FROM federated_identities fi
+WHERE NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = fi.account_id);
 
 -- federated_identities → accounts
 ALTER TABLE federated_identities
@@ -19,6 +27,11 @@ ALTER TABLE federated_identities
 ALTER TABLE groups
     ADD CONSTRAINT fk_groups_parent
     FOREIGN KEY (parent_id) REFERENCES groups(id) ON DELETE SET NULL;
+
+-- 清理孤儿数据：删除 account_roles 中引用不存在的 account 或 role 的记录
+DELETE FROM account_roles ar
+WHERE NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = ar.account_id)
+   OR NOT EXISTS (SELECT 1 FROM roles r WHERE r.id = ar.role_id);
 
 -- account_roles → accounts
 ALTER TABLE account_roles
@@ -43,6 +56,10 @@ ALTER TABLE account_groups
 -- ================================================
 -- 外键约束（0005 缺失）
 -- ================================================
+
+-- 清理孤儿数据：删除 webauthn_credentials 中引用不存在的 account 的记录
+DELETE FROM webauthn_credentials wc
+WHERE NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = wc.account_id);
 
 -- webauthn_credentials → accounts
 ALTER TABLE webauthn_credentials
