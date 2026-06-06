@@ -148,7 +148,7 @@ func TestListCredentials_Empty(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestNewPasskeyService_NilLogger(t *testing.T) {
-	svc := NewPasskeyService(nil, nil, nil, nil, nil)
+	svc := NewPasskeyService(nil, nil, nil, nil, nil, nil)
 	assert.NotNil(t, svc)
 	assert.NotNil(t, svc.logger)
 }

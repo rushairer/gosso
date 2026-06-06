@@ -155,7 +155,7 @@ func setupAuthController(authSvc *mockAuthOrchestrator, tokenMgr *mockTokenManag
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 
-	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, nil, false, zap.NewNop())
+	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, false, zap.NewNop())
 
 	api := engine.Group("/api")
 	ctrl.RegisterRoutes(api, nil, nil, nil, nil, nil, nil)
@@ -171,7 +171,7 @@ func setupAuthControllerWithClaims(authSvc *mockAuthOrchestrator, tokenMgr *mock
 		ctx.Next()
 	})
 
-	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, nil, false, zap.NewNop())
+	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, false, zap.NewNop())
 	api := engine.Group("/api")
 	ctrl.RegisterRoutes(api, nil, nil, nil, nil, nil, nil)
 

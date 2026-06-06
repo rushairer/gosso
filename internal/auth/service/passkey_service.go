@@ -17,12 +17,18 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/auth/domain"
 	"github.com/rushairer/gosso/internal/auth/repository"
 	"github.com/rushairer/gosso/internal/cache"
 	dbutil "github.com/rushairer/gosso/internal/db"
 	"github.com/rushairer/gosso/utility"
 )
+
+// AccountLookup provides account lookup for passkey registration name resolution.
+type AccountLookup interface {
+	FindAccountByID(ctx context.Context, accountID string) (*accountDomain.Account, error)
+}
 
 const (
 	defaultChallengeTTL       = 5 * time.Minute
@@ -45,11 +51,12 @@ const maxPasskeyRequestBodySize = 64 << 10 // 64KB — WebAuthn payloads are CBO
 
 // PasskeyService WebAuthn Passkey service
 type PasskeyService struct {
-	web         *wa.WebAuthn
-	credRepo    repository.WebAuthnCredentialRepository
-	redis       *cache.RedisClient
-	db          *sql.DB
-	logger      *zap.Logger
+	web          *wa.WebAuthn
+	credRepo     repository.WebAuthnCredentialRepository
+	redis        *cache.RedisClient
+	db           *sql.DB
+	accountLookup AccountLookup
+	logger       *zap.Logger
 	challengeTTL time.Duration
 }
 
@@ -59,16 +66,18 @@ func NewPasskeyService(
 	credRepo repository.WebAuthnCredentialRepository,
 	redis *cache.RedisClient,
 	db *sql.DB,
+	accountLookup AccountLookup,
 	logger *zap.Logger,
 ) *PasskeyService {
 	logger = utility.EnsureLogger(logger)
 	return &PasskeyService{
-		web:          web,
-		credRepo:     credRepo,
-		redis:        redis,
-		db:           db,
-		logger:       logger,
-		challengeTTL: defaultChallengeTTL,
+		web:           web,
+		credRepo:      credRepo,
+		redis:         redis,
+		db:            db,
+		accountLookup: accountLookup,
+		logger:        logger,
+		challengeTTL:  defaultChallengeTTL,
 	}
 }
 
@@ -456,4 +465,23 @@ func transportsToStrings(transports []protocol.AuthenticatorTransport) []string 
 		result[i] = string(t)
 	}
 	return result
+}
+
+// ResolveAccountForRegistration resolves the account and derives username/displayName for passkey registration.
+// Falls back to accountID when username/displayName are not set on the account.
+func (s *PasskeyService) ResolveAccountForRegistration(ctx context.Context, accountID string) (username, displayName string, err error) {
+	account, err := s.accountLookup.FindAccountByID(ctx, accountID)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve account: %w", err)
+	}
+
+	username = accountID
+	if account.Username != nil {
+		username = *account.Username
+	}
+	displayName = username
+	if account.DisplayName != "" {
+		displayName = account.DisplayName
+	}
+	return username, displayName, nil
 }

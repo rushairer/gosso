@@ -118,6 +118,14 @@ type mockAccountSvcForPasskey struct {
 	findByIDFn func() (*accountDomain.Account, error)
 }
 
+type mockAccountLookupForPasskey struct {
+	err error
+}
+
+func (m *mockAccountLookupForPasskey) FindAccountByID(_ context.Context, _ string) (*accountDomain.Account, error) {
+	return nil, m.err
+}
+
 func (m *mockAccountSvcForPasskey) FindAccountByID(_ context.Context, id string) (*accountDomain.Account, error) {
 	if m.findByIDFn != nil {
 		return m.findByIDFn()
@@ -178,7 +186,6 @@ func TestPasskey_RegisterBegin_NoAuth(t *testing.T) {
 
 	ctrl := &PasskeyController{
 		passkeySvc: nil,
-		accountSvc: &mockAccountSvcForPasskey{},
 		logger:     zap.NewNop(),
 	}
 	engine.POST("/api/auth/passkey/register/begin", ctrl.RegisterBegin)
@@ -194,12 +201,13 @@ func TestPasskey_RegisterBegin_AccountNotFound(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 
+	passkeySvc := service.NewPasskeyService(nil, nil, nil, nil,
+		&mockAccountLookupForPasskey{err: fmt.Errorf("account not found")},
+		zap.NewNop(),
+	)
 	ctrl := &PasskeyController{
-		passkeySvc: nil,
-		accountSvc: &mockAccountSvcForPasskey{
-			findByIDFn: func() (*accountDomain.Account, error) { return nil, fmt.Errorf("not found") },
-		},
-		logger: zap.NewNop(),
+		passkeySvc: passkeySvc,
+		logger:     zap.NewNop(),
 	}
 	api := engine.Group("/api/auth")
 	api.Use(func(ctx *gin.Context) {
@@ -225,7 +233,6 @@ func TestPasskey_RegisterComplete_NoAuth(t *testing.T) {
 
 	ctrl := &PasskeyController{
 		passkeySvc: nil,
-		accountSvc: &mockAccountSvcForPasskey{},
 		logger:     zap.NewNop(),
 	}
 	engine.POST("/api/auth/passkey/register/complete", ctrl.RegisterComplete)

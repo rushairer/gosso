@@ -68,7 +68,7 @@ func InitializeAuthModule(
 			logger.Error("Failed to initialize WebAuthn", zap.Error(err))
 		} else {
 			webauthnRepo := repository.NewWebAuthnCredentialRepository(db)
-			passkeySvc = service.NewPasskeyService(web, webauthnRepo, redis, db, logger)
+			passkeySvc = service.NewPasskeyService(web, webauthnRepo, redis, db, accountSvc, logger)
 			if authConfig.ChallengeTTL > 0 {
 				passkeySvc.SetChallengeTTL(authConfig.ChallengeTTL)
 			}
@@ -111,7 +111,7 @@ func InitializeAuthModule(
 
 	emailSvc := notificationService.NewEmailService(smtpConfig, logger)
 	smsSvc := notificationService.NewStubSMSService(logger)
-	verificationSvc := service.NewVerificationService(redis, emailSvc, smsSvc, logger)
+	verificationSvc := service.NewVerificationService(redis, emailSvc, smsSvc, credentialRepo, logger)
 
 	passwordResetSvc := service.NewPasswordResetService(redis, credentialRepo, emailSvc, sessionSvc, accountSvc, db, baseURL, logger)
 

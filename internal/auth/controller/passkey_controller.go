@@ -9,7 +9,6 @@ import (
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
-	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/auth/middleware"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 )
@@ -19,7 +18,6 @@ type PasskeyController struct {
 	passkeySvc *authService.PasskeyService
 	authSvc    authService.AuthOrchestrator
 	tokenMgr   authService.TokenManager
-	accountSvc accountService.AccountService
 	logger     *zap.Logger
 }
 
@@ -28,14 +26,12 @@ func NewPasskeyController(
 	passkeySvc *authService.PasskeyService,
 	authSvc authService.AuthOrchestrator,
 	tokenMgr authService.TokenManager,
-	accountSvc accountService.AccountService,
 	logger *zap.Logger,
 ) *PasskeyController {
 	return &PasskeyController{
 		passkeySvc: passkeySvc,
 		authSvc:    authSvc,
 		tokenMgr:   tokenMgr,
-		accountSvc: accountSvc,
 		logger:     logger,
 	}
 }
@@ -114,19 +110,10 @@ func (c *PasskeyController) resolveAccountForPasskey(ctx *gin.Context) (accountI
 		return "", "", "", false
 	}
 
-	account, err := c.accountSvc.FindAccountByID(ctx, accountID)
+	username, displayName, err := c.passkeySvc.ResolveAccountForRegistration(ctx, accountID)
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "account not found"))
 		return "", "", "", false
-	}
-
-	username = accountID
-	if account.Username != nil {
-		username = *account.Username
-	}
-	displayName = username
-	if account.DisplayName != "" {
-		displayName = account.DisplayName
 	}
 	return accountID, username, displayName, true
 }

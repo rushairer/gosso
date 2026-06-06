@@ -1,9 +1,7 @@
 package controller
 
 import (
-	"crypto/rand"
 	"crypto/subtle"
-	"encoding/hex"
 	"errors"
 	"net/http"
 	"net/mail"
@@ -14,7 +12,6 @@ import (
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
-	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
@@ -28,7 +25,6 @@ type AuthController struct {
 	socialSvc        *authService.SocialLoginService
 	verificationSvc  *authService.VerificationService
 	passwordResetSvc *authService.PasswordResetService
-	credentialRepo   accountRepo.CredentialRepository
 	secureCookie     bool
 	logger           *zap.Logger
 }
@@ -55,7 +51,6 @@ func NewAuthController(
 	socialSvc *authService.SocialLoginService,
 	verificationSvc *authService.VerificationService,
 	passwordResetSvc *authService.PasswordResetService,
-	credentialRepo accountRepo.CredentialRepository,
 	secureCookie bool,
 	logger *zap.Logger,
 ) *AuthController {
@@ -65,7 +60,6 @@ func NewAuthController(
 		socialSvc:        socialSvc,
 		verificationSvc:  verificationSvc,
 		passwordResetSvc: passwordResetSvc,
-		credentialRepo:   credentialRepo,
 		secureCookie:     secureCookie,
 		logger:           logger,
 	}
@@ -452,12 +446,11 @@ func (c *AuthController) SocialAuthURL(ctx *gin.Context) {
 	provider := ctx.Param("provider")
 
 	// Generate cryptographic state for CSRF protection
-	stateBytes := make([]byte, 32)
-	if _, err := rand.Read(stateBytes); err != nil {
+	state, err := authService.GenerateAuthState()
+	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to generate state"))
 		return
 	}
-	state := hex.EncodeToString(stateBytes)
 	http.SetCookie(ctx.Writer, &http.Cookie{
 		Name:     "oauth_state",
 		Value:    state,
@@ -578,20 +571,8 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 	if req.Type == "phone" {
 		credType = accountDomain.CredentialTypePhone
 	}
-	creds, err := c.credentialRepo.FindByAccountAndType(ctx, tc.AccountID, credType)
-	if err != nil {
-		c.logger.Error("Failed to lookup credentials for verification", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "verification failed"))
-		return
-	}
-	found := false
-	for _, cred := range creds {
-		if cred.Identifier != nil && *cred.Identifier == req.Identifier {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if err := c.verificationSvc.ValidateCredentialOwnership(ctx, tc.AccountID, string(credType), req.Identifier); err != nil {
+		c.logger.Warn("Credential ownership validation failed", zap.Error(err))
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "identifier not associated with this account"))
 		return
 	}
@@ -630,17 +611,10 @@ func (c *AuthController) ConfirmVerification(ctx *gin.Context) {
 		return
 	}
 
-	// Validate verification code
-	accountID, err := c.verificationSvc.VerifyCode(ctx, req.Type, req.Identifier, req.Code)
-	if err != nil {
+	// Validate verification code and check ownership
+	if err := c.verificationSvc.VerifyCodeForAccount(ctx, req.Type, req.Identifier, req.Code, tc.AccountID); err != nil {
 		c.logger.Warn("Verification code failed", zap.Error(err))
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid verification code"))
-		return
-	}
-
-	// The verification code belongs to the current user
-	if accountID != tc.AccountID {
-		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "verification code does not belong to this account"))
 		return
 	}
 
