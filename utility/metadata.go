@@ -131,62 +131,36 @@ func (m *MetadataHelper) GetAll() map[string]any {
 	return m.data
 }
 
-// Standalone helper functions, independent of MetadataHelper struct
+// Standalone helper functions — delegate to MetadataHelper to avoid duplication.
 
-// GetStringValue safely gets a string value from a map
+// GetStringValue safely gets a string value from a map.
 func GetStringValue(m map[string]any, key, defaultValue string) string {
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return defaultValue
+	return NewMetadataHelper(m).GetString(key, defaultValue)
 }
 
-// GetIntValue safely gets an integer value from a map
+// GetIntValue safely gets an integer value from a map.
 func GetIntValue(m map[string]any, key string, defaultValue int) int {
-	switch v := m[key].(type) {
-	case int:
-		return v
-	case int64:
-		return int(v)
-	case float64:
-		return int(v)
-	default:
-		return defaultValue
-	}
+	return NewMetadataHelper(m).GetInt(key, defaultValue)
 }
 
-// GetBoolValue safely gets a boolean value from a map
+// GetBoolValue safely gets a boolean value from a map.
 func GetBoolValue(m map[string]any, key string, defaultValue bool) bool {
-	if v, ok := m[key].(bool); ok {
-		return v
-	}
-	return defaultValue
+	return NewMetadataHelper(m).GetBool(key, defaultValue)
 }
 
-// GetFloat64Value safely gets a float64 value from a map
+// GetFloat64Value safely gets a float64 value from a map.
 func GetFloat64Value(m map[string]any, key string, defaultValue float64) float64 {
-	switch v := m[key].(type) {
-	case float64:
-		return v
-	case float32:
-		return float64(v)
-	case int:
-		return float64(v)
-	case int64:
-		return float64(v)
-	default:
-		return defaultValue
-	}
+	return NewMetadataHelper(m).GetFloat64(key, defaultValue)
 }
 
-// SetIfNotEmpty sets value only when not empty
+// SetIfNotEmpty sets value only when not empty.
 func SetIfNotEmpty(m map[string]any, key, value string) {
 	if value != "" {
 		m[key] = value
 	}
 }
 
-// SetIfNotZero sets value only when not zero
+// SetIfNotZero sets value only when not zero.
 func SetIfNotZero(m map[string]any, key string, value int) {
 	if value != 0 {
 		m[key] = value
