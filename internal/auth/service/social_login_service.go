@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -90,6 +92,15 @@ func (s *SocialLoginService) SetMFAChecker(checker MFAChecker) {
 // Must be called during initialization; not safe for concurrent use.
 func (s *SocialLoginService) SetAuditor(auditor *auditService.Auditor) {
 	s.auditor = auditor
+}
+
+// GenerateAuthState generates a cryptographic state parameter for OAuth CSRF protection.
+func GenerateAuthState() (string, error) {
+	stateBytes := make([]byte, 32)
+	if _, err := rand.Read(stateBytes); err != nil {
+		return "", fmt.Errorf("generate auth state: %w", err)
+	}
+	return hex.EncodeToString(stateBytes), nil
 }
 
 // GetAuthURL gets the third-party authorization URL
@@ -262,7 +273,7 @@ func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, i
 
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("find account: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrAccountNotFound, err)
 	}
 
 	if account.Status != accountDomain.AccountStatusActive {
