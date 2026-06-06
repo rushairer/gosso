@@ -1,0 +1,302 @@
+package controller
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+
+	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
+	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+)
+
+// DeviceCodeRequestRequest is the device code initiation request body.
+type DeviceCodeRequestRequest struct {
+	ClientID     string `form:"client_id" binding:"required"`
+	ClientSecret string `form:"client_secret"`
+	Scope        string `form:"scope"`
+}
+
+// DeviceCodeRequest POST /oauth2/device/code
+func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
+	var req DeviceCodeRequestRequest
+	if err := ctx.ShouldBind(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "client_id is required"})
+		return
+	}
+
+	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
+		return
+	}
+
+	if !client.HasGrantType(oauth2Domain.GrantTypeDeviceCode) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "device_code grant not allowed"})
+		return
+	}
+
+	// Client authentication for confidential clients (RFC 8628 §3.1)
+	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
+		if errors.Is(err, oauth2Service.ErrClientSecretRequired) {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client_secret required for confidential client"})
+		} else {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "invalid client_secret"})
+		}
+		return
+	}
+
+	scopes := splitScope(req.Scope)
+	originalScope := req.Scope
+	if len(scopes) == 0 {
+		scopes = client.Scopes
+	} else {
+		scopes = client.ValidateScope(scopes)
+		if len(scopes) == 0 && originalScope != "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_scope", "error_description": "none of the requested scopes are valid for this client"})
+			return
+		}
+	}
+
+	dc, err := c.deviceCodeSvc.CreateDeviceCode(ctx, req.ClientID, scopes)
+	if err != nil {
+		c.logger.Error("Failed to create device code", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	verificationURI := c.issuer + "/oauth2/device"
+	ctx.JSON(http.StatusOK, gin.H{
+		"device_code":               dc.DeviceCode,
+		"user_code":                 dc.UserCode,
+		"verification_uri":          verificationURI,
+		"verification_uri_complete": verificationURI + "?" + url.Values{"user_code": {dc.UserCode}}.Encode(),
+		"expires_in":                int(time.Until(dc.ExpiresAt).Seconds()),
+		"interval":                  dc.Interval,
+	})
+}
+
+// DeviceUserPage GET /oauth2/device
+func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
+	userCode := ctx.Query("user_code")
+
+	if userCode == "" {
+		var buf bytes.Buffer
+		if err := c.deviceTmpl.Execute(&buf, gin.H{
+			"UserCode": "",
+		}); err != nil {
+			c.logger.Error("Failed to render device template", zap.Error(err))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
+		return
+	}
+
+	dc, err := c.deviceCodeSvc.GetDeviceCodeByUserCode(ctx, userCode)
+	if err != nil {
+		var buf bytes.Buffer
+		if err := c.deviceTmpl.Execute(&buf, gin.H{
+			"UserCode": "",
+			"Error":    "Invalid or expired code. Please try again.",
+		}); err != nil {
+			c.logger.Error("Failed to render device template", zap.Error(err))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
+		return
+	}
+
+	if dc.IsExpired() || dc.Status != oauth2Domain.DeviceCodeStatusPending {
+		var buf bytes.Buffer
+		if err := c.deviceTmpl.Execute(&buf, gin.H{
+			"UserCode": "",
+			"Error":    "This code has expired or is no longer valid.",
+		}); err != nil {
+			c.logger.Error("Failed to render device template", zap.Error(err))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
+		return
+	}
+
+	client, err := c.clientSvc.FindByClientID(ctx, dc.ClientID)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
+		return
+	}
+
+	var buf bytes.Buffer
+	if err := c.deviceTmpl.Execute(&buf, gin.H{
+		"UserCode":   dc.UserCode,
+		"DeviceCode": dc.DeviceCode,
+		"ClientName": client.Name,
+		"Scopes":     dc.Scopes,
+		"CSRFToken":  csrfTokenFromCookie(ctx),
+	}); err != nil {
+		c.logger.Error("Failed to render device template", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+	ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
+}
+
+// DeviceUserSubmitRequest is the device authorization form submission.
+type DeviceUserSubmitRequest struct {
+	DeviceCode string `form:"device_code" binding:"required"`
+	UserCode   string `form:"user_code"`
+	Approved   string `form:"approved"`
+}
+
+// DeviceUserSubmit POST /oauth2/device
+func (c *OAuth2Controller) DeviceUserSubmit(ctx *gin.Context) {
+	var req DeviceUserSubmitRequest
+	if err := ctx.ShouldBind(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
+	}
+
+	accountIDStr, ok := c.authenticateRequest(ctx)
+	if !ok {
+		return
+	}
+
+	if req.Approved == "true" {
+		if err := c.deviceCodeSvc.AuthorizeDeviceCode(ctx, req.DeviceCode, accountIDStr); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "device code authorization failed"})
+			return
+		}
+	} else {
+		if err := c.deviceCodeSvc.DenyDeviceCode(ctx, req.DeviceCode); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "device code denial failed"})
+			return
+		}
+	}
+
+	ctx.Header("Content-Type", "text/html; charset=utf-8")
+	ctx.String(http.StatusOK, "<!DOCTYPE html><html><body><p>Authorization %s. You may close this page.</p></body></html>",
+		map[bool]string{true: "granted", false: "denied"}[req.Approved == "true"])
+}
+
+func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenRequest) {
+	if req.ClientID == "" || req.DeviceCode == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "client_id and device_code required"})
+		return
+	}
+
+	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
+		return
+	}
+
+	if !client.HasGrantType(oauth2Domain.GrantTypeDeviceCode) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "device_code grant not allowed"})
+		return
+	}
+
+	// Client authentication for confidential clients
+	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
+		if errors.Is(err, oauth2Service.ErrClientSecretRequired) {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client_secret required"})
+		} else {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "invalid client_secret"})
+		}
+		return
+	}
+
+	dc, err := c.deviceCodeSvc.GetDeviceCode(ctx, req.DeviceCode)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "device code not found"})
+		return
+	}
+
+	if dc.IsExpired() {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "expired_token", "error_description": "device code has expired"})
+		return
+	}
+
+	if err := c.deviceCodeSvc.CheckAndUpdatePollRate(ctx, req.DeviceCode); err != nil {
+		ctx.Header("Retry-After", fmt.Sprintf("%d", dc.Interval))
+		ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "slow_down", "error_description": "too many requests"})
+		return
+	}
+
+	// Verify account is still active BEFORE claiming the device code.
+	// If checked after claim, an inactive account would waste the device code.
+	if !c.accountValidator.IsAccountActive(ctx, dc.AccountID) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "account is not active"})
+		return
+	}
+
+	// Atomically claim the device code (status authorized→used) to prevent double-use.
+	// The Lua script handles all status validation atomically, so no non-atomic
+	// status check is needed before this call.
+	claimedDC, err := c.deviceCodeSvc.ClaimAuthorizedDeviceCode(ctx, req.DeviceCode)
+	if err != nil {
+		// Distinguish expired vs consumed per RFC 8628 §3.5
+		errorDesc := "device code already consumed"
+		if lookupDC, lookupErr := c.deviceCodeSvc.GetDeviceCode(ctx, req.DeviceCode); lookupErr == nil && lookupDC.IsExpired() {
+			errorDesc = "device code has expired"
+		}
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": errorDesc})
+		return
+	}
+
+	// Use claimedDC for token issuance
+	dc = claimedDC
+
+	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
+		AccountID: dc.AccountID,
+		Scope:     strings.Join(dc.Scopes, " "),
+		ClientID:  dc.ClientID,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	refreshToken, err := c.tokenSvc.GenerateRefreshToken(ctx, dc.AccountID, dc.ClientID, "", strings.Join(dc.Scopes, " "))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	var idToken string
+	if c.idTokenSvc != nil {
+		for _, s := range dc.Scopes {
+			if s == "openid" {
+				var idErr error
+				idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", dc.AuthorizedAt)
+				if idErr != nil {
+					c.logger.Error("Failed to generate ID token for device code", zap.Error(idErr))
+					ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+					return
+				}
+				break
+			}
+		}
+	}
+
+	response := gin.H{
+		"access_token":  accessToken,
+		"refresh_token": refreshToken.Token,
+		"token_type":    "Bearer",
+		"expires_in":    int(c.tokenSvc.AccessExpiry().Seconds()),
+		"scope":         strings.Join(dc.Scopes, " "),
+	}
+	if idToken != "" {
+		response["id_token"] = idToken
+	}
+
+	ctx.JSON(http.StatusOK, response)
+}

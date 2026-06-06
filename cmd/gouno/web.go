@@ -259,17 +259,21 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	)
 
 	// Wire session revoker into account service (for account deletion -> session revocation)
-	if impl, ok := accountMod.Service.(interface{ SetSessionRevoker(accountService.SessionRevoker) }); ok {
-		impl.SetSessionRevoker(authMod.SessionService)
+	sessionRevokerImpl, ok := accountMod.Service.(interface{ SetSessionRevoker(accountService.SessionRevoker) })
+	if !ok {
+		return nil, fmt.Errorf("account service does not implement SetSessionRevoker")
 	}
+	sessionRevokerImpl.SetSessionRevoker(authMod.SessionService)
 
 	oauth2Mod := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig)
 	oidcMod := oidc.InitializeOIDCModule(tokenSvc, accountMod.Service, cfg.AuthConfig, authMod.SessionService, accountMod.CredentialRepo, logger)
 
 	// Wire OAuth2 client deleter into account service (for account deletion -> OAuth2 client cascade)
-	if impl, ok := accountMod.Service.(interface{ SetOAuth2ClientDeleter(accountService.OAuth2ClientDeleter) }); ok {
-		impl.SetOAuth2ClientDeleter(&oauth2ClientDeleterAdapter{clientRepo: oauth2Mod.ClientRepo})
+	oauth2DeleterImpl, ok := accountMod.Service.(interface{ SetOAuth2ClientDeleter(accountService.OAuth2ClientDeleter) })
+	if !ok {
+		return nil, fmt.Errorf("account service does not implement SetOAuth2ClientDeleter")
 	}
+	oauth2DeleterImpl.SetOAuth2ClientDeleter(&oauth2ClientDeleterAdapter{clientRepo: oauth2Mod.ClientRepo})
 
 	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, !cfg.WebServerConfig.Debug, logger)
 	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &accountValidatorAdapter{accountSvc: accountMod.Service}, authMod.SessionService, cfg.AuthConfig.Issuer, logger)

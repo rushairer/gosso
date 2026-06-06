@@ -29,6 +29,9 @@ lint-fix:
 	fi
 	golangci-lint run --fix ./...
 test:
+	go test -v -count=1 ./...
+
+test-ui:
 	@if ! command -v goconvey &> /dev/null; then \
 		go install github.com/smartystreets/goconvey@latest; \
 	fi
@@ -114,7 +117,8 @@ help:
 	@echo "  lint-fix             - Run golangci-lint with auto-fix"
 	@echo ""
 	@echo "🧪 Testing Commands:"
-	@echo "  test                 - Run tests with goconvey"
+	@echo "  test                 - Run unit tests"
+	@echo "  test-ui              - Run tests with goconvey (GUI)"
 	@echo "  test-integration     - Run integration tests (requires docker-test-up)"
 	@echo ""
 	@echo "🐳 Docker Environment Commands:"
@@ -144,7 +148,7 @@ help:
 	@echo "🆘 Help Commands:"
 	@echo "  help                 - Show this help message"
 
-.PHONY: default build run dev lint lint-fix test test-integration docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs docker-prod-up docker-prod-down docker-prod-logs env-dev env-test env-prod env-all help
+.PHONY: default build run dev lint lint-fix test test-ui test-integration docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs docker-prod-up docker-prod-down docker-prod-logs env-dev env-test env-prod env-all help
 # Examples - 示例程序
 .PHONY: examples example-account example-redis example-metadata
 

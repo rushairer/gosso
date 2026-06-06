@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- `OAuth2Controller` (1049 lines) split into 5 files by flow: `oauth2_authorize.go`, `oauth2_token.go`, `oauth2_revoke.go`, `oauth2_device.go` — improves readability and maintainability (`internal/oauth2/controller/`).
+- Makefile `test` target now runs `go test -v -count=1 ./...` instead of `goconvey`; goconvey GUI runner moved to `test-ui` target — aligns with standard Go testing workflow (`Makefile`).
+- Setter injection type assertions in `initModules` now return explicit errors instead of silently skipping — prevents runtime failures from unresolvable cross-module dependencies (`cmd/gouno/web.go`).
+
 ### Added
 
 - `MaxBodySizeMiddleware` limits request body size (default 10MB, configurable via `web_server.max_body_size`) — prevents memory exhaustion from oversized requests (`middleware/middleware.go`, `config/config.go`).
