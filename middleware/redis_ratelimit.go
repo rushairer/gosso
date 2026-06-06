@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
+	"github.com/rushairer/gouno"
 	"github.com/rushairer/gosso/internal/cache"
 )
 
@@ -72,7 +73,7 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context)
 	return func(ctx *gin.Context) {
 		key := fmt.Sprintf("rate_limit:%s", keyFunc(ctx))
 
-		result, err := slidingWindowScript.Run(ctx, rds.GetClient(),
+		result, err := rds.RunScript(ctx, slidingWindowScript,
 			[]string{key},
 			int(window.Seconds()),
 			limit,
@@ -85,10 +86,7 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context)
 			if failOpen {
 				ctx.Next()
 			} else {
-				ctx.JSON(http.StatusServiceUnavailable, gin.H{
-					"code":    503,
-					"message": "rate limit service unavailable",
-				})
+				ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "rate limit service unavailable"))
 				ctx.Abort()
 			}
 			return
@@ -98,10 +96,7 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context)
 			if failOpen {
 				ctx.Next()
 			} else {
-				ctx.JSON(http.StatusServiceUnavailable, gin.H{
-					"code":    503,
-					"message": "rate limit service unavailable",
-				})
+				ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "rate limit service unavailable"))
 				ctx.Abort()
 			}
 			return
@@ -118,10 +113,7 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context)
 
 		if !allowed {
 			ctx.Header("Retry-After", fmt.Sprintf("%d", retryAfter))
-			ctx.JSON(http.StatusTooManyRequests, gin.H{
-				"code":    429,
-				"message": "rate limit exceeded",
-			})
+			ctx.JSON(http.StatusTooManyRequests, gouno.NewErrorResponse(http.StatusTooManyRequests, "rate limit exceeded"))
 			ctx.Abort()
 			return
 		}
