@@ -82,6 +82,34 @@ func (s *TokenService) GenerateAccessToken(claims *domain.AccessTokenClaims) (st
 	return tokenString, nil
 }
 
+// GenerateShortLivedToken generates a JWT access token (RS256) that respects
+// the caller-provided ExpiresAt. Unlike GenerateAccessToken which always uses
+// the configured accessExpiry, this method preserves short TTLs for special
+// purposes like MFA verification tokens.
+func (s *TokenService) GenerateShortLivedToken(claims *domain.AccessTokenClaims) (string, error) {
+	now := time.Now()
+	clonedClaims := *claims
+	if clonedClaims.ID == "" {
+		clonedClaims.ID = uuid.New().String()
+	}
+	clonedClaims.Issuer = s.issuer
+	clonedClaims.Subject = clonedClaims.AccountID
+	clonedClaims.IssuedAt = jwt.NewNumericDate(now)
+	if clonedClaims.ExpiresAt == nil || clonedClaims.ExpiresAt.Time.IsZero() {
+		clonedClaims.ExpiresAt = jwt.NewNumericDate(now.Add(s.accessExpiry))
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, &clonedClaims)
+	token.Header["kid"] = s.keySvc.KeyID()
+	tokenString, err := token.SignedString(s.keySvc.PrivateKey())
+	if err != nil {
+		s.logger.Error("Failed to sign short-lived token", zap.Error(err))
+		return "", fmt.Errorf("sign short-lived token: %w", err)
+	}
+
+	return tokenString, nil
+}
+
 // AccessExpiry returns the access token expiration duration
 func (s *TokenService) AccessExpiry() time.Duration {
 	return s.accessExpiry
@@ -168,12 +196,8 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 	if sessionID != "" {
 		sessionKey := s.buildSessionTokensKey(sessionID)
 		tokenHash := domain.HashToken(tokenString)
-		if err := s.redis.SAdd(ctx, sessionKey, tokenHash); err != nil {
+		if err := s.redis.SAddWithTTL(ctx, sessionKey, tokenHash, s.refreshExpiry); err != nil {
 			s.logger.Warn("Failed to index refresh token by session", zap.Error(err), zap.String("session_id", sessionID))
-		}
-		if err := s.redis.Expire(ctx, sessionKey, s.refreshExpiry); err != nil {
-			s.logger.Error("Failed to set TTL on session tokens set — may grow unbounded",
-				zap.String("key", sessionKey), zap.Error(err))
 		}
 	}
 

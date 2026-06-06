@@ -34,10 +34,8 @@ linters:
       - path: _test\.go
         linters:
           - errcheck
-          - govet
           - unparam
           - ineffassign
-          - staticcheck
       # Generated code
       - path: \.gen\.go$
         linters:

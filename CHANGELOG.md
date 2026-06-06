@@ -13,6 +13,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Dedicated rate limits for OAuth2 `/introspect` and `/device/code` endpoints (configurable via `web_server.rate_limits.introspect` and `web_server.rate_limits.device_code`) — prevents CPU exhaustion from bcrypt-heavy introspect calls (`router/web.go`, `config/config.go`).
 - `MaxSessions` is now configurable via `auth.max_sessions` config (default: 10) (`config/config.go`, `internal/auth/module.go`).
 - Migration 0011 adds `idx_audit_record_created_at` index on `audit_record(created_at DESC)` — optimizes time-range audit queries (`db/migrations/0011_audit_record_created_at_index.up.sql`).
+- `GenerateShortLivedToken` method on `TokenService` — generates JWT tokens that respect caller-provided `ExpiresAt` instead of unconditionally overwriting it with the access token TTL (`internal/token/service/token_service.go`).
+
+### Changed
+
+- RSA key size for new key generation increased from 2048 to 3072 bits — existing keys are not affected; rotate keys to upgrade (`internal/token/service/key_service.go`).
+- Hardcoded `"admin"` and `"mfa"` strings extracted to `RoleAdmin` and `ScopeMFA` constants (`internal/auth/service/errors.go`).
+- OAuth2 `accountValidator` nil-check changed from skip-on-nil to fail-closed panic — nil validator is now treated as an initialization error (`internal/oauth2/controller/oauth2_controller.go`).
+- Duplicate/inline `errors.New` calls in passkey and social login services consolidated into checkable sentinel errors in `errors.go` — enables reliable `errors.Is` matching (`internal/auth/service/errors.go`, `internal/auth/service/passkey_service.go`, `internal/auth/service/social_login_service.go`).
+- Error wrapping standardized to use `%w` verb where `errors.Is` matching is needed — fixes `ErrUnsupportedProvider` and `ErrAccountNotActive` unwrapping (`internal/auth/service/social_login_service.go`, `internal/auth/service/mfa_service.go`).
+- Duplicate `ErrAccountNotActive` definition removed from `oidc/service` — unified to use the canonical definition from `auth/service` (`internal/oidc/service/userinfo_service.go`).
+- Shared `auditLog` helper extracted to `audit_helper.go` — removes duplication between `AuthService` and `SocialLoginService` (`internal/auth/service/audit_helper.go`, `internal/auth/service/auth_service.go`, `internal/auth/service/social_login_service.go`).
+- `wire.go` renamed to `module.go` in all modules — avoids confusion with Google Wire DI tool (`internal/account/module.go`, `internal/auth/module.go`, `internal/oauth2/module.go`, `internal/oidc/module.go`).
+- `isUniqueViolation` now uses `pgconn.PgError` type assertion with SQLSTATE code `23505` instead of fragile string matching (`internal/auth/service/social_login_service.go`).
+- Session index and token index `EXPIRE` failure now logged at Error level — silent failure could leave sets without TTL, accumulating indefinitely in Redis (`internal/session/service/session_service.go`, `internal/token/service/token_service.go`).
+- Consent and device authorization templates now inject CSRF token server-side via `{{.CSRFToken}}` with JS fallback — defense-in-depth against cookie-not-set edge cases (`internal/oauth2/controller/template/consent.html`, `internal/oauth2/controller/template/device.html`, `internal/oauth2/controller/oauth2_controller.go`).
+- CSRF middleware doc comment corrected from "prefix match" to "exact match" to match actual behavior (`middleware/csrf.go`).
+- Magic numbers `100ms` and `5s` in password reset service extracted to named constants `PasswordResetRetryDelay` and `PasswordResetSyncRevokeTimeout` (`internal/auth/service/password_reset_service.go`).
+- `WebAuthnRPOrigin` config validation now checks URL format with `http`/`https` scheme in addition to non-empty check (`config/config.go`).
+- `Issuer` and `PasswordResetBaseURL` config validation now checks URL format with `http`/`https` scheme — prevents silent OIDC discovery and password reset failures from malformed URLs (`config/config.go`).
+- `SendVerification` and `ConfirmVerification` request `Identifier` field now has `max=255` binding — prevents oversized input from reaching the service layer (`internal/auth/controller/auth_controller.go`).
+- `ConfirmVerification` credential lookup failure now logged at Warn level with context — previously silently returned 404, hiding infrastructure errors (`internal/auth/controller/auth_controller.go`).
+- Password reset failure log level changed from Debug to Warn — consistent with `ForgotPassword` failure logging (`internal/auth/controller/auth_controller.go`).
+- OIDC Discovery now includes `introspection_endpoint`, `"none"` in `token_endpoint_auth_methods_supported`, and `authorization_response_iss_parameter_supported` — reflects actual server capabilities and RFC 9207 compliance (`internal/oidc/service/discovery_service.go`).
+- Social login `loginExistingUser` failure paths now emit audit logs — `FindAccountByID` errors and `ErrAccountNotActive` were previously unaudited (`internal/auth/service/social_login_service.go`).
+- OIDC Logout Bearer token now validated once and cached — eliminates redundant `ValidateAccessTokenWithContext` call for the same token (`internal/oidc/controller/oidc_controller.go`).
+- `SessionService.SetSessionTTL` and `SetMaxSessions` now reject invalid values (non-positive TTL, negative max sessions) instead of silently accepting them (`internal/session/service/session_service.go`).
+- `OAuth2Module` and `OIDCModule` `Initialize` functions now return a struct instead of 5 separate values — improves readability and maintainability (`internal/oauth2/module.go`, `internal/oidc/module.go`, `cmd/gouno/web.go`).
+- Login failure, token refresh failure, and MFA verification failure now logged at Warn level instead of Debug — production default hides Debug, losing security audit signals (`internal/auth/controller/auth_controller.go`).
+- Logout handler now uses JWT claims from middleware context instead of re-validating the access token — eliminates redundant `ValidateAccessTokenWithContext` call (`internal/auth/controller/auth_controller.go`).
+- `ValidateAccessToken` marked as deprecated in favor of `ValidateAccessTokenWithContext` — the no-context variant bypasses request-scoped context propagation (`internal/token/service/token_service.go`).
+- `Auditor.Wait()` now explicitly drains in-flight audit batches during graceful shutdown instead of relying on deferred `Close()` — ensures audit writes complete before process exit (`internal/audit/service/audit.go`, `cmd/gouno/web.go`).
+- `RevokeSession` now cascades refresh token revocation before deleting the session — consistent with `EnforceSessionLimit` and `RevokeAllForAccount` (`internal/session/service/session_service.go`).
+- `Auditor` now accepts a `*zap.Logger` — `Log` method preserves original audit Meta on JSON unmarshal/marshal failure instead of silently discarding it (`internal/audit/service/audit.go`).
+- Admin self-operation check now uses `uuid.Parse` comparison instead of string `==` — prevents bypass when UUID formats differ between middleware and URL parameter (`internal/admin/controller/admin_controller.go`).
+- `RevokeSession` now returns `ErrSessionAccessDenied` sentinel error — enables callers to distinguish permission errors (403) from infrastructure errors (500) (`internal/session/service/session_service.go`, `internal/auth/controller/auth_controller.go`).
+- Account-level token revocation TTL now has a 5-minute minimum floor — prevents misconfigured small `accessExpiry` from defeating OIDC logout revocation (`internal/token/service/token_service.go`).
+- MFA token blacklist moved to defer pattern — MFA token is now blacklisted immediately after validation, before MFA code verification, preventing reuse if verification errors out (`internal/auth/service/auth_login.go`).
+- Refresh token session index now uses atomic `SAddWithTTL` instead of separate `SADD`+`EXPIRE` — prevents unbounded key growth if `EXPIRE` fails (`internal/token/service/token_service.go`).
+- Production config: SMTP, issuer, and password reset base URL externalized to environment variables (`GOUNO_SMTP_*`, `GOUNO_AUTH_ISSUER`, `GOUNO_PASSWORD_RESET_BASE_URL`) (`config/production.yaml`).
+- Production config: added missing required fields `session_ttl`, `max_sessions`, `max_body_size` (`config/production.yaml`).
+- `.env.production.example` updated with auth and SMTP environment variable templates (`.env.production.example`).
+- `.gitignore` now includes `keys/` and `log/` directories to prevent accidental commits of sensitive material (`.gitignore`).
+- `docker-compose.test.yml` ports bound to `127.0.0.1` — consistent with development compose, prevents exposure on public interfaces (`docker-compose.test.yml`).
+- CI integration tests expanded to include `./internal/token/service/` and `./internal/account/` packages (`.github/workflows/ci.yml`).
+- CI added 50% coverage threshold check to prevent silent regression (`.github/workflows/ci.yml`).
+- Linter config restored `govet` and `staticcheck` for test files — catches real bugs in test code (`.golangci.yml`).
+- Logout handler refactored to use `getClaimsFromContext` helper — consistent with all other authenticated handlers (`internal/auth/controller/auth_controller.go`).
+
+### Fixed
+
+- MFA verification token TTL silently overwritten by access token expiry — `GenerateAccessToken` unconditionally overwrites caller-provided `ExpiresAt`, causing MFA tokens to live 3x longer than intended (e.g., 15min vs 5min), expanding the TOTP brute-force window. Fixed by introducing `GenerateShortLivedToken` that respects caller-provided expiry (`internal/token/service/token_service.go`, `internal/auth/service/auth_login.go`).
 
 ### Changed
 

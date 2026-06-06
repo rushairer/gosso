@@ -165,13 +165,17 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	accountID := claims.AccountID
 	mfaAccountID = &accountID
 
-	// 2. Verify based on MFA type
-	if err := s.verifyMFACode(ctx, mfaType, accountID, mfaCode, claims.ID); err != nil {
-		return nil, err
-	}
+	// 2. Blacklist MFA token immediately after validation to prevent reuse,
+	// regardless of whether the MFA code verification succeeds or fails.
+	defer func() {
+		if err := s.blacklistMFAToken(ctx, claims); err != nil {
+			s.logger.Error("Failed to blacklist MFA token after verification attempt",
+				zap.String("account_id", accountID), zap.String("jti", claims.ID), zap.Error(err))
+		}
+	}()
 
-	// 2.5. Blacklist MFA token to prevent reuse
-	if err := s.blacklistMFAToken(ctx, claims); err != nil {
+	// 3. Verify based on MFA type
+	if err := s.verifyMFACode(ctx, mfaType, accountID, mfaCode, claims.ID); err != nil {
 		return nil, err
 	}
 
@@ -426,7 +430,7 @@ func (s *AuthService) handleMFARequirement(ctx context.Context, account *account
 		return nil, nil
 	}
 
-	mfaToken, err := s.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
+	mfaToken, err := s.tokenSvc.GenerateShortLivedToken(&tokenDomain.AccessTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.New().String(),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.mfaVerificationTTL)),

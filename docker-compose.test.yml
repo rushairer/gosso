@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-gosso}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gosso123}
     ports:
-      - "${POSTGRES_EXTERNAL_PORT:-5434}:5432"
+      - "127.0.0.1:${POSTGRES_EXTERNAL_PORT:-5434}:5432"
     tmpfs:
       - /var/lib/postgresql/data  # 使用内存存储
     healthcheck:
@@ -19,8 +19,8 @@ services:
   mailpit-test:
     image: axllent/mailpit:latest
     ports:
-      - "${SMTP_EXTERNAL_PORT:-1027}:1025"  # SMTP 端口
-      - "${MAILPIT_WEB_EXTERNAL_PORT:-8027}:8025"  # Web UI 端口
+      - "127.0.0.1:${SMTP_EXTERNAL_PORT:-1027}:1025"  # SMTP 端口
+      - "127.0.0.1:${MAILPIT_WEB_EXTERNAL_PORT:-8027}:8025"  # Web UI 端口
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8025"]
       timeout: 5s
@@ -30,7 +30,7 @@ services:
   redis-test:
     image: redis:7-alpine
     ports:
-      - "${REDIS_EXTERNAL_PORT:-6381}:6379"
+      - "127.0.0.1:${REDIS_EXTERNAL_PORT:-6381}:6379"
     tmpfs:
       - /data
     healthcheck:

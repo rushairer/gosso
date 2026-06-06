@@ -45,6 +45,12 @@ ssl/*.crt
 ssl/*.key
 ssl/*.pem
 
+# RSA keys (JWT signing)
+keys/
+
+# Logs
+log/
+
 # Go 相关文件
 # Test binary, built with `go test -c`
 # *.test

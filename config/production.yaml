@@ -4,6 +4,7 @@
 web_server:
     address: 0.0.0.0
     port: 8080
+    max_body_size: 1048576
     idle_timeout: 60s
     read_timeout: 5s
     read_header_timeout: 2s
@@ -43,18 +44,20 @@ task_pipeline:
     buffer_size: 64
     flush_interval: 1s
 smtp:
-    host: localhost
-    port: 1025
-    username: ""
-    password: ""
-    from: "noreply@gosso.com"
+    host: "${GOUNO_SMTP_HOST}"
+    port: "${GOUNO_SMTP_PORT}"
+    username: "${GOUNO_SMTP_USERNAME}"
+    password: "${GOUNO_SMTP_PASSWORD}"
+    from: "${GOUNO_SMTP_FROM}"
 captcha:
     type: math
 log:
     level: 0 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
 auth:
     jwt_secret: "${GOUNO_JWT_SECRET}"
-    issuer: "https://gosso.example.com"
+    issuer: "${GOUNO_AUTH_ISSUER}"
+    session_ttl: 720h
+    max_sessions: 10
     access_token_expiry: 15m
     refresh_token_expiry: 720h
     authorization_code_expiry: 10m
@@ -66,7 +69,7 @@ auth:
         - profile
         - email
     private_key_path: "/app/keys/private.pem"
-    password_reset_base_url: "https://gosso.example.com/reset-password"
+    password_reset_base_url: "${GOUNO_PASSWORD_RESET_BASE_URL}"
 cors:
     allowed_origins:
         - "${GOUNO_CORS_ORIGIN}"

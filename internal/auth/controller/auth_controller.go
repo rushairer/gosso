@@ -238,14 +238,8 @@ type LogoutRequest struct {
 
 // Logout POST /api/auth/logout
 func (c *AuthController) Logout(ctx *gin.Context) {
-	jwtClaims, exists := ctx.Get("jwt_claims")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
-		return
-	}
-	tc, ok := jwtClaims.(*tokenDomain.AccessTokenClaims)
+	tc, ok := getClaimsFromContext(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
 		return
 	}
 
