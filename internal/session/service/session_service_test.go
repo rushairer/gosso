@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -11,27 +10,28 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/session/domain"
+	"github.com/rushairer/gosso/internal/testutil"
 )
 
-func setupTestSessionService(t *testing.T) *SessionService {
+func setupTestSessionService(t *testing.T) (*SessionService, func()) {
+	t.Helper()
 	logger := zap.NewNop()
-	dsn := os.Getenv("GOUNO_REDIS_DSN")
-	if dsn == "" {
-		dsn = "redis://localhost:6379/15"
-	}
 
-	redisClient, err := cache.NewRedisClient(dsn, 10, 5*time.Second, logger)
-	if err != nil {
-		t.Skip("Redis not available, skipping test:", err)
-	}
+	redisClient, mr := testutil.SetupTestRedis(t)
+	cleanup := mr.Close
 
 	service := NewSessionService(redisClient, logger)
 	service.SetSessionTTL(10 * time.Second) // short TTL for tests
+	service.SetTokenRevoker(&stubTokenRevoker{})
 
-	return service
+	return service, cleanup
 }
+
+// stubTokenRevoker implements TokenRevoker for testing.
+type stubTokenRevoker struct{}
+
+func (s *stubTokenRevoker) RevokeAllForSession(_ context.Context, _ string) error { return nil }
 
 // ──────────────────────────────────────────────
 // Constructor and config (no Redis needed)
@@ -81,8 +81,8 @@ func TestSessionService_BuildAccountSessionsKey(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestSessionService_CreateAndGetSession(t *testing.T) {
-	service := setupTestSessionService(t)
-	defer service.redis.Close()
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 	accountID := uuid.New().String()
@@ -111,8 +111,8 @@ func TestSessionService_CreateAndGetSession(t *testing.T) {
 }
 
 func TestSessionService_UpdateSession(t *testing.T) {
-	service := setupTestSessionService(t)
-	defer service.redis.Close()
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -148,8 +148,8 @@ func TestSessionService_UpdateSession(t *testing.T) {
 }
 
 func TestSessionService_DeleteSession(t *testing.T) {
-	service := setupTestSessionService(t)
-	defer service.redis.Close()
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -174,8 +174,8 @@ func TestSessionService_DeleteSession(t *testing.T) {
 }
 
 func TestSessionService_ValidateSession(t *testing.T) {
-	service := setupTestSessionService(t)
-	defer service.redis.Close()
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -200,8 +200,8 @@ func TestSessionService_ValidateSession(t *testing.T) {
 }
 
 func TestSessionService_RefreshSession(t *testing.T) {
-	service := setupTestSessionService(t)
-	defer service.redis.Close()
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -233,16 +233,16 @@ func TestSessionService_RefreshSession(t *testing.T) {
 }
 
 func TestSessionService_RevokeSession_NotFound(t *testing.T) {
-	service := setupTestSessionService(t)
-	defer service.redis.Close()
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
 
 	err := service.RevokeSession(context.Background(), "account-001", uuid.New().String())
 	assert.Equal(t, ErrSessionNotFound, err)
 }
 
 func TestSessionService_ListSessionsByAccount_Empty(t *testing.T) {
-	service := setupTestSessionService(t)
-	defer service.redis.Close()
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
 
 	sessions, err := service.ListSessionsByAccount(context.Background(), "nonexistent-account")
 	require.NoError(t, err)
@@ -250,8 +250,8 @@ func TestSessionService_ListSessionsByAccount_Empty(t *testing.T) {
 }
 
 func TestSessionService_RevokeAllForAccount_Empty(t *testing.T) {
-	service := setupTestSessionService(t)
-	defer service.redis.Close()
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
 
 	err := service.RevokeAllForAccount(context.Background(), "nonexistent-account")
 	require.NoError(t, err)

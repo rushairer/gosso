@@ -15,6 +15,19 @@ import (
 	"github.com/rushairer/gosso/internal/account/repository"
 )
 
+// stubSessionRevoker implements SessionRevoker for testing.
+type stubSessionRevoker struct{}
+
+func (s *stubSessionRevoker) RevokeAllForAccount(_ context.Context, _ string) error { return nil }
+
+// stubOAuth2ClientDeleter implements OAuth2ClientDeleter for testing.
+type stubOAuth2ClientDeleter struct{}
+
+func (s *stubOAuth2ClientDeleter) SoftDeleteOAuth2ClientsByAccount(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+	return nil
+}
+
+
 // TestRegisterAccount tests account registration
 func TestRegisterAccount(t *testing.T) {
 	// Create mock database
@@ -145,6 +158,9 @@ func TestChangePassword(t *testing.T) {
 	roleRepo := repository.NewRoleRepository(db)
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	impl := accountService.(*accountServiceImpl)
+	impl.SetSessionRevoker(&stubSessionRevoker{})
+	impl.SetOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
 
 	accountID := "test-account-id"
 	oldPassword := "OldPassword123!"
@@ -188,6 +204,9 @@ func TestSoftDeleteAccount(t *testing.T) {
 	roleRepo := repository.NewRoleRepository(db)
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	impl := accountService.(*accountServiceImpl)
+	impl.SetSessionRevoker(&stubSessionRevoker{})
+	impl.SetOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
 
 	accountID := "test-account-id"
 

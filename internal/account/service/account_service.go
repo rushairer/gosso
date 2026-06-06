@@ -306,7 +306,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 				return err
 			}
 		} else {
-			s.logger.Warn("OAuth2ClientDeleter not set, skipping OAuth2 client cascade on account deletion", zap.String("account_id", accountID))
+			return fmt.Errorf("OAuth2ClientDeleter not configured; cannot cascade-delete OAuth2 clients")
 		}
 		return s.accountRepo.SoftDeleteAccount(ctx, tx, accountID, now)
 	})
@@ -323,7 +323,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 			s.logger.Error("Failed to revoke sessions after account deletion", zap.String("account_id", accountID), zap.Error(revokeErr))
 		}
 	} else {
-		s.logger.Warn("SessionRevoker not set, skipping session revocation on account deletion", zap.String("account_id", accountID))
+		return fmt.Errorf("SessionRevoker not configured; cannot revoke sessions on account deletion")
 	}
 
 	// 5. Audit log
@@ -411,8 +411,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 				zap.String("account_id", accountID), zap.Error(revokeErr))
 		}
 	} else {
-		s.logger.Warn("SessionRevoker not set, skipping session revocation on password change",
-			zap.String("account_id", accountID))
+		return fmt.Errorf("SessionRevoker not configured; cannot revoke sessions on password change")
 	}
 
 	// 7. Audit log
@@ -522,8 +521,7 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 				zap.String("account_id", accountID), zap.Error(revokeErr))
 		}
 	} else {
-		s.logger.Warn("SessionRevoker not set, skipping session revocation on account suspension",
-			zap.String("account_id", accountID))
+		return fmt.Errorf("SessionRevoker not configured; cannot revoke sessions on account suspension")
 	}
 
 	s.auditLog(ctx, auditDomain.NewRecord(
