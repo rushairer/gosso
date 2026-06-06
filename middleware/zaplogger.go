@@ -37,7 +37,7 @@ func ZapLoggerMiddleware(logger *zap.Logger) gin.HandlerFunc {
 			}
 		}
 
-		if accountID, exists := ctx.Get("account_id"); exists {
+		if accountID, exists := ctx.Get(ContextKeyAccountID); exists {
 			if aid, ok := accountID.(string); ok && aid != "" {
 				fields = append(fields, zap.String("account_id", aid))
 			}

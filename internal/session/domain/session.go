@@ -2,14 +2,12 @@ package domain
 
 import (
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // Session is the session entity.
 type Session struct {
-	ID           uuid.UUID `json:"id"`
-	AccountID    uuid.UUID `json:"account_id"`
+	ID           string `json:"id"`
+	AccountID    string `json:"account_id"`
 	Username     string    `json:"username,omitempty"`
 	IP           string    `json:"ip"`
 	UserAgent    string    `json:"user_agent"`

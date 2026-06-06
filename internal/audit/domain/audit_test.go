@@ -30,7 +30,7 @@ func TestNewRecord_BasicFields(t *testing.T) {
 }
 
 func TestNewRecord_WithAccountID(t *testing.T) {
-	accountID := uuid.New()
+	accountID := uuid.New().String()
 	resource := json.RawMessage(`{}`)
 
 	record := NewRecord(ActionAccountRegister, "user", &accountID, resource, nil)
@@ -55,9 +55,9 @@ func TestNewRecord_UUIDFormat(t *testing.T) {
 
 	record := NewRecord(ActionLoginSuccess, "system", nil, resource, nil)
 
-	_, err := uuid.Parse(record.ID.String())
+	_, err := uuid.Parse(record.ID)
 	assert.NoError(t, err)
-	_, err = uuid.Parse(record.TxID.String())
+	_, err = uuid.Parse(record.TxID)
 	assert.NoError(t, err)
 }
 

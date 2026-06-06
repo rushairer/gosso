@@ -113,9 +113,7 @@ func NewAccountService(
 	auditor *auditService.Auditor,
 	logger *zap.Logger,
 ) AccountService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	return &accountServiceImpl{
 		db:                    db,
 		accountRepo:           accountRepo,
@@ -248,7 +246,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountRegister,
 		audit.IPFromContext(ctx),
-		parseUUID(account.ID),
+		stringPtr(account.ID),
 		utility.MustMarshalJSON(map[string]any{"account_id": account.ID}),
 		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
@@ -324,7 +322,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountDelete,
 		audit.IPFromContext(ctx),
-		parseUUID(accountID),
+		stringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
 		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
@@ -413,7 +411,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionPasswordChange,
 		audit.IPFromContext(ctx),
-		parseUUID(accountID),
+		stringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
 		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
@@ -467,7 +465,7 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionRoleAssign,
 		audit.IPFromContext(ctx),
-		parseUUID(accountID),
+		stringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
 		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
@@ -488,7 +486,7 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionRoleRemove,
 		audit.IPFromContext(ctx),
-		parseUUID(accountID),
+		stringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
 		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
@@ -502,7 +500,10 @@ func (s *accountServiceImpl) ListAccounts(ctx context.Context, page, pageSize in
 
 // SuspendAccount suspends the account atomically.
 func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID string) error {
-	if err := s.accountRepo.SuspendAccount(ctx, accountID); err != nil {
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.accountRepo.SuspendAccount(ctx, tx, accountID)
+	})
+	if err != nil {
 		return err
 	}
 
@@ -520,7 +521,7 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountSuspend,
 		audit.IPFromContext(ctx),
-		parseUUID(accountID),
+		stringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
 		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
@@ -529,14 +530,17 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 
 // ActivateAccount reactivates the account atomically.
 func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID string) error {
-	if err := s.accountRepo.ActivateAccount(ctx, accountID); err != nil {
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.accountRepo.ActivateAccount(ctx, tx, accountID)
+	})
+	if err != nil {
 		return err
 	}
 
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountActivate,
 		audit.IPFromContext(ctx),
-		parseUUID(accountID),
+		stringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
 		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
@@ -611,10 +615,6 @@ func (s *accountServiceImpl) auditLog(ctx context.Context, record *auditDomain.A
 	}
 }
 
-func parseUUID(s string) *uuid.UUID {
-	id, err := uuid.Parse(s)
-	if err != nil {
-		return nil
-	}
-	return &id
+func stringPtr(s string) *string {
+	return &s
 }

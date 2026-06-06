@@ -15,6 +15,7 @@ import (
 
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/captcha/domain"
+	"github.com/rushairer/gosso/utility"
 )
 
 const (
@@ -63,9 +64,7 @@ return "ok"
 
 // NewCaptchaService creates a new captcha service instance
 func NewCaptchaService(redis *cache.RedisClient, logger *zap.Logger) *CaptchaService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 
 	return &CaptchaService{
 		redis:      redis,

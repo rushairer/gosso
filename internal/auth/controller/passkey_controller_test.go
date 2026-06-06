@@ -444,7 +444,7 @@ func TestPasskey_LoginComplete_Success(t *testing.T) {
 				return &service.LoginResult{
 					AccessToken:  "access-123",
 					RefreshToken: "refresh-456",
-					Session:      &sessionDomain.Session{ID: [16]byte{1, 2, 3}},
+					Session:      &sessionDomain.Session{ID: "test-session-id"},
 				}, nil
 			},
 		},

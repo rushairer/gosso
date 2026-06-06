@@ -101,19 +101,13 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		return mfaResult, mfaErr
 	}
 
-	// 6. Parse account ID for audit log (before creating session to avoid leak on parse failure)
-	accountUUID, parseErr := uuid.Parse(account.ID)
-	if parseErr != nil {
-		s.logger.Warn("Invalid account ID for audit", zap.String("account_id", account.ID), zap.Error(parseErr))
-	}
-
-	// 7. Create session and tokens
+	// 6. Create session and tokens
 	session, accessToken, refreshToken, err := s.createSessionAndTokens(ctx, account, req.IP, req.UserAgent)
 	if err != nil {
 		return nil, err
 	}
 
-	// 8. Update credential last used time
+	// 7. Update credential last used time
 	cred.MarkUsed()
 	if txErr := s.updateCredentialLastUsed(ctx, cred); txErr != nil {
 		s.logger.Warn("Failed to update credential last_used_at", zap.Error(txErr))
@@ -121,19 +115,17 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 
 	s.logger.Info("Login successful",
 		zap.String("account_id", account.ID),
-		zap.String("session_id", session.ID.String()))
+		zap.String("session_id", session.ID))
 
 	// Clear login failures count
 	_ = s.redis.Del(ctx, attemptsKey)
 	_ = s.redis.Del(ctx, ipAttemptsKey)
 
-	// 9. Audit log
-	if accountUUID != (uuid.UUID{}) {
-		s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, req.Username, &accountUUID,
-			map[string]any{"account_id": account.ID, "session_id": session.ID.String()},
-			map[string]any{"ip": req.IP, "user_agent": req.UserAgent},
-		)
-	}
+	// 8. Audit log
+	s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, req.Username, &account.ID,
+		map[string]any{"account_id": account.ID, "session_id": session.ID},
+		map[string]any{"ip": req.IP, "user_agent": req.UserAgent},
+	)
 
 	return &LoginResult{
 		Account:      account,
@@ -147,7 +139,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 // VerifyMFALogin completes login after MFA verification
 func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfaType, ip, userAgent string) (result *LoginResult, err error) {
 	// Captured after MFA token validation; used in failure audit logs.
-	var mfaAccountID *uuid.UUID
+	var mfaAccountID *string
 	defer func() {
 		if err != nil {
 			s.loginAuditLogs(ctx, auditDomain.ActionMFALoginFailure, "", mfaAccountID,
@@ -166,9 +158,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 		return nil, ErrInvalidMFATokenScope
 	}
 	accountID := claims.AccountID
-	if id, parseErr := uuid.Parse(accountID); parseErr == nil {
-		mfaAccountID = &id
-	}
+	mfaAccountID = &accountID
 
 	// 2. Verify based on MFA type
 	if err := s.verifyMFACode(ctx, mfaType, accountID, mfaCode, claims.ID); err != nil {
@@ -206,12 +196,10 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	_ = s.redis.Del(ctx, fmt.Sprintf("login_attempts_ip:%s", ip))
 
 	// 5. Audit log
-	if accountUUID, parseErr := uuid.Parse(account.ID); parseErr == nil {
-		s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, "", &accountUUID,
-			map[string]any{"account_id": account.ID, "session_id": session.ID.String()},
-			map[string]any{"ip": ip, "user_agent": userAgent},
-		)
-	}
+	s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, "", &account.ID,
+		map[string]any{"account_id": account.ID, "session_id": session.ID},
+		map[string]any{"ip": ip, "user_agent": userAgent},
+	)
 
 	return &LoginResult{
 		Account:      account,
@@ -226,7 +214,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 // avoiding the extra round-trip to /mfa/verify. The MFA token is validated here.
 func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip, userAgent string) (result *LoginResult, err error) {
 	// Captured after MFA token validation; used in failure audit logs.
-	var mfaAccountID *uuid.UUID
+	var mfaAccountID *string
 	defer func() {
 		if err != nil {
 			s.loginAuditLogs(ctx, auditDomain.ActionMFALoginFailure, "", mfaAccountID,
@@ -245,9 +233,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 		return nil, ErrInvalidMFATokenScope
 	}
 	accountID := claims.AccountID
-	if id, parseErr := uuid.Parse(accountID); parseErr == nil {
-		mfaAccountID = &id
-	}
+	mfaAccountID = &accountID
 
 	// 2. Verify passkey MFA flag (set by CompleteMFALogin in the passkey controller)
 	passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", claims.ID) // namespaced by MFA token JTI
@@ -292,12 +278,10 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	_ = s.redis.Del(ctx, fmt.Sprintf("login_attempts_ip:%s", ip))
 
 	// 5. Audit log
-	if accountUUID, parseErr := uuid.Parse(account.ID); parseErr == nil {
-		s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, "", &accountUUID,
-			map[string]any{"account_id": account.ID, "session_id": session.ID.String()},
-			map[string]any{"ip": ip, "user_agent": userAgent},
-		)
-	}
+	s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, "", &account.ID,
+		map[string]any{"account_id": account.ID, "session_id": session.ID},
+		map[string]any{"ip": ip, "user_agent": userAgent},
+	)
 
 	return &LoginResult{
 		Account:      account,
@@ -344,15 +328,13 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 
 	s.logger.Info("Passkey login successful",
 		zap.String("account_id", account.ID),
-		zap.String("session_id", session.ID.String()))
+		zap.String("session_id", session.ID))
 
 	// 5. Audit log
-	if accountUUID, parseErr := uuid.Parse(account.ID); parseErr == nil {
-		s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, accountID, &accountUUID,
-			map[string]any{"method": "passkey", "account_id": account.ID, "session_id": session.ID.String()},
-			map[string]any{"ip": ip, "user_agent": userAgent},
-		)
-	}
+	s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, accountID, &account.ID,
+		map[string]any{"method": "passkey", "account_id": account.ID, "session_id": session.ID},
+		map[string]any{"ip": ip, "user_agent": userAgent},
+	)
 
 	// 6. Clear IP rate-limit counters on successful passkey login
 	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", ip)
@@ -372,12 +354,7 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 	var errs []error
 
 	// 1. Revoke session (removes from both session store and account index)
-	parsedSessionID, err := uuid.Parse(sessionID)
-	if err != nil {
-		return fmt.Errorf("invalid session id: %w", err)
-	}
-
-	if err := s.sessionSvc.RevokeSession(ctx, accountID, parsedSessionID); err != nil {
+	if err := s.sessionSvc.RevokeSession(ctx, accountID, sessionID); err != nil {
 		s.logger.Warn("Failed to revoke session during logout", zap.Error(err))
 	}
 
@@ -395,14 +372,9 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 	}
 
 	// 4. Audit log
-	var acctID *uuid.UUID
+	var acctID *string
 	if accountID != "" {
-		id, err := uuid.Parse(accountID)
-		if err != nil {
-			s.logger.Warn("Invalid account ID in logout", zap.String("account_id", accountID), zap.Error(err))
-		} else {
-			acctID = &id
-		}
+		acctID = &accountID
 	}
 	auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionLogout,

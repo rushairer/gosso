@@ -13,6 +13,7 @@ import (
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
+	"github.com/rushairer/gosso/utility"
 )
 
 // IDTokenClaims OIDC ID Token claims
@@ -51,9 +52,7 @@ func NewIDTokenService(
 	expiry time.Duration,
 	logger *zap.Logger,
 ) *IDTokenService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	if expiry <= 0 {
 		expiry = defaultIDTokenExpiry
 	}

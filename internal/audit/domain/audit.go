@@ -3,14 +3,12 @@ package domain
 import (
 	"encoding/json"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type AuditRecord struct {
-	ID        uuid.UUID       `json:"id"`
-	TxID      uuid.UUID       `json:"tx_id"`
-	AccountID *uuid.UUID      `json:"account_id,omitempty"`
+	ID        string          `json:"id"`
+	TxID      string          `json:"tx_id"`
+	AccountID *string         `json:"account_id,omitempty"`
 	Action    string          `json:"action"`
 	Actor     string          `json:"actor"`
 	Resource  json.RawMessage `json:"resource"`
@@ -21,9 +19,9 @@ type AuditRecord struct {
 }
 
 type AuditEntry struct {
-	ID        uuid.UUID       `json:"id"`
-	TxID      uuid.UUID       `json:"tx_id"`
-	AccountID *uuid.UUID      `json:"account_id,omitempty"`
+	ID        string          `json:"id"`
+	TxID      string          `json:"tx_id"`
+	AccountID *string         `json:"account_id,omitempty"`
 	Action    string          `json:"action"`
 	Payload   json.RawMessage `json:"payload"`
 	Attempts  uint            `json:"attempts"`

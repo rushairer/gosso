@@ -180,8 +180,8 @@ func setupAuthControllerWithClaims(authSvc *mockAuthOrchestrator, tokenMgr *mock
 
 func newTestSession() *sessionDomain.Session {
 	return &sessionDomain.Session{
-		ID:           uuid.New(),
-		AccountID:    uuid.New(),
+		ID:           uuid.New().String(),
+		AccountID:    uuid.New().String(),
 		IP:           "127.0.0.1",
 		UserAgent:    "test-agent",
 		CreatedAt:    time.Now(),
@@ -223,7 +223,7 @@ func TestLogin_Success(t *testing.T) {
 	assert.Equal(t, "refresh-456", data["refresh_token"])
 	assert.Equal(t, "Bearer", data["token_type"])
 	assert.Equal(t, float64(900), data["expires_in"])
-	assert.Equal(t, session.ID.String(), data["session_id"])
+	assert.Equal(t, session.ID, data["session_id"])
 }
 
 func TestLogin_MFARequired(t *testing.T) {
@@ -380,7 +380,7 @@ func TestGetSession_Success(t *testing.T) {
 	tokenMgr := &mockTokenManager{}
 	claims := &tokenDomain.AccessTokenClaims{
 		AccountID: "account-001",
-		SessionID: session.ID.String(),
+		SessionID: session.ID,
 	}
 	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
 
@@ -503,7 +503,7 @@ func TestMFAVerify_Success(t *testing.T) {
 	assert.Equal(t, "mfa-refresh-456", data["refresh_token"])
 	assert.Equal(t, "Bearer", data["token_type"])
 	assert.Equal(t, float64(900), data["expires_in"])
-	assert.Equal(t, session.ID.String(), data["session_id"])
+	assert.Equal(t, session.ID, data["session_id"])
 }
 
 func TestMFAVerify_MissingCode(t *testing.T) {

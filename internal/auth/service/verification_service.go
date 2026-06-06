@@ -80,9 +80,7 @@ func NewVerificationService(
 	smsSvc SMSSender,
 	logger *zap.Logger,
 ) *VerificationService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	return &VerificationService{
 		redis:    redis,
 		emailSvc: emailSvc,

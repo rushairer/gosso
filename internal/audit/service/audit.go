@@ -11,6 +11,23 @@ import (
 
 	"github.com/rushairer/gosso/internal/audit"
 	"github.com/rushairer/gosso/internal/audit/domain"
+	"github.com/rushairer/gosso/utility"
+)
+
+const (
+	auditBufferSize    = 100
+	auditFlushSize     = 50
+	auditFlushInterval = 5 * time.Second
+	auditTimeout       = 300 * time.Millisecond
+	auditMaxAttempts   = 3
+	auditBackoffBase   = 10 * time.Millisecond
+	auditMaxBackoff    = 20 * time.Millisecond
+	auditConcurrency   = 100
+	auditErrorChanSize = 1024
+
+	// auditDrainGracePeriod is how long Wait() sleeps after cancelling the context.
+	// batchflow uses a hardcoded 2s drain grace period; we add 500ms margin.
+	auditDrainGracePeriod = 2500 * time.Millisecond
 )
 
 type Auditor struct {
@@ -22,24 +39,21 @@ type Auditor struct {
 }
 
 func NewAuditor(_ context.Context, db *sql.DB, logger *zap.Logger) *Auditor {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	auditorCtx, cancel := context.WithCancel(context.Background())
 	auditor := Auditor{db: db, cancel: cancel, logger: logger}
 	auditor.batchflow = batchflow.NewPostgreSQLBatchFlow(auditorCtx, db, batchflow.PipelineConfig{
-		BufferSize:    100,                    // Buffer size
-		FlushSize:     50,                     // Batch flush size
-		FlushInterval: 5 * time.Second,        // Flush interval
-		Timeout:       300 * time.Millisecond, // Timeout
+		BufferSize:    auditBufferSize,
+		FlushSize:     auditFlushSize,
+		FlushInterval: auditFlushInterval,
+		Timeout:       auditTimeout,
 		Retry: batchflow.RetryConfig{
-			Enabled:     true,                  // Enable retry
-			MaxAttempts: 3,                     // Total attempts (including first attempt), suggest 2-3
-			BackoffBase: 10 * time.Millisecond, // Backoff base (exponential backoff start)
-			MaxBackoff:  20 * time.Millisecond, // Max backoff duration (upper limit)
+			Enabled:     true,
+			MaxAttempts: auditMaxAttempts,
+			BackoffBase: auditBackoffBase,
+			MaxBackoff:  auditMaxBackoff,
 		},
-
-		ConcurrencyLimit: 100, // Batch concurrency limit
+		ConcurrencyLimit: auditConcurrency,
 	})
 	auditor.recordSchema = batchflow.NewSQLSchema(
 		"audit_record",                                                                                       // Table name
@@ -51,7 +65,7 @@ func NewAuditor(_ context.Context, db *sql.DB, logger *zap.Logger) *Auditor {
 }
 
 func (a *Auditor) ErrorChan() <-chan error {
-	return a.batchflow.ErrorChan(1024)
+	return a.batchflow.ErrorChan(auditErrorChanSize)
 }
 
 // Close stops the batchflow pipeline, allowing in-flight batches to complete.
@@ -71,7 +85,7 @@ func (a *Auditor) Wait() {
 	}
 	// batchflow uses a hardcoded 2s drain grace period on context cancel.
 	// Sleep slightly longer to ensure all in-flight batches are flushed.
-	time.Sleep(2500 * time.Millisecond)
+	time.Sleep(auditDrainGracePeriod)
 }
 
 func (a *Auditor) Do(
@@ -98,7 +112,7 @@ func (a *Auditor) Do(
 			SetTime("created_at", auditRecord.CreatedAt)
 
 		if auditRecord.AccountID != nil {
-			request.SetString("account_id", auditRecord.AccountID.String())
+			request.SetString("account_id", *auditRecord.AccountID)
 		}
 
 		if err := a.batchflow.Submit(ctx, request); err != nil {
@@ -157,7 +171,7 @@ func (a *Auditor) submit(ctx context.Context, record *domain.AuditRecord) error 
 		SetTime("created_at", record.CreatedAt)
 
 	if record.AccountID != nil {
-		request.SetString("account_id", record.AccountID.String())
+		request.SetString("account_id", *record.AccountID)
 	}
 
 	return a.batchflow.Submit(ctx, request)

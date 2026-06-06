@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
@@ -20,10 +19,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	}
 
 	// 2. Validate session BEFORE rotation (prevents orphaned token on failure)
-	sessionID, err := uuid.Parse(oldRT.SessionID)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidSessionID, err)
-	}
+	sessionID := oldRT.SessionID
 	session, err := s.sessionSvc.ValidateSession(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrSessionInvalid, err)
@@ -38,7 +34,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	// 4. Build claims and generate new access token BEFORE rotating refresh token.
 	// If access token generation fails, the old refresh token remains valid so the
 	// client can retry instead of being locked out.
-	claims, err := s.buildTokenClaims(ctx, oldRT.AccountID, session.ID.String())
+	claims, err := s.buildTokenClaims(ctx, oldRT.AccountID, session.ID)
 	if err != nil {
 		return nil, fmt.Errorf("build token claims: %w", err)
 	}
@@ -56,23 +52,19 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 
 	// 6. Refresh session
 	if err := s.sessionSvc.RefreshSession(ctx, sessionID); err != nil {
-		s.logger.Warn("Failed to refresh session", zap.Error(err), zap.String("session_id", sessionID.String()))
+		s.logger.Warn("Failed to refresh session", zap.Error(err), zap.String("session_id", sessionID))
 	}
 
 	return &RefreshResult{
 		AccessToken:  accessToken,
 		RefreshToken: newRefreshToken.Token,
-		SessionID:    session.ID.String(),
+		SessionID:    session.ID,
 	}, nil
 }
 
 // ValidateSession validates the session
 func (s *AuthService) ValidateSession(ctx context.Context, sessionID string) (*sessionDomain.Session, error) {
-	parsedID, err := uuid.Parse(sessionID)
-	if err != nil {
-		return nil, fmt.Errorf("invalid session id: %w", err)
-	}
-	return s.sessionSvc.ValidateSession(ctx, parsedID)
+	return s.sessionSvc.ValidateSession(ctx, sessionID)
 }
 
 // ListSessions lists all active sessions for the account
@@ -82,9 +74,5 @@ func (s *AuthService) ListSessions(ctx context.Context, accountID string) ([]*se
 
 // RevokeSession revokes specified session
 func (s *AuthService) RevokeSession(ctx context.Context, accountID, sessionID string) error {
-	parsedID, err := uuid.Parse(sessionID)
-	if err != nil {
-		return fmt.Errorf("invalid session id: %w", err)
-	}
-	return s.sessionSvc.RevokeSession(ctx, accountID, parsedID)
+	return s.sessionSvc.RevokeSession(ctx, accountID, sessionID)
 }

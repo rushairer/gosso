@@ -9,6 +9,14 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// EnsureLogger returns a no-op logger if the given logger is nil.
+func EnsureLogger(logger *zap.Logger) *zap.Logger {
+	if logger == nil {
+		return zap.NewNop()
+	}
+	return logger
+}
+
 // NewLogger initializes the global logger
 func NewLogger(level zap.AtomicLevel) *zap.Logger {
 

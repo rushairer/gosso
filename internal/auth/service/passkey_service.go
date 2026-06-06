@@ -21,6 +21,7 @@ import (
 	"github.com/rushairer/gosso/internal/auth/repository"
 	"github.com/rushairer/gosso/internal/cache"
 	dbutil "github.com/rushairer/gosso/internal/db"
+	"github.com/rushairer/gosso/utility"
 )
 
 const (
@@ -60,9 +61,7 @@ func NewPasskeyService(
 	db *sql.DB,
 	logger *zap.Logger,
 ) *PasskeyService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	return &PasskeyService{
 		web:          web,
 		credRepo:     credRepo,

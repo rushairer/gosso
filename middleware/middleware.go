@@ -9,6 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/utility"
 )
 
 func TimeoutMiddleware(requestTimeout time.Duration) gin.HandlerFunc {
@@ -23,9 +25,7 @@ func TimeoutMiddleware(requestTimeout time.Duration) gin.HandlerFunc {
 }
 
 func RecoveryMiddleware(logger *zap.Logger) gin.HandlerFunc {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	return gin.CustomRecovery(
 		func(ctx *gin.Context, err any) {
 			logger.Error("panic recovered",

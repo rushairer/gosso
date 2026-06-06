@@ -14,6 +14,7 @@ import (
 
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/session/domain"
+	"github.com/rushairer/gosso/utility"
 )
 
 const (
@@ -55,9 +56,7 @@ type SessionService struct {
 
 // NewSessionService creates a new session service instance.
 func NewSessionService(redis *cache.RedisClient, logger *zap.Logger) *SessionService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 
 	return &SessionService{
 		redis:       redis,
@@ -93,8 +92,8 @@ func (s *SessionService) SetSessionTTL(ttl time.Duration) {
 
 // CreateSession creates a new session.
 func (s *SessionService) CreateSession(ctx context.Context, session *domain.Session) error {
-	if session.ID == uuid.Nil {
-		session.ID = uuid.New()
+	if session.ID == "" {
+		session.ID = uuid.New().String()
 	}
 
 	now := time.Now()
@@ -104,51 +103,51 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 	// Serialize session data
 	data, err := json.Marshal(session)
 	if err != nil {
-		s.logger.Error("Failed to marshal session", zap.Error(err), zap.String("session_id", session.ID.String()))
+		s.logger.Error("Failed to marshal session", zap.Error(err), zap.String("session_id", session.ID))
 		return fmt.Errorf("marshal session: %w", err)
 	}
 
 	key := s.buildSessionKey(session.ID)
 	if err := s.redis.Set(ctx, key, data, s.sessionTTL); err != nil {
-		s.logger.Error("Failed to create session", zap.Error(err), zap.String("session_id", session.ID.String()))
+		s.logger.Error("Failed to create session", zap.Error(err), zap.String("session_id", session.ID))
 		return fmt.Errorf("create session: %w", err)
 	}
 
 	// Maintain account session index (SADD + EXPIRE atomically via Lua)
-	indexKey := s.buildAccountSessionsKey(session.AccountID.String())
-	if err := s.redis.SAddWithTTL(ctx, indexKey, session.ID.String(), s.sessionTTL); err != nil {
-		s.logger.Warn("Failed to index session by account", zap.Error(err), zap.String("session_id", session.ID.String()))
+	indexKey := s.buildAccountSessionsKey(session.AccountID)
+	if err := s.redis.SAddWithTTL(ctx, indexKey, session.ID, s.sessionTTL); err != nil {
+		s.logger.Warn("Failed to index session by account", zap.Error(err), zap.String("session_id", session.ID))
 	}
 
 	// Enforce maximum concurrent session limit
-	if err := s.EnforceSessionLimit(ctx, session.AccountID.String()); err != nil {
+	if err := s.EnforceSessionLimit(ctx, session.AccountID); err != nil {
 		s.logger.Warn("Failed to enforce session limit", zap.Error(err),
-			zap.String("account_id", session.AccountID.String()))
+			zap.String("account_id", session.AccountID))
 	}
 
 	s.logger.Info("Session created",
-		zap.String("session_id", session.ID.String()),
-		zap.String("account_id", session.AccountID.String()),
+		zap.String("session_id", session.ID),
+		zap.String("account_id", session.AccountID),
 		zap.Duration("ttl", s.sessionTTL))
 
 	return nil
 }
 
 // GetSession retrieves session information.
-func (s *SessionService) GetSession(ctx context.Context, sessionID uuid.UUID) (*domain.Session, error) {
+func (s *SessionService) GetSession(ctx context.Context, sessionID string) (*domain.Session, error) {
 	key := s.buildSessionKey(sessionID)
 	data, err := s.redis.Get(ctx, key)
 	if err == cache.ErrKeyNotFound {
 		return nil, ErrSessionNotFound
 	}
 	if err != nil {
-		s.logger.Error("Failed to get session", zap.Error(err), zap.String("session_id", sessionID.String()))
+		s.logger.Error("Failed to get session", zap.Error(err), zap.String("session_id", sessionID))
 		return nil, fmt.Errorf("get session: %w", err)
 	}
 
 	var session domain.Session
 	if err := json.Unmarshal([]byte(data), &session); err != nil {
-		s.logger.Error("Failed to unmarshal session", zap.Error(err), zap.String("session_id", sessionID.String()))
+		s.logger.Error("Failed to unmarshal session", zap.Error(err), zap.String("session_id", sessionID))
 		return nil, fmt.Errorf("unmarshal session: %w", err)
 	}
 
@@ -169,7 +168,7 @@ func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Sess
 	// Serialize session data
 	data, err := json.Marshal(session)
 	if err != nil {
-		s.logger.Error("Failed to marshal session", zap.Error(err), zap.String("session_id", session.ID.String()))
+		s.logger.Error("Failed to marshal session", zap.Error(err), zap.String("session_id", session.ID))
 		return fmt.Errorf("marshal session: %w", err)
 	}
 
@@ -177,24 +176,24 @@ func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Sess
 	key := s.buildSessionKey(session.ID)
 	ok, err := s.redis.SetIfExists(ctx, key, data, s.sessionTTL)
 	if err != nil {
-		s.logger.Error("Failed to update session", zap.Error(err), zap.String("session_id", session.ID.String()))
+		s.logger.Error("Failed to update session", zap.Error(err), zap.String("session_id", session.ID))
 		return fmt.Errorf("update session: %w", err)
 	}
 	if !ok {
-		s.logger.Warn("Session expired during update, skipping", zap.String("session_id", session.ID.String()))
+		s.logger.Warn("Session expired during update, skipping", zap.String("session_id", session.ID))
 		return fmt.Errorf("session %s no longer exists", session.ID)
 	}
 
 	// Refresh the account sessions index TTL to prevent it from expiring before the session
-	indexKey := s.buildAccountSessionsKey(session.AccountID.String())
+	indexKey := s.buildAccountSessionsKey(session.AccountID)
 	_ = s.redis.Expire(ctx, indexKey, s.sessionTTL)
 
-	s.logger.Debug("Session updated", zap.String("session_id", session.ID.String()))
+	s.logger.Debug("Session updated", zap.String("session_id", session.ID))
 	return nil
 }
 
 // DeleteSession deletes a session and removes it from the account session index.
-func (s *SessionService) DeleteSession(ctx context.Context, sessionID uuid.UUID) error {
+func (s *SessionService) DeleteSession(ctx context.Context, sessionID string) error {
 	// Load session to get accountID for index cleanup.
 	// If the session has already expired and GetSession fails, we still
 	// attempt the index cleanup using whatever data we can obtain.
@@ -202,7 +201,7 @@ func (s *SessionService) DeleteSession(ctx context.Context, sessionID uuid.UUID)
 
 	key := s.buildSessionKey(sessionID)
 	if err := s.redis.Del(ctx, key); err != nil {
-		s.logger.Error("Failed to delete session", zap.Error(err), zap.String("session_id", sessionID.String()))
+		s.logger.Error("Failed to delete session", zap.Error(err), zap.String("session_id", sessionID))
 		return fmt.Errorf("delete session: %w", err)
 	}
 
@@ -210,22 +209,22 @@ func (s *SessionService) DeleteSession(ctx context.Context, sessionID uuid.UUID)
 	// If the session was loaded, use its accountID. Otherwise, the stale
 	// index entry will be cleaned up lazily by ListSessionsByAccount.
 	if session != nil {
-		indexKey := s.buildAccountSessionsKey(session.AccountID.String())
-		if err := s.redis.SRem(ctx, indexKey, sessionID.String()); err != nil {
+		indexKey := s.buildAccountSessionsKey(session.AccountID)
+		if err := s.redis.SRem(ctx, indexKey, sessionID); err != nil {
 			s.logger.Warn("Failed to remove session from account index",
-				zap.String("session_id", sessionID.String()), zap.Error(err))
+				zap.String("session_id", sessionID), zap.Error(err))
 		}
 	} else if getErr != nil {
 		s.logger.Debug("Session data unavailable for index cleanup, stale entry will be cleaned by ListSessionsByAccount",
-			zap.String("session_id", sessionID.String()), zap.Error(getErr))
+			zap.String("session_id", sessionID), zap.Error(getErr))
 	}
 
-	s.logger.Info("Session deleted", zap.String("session_id", sessionID.String()))
+	s.logger.Info("Session deleted", zap.String("session_id", sessionID))
 	return nil
 }
 
 // RefreshSession refreshes the session expiration.
-func (s *SessionService) RefreshSession(ctx context.Context, sessionID uuid.UUID) error {
+func (s *SessionService) RefreshSession(ctx context.Context, sessionID string) error {
 	session, err := s.GetSession(ctx, sessionID)
 	if err != nil {
 		return err
@@ -235,14 +234,14 @@ func (s *SessionService) RefreshSession(ctx context.Context, sessionID uuid.UUID
 
 	data, err := json.Marshal(session)
 	if err != nil {
-		s.logger.Error("Failed to marshal session", zap.Error(err), zap.String("session_id", sessionID.String()))
+		s.logger.Error("Failed to marshal session", zap.Error(err), zap.String("session_id", sessionID))
 		return fmt.Errorf("marshal session: %w", err)
 	}
 
 	key := s.buildSessionKey(sessionID)
 	ok, err := s.redis.SetIfExists(ctx, key, data, s.sessionTTL)
 	if err != nil {
-		s.logger.Error("Failed to refresh session", zap.Error(err), zap.String("session_id", sessionID.String()))
+		s.logger.Error("Failed to refresh session", zap.Error(err), zap.String("session_id", sessionID))
 		return fmt.Errorf("refresh session: %w", err)
 	}
 	if !ok {
@@ -253,7 +252,7 @@ func (s *SessionService) RefreshSession(ctx context.Context, sessionID uuid.UUID
 }
 
 // ValidateSession validates whether a session is still active.
-func (s *SessionService) ValidateSession(ctx context.Context, sessionID uuid.UUID) (*domain.Session, error) {
+func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) (*domain.Session, error) {
 	session, err := s.GetSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
@@ -261,7 +260,7 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID uuid.UUI
 
 	// Check if session has expired
 	if session.IsExpired(s.sessionTTL) {
-		s.logger.Warn("Session expired", zap.String("session_id", sessionID.String()))
+		s.logger.Warn("Session expired", zap.String("session_id", sessionID))
 		// Delete the expired session
 		_ = s.DeleteSession(ctx, sessionID)
 		return nil, ErrSessionExpired
@@ -271,8 +270,8 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID uuid.UUI
 }
 
 // buildSessionKey builds the Redis key for a session.
-func (s *SessionService) buildSessionKey(sessionID uuid.UUID) string {
-	return fmt.Sprintf("%s%s", SessionKeyPrefix, sessionID.String())
+func (s *SessionService) buildSessionKey(sessionID string) string {
+	return fmt.Sprintf("%s%s", SessionKeyPrefix, sessionID)
 }
 
 // buildAccountSessionsKey builds the Redis key for the account session index.
@@ -342,18 +341,14 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 		return nil, nil
 	}
 
-	// Build keys and parse UUIDs, filtering invalid ones
+	// Build keys
 	type sessionEntry struct {
 		rawID string
 		key   string
 	}
 	entries := make([]sessionEntry, 0, len(sessionIDs))
 	for _, sid := range sessionIDs {
-		sessionUUID, err := uuid.Parse(sid)
-		if err != nil {
-			continue
-		}
-		entries = append(entries, sessionEntry{rawID: sid, key: s.buildSessionKey(sessionUUID)})
+		entries = append(entries, sessionEntry{rawID: sid, key: s.buildSessionKey(sid)})
 	}
 
 	if len(entries) == 0 {
@@ -396,22 +391,22 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 }
 
 // RevokeSession revokes a specific session (with ownership check).
-func (s *SessionService) RevokeSession(ctx context.Context, accountID string, sessionID uuid.UUID) error {
+func (s *SessionService) RevokeSession(ctx context.Context, accountID string, sessionID string) error {
 	session, err := s.GetSession(ctx, sessionID)
 	if err != nil {
 		return err
 	}
 
-	if session.AccountID.String() != accountID {
+	if session.AccountID != accountID {
 		return ErrSessionAccessDenied
 	}
 
 	// Revoke refresh tokens for this session before deleting the session key.
 	// Prevents orphaned tokens that could still be rotated after session deletion.
 	if s.tokenRevoker != nil {
-		if err := s.tokenRevoker.RevokeAllForSession(ctx, sessionID.String()); err != nil {
+		if err := s.tokenRevoker.RevokeAllForSession(ctx, sessionID); err != nil {
 			s.logger.Warn("Failed to revoke tokens for session during revocation",
-				zap.String("session_id", sessionID.String()),
+				zap.String("session_id", sessionID),
 				zap.String("account_id", accountID),
 				zap.Error(err))
 		}
@@ -420,21 +415,21 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 	// Delete session key
 	key := s.buildSessionKey(sessionID)
 	if err := s.redis.Del(ctx, key); err != nil {
-		s.logger.Error("Failed to delete session", zap.Error(err), zap.String("session_id", sessionID.String()))
+		s.logger.Error("Failed to delete session", zap.Error(err), zap.String("session_id", sessionID))
 		return fmt.Errorf("delete session: %w", err)
 	}
 
 	// Remove from account index
 	indexKey := s.buildAccountSessionsKey(accountID)
-	if err := s.redis.SRem(ctx, indexKey, sessionID.String()); err != nil {
+	if err := s.redis.SRem(ctx, indexKey, sessionID); err != nil {
 		s.logger.Warn("Failed to remove session from account index during revocation",
-			zap.String("session_id", sessionID.String()),
+			zap.String("session_id", sessionID),
 			zap.String("account_id", accountID),
 			zap.Error(err))
 	}
 
 	s.logger.Info("Session revoked",
-		zap.String("session_id", sessionID.String()),
+		zap.String("session_id", sessionID),
 		zap.String("account_id", accountID))
 	return nil
 }
@@ -464,7 +459,7 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 	toRemove := len(sessions) - s.maxSessions
 	for i := 0; i < toRemove; i++ {
 		s.logger.Info("Revoking old session due to limit",
-			zap.String("session_id", sessions[i].ID.String()),
+			zap.String("session_id", sessions[i].ID),
 			zap.String("account_id", accountID))
 		_ = s.RevokeSession(ctx, accountID, sessions[i].ID)
 	}

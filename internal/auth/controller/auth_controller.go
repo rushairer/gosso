@@ -197,7 +197,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		"refresh_token": result.RefreshToken,
 		"token_type":    "Bearer",
 		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
-		"session_id":    result.Session.ID.String(),
+		"session_id":    result.Session.ID,
 	}))
 }
 
@@ -365,7 +365,7 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 		"refresh_token": result.RefreshToken,
 		"token_type":    "Bearer",
 		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
-		"session_id":    result.Session.ID.String(),
+		"session_id":    result.Session.ID,
 	}))
 }
 
@@ -537,7 +537,7 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 		"refresh_token": result.RefreshToken,
 		"token_type":    "Bearer",
 		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
-		"session_id":    result.Session.ID.String(),
+		"session_id":    result.Session.ID,
 	}))
 }
 

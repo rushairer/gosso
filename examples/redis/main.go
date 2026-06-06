@@ -99,7 +99,7 @@ func sessionExample(ctx context.Context, redisClient *cache.RedisClient, logger 
 	sessionSvc.SetSessionTTL(24 * time.Hour)
 
 	// 创建用户会话
-	accountID := uuid.New()
+	accountID := uuid.New().String()
 	session := &domain.Session{
 		AccountID: accountID,
 		Username:  "johndoe",
@@ -116,7 +116,7 @@ func sessionExample(ctx context.Context, redisClient *cache.RedisClient, logger 
 		logger.Error("Failed to create session", zap.Error(err))
 		return
 	}
-	logger.Info("Session created", zap.String("session_id", session.ID.String()))
+	logger.Info("Session created", zap.String("session_id", session.ID))
 
 	// 获取会话
 	retrieved, err := sessionSvc.GetSession(ctx, session.ID)

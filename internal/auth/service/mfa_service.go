@@ -19,6 +19,7 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	dbutil "github.com/rushairer/gosso/internal/db"
+	"github.com/rushairer/gosso/utility"
 )
 
 const (
@@ -52,9 +53,7 @@ func NewMFAService(
 	logger *zap.Logger,
 	passkeySvc ...*PasskeyService,
 ) *MFAService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	svc := &MFAService{
 		credentialRepo:   credentialRepo,
 		db:               db,

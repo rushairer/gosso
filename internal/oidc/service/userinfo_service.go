@@ -10,6 +10,7 @@ import (
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	authService "github.com/rushairer/gosso/internal/auth/service"
+	"github.com/rushairer/gosso/utility"
 )
 
 // UserInfoService OIDC UserInfo service
@@ -25,9 +26,7 @@ func NewUserInfoService(
 	credentialRepo accountRepo.CredentialRepository,
 	logger *zap.Logger,
 ) *UserInfoService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	return &UserInfoService{
 		accountSvc:     accountSvc,
 		credentialRepo: credentialRepo,

@@ -71,25 +71,9 @@ func (c *PasskeyController) RegisterRoutes(rg *gin.RouterGroup, jwtAuth gin.Hand
 
 // RegisterBegin POST /api/auth/passkey/register/begin
 func (c *PasskeyController) RegisterBegin(ctx *gin.Context) {
-	accountID := ctx.GetString(middleware.ContextKeyAccountID)
-	if accountID == "" {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+	accountID, username, displayName, ok := c.resolveAccountForPasskey(ctx)
+	if !ok {
 		return
-	}
-
-	account, err := c.accountSvc.FindAccountByID(ctx, accountID)
-	if err != nil {
-		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "account not found"))
-		return
-	}
-
-	username := accountID
-	if account.Username != nil {
-		username = *account.Username
-	}
-	displayName := username
-	if account.DisplayName != "" {
-		displayName = account.DisplayName
 	}
 
 	options, err := c.passkeySvc.BeginRegistration(ctx, accountID, username, displayName)
@@ -104,25 +88,9 @@ func (c *PasskeyController) RegisterBegin(ctx *gin.Context) {
 
 // RegisterComplete POST /api/auth/passkey/register/complete
 func (c *PasskeyController) RegisterComplete(ctx *gin.Context) {
-	accountID := ctx.GetString(middleware.ContextKeyAccountID)
-	if accountID == "" {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+	accountID, username, displayName, ok := c.resolveAccountForPasskey(ctx)
+	if !ok {
 		return
-	}
-
-	account, err := c.accountSvc.FindAccountByID(ctx, accountID)
-	if err != nil {
-		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "account not found"))
-		return
-	}
-
-	username := accountID
-	if account.Username != nil {
-		username = *account.Username
-	}
-	displayName := username
-	if account.DisplayName != "" {
-		displayName = account.DisplayName
 	}
 
 	cred, err := c.passkeySvc.CompleteRegistration(ctx, accountID, username, displayName, ctx.Request)
@@ -136,6 +104,31 @@ func (c *PasskeyController) RegisterComplete(ctx *gin.Context) {
 		"id":   cred.ID,
 		"name": cred.Name,
 	}))
+}
+
+// resolveAccountForPasskey extracts the authenticated account's ID, username, and display name.
+func (c *PasskeyController) resolveAccountForPasskey(ctx *gin.Context) (accountID, username, displayName string, ok bool) {
+	accountID = ctx.GetString(middleware.ContextKeyAccountID)
+	if accountID == "" {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+		return "", "", "", false
+	}
+
+	account, err := c.accountSvc.FindAccountByID(ctx, accountID)
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "account not found"))
+		return "", "", "", false
+	}
+
+	username = accountID
+	if account.Username != nil {
+		username = *account.Username
+	}
+	displayName = username
+	if account.DisplayName != "" {
+		displayName = account.DisplayName
+	}
+	return accountID, username, displayName, true
 }
 
 // LoginBeginRequest is the passkey login begin request body.
@@ -229,7 +222,7 @@ func (c *PasskeyController) LoginComplete(ctx *gin.Context) {
 		"refresh_token": loginResult.RefreshToken,
 		"token_type":    "Bearer",
 		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
-		"session_id":    loginResult.Session.ID.String(),
+		"session_id":    loginResult.Session.ID,
 	}))
 }
 
@@ -321,7 +314,7 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 		"refresh_token": result.RefreshToken,
 		"token_type":    "Bearer",
 		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
-		"session_id":    result.Session.ID.String(),
+		"session_id":    result.Session.ID,
 	}))
 }
 

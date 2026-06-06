@@ -14,6 +14,7 @@ import (
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	"github.com/rushairer/gosso/utility"
 )
 
 const (
@@ -30,9 +31,7 @@ type AuthCodeService struct {
 
 // NewAuthCodeService creates a new authorization code service instance
 func NewAuthCodeService(redis *cache.RedisClient, logger *zap.Logger, expiry time.Duration) *AuthCodeService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	return &AuthCodeService{
 		redis:  redis,
 		logger: logger,

@@ -173,7 +173,7 @@ func (r *credentialRepositoryImpl) FindByTypeAndIdentifier(ctx context.Context, 
 		&cred.DeletedAt,
 	)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", ErrCredentialNotFound, credType)
 	}
 	if err != nil {
@@ -244,7 +244,7 @@ func (r *credentialRepositoryImpl) UpdateCredential(ctx context.Context, tx *sql
 func (r *credentialRepositoryImpl) SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `
 		UPDATE account_credentials
-		SET deleted_at = $1
+		SET deleted_at = $1, updated_at = $1
 		WHERE account_id = $2 AND deleted_at IS NULL
 	`
 

@@ -53,6 +53,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - MFA failure audit logs now include `accountID` extracted from validated MFA token — previously logged empty identity, hindering security incident investigation (`internal/auth/service/auth_login.go`).
 - Verification code failure and MFA activation failure now logged at Warn level instead of Debug — production log config typically hides Debug, making brute-force attempts invisible (`internal/auth/controller/auth_controller.go`).
 - Social login `createNewUser` audit record now uses `auditDomain.NewRecord()` helper — consistent with all other audit call sites; removed redundant `if s.auditor != nil` guard (`internal/auth/service/social_login_service.go`).
+- Error checking standardized to use `errors.Is(err, sql.ErrNoRows)` instead of `err == sql.ErrNoRows` across all repositories — ensures correct matching when errors are wrapped (`internal/account/repository/`, `internal/oauth2/repository/`).
+- Batch soft-delete methods now set `updated_at` alongside `deleted_at` — consistent audit trail for credential, role, and WebAuthn batch operations (`internal/account/repository/credential_repository.go`, `internal/account/repository/role_repository.go`, `internal/auth/repository/webauthn_repository.go`).
+- `SuspendAccount` and `ActivateAccount` repository methods now accept `*sql.Tx` parameter — enables composing status changes into larger transactions (`internal/account/repository/account_repository.go`, `internal/account/service/account_service.go`).
+- Duplicate JSON marshal/unmarshal blocks extracted to `marshalClientJSONFields` and `unmarshalClientJSONFields` helpers in OAuth2 client repository (`internal/oauth2/repository/client_repository_impl.go`).
+- Duplicate account resolution logic extracted to `resolveAccountForPasskey` helper in passkey controller (`internal/auth/controller/passkey_controller.go`).
+- `zaplogger` middleware now uses `ContextKeyAccountID` constant instead of hardcoded `"account_id"` string (`middleware/zaplogger.go`, `middleware/requestid.go`).
+- `if logger == nil { logger = zap.NewNop() }` pattern replaced with `utility.EnsureLogger(logger)` across 22 files — single point of change for logger nil-guard (`utility/logger.go`).
+- Audit service magic numbers extracted to named constants (`internal/audit/service/audit.go`).
+- Session and audit domain ID types standardized from `uuid.UUID` to `string` — consistent with all other domain entities (`internal/session/domain/`, `internal/audit/domain/`, and all callers).
 
 ### Removed
 

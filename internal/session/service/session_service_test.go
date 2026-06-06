@@ -65,9 +65,9 @@ func TestSessionService_SetSessionTTL(t *testing.T) {
 
 func TestSessionService_BuildSessionKey(t *testing.T) {
 	svc := NewSessionService(nil, nil)
-	id := uuid.New()
+	id := uuid.New().String()
 	key := svc.buildSessionKey(id)
-	assert.Equal(t, SessionKeyPrefix+id.String(), key)
+	assert.Equal(t, SessionKeyPrefix+id, key)
 }
 
 func TestSessionService_BuildAccountSessionsKey(t *testing.T) {
@@ -85,7 +85,7 @@ func TestSessionService_CreateAndGetSession(t *testing.T) {
 	defer service.redis.Close()
 
 	ctx := context.Background()
-	accountID := uuid.New()
+	accountID := uuid.New().String()
 
 	session := &domain.Session{
 		AccountID: accountID,
@@ -97,7 +97,7 @@ func TestSessionService_CreateAndGetSession(t *testing.T) {
 	// Create session
 	err := service.CreateSession(ctx, session)
 	require.NoError(t, err)
-	assert.NotEqual(t, uuid.Nil, session.ID)
+	assert.NotEmpty(t, session.ID)
 
 	// Retrieve session
 	retrieved, err := service.GetSession(ctx, session.ID)
@@ -117,7 +117,7 @@ func TestSessionService_UpdateSession(t *testing.T) {
 	ctx := context.Background()
 
 	session := &domain.Session{
-		AccountID: uuid.New(),
+		AccountID: uuid.New().String(),
 		Username:  "testuser",
 		IP:        "127.0.0.1",
 		UserAgent: "test-agent",
@@ -154,7 +154,7 @@ func TestSessionService_DeleteSession(t *testing.T) {
 	ctx := context.Background()
 
 	session := &domain.Session{
-		AccountID: uuid.New(),
+		AccountID: uuid.New().String(),
 		Username:  "testuser",
 		IP:        "127.0.0.1",
 		UserAgent: "test-agent",
@@ -180,7 +180,7 @@ func TestSessionService_ValidateSession(t *testing.T) {
 	ctx := context.Background()
 
 	session := &domain.Session{
-		AccountID: uuid.New(),
+		AccountID: uuid.New().String(),
 		Username:  "testuser",
 		IP:        "127.0.0.1",
 		UserAgent: "test-agent",
@@ -206,7 +206,7 @@ func TestSessionService_RefreshSession(t *testing.T) {
 	ctx := context.Background()
 
 	session := &domain.Session{
-		AccountID: uuid.New(),
+		AccountID: uuid.New().String(),
 		Username:  "testuser",
 		IP:        "127.0.0.1",
 		UserAgent: "test-agent",
@@ -236,7 +236,7 @@ func TestSessionService_RevokeSession_NotFound(t *testing.T) {
 	service := setupTestSessionService(t)
 	defer service.redis.Close()
 
-	err := service.RevokeSession(context.Background(), "account-001", uuid.New())
+	err := service.RevokeSession(context.Background(), "account-001", uuid.New().String())
 	assert.Equal(t, ErrSessionNotFound, err)
 }
 

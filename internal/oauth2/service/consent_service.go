@@ -10,6 +10,7 @@ import (
 
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/oauth2/domain"
+	"github.com/rushairer/gosso/utility"
 )
 
 const (
@@ -25,9 +26,7 @@ type ConsentService struct {
 
 // NewConsentService creates a new consent service instance
 func NewConsentService(redis *cache.RedisClient, logger *zap.Logger) *ConsentService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	return &ConsentService{
 		redis:  redis,
 		logger: logger,

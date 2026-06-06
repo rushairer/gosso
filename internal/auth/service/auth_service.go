@@ -95,9 +95,7 @@ func NewAuthService(
 	mfaSvc *MFAService,
 	passkeySvc *PasskeyService,
 ) *AuthService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	return &AuthService{
 		db:                    db,
 		accountSvc:            accountSvc,
@@ -249,13 +247,9 @@ func (s *AuthService) buildTokenClaims(ctx context.Context, accountID, sessionID
 // createSessionAndTokens creates a session, generates access and refresh tokens.
 func (s *AuthService) createSessionAndTokens(ctx context.Context, account *accountDomain.Account, ip, userAgent string) (retSession *sessionDomain.Session, retAccessToken string, retRefreshToken *tokenDomain.RefreshToken, retErr error) {
 	now := time.Now()
-	accountID, err := uuid.Parse(account.ID)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("invalid account id: %w", err)
-	}
 	session := &sessionDomain.Session{
-		ID:           uuid.New(),
-		AccountID:    accountID,
+		ID:           uuid.New().String(),
+		AccountID:    account.ID,
 		IP:           ip,
 		UserAgent:    userAgent,
 		CreatedAt:    now,
@@ -274,12 +268,12 @@ func (s *AuthService) createSessionAndTokens(ctx context.Context, account *accou
 		if retErr != nil {
 			if delErr := s.sessionSvc.DeleteSession(ctx, session.ID); delErr != nil {
 				s.logger.Warn("Failed to cleanup orphaned session",
-					zap.String("session_id", session.ID.String()), zap.Error(delErr))
+					zap.String("session_id", session.ID), zap.Error(delErr))
 			}
 		}
 	}()
 
-	claims, err := s.buildTokenClaims(ctx, account.ID, session.ID.String())
+	claims, err := s.buildTokenClaims(ctx, account.ID, session.ID)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("build token claims: %w", err)
 	}
@@ -289,7 +283,7 @@ func (s *AuthService) createSessionAndTokens(ctx context.Context, account *accou
 		return nil, "", nil, fmt.Errorf("generate access token: %w", err)
 	}
 
-	refreshToken, err := s.tokenSvc.GenerateRefreshToken(ctx, account.ID, "", session.ID.String(), "")
+	refreshToken, err := s.tokenSvc.GenerateRefreshToken(ctx, account.ID, "", session.ID, "")
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("generate refresh token: %w", err)
 	}
@@ -303,7 +297,7 @@ func (s *AuthService) CreateSessionAndTokens(ctx context.Context, account *accou
 }
 
 // loginAuditLogs logs a login success or failure audit record.
-func (s *AuthService) loginAuditLogs(ctx context.Context, action string, username string, accountID *uuid.UUID, detail map[string]any, meta map[string]any) {
+func (s *AuthService) loginAuditLogs(ctx context.Context, action string, username string, accountID *string, detail map[string]any, meta map[string]any) {
 	auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		action,
 		username,

@@ -91,9 +91,7 @@ func NewPasswordResetService(
 	baseURL string,
 	logger *zap.Logger,
 ) *PasswordResetService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	return &PasswordResetService{
 		redis:          redis,
 		credentialRepo: credentialRepo,

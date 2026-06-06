@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -19,29 +20,75 @@ func NewOAuth2ClientRepository(db *sql.DB) OAuth2ClientRepository {
 	return &oauth2ClientRepositoryImpl{db: db}
 }
 
-func (r *oauth2ClientRepositoryImpl) Create(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client) error {
+// clientJSONFields holds raw JSON bytes for the five JSON columns of an oauth2_clients row.
+type clientJSONFields struct {
+	redirectURIs     []byte
+	postLogoutURIs   []byte
+	grantTypes       []byte
+	scopes           []byte
+	metadata         []byte
+}
+
+// unmarshalClientJSONFields populates an OAuth2Client's JSON columns from raw bytes.
+func unmarshalClientJSONFields(client *domain.OAuth2Client, f *clientJSONFields) error {
+	if err := json.Unmarshal(f.redirectURIs, &client.RedirectURIs); err != nil {
+		return fmt.Errorf("unmarshal redirect_uris: %w", err)
+	}
+	if err := json.Unmarshal(f.postLogoutURIs, &client.PostLogoutRedirectURIs); err != nil {
+		return fmt.Errorf("unmarshal post_logout_redirect_uris: %w", err)
+	}
+	if err := json.Unmarshal(f.grantTypes, &client.GrantTypes); err != nil {
+		return fmt.Errorf("unmarshal grant_types: %w", err)
+	}
+	if err := json.Unmarshal(f.scopes, &client.Scopes); err != nil {
+		return fmt.Errorf("unmarshal scopes: %w", err)
+	}
+	if f.metadata != nil {
+		if err := json.Unmarshal(f.metadata, &client.Metadata); err != nil {
+			return fmt.Errorf("unmarshal metadata: %w", err)
+		}
+	}
+	return nil
+}
+
+// marshalClientJSONFields serializes an OAuth2Client's JSON columns to raw bytes.
+func marshalClientJSONFields(client *domain.OAuth2Client) (*clientJSONFields, error) {
 	redirectURIs, err := json.Marshal(client.RedirectURIs)
 	if err != nil {
-		return fmt.Errorf("marshal redirect_uris: %w", err)
+		return nil, fmt.Errorf("marshal redirect_uris: %w", err)
+	}
+	postLogoutURIs, err := json.Marshal(client.PostLogoutRedirectURIs)
+	if err != nil {
+		return nil, fmt.Errorf("marshal post_logout_redirect_uris: %w", err)
 	}
 	grantTypes, err := json.Marshal(client.GrantTypes)
 	if err != nil {
-		return fmt.Errorf("marshal grant_types: %w", err)
+		return nil, fmt.Errorf("marshal grant_types: %w", err)
 	}
 	scopes, err := json.Marshal(client.Scopes)
 	if err != nil {
-		return fmt.Errorf("marshal scopes: %w", err)
+		return nil, fmt.Errorf("marshal scopes: %w", err)
 	}
 	var metadata []byte
 	if client.Metadata != nil {
 		metadata, err = json.Marshal(client.Metadata)
 		if err != nil {
-			return fmt.Errorf("marshal metadata: %w", err)
+			return nil, fmt.Errorf("marshal metadata: %w", err)
 		}
 	}
-	postLogoutURIs, err := json.Marshal(client.PostLogoutRedirectURIs)
+	return &clientJSONFields{
+		redirectURIs:   redirectURIs,
+		postLogoutURIs: postLogoutURIs,
+		grantTypes:     grantTypes,
+		scopes:         scopes,
+		metadata:       metadata,
+	}, nil
+}
+
+func (r *oauth2ClientRepositoryImpl) Create(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client) error {
+	f, err := marshalClientJSONFields(client)
 	if err != nil {
-		return fmt.Errorf("marshal post_logout_redirect_uris: %w", err)
+		return err
 	}
 
 	query := `
@@ -55,12 +102,12 @@ func (r *oauth2ClientRepositoryImpl) Create(ctx context.Context, tx *sql.Tx, cli
 		client.ClientSecretHash,
 		client.Name,
 		client.Description,
-		redirectURIs,
-		postLogoutURIs,
-		grantTypes,
-		scopes,
+		f.redirectURIs,
+		f.postLogoutURIs,
+		f.grantTypes,
+		f.scopes,
 		client.IsConfidential,
-		metadata,
+		f.metadata,
 	).Scan(&client.ID, &client.CreatedAt, &client.UpdatedAt)
 
 	if err != nil {
@@ -84,29 +131,18 @@ func (r *oauth2ClientRepositoryImpl) FindByClientID(ctx context.Context, clientI
 		&client.Name, &client.Description, &redirectURIs, &postLogoutURIs, &grantTypes, &scopes,
 		&client.IsConfidential, &metadata, &client.CreatedAt, &client.UpdatedAt,
 	)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrClientNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find oauth2_client by client_id: %w", err)
 	}
 
-	if err := json.Unmarshal(redirectURIs, &client.RedirectURIs); err != nil {
-		return nil, fmt.Errorf("unmarshal redirect_uris: %w", err)
-	}
-	if err := json.Unmarshal(postLogoutURIs, &client.PostLogoutRedirectURIs); err != nil {
-		return nil, fmt.Errorf("unmarshal post_logout_redirect_uris: %w", err)
-	}
-	if err := json.Unmarshal(grantTypes, &client.GrantTypes); err != nil {
-		return nil, fmt.Errorf("unmarshal grant_types: %w", err)
-	}
-	if err := json.Unmarshal(scopes, &client.Scopes); err != nil {
-		return nil, fmt.Errorf("unmarshal scopes: %w", err)
-	}
-	if metadata != nil {
-		if err := json.Unmarshal(metadata, &client.Metadata); err != nil {
-			return nil, fmt.Errorf("unmarshal metadata: %w", err)
-		}
+	if err := unmarshalClientJSONFields(client, &clientJSONFields{
+		redirectURIs: redirectURIs, postLogoutURIs: postLogoutURIs,
+		grantTypes: grantTypes, scopes: scopes, metadata: metadata,
+	}); err != nil {
+		return nil, err
 	}
 
 	return client, nil
@@ -138,22 +174,11 @@ func (r *oauth2ClientRepositoryImpl) FindByAccountID(ctx context.Context, accoun
 			return nil, fmt.Errorf("scan oauth2_client: %w", err)
 		}
 
-		if err := json.Unmarshal(redirectURIs, &client.RedirectURIs); err != nil {
-			return nil, fmt.Errorf("unmarshal redirect_uris: %w", err)
-		}
-		if err := json.Unmarshal(postLogoutURIs, &client.PostLogoutRedirectURIs); err != nil {
-			return nil, fmt.Errorf("unmarshal post_logout_redirect_uris: %w", err)
-		}
-		if err := json.Unmarshal(grantTypes, &client.GrantTypes); err != nil {
-			return nil, fmt.Errorf("unmarshal grant_types: %w", err)
-		}
-		if err := json.Unmarshal(scopes, &client.Scopes); err != nil {
-			return nil, fmt.Errorf("unmarshal scopes: %w", err)
-		}
-		if metadata != nil {
-			if err := json.Unmarshal(metadata, &client.Metadata); err != nil {
-				return nil, fmt.Errorf("unmarshal metadata: %w", err)
-			}
+		if err := unmarshalClientJSONFields(client, &clientJSONFields{
+			redirectURIs: redirectURIs, postLogoutURIs: postLogoutURIs,
+			grantTypes: grantTypes, scopes: scopes, metadata: metadata,
+		}); err != nil {
+			return nil, err
 		}
 
 		clients = append(clients, client)
@@ -167,28 +192,9 @@ func (r *oauth2ClientRepositoryImpl) FindByAccountID(ctx context.Context, accoun
 }
 
 func (r *oauth2ClientRepositoryImpl) Update(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client) error {
-	redirectURIs, err := json.Marshal(client.RedirectURIs)
+	f, err := marshalClientJSONFields(client)
 	if err != nil {
-		return fmt.Errorf("marshal redirect_uris: %w", err)
-	}
-	postLogoutURIs, err := json.Marshal(client.PostLogoutRedirectURIs)
-	if err != nil {
-		return fmt.Errorf("marshal post_logout_redirect_uris: %w", err)
-	}
-	grantTypes, err := json.Marshal(client.GrantTypes)
-	if err != nil {
-		return fmt.Errorf("marshal grant_types: %w", err)
-	}
-	scopes, err := json.Marshal(client.Scopes)
-	if err != nil {
-		return fmt.Errorf("marshal scopes: %w", err)
-	}
-	var metadata []byte
-	if client.Metadata != nil {
-		metadata, err = json.Marshal(client.Metadata)
-		if err != nil {
-			return fmt.Errorf("marshal metadata: %w", err)
-		}
+		return err
 	}
 
 	query := `
@@ -198,10 +204,10 @@ func (r *oauth2ClientRepositoryImpl) Update(ctx context.Context, tx *sql.Tx, cli
 		RETURNING updated_at`
 
 	err = tx.QueryRowContext(ctx, query,
-		client.Name, client.Description, redirectURIs, postLogoutURIs, grantTypes, scopes, metadata, client.ID,
+		client.Name, client.Description, f.redirectURIs, f.postLogoutURIs, f.grantTypes, f.scopes, f.metadata, client.ID,
 	).Scan(&client.UpdatedAt)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return domain.ErrClientNotFound
 	}
 	if err != nil {

@@ -47,8 +47,8 @@ func setupSessionTest(t *testing.T) (context.Context, *service.SessionService) {
 
 func createTestSession(accountID string) *domain.Session {
 	return &domain.Session{
-		ID:           uuid.New(),
-		AccountID:    uuid.MustParse(accountID),
+		ID:           uuid.New().String(),
+		AccountID:    accountID,
 		IP:           "127.0.0.1",
 		UserAgent:    "test-agent",
 		Username:     "testuser",
@@ -69,7 +69,7 @@ func TestCreateAndGetSession(t *testing.T) {
 	got, err := svc.GetSession(ctx, session.ID)
 	require.NoError(t, err)
 	assert.Equal(t, session.ID, got.ID)
-	assert.Equal(t, accountID, got.AccountID.String())
+	assert.Equal(t, accountID, got.AccountID)
 	assert.Equal(t, "127.0.0.1", got.IP)
 	assert.Equal(t, "testuser", got.Username)
 }
@@ -77,7 +77,7 @@ func TestCreateAndGetSession(t *testing.T) {
 func TestSessionNotFound(t *testing.T) {
 	ctx, svc := setupSessionTest(t)
 
-	_, err := svc.GetSession(ctx, uuid.New())
+	_, err := svc.GetSession(ctx, uuid.New().String())
 	assert.ErrorIs(t, err, service.ErrSessionNotFound)
 }
 

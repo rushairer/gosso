@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/auth/middleware"
@@ -55,7 +54,7 @@ type AccountValidator interface {
 
 // SessionValidator checks whether a session is still active.
 type SessionValidator interface {
-	ValidateSession(ctx context.Context, sessionID uuid.UUID) (*sessionDomain.Session, error)
+	ValidateSession(ctx context.Context, sessionID string) (*sessionDomain.Session, error)
 }
 
 //go:embed template/consent.html
@@ -144,12 +143,7 @@ func (c *OAuth2Controller) authenticateRequest(ctx *gin.Context) (string, bool) 
 		return "", false
 	}
 	if c.sessionValidator != nil && claims.SessionID != "" {
-		sessionUUID, err := uuid.Parse(claims.SessionID)
-		if err != nil {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-			return "", false
-		}
-		if _, err := c.sessionValidator.ValidateSession(ctx.Request.Context(), sessionUUID); err != nil {
+		if _, err := c.sessionValidator.ValidateSession(ctx.Request.Context(), claims.SessionID); err != nil {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return "", false
 		}

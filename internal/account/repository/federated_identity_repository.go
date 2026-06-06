@@ -95,7 +95,7 @@ func (r *federatedIdentityRepositoryImpl) FindByProvider(ctx context.Context, pr
 		&identity.DeletedAt,
 	)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s/%s", ErrFederatedIdentityNotFound, provider, providerUserID)
 	}
 	if err != nil {

@@ -21,9 +21,7 @@ type StubSMSService struct {
 
 // NewStubSMSService creates a stub SMS service
 func NewStubSMSService(logger *zap.Logger) *StubSMSService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	return &StubSMSService{logger: logger}
 }
 

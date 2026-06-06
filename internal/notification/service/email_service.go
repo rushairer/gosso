@@ -51,9 +51,7 @@ type EmailService struct {
 // The SMTP connection uses the OS-level TCP timeout. Consider upgrading to a
 // context-aware mail library if goroutine leaks are observed under load.
 func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) *EmailService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	return &EmailService{
 		dialer: gomail.NewDialer(cfg.Host, cfg.Port, cfg.Username, cfg.Password),
 		from:   cfg.From,

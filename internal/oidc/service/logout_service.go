@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	sessionService "github.com/rushairer/gosso/internal/session/service"
@@ -102,17 +101,12 @@ func (s *LogoutService) LogoutBySessionID(ctx context.Context, accountID, sessio
 		return fmt.Errorf("session service not configured")
 	}
 
-	parsedID, err := uuid.Parse(sessionID)
-	if err != nil {
-		return fmt.Errorf("invalid session id: %w", err)
-	}
-
 	if err := s.tokenSvc.RevokeAllForSession(ctx, sessionID); err != nil {
 		s.logger.Warn("Failed to revoke tokens for session during logout",
 			zap.String("session_id", sessionID), zap.Error(err))
 	}
 
-	if err := s.sessionSvc.RevokeSession(ctx, accountID, parsedID); err != nil {
+	if err := s.sessionSvc.RevokeSession(ctx, accountID, sessionID); err != nil {
 		return fmt.Errorf("revoke session: %w", err)
 	}
 

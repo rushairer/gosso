@@ -9,6 +9,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/utility"
 )
 
 // RedisClient wraps the Redis client and provides a unified cache operation interface
@@ -47,9 +49,7 @@ func NewRedisClient(dsn string, maxActiveConns int, poolTimeout time.Duration, l
 		return nil, fmt.Errorf("ping redis: %w", err)
 	}
 
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 
 	logger.Info("Redis client initialized",
 		zap.String("addr", opts.Addr),

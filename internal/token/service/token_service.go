@@ -15,6 +15,7 @@ import (
 
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/token/domain"
+	"github.com/rushairer/gosso/utility"
 )
 
 const (
@@ -45,9 +46,7 @@ func NewTokenService(
 	blacklist *BlacklistService,
 	logger *zap.Logger,
 ) *TokenService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	return &TokenService{
 		keySvc:        keySvc,
 		issuer:        issuer,

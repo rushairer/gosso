@@ -11,6 +11,7 @@ import (
 
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/token/domain"
+	"github.com/rushairer/gosso/utility"
 )
 
 const (
@@ -29,9 +30,7 @@ type BlacklistService struct {
 
 // NewBlacklistService creates a new token blacklist service instance
 func NewBlacklistService(redis *cache.RedisClient, logger *zap.Logger) *BlacklistService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 
 	return &BlacklistService{
 		redis:  redis,

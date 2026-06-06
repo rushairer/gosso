@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 
 	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/utility"
 )
 
 // rsaKeyBits is the key size for new RSA key generation.
@@ -30,9 +32,7 @@ type KeyService struct {
 //  2. privateKeyPath non-empty and file missing → generate and write PEM
 //  3. privateKeyPath empty → generate in-memory (dev mode, keys lost on restart)
 func NewKeyService(privateKeyPath string, keyID string, logger *zap.Logger) (*KeyService, error) {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 
 	var privateKey *rsa.PrivateKey
 	var err error

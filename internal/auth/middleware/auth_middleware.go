@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/rushairer/gouno"
 
 	"github.com/rushairer/gosso/internal/audit"
@@ -18,7 +17,7 @@ import (
 
 // SessionValidator checks whether a session is still active.
 type SessionValidator interface {
-	ValidateSession(ctx context.Context, sessionID uuid.UUID) (*sessionDomain.Session, error)
+	ValidateSession(ctx context.Context, sessionID string) (*sessionDomain.Session, error)
 }
 
 const (
@@ -52,12 +51,7 @@ func JWTAuthMiddleware(tokenSvc *tokenService.TokenService, sessionValidator Ses
 
 		// Verify the session still exists (invalidates tokens after account deletion/suspension)
 		if sessionValidator != nil && claims.SessionID != "" {
-			sessionUUID, err := uuid.Parse(claims.SessionID)
-			if err != nil {
-				ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid session ID in token"))
-				return
-			}
-			if _, err := sessionValidator.ValidateSession(ctx.Request.Context(), sessionUUID); err != nil {
+			if _, err := sessionValidator.ValidateSession(ctx.Request.Context(), claims.SessionID); err != nil {
 				ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "session expired or revoked"))
 				return
 			}

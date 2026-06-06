@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 
@@ -63,9 +62,7 @@ func NewSocialLoginService(
 	providers map[string]*OAuthProviderConfig,
 	logger *zap.Logger,
 ) *SocialLoginService {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = utility.EnsureLogger(logger)
 	return &SocialLoginService{
 		db:                    db,
 		accountSvc:            accountSvc,
@@ -249,11 +246,10 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, ip, userAgent string) (result *LoginResult, err error) {
 	defer func() {
 		if err != nil {
-			accountUUID, _ := uuid.Parse(accountID)
 			auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 				auditDomain.ActionLoginFailure,
 				audit.IPFromContext(ctx),
-				&accountUUID,
+				&accountID,
 				utility.MustMarshalJSON(map[string]any{"method": "social", "account_id": accountID}),
 				utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx), "reason": safeAuditReason(err)}),
 			))
@@ -367,11 +363,10 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 	}
 
 	// Audit log for social login account creation
-	accountUUID, _ := uuid.Parse(account.ID)
 	auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountRegister,
 		audit.IPFromContext(ctx),
-		&accountUUID,
+		&account.ID,
 		utility.MustMarshalJSON(map[string]any{"account_id": account.ID, "provider": provider}),
 		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))

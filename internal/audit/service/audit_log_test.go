@@ -15,8 +15,8 @@ import (
 func TestLogNilReceiver(t *testing.T) {
 	var auditor *Auditor
 	record := &domain.AuditRecord{
-		ID:        uuid.New(),
-		TxID:      uuid.New(),
+		ID:        uuid.New().String(),
+		TxID:      uuid.New().String(),
 		Action:    "test.action",
 		Actor:     "test",
 		Resource:  json.RawMessage(`{}`),
@@ -27,12 +27,12 @@ func TestLogNilReceiver(t *testing.T) {
 }
 
 func TestNewRecord(t *testing.T) {
-	accountID := uuid.New()
+	accountID := uuid.New().String()
 	record := domain.NewRecord(
 		domain.ActionLoginSuccess,
 		"testuser",
 		&accountID,
-		json.RawMessage(`{"account_id":"`+accountID.String()+`"}`),
+		json.RawMessage(`{"account_id":"`+accountID+`"}`),
 		json.RawMessage(`{"ip":"127.0.0.1"}`),
 	)
 

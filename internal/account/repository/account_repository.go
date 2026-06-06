@@ -38,12 +38,12 @@ type AccountRepository interface {
 	FindAll(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error)
 
 	// SuspendAccount atomically sets status to 'suspended' only if currently 'active'.
-	// Returns ErrAccountNotFound if the account doesn't exist, or a sentinel error if the status transition is invalid.
-	SuspendAccount(ctx context.Context, accountID string) error
+	// Returns ErrInvalidStatusTransition if the account doesn't exist or is not in 'active' status.
+	SuspendAccount(ctx context.Context, tx *sql.Tx, accountID string) error
 
 	// ActivateAccount atomically sets status to 'active' only if currently 'suspended'.
-	// Returns ErrAccountNotFound if the account doesn't exist, or a sentinel error if the status transition is invalid.
-	ActivateAccount(ctx context.Context, accountID string) error
+	// Returns ErrInvalidStatusTransition if the account doesn't exist or is not in 'suspended' status.
+	ActivateAccount(ctx context.Context, tx *sql.Tx, accountID string) error
 }
 
 // accountRepositoryImpl implements AccountRepository
@@ -112,7 +112,7 @@ func (r *accountRepositoryImpl) FindByID(ctx context.Context, accountID string) 
 		&account.DeletedAt,
 	)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, accountID)
 	}
 	if err != nil {
@@ -152,7 +152,7 @@ func (r *accountRepositoryImpl) FindByUsername(ctx context.Context, username str
 		&account.DeletedAt,
 	)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, username)
 	}
 	if err != nil {
@@ -321,41 +321,31 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 }
 
 // SuspendAccount atomically sets status to 'suspended' only if currently 'active'.
-func (r *accountRepositoryImpl) SuspendAccount(ctx context.Context, accountID string) error {
-	query := `
-		UPDATE accounts SET status = 'suspended', updated_at = $1
-		WHERE id = $2 AND status = 'active' AND deleted_at IS NULL
-	`
-	result, err := r.db.ExecContext(ctx, query, time.Now(), accountID)
-	if err != nil {
-		return fmt.Errorf("suspend account: %w", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
-	}
-	if rows == 0 {
-		return fmt.Errorf("%w: account %s not found or not in active status", ErrInvalidStatusTransition, accountID)
-	}
-	return nil
+func (r *accountRepositoryImpl) SuspendAccount(ctx context.Context, tx *sql.Tx, accountID string) error {
+	return r.transitionAccountStatus(ctx, tx, accountID, "active", "suspended")
 }
 
 // ActivateAccount atomically sets status to 'active' only if currently 'suspended'.
-func (r *accountRepositoryImpl) ActivateAccount(ctx context.Context, accountID string) error {
-	query := `
-		UPDATE accounts SET status = 'active', updated_at = $1
-		WHERE id = $2 AND status = 'suspended' AND deleted_at IS NULL
-	`
-	result, err := r.db.ExecContext(ctx, query, time.Now(), accountID)
+func (r *accountRepositoryImpl) ActivateAccount(ctx context.Context, tx *sql.Tx, accountID string) error {
+	return r.transitionAccountStatus(ctx, tx, accountID, "suspended", "active")
+}
+
+// transitionAccountStatus is a shared helper for status transitions.
+func (r *accountRepositoryImpl) transitionAccountStatus(ctx context.Context, tx *sql.Tx, accountID, fromStatus, toStatus string) error {
+	query := fmt.Sprintf(`
+		UPDATE accounts SET status = '%s', updated_at = $1
+		WHERE id = $2 AND status = '%s' AND deleted_at IS NULL
+	`, toStatus, fromStatus)
+	result, err := tx.ExecContext(ctx, query, time.Now(), accountID)
 	if err != nil {
-		return fmt.Errorf("activate account: %w", err)
+		return fmt.Errorf("%s account: %w", toStatus, err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("%w: account %s not found or not in suspended status", ErrInvalidStatusTransition, accountID)
+		return fmt.Errorf("%w: account %s not found or not in %s status", ErrInvalidStatusTransition, accountID, fromStatus)
 	}
 	return nil
 }

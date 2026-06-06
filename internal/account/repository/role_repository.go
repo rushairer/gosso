@@ -155,7 +155,7 @@ func (r *roleRepositoryImpl) FindByID(ctx context.Context, roleID string) (*doma
 		&role.DeletedAt,
 	)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", ErrRoleNotFound, roleID)
 	}
 	if err != nil {
@@ -196,7 +196,7 @@ func (r *roleRepositoryImpl) FindByName(ctx context.Context, name string) (*doma
 		&role.DeletedAt,
 	)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", ErrRoleNotFound, name)
 	}
 	if err != nil {
@@ -387,7 +387,7 @@ func (r *roleRepositoryImpl) FindRolesByAccountID(ctx context.Context, accountID
 func (r *roleRepositoryImpl) SoftDeleteRolesByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `
 		UPDATE account_roles
-		SET deleted_at = $1
+		SET deleted_at = $1, updated_at = $1
 		WHERE account_id = $2 AND deleted_at IS NULL
 	`
 

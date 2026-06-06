@@ -32,7 +32,7 @@ func TestAudit(t *testing.T) {
 
 	auditor := service.NewAuditor(ctx, db, nil)
 
-	testAccountID := uuid.New()
+	testAccountID := uuid.New().String()
 
 	err = auditor.Do(ctx, func(innerCtx context.Context, db *sql.DB) (*domain.AuditRecord, error) {
 		id, err := uuid.NewV7()
@@ -51,8 +51,8 @@ func TestAudit(t *testing.T) {
 		}
 		resource := json.RawMessage(dataJson)
 		return &domain.AuditRecord{
-			ID:        id,
-			TxID:      id,
+			ID:        id.String(),
+			TxID:      id.String(),
 			AccountID: &testAccountID,
 			Action:    "test.action",
 			Actor:     "test",
@@ -72,13 +72,13 @@ func TestAudit(t *testing.T) {
 	var count int
 	err = db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM audit_record WHERE account_id = $1 AND action = 'test.action'`,
-		testAccountID.String(),
+		testAccountID,
 	).Scan(&count)
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, count, 1, "audit record should have been persisted")
 
 	// Cleanup
-	_, _ = db.ExecContext(ctx, `DELETE FROM audit_record WHERE account_id = $1`, testAccountID.String())
+	_, _ = db.ExecContext(ctx, `DELETE FROM audit_record WHERE account_id = $1`, testAccountID)
 
 	go func() {
 		errorChan := auditor.ErrorChan()
