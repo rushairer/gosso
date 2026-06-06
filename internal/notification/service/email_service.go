@@ -67,7 +67,7 @@ func (s *EmailService) SendVerificationCode(ctx context.Context, to, code string
 		return fmt.Errorf("render verification template: %w", err)
 	}
 
-	return s.send(to, subject, body.String())
+	return s.send(ctx, to, subject, body.String())
 }
 
 // SendPasswordResetLink sends a password reset email
@@ -78,21 +78,31 @@ func (s *EmailService) SendPasswordResetLink(ctx context.Context, to, resetLink 
 		return fmt.Errorf("render password reset template: %w", err)
 	}
 
-	return s.send(to, subject, body.String())
+	return s.send(ctx, to, subject, body.String())
 }
 
-func (s *EmailService) send(to, subject, htmlBody string) error {
+func (s *EmailService) send(ctx context.Context, to, subject, htmlBody string) error {
 	msg := gomail.NewMessage()
 	msg.SetHeader("From", s.from)
 	msg.SetHeader("To", to)
 	msg.SetHeader("Subject", subject)
 	msg.SetBody("text/html", htmlBody)
 
-	if err := s.dialer.DialAndSend(msg); err != nil {
-		s.logger.Error("Failed to send email",
-			zap.String("to", maskEmail(to)),
-			zap.Error(err))
-		return fmt.Errorf("send email: %w", err)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- s.dialer.DialAndSend(msg)
+	}()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			s.logger.Error("Failed to send email",
+				zap.String("to", maskEmail(to)),
+				zap.Error(err))
+			return fmt.Errorf("send email: %w", err)
+		}
+	case <-ctx.Done():
+		return fmt.Errorf("send email: %w", ctx.Err())
 	}
 
 	s.logger.Info("Email sent", zap.String("to", maskEmail(to)))
