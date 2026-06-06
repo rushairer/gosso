@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 )
@@ -30,6 +31,11 @@ func RunInTransactionIsolation(ctx context.Context, db *sql.DB, isolation sql.Is
 		} else if panicked || err != nil {
 			if rerr := tx.Rollback(); rerr != nil {
 				fmt.Fprintf(os.Stderr, "rollback failed: %v\n", rerr)
+				if err != nil {
+					err = errors.Join(err, fmt.Errorf("transaction rollback failed: %w", rerr))
+				} else {
+					err = fmt.Errorf("transaction rollback failed: %w", rerr)
+				}
 			}
 		}
 	}()

@@ -61,17 +61,17 @@ func NewTokenService(
 // GenerateAccessToken generates a JWT access token (RS256)
 func (s *TokenService) GenerateAccessToken(claims *domain.AccessTokenClaims) (string, error) {
 	now := time.Now()
-	if claims.ID == "" {
-		claims.ID = uuid.New().String()
+	// Copy claims to avoid mutating caller's state
+	clonedClaims := *claims
+	if clonedClaims.ID == "" {
+		clonedClaims.ID = uuid.New().String()
 	}
-	claims.Issuer = s.issuer
-	claims.Subject = claims.AccountID
-	claims.IssuedAt = jwt.NewNumericDate(now)
-	if claims.ExpiresAt == nil {
-		claims.ExpiresAt = jwt.NewNumericDate(now.Add(s.accessExpiry))
-	}
+	clonedClaims.Issuer = s.issuer
+	clonedClaims.Subject = clonedClaims.AccountID
+	clonedClaims.IssuedAt = jwt.NewNumericDate(now)
+	clonedClaims.ExpiresAt = jwt.NewNumericDate(now.Add(s.accessExpiry))
 
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, &clonedClaims)
 	token.Header["kid"] = s.keySvc.KeyID()
 	tokenString, err := token.SignedString(s.keySvc.PrivateKey())
 	if err != nil {
@@ -311,7 +311,9 @@ func (s *TokenService) RevokeRefreshToken(ctx context.Context, token string) err
 		if jsonErr := json.Unmarshal([]byte(dataStr), &rt); jsonErr == nil && rt.SessionID != "" {
 			sessionKey := s.buildSessionTokensKey(rt.SessionID)
 			tokenHash := domain.HashToken(token)
-			_ = s.redis.SRem(ctx, sessionKey, tokenHash)
+			if err := s.redis.SRem(ctx, sessionKey, tokenHash); err != nil {
+				s.logger.Warn("Failed to remove token hash from session index during revocation", zap.Error(err), zap.String("session_id", rt.SessionID))
+			}
 		}
 	}
 

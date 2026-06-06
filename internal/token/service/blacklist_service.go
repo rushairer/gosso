@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"go.uber.org/zap"
@@ -162,8 +163,8 @@ func (s *BlacklistService) GetAccountRevokedAfter(ctx context.Context, accountID
 		return time.Time{}, fmt.Errorf("get account revoked after: %w", err)
 	}
 
-	var unixTimestamp int64
-	if _, parseErr := fmt.Sscanf(val, "%d", &unixTimestamp); parseErr != nil {
+	unixTimestamp, parseErr := strconv.ParseInt(val, 10, 64)
+	if parseErr != nil {
 		s.logger.Error("Failed to parse account revoked-after timestamp",
 			zap.String("account_id", accountID), zap.String("value", val), zap.Error(parseErr))
 		return time.Time{}, fmt.Errorf("parse account revoked after: %w", parseErr)

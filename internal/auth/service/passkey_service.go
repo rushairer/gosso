@@ -85,8 +85,8 @@ func (s *PasskeyService) BeginRegistration(ctx context.Context, accountID, usern
 	// Find existing credentials for exclusion
 	existingCreds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil {
-		s.logger.Warn("Failed to find existing credentials", zap.Error(err), zap.String("account_id", accountID))
-		existingCreds = nil
+		s.logger.Error("Failed to find existing credentials during registration", zap.Error(err), zap.String("account_id", accountID))
+		return nil, fmt.Errorf("find existing credentials: %w", err)
 	}
 
 	user := domain.NewWebAuthnUser(accountID, username, displayName, toCredentialSlice(existingCreds))
@@ -278,6 +278,7 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 			zap.Error(err),
 			zap.String("account_id", cred.AccountID),
 			zap.String("credential_id", cred.ID))
+		return "", nil, fmt.Errorf("update credential sign count: %w", err)
 	}
 
 	return cred.AccountID, cred, nil
@@ -372,6 +373,7 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, requestID string,
 			zap.Error(err),
 			zap.String("account_id", cred.AccountID),
 			zap.String("credential_id", cred.ID))
+		return fmt.Errorf("update credential sign count: %w", err)
 	}
 
 	return nil

@@ -161,7 +161,9 @@ func initDatabase(cfg config.GoUnoConfig, logger *zap.Logger) (*sql.DB, error) {
 	db.SetConnMaxLifetime(time.Duration(cfg.DatabaseConfig.ConnMaxLifetimeSec) * time.Second)
 	db.SetConnMaxIdleTime(time.Duration(cfg.DatabaseConfig.ConnMaxIdleTimeSec) * time.Second)
 
-	if err := db.Ping(); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}

@@ -19,21 +19,47 @@ import (
 // Uses Redis server TIME instead of client-provided timestamp for consistency across instances.
 var slidingWindowScript = redis.NewScript(`
 local key = KEYS[1]
-local window = tonumber(ARGV[1]) * 1000
+local window_sec = tonumber(ARGV[1])
+local window_ms = window_sec * 1000
 local limit = tonumber(ARGV[2])
 local timeArr = redis.call('TIME')
-local now = tonumber(timeArr[1]) * 1000 + math.floor(tonumber(timeArr[2]) / 1000)
+local now_sec = tonumber(timeArr[1])
+local now_ms = now_sec * 1000 + math.floor(tonumber(timeArr[2]) / 1000)
 
-redis.call('ZREMRANGEBYSCORE', key, 0, now - window)
+redis.call('ZREMRANGEBYSCORE', key, 0, now_ms - window_ms)
 local count = redis.call('ZCARD', key)
+
+local allowed = 0
+local remaining = 0
 if count < limit then
-    redis.call('ZADD', key, now, now .. ':' .. timeArr[2])
-    if count == 0 then
-        redis.call('EXPIRE', key, ARGV[1])
-    end
-    return {1, limit - count - 1}
+    redis.call('ZADD', key, now_ms, now_ms .. ':' .. timeArr[2])
+    allowed = 1
+    remaining = limit - count - 1
+else
+    allowed = 0
+    remaining = 0
 end
-return {0, 0}
+
+redis.call('EXPIRE', key, window_sec)
+
+local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+local reset_at = now_sec + window_sec
+local retry_after = window_sec
+if #oldest > 0 then
+    local oldest_score = tonumber(oldest[2])
+    reset_at = math.ceil((oldest_score + window_ms) / 1000)
+    local diff = oldest_score + window_ms - now_ms
+    if diff > 0 then
+        retry_after = math.ceil(diff / 1000)
+    else
+        retry_after = 0
+    end
+    if retry_after > window_sec then
+        retry_after = window_sec
+    end
+end
+
+return {allowed, remaining, reset_at, retry_after}
 `)
 
 // RedisRateLimitMiddleware Redis-based distributed sliding window rate limiter middleware.
@@ -68,7 +94,7 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context)
 			return
 		}
 
-		if len(result) < 2 {
+		if len(result) < 4 {
 			if failOpen {
 				ctx.Next()
 			} else {
@@ -83,14 +109,14 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context)
 
 		allowed := result[0] == 1
 		remaining := result[1]
+		resetAt := result[2]
+		retryAfter := result[3]
 
-		resetAt := time.Now().Add(window).Unix()
 		ctx.Header("X-RateLimit-Limit", fmt.Sprintf("%d", limit))
 		ctx.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
 		ctx.Header("X-RateLimit-Reset", fmt.Sprintf("%d", resetAt))
 
 		if !allowed {
-			retryAfter := int(window.Seconds())
 			ctx.Header("Retry-After", fmt.Sprintf("%d", retryAfter))
 			ctx.JSON(http.StatusTooManyRequests, gin.H{
 				"code":    429,

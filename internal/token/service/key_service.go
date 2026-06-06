@@ -162,7 +162,7 @@ func computeKeyID(pubKey *rsa.PublicKey) (string, error) {
 		return "", fmt.Errorf("marshal public key: %w", err)
 	}
 	hash := sha256.Sum256(DER)
-	return base64.RawURLEncoding.EncodeToString(hash[:8]), nil
+	return base64.RawURLEncoding.EncodeToString(hash[:16]), nil
 }
 
 // BigEndianBytes converts an int to its big-endian byte representation.

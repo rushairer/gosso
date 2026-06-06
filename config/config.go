@@ -255,14 +255,20 @@ func (c *GoUnoConfig) Validate() error {
 		if err != nil || (origin.Scheme != "http" && origin.Scheme != "https") {
 			return fmt.Errorf("auth: webauthn_rp_origin must be a valid URL with http or https scheme")
 		}
+		if origin.Scheme == "http" && origin.Hostname() != "localhost" && origin.Hostname() != "127.0.0.1" {
+			return fmt.Errorf("auth: webauthn_rp_origin with http scheme is only allowed for localhost or 127.0.0.1")
+		}
+		if c.AuthConfig.TOTPEncryptionKey == "" {
+			return fmt.Errorf("auth: totp_encryption_key is required when webauthn_rp_id is set")
+		}
 	}
 	if c.DatabaseConfig.MaxIdleConns > 0 && c.DatabaseConfig.MaxOpenConns > 0 &&
 		c.DatabaseConfig.MaxIdleConns > c.DatabaseConfig.MaxOpenConns {
 		return fmt.Errorf("database: max_idle_conns (%d) must not exceed max_open_conns (%d)",
 			c.DatabaseConfig.MaxIdleConns, c.DatabaseConfig.MaxOpenConns)
 	}
-	if c.AuthConfig.MaxSessions < 0 {
-		return fmt.Errorf("auth: max_sessions must not be negative")
+	if c.AuthConfig.MaxSessions <= 0 {
+		return fmt.Errorf("auth: max_sessions must be positive")
 	}
 	if c.WebServerConfig.MaxBodySize <= 0 {
 		return fmt.Errorf("web_server: max_body_size must be positive (got %d)", c.WebServerConfig.MaxBodySize)

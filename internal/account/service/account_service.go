@@ -157,12 +157,6 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 			return nil, err
 		}
 	}
-	if req.Username != "" {
-		existing, err := s.FindAccountByUsername(ctx, req.Username)
-		if err == nil && existing != nil {
-			return nil, fmt.Errorf("username already taken")
-		}
-	}
 
 	// 3. Create account + credentials in transaction
 	now := time.Now()
@@ -185,6 +179,13 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	}
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		if req.Username != "" {
+			existing, err := s.FindAccountByUsername(ctx, req.Username)
+			if err == nil && existing != nil {
+				return fmt.Errorf("username already taken")
+			}
+		}
+
 		if err := s.accountRepo.CreateAccount(ctx, tx, account); err != nil {
 			return err
 		}
@@ -572,7 +573,8 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 
 	// Validate email format
 	if req.Email != "" {
-		if _, err := mail.ParseAddress(req.Email); err != nil {
+		addr, err := mail.ParseAddress(req.Email)
+		if err != nil || addr.Address != req.Email {
 			return errors.New("invalid email format")
 		}
 	}

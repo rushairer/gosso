@@ -37,13 +37,13 @@ func TestRegisterAccount(t *testing.T) {
 		WithArgs(domain.CredentialTypeEmail, "test@example.com").
 		WillReturnError(sql.ErrNoRows)
 
-	// 1b. Expect querying whether username exists (executed outside transaction)
+	// 2. Begin transaction
+	mock.ExpectBegin()
+
+	// 2b. Expect querying whether username exists (executed inside transaction)
 	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE username").
 		WithArgs("testuser").
 		WillReturnError(sql.ErrNoRows)
-
-	// 2. Begin transaction
-	mock.ExpectBegin()
 
 	// 3. Expect inserting account
 	mock.ExpectExec("INSERT INTO accounts").

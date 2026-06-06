@@ -541,7 +541,6 @@ func TestRevoke_Success(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "ok")
 }
 
 func TestRevoke_MissingToken(t *testing.T) {

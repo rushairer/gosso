@@ -159,7 +159,9 @@ func setupUserInfoEngine(accountSvc *mockAccountService, credRepo *mockCredentia
 	userInfoSvc := oidcService.NewUserInfoService(accountSvc, credRepo, nil)
 
 	ctrl := NewOIDCController(discoverySvc, nil, userInfoSvc, nil, nil, nil, "https://sso.example.com", zap.NewNop())
-	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
+	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	return engine
 }
@@ -272,7 +274,9 @@ func TestUserInfo_NoClaims(t *testing.T) {
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 	userInfoSvc := oidcService.NewUserInfoService(&mockAccountService{}, &mockCredentialRepo{}, nil)
 	ctrl := NewOIDCController(discoverySvc, nil, userInfoSvc, nil, nil, nil, "https://sso.example.com", zap.NewNop())
-	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
+	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	req := httptest.NewRequest(http.MethodGet, "/oidc/userinfo", nil)
 	w := httptest.NewRecorder()
@@ -416,7 +420,9 @@ func setupLogoutEngine(t *testing.T, clientRepo *mockClientRepo) (*gin.Engine, *
 	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, clientRepo, tokenSvc, "https://sso.example.com", zap.NewNop())
 
 	engine := gin.New()
-	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
+	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	return engine, keySvc
 }
@@ -435,14 +441,17 @@ func TestLogout_InvalidIDTokenHint(t *testing.T) {
 
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	// Invalid id_token_hint is silently skipped per OIDC RP-Initiated Logout spec
+	// (id_token_hint is optional). Without a Bearer token, this falls through
+	// to the anonymous success path.
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestLogout_ExpiredIDTokenHint(t *testing.T) {
 	// Expired tokens SHOULD be accepted per OIDC RP-Initiated Logout spec.
 	// This is validated at the service layer (TestValidateIDTokenHint_ExpiredTokenAccepted).
 	// At the controller layer, the accepted token triggers LogoutByAccountID which
-	// requires a session service — tested in integration tests.
+	// gracefully handles missing session service (warns and continues).
 	keySvc := setupTestKeyService(t)
 	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, nil, nil, zap.NewNop())
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
@@ -451,7 +460,9 @@ func TestLogout_ExpiredIDTokenHint(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
+	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	expiredToken := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, true)
 
@@ -463,8 +474,7 @@ func TestLogout_ExpiredIDTokenHint(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	// Token is accepted by ValidateIDTokenHint (expired OK per spec).
-	// LogoutByAccountID fails gracefully (no session service).
-	// Controller returns 200 "logged_out" since loggedOut is set true.
+	// LogoutByAccountID succeeds (session service gracefully skipped).
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
@@ -483,7 +493,9 @@ func TestLogout_IDTokenHint_WrongIssuer(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
+	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	// Token signed by same key but issuer in claims differs from server's issuer
 	token := signIDToken(t, keySvc, "https://other-issuer.com", "account-001", []string{"client-001"}, false)
@@ -495,7 +507,8 @@ func TestLogout_IDTokenHint_WrongIssuer(t *testing.T) {
 
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	// Wrong issuer → validation fails → falls through to anonymous success
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestLogout_IDTokenHint_NoAudience(t *testing.T) {
@@ -508,7 +521,9 @@ func TestLogout_IDTokenHint_NoAudience(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
+	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", nil, false)
 
@@ -519,7 +534,8 @@ func TestLogout_IDTokenHint_NoAudience(t *testing.T) {
 
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	// No audience → validation fails → falls through to anonymous success
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestLogout_IDTokenHint_WrongSignature(t *testing.T) {
@@ -535,7 +551,9 @@ func TestLogout_IDTokenHint_WrongSignature(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
+	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	token := signIDToken(t, otherKeySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
@@ -546,7 +564,8 @@ func TestLogout_IDTokenHint_WrongSignature(t *testing.T) {
 
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	// Wrong signature → validation fails → falls through to anonymous success
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 // ──────────────────────────────────────────────
@@ -565,7 +584,9 @@ func TestLogout_BearerToken_InvalidSignature(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
+	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	// Access token signed with a different key
 	token := signAccessToken(t, otherKeySvc, "https://sso.example.com", "account-001", "session-001")
@@ -576,11 +597,11 @@ func TestLogout_BearerToken_InvalidSignature(t *testing.T) {
 
 	engine.ServeHTTP(w, req)
 
-	// Token validation fails, no session → 400 error
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	// Invalid Bearer token → 401 Unauthorized
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.Equal(t, float64(http.StatusBadRequest), resp["code"])
+	assert.Equal(t, float64(http.StatusUnauthorized), resp["code"])
 }
 
 // ──────────────────────────────────────────────
@@ -606,7 +627,9 @@ func TestLogout_PostLogoutRedirect_InvalidURI(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
+	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
@@ -644,7 +667,9 @@ func TestLogout_PostLogoutRedirect_ValidURI(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
+	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
@@ -681,7 +706,9 @@ func TestLogout_PostLogoutRedirect_ClientNotFound(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
+	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
@@ -713,7 +740,9 @@ func TestLogout_ClientIDMismatch(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	ctrl.RegisterRoutes(&engine.RouterGroup, func(ctx *gin.Context) { ctx.Next() })
+	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
 
 	// Token has audience ["client-001"], but request claims client_id=client-999
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
@@ -743,10 +772,11 @@ func TestLogout_NoSession(t *testing.T) {
 
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	// No id_token_hint, no Bearer → anonymous logout succeeds
+	assert.Equal(t, http.StatusOK, w.Code)
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.Equal(t, float64(http.StatusBadRequest), resp["code"])
+	assert.Equal(t, float64(http.StatusOK), resp["code"])
 }
 
 // ──────────────────────────────────────────────

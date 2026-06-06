@@ -11,16 +11,16 @@ const MinPasswordLength = 8
 
 // MaxPasswordLength is the maximum allowed password length.
 // Prevents excessive bcrypt CPU usage and memory consumption from oversized inputs.
-const MaxPasswordLength = 128
+const MaxPasswordLength = 72
 
 // ValidatePasswordStrength checks that a password meets minimum strength requirements:
-// at least 8 characters, with at least one uppercase letter, one lowercase letter, and one digit.
+// at least 8 bytes, with at least one uppercase letter, one lowercase letter, and one digit.
 func ValidatePasswordStrength(password string) error {
 	if len(password) > MaxPasswordLength {
-		return fmt.Errorf("password must not exceed %d characters", MaxPasswordLength)
+		return fmt.Errorf("password must not exceed %d bytes", MaxPasswordLength)
 	}
 	if len(password) < MinPasswordLength {
-		return errors.New("password must be at least 8 characters")
+		return fmt.Errorf("password must be at least %d bytes", MinPasswordLength)
 	}
 
 	var hasUpper, hasLower, hasDigit bool

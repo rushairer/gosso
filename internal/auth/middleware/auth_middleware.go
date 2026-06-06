@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 
@@ -30,6 +31,9 @@ const (
 // JWTAuthMiddleware is the JWT authentication middleware.
 // sessionValidator is optional; when provided, it verifies the session still exists in Redis.
 func JWTAuthMiddleware(tokenSvc *tokenService.TokenService, sessionValidator SessionValidator) gin.HandlerFunc {
+	if sessionValidator == nil {
+		log.Println("WARNING: SessionValidator is nil in JWTAuthMiddleware. Token revocation checks based on sessions are disabled.")
+	}
 	return func(ctx *gin.Context) {
 		tokenString := extractBearerToken(ctx)
 		if tokenString == "" {

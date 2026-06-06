@@ -33,15 +33,14 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 
 		// Skip Bearer auth (JWT is not affected by CSRF)
 		if strings.HasPrefix(ctx.GetHeader("Authorization"), "Bearer ") {
-			setCSRFCookie(ctx, secure)
 			ctx.Next()
 			return
 		}
 
-		// Skip specified paths (exact match)
+		// Skip specified paths (prefix match)
 		path := ctx.Request.URL.Path
 		for _, sp := range skipPaths {
-			if path == sp {
+			if strings.HasPrefix(path, sp) {
 				setCSRFCookie(ctx, secure)
 				ctx.Next()
 				return

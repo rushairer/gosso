@@ -62,6 +62,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `if logger == nil { logger = zap.NewNop() }` pattern replaced with `utility.EnsureLogger(logger)` across 22 files — single point of change for logger nil-guard (`utility/logger.go`).
 - Audit service magic numbers extracted to named constants (`internal/audit/service/audit.go`).
 - Session and audit domain ID types standardized from `uuid.UUID` to `string` — consistent with all other domain entities (`internal/session/domain/`, `internal/audit/domain/`, and all callers).
+- `MaxPasswordLength` reduced from 128 to 72 — aligns with bcrypt's 72-byte truncation boundary; validation error messages now specify "bytes" instead of "characters" (`utility/password.go`).
+- `MaxSessions` validation changed from `< 0` to `<= 0` — zero sessions would silently disable login (`config/config.go`).
+- `WebAuthnRPOrigin` with `http` scheme now restricted to `localhost` / `127.0.0.1` — prevents accidental cleartext WebAuthn in production (`config/config.go`).
+- `TOTPEncryptionKey` is now required when `WebAuthnRPID` is configured — prevents runtime panic from missing encryption key (`config/config.go`).
+- CSRF middleware skip paths now use prefix matching instead of exact matching — `/.well-known` now correctly skips both `/.well-known/openid-configuration` and `/.well-known/jwks.json` (`middleware/csrf.go`).
+- CSRF middleware no longer sets the CSRF cookie for Bearer token requests — eliminates unnecessary cookie for API-only clients (`middleware/csrf.go`).
+- `JWTAuthMiddleware` now logs a warning when `SessionValidator` is nil — operators can detect misconfigured middleware that disables session-based token revocation (`internal/auth/middleware/auth_middleware.go`).
 
 ### Removed
 
@@ -213,6 +220,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Rate limiter Lua script removed redundant `EXPIRE` call on rejected path — key TTL was already set on first insertion, so the extra call wasted a Redis round-trip on every rejected request (`middleware/redis_ratelimit.go`).
 - Rate limiter Redis errors are now logged at Error level with key context — previously failed silently, making Redis infrastructure issues invisible in production (`middleware/redis_ratelimit.go`, `router/web.go`).
 - `Config.Validate()` now rejects negative `conn_max_lifetime_sec` and `conn_max_idle_time_sec` — negative values cause undefined behavior in `database/sql` connection pool management (`config/config.go`).
+- **Security**: Bcrypt password length limit reduced from 128 to 72 — bcrypt silently truncates at 72 bytes; the previous limit allowed passwords to have identical hashes for different inputs past the boundary (`utility/password.go`).
+- Username uniqueness check now runs inside the signup transaction — eliminates TOCTOU race where concurrent registrations could both pass the check (`internal/account/service/account_service.go`).
+- Email validation now rejects display-name syntax like `"Admin" <user@example.com>` — `mail.ParseAddress` accepts RFC 5322 addr-spec with display names; `addr.Address` is now compared against the raw input (`internal/account/service/account_service.go`).
+- **Security**: `GenerateAccessToken` now clones incoming claims before mutation — prevents caller's `ExpiresAt` and `ID` fields from being silently overwritten (`internal/token/service/token_service.go`).
+- Access token expiry is now always enforced from service config, ignoring any pre-set `ExpiresAt` on incoming claims — prevents callers from extending token lifetime beyond the configured limit (`internal/token/service/token_service.go`).
+- `RevokeRefreshToken` now logs `SRem` errors from session index cleanup — silent failure could leave orphaned token hashes in the session set (`internal/token/service/token_service.go`).
+- `GetAccountRevokedAfter` now uses `strconv.ParseInt` instead of `fmt.Sscanf` — `Sscanf` silently returns 0 for malformed values, masking Redis data corruption (`internal/token/service/blacklist_service.go`).
+- `computeKeyID` hash slice increased from 8 to 16 bytes — reduces JWKS key ID collision probability for deployments with multiple signing keys (`internal/token/service/key_service.go`).
+- Passkey `CompleteLogin` and `CompleteMFALogin` now return error when sign count update fails — previously logged but continued, defeating WebAuthn clone detection (`internal/auth/service/passkey_service.go`).
+- Passkey `BeginRegistration` now returns error when existing credential lookup fails — previously swallowed the error and continued with an empty exclusion list, allowing duplicate registrations (`internal/auth/service/passkey_service.go`).
+- Database ping now uses a 10-second timeout context — previously used `db.Ping()` without timeout, which could hang indefinitely on network partitions (`cmd/gouno/web.go`).
+- Transaction rollback failures are now aggregated via `errors.Join` — callers can inspect both the original error and the rollback failure (`internal/db/transaction.go`).
+- OIDC `LogoutByAccountID` and `LogoutBySessionID` now gracefully handle nil session service — logs a warning and continues instead of returning an error that blocks the logout response (`internal/oidc/service/logout_service.go`).
+- OIDC controller tests now align with spec-compliant behavior — invalid `id_token_hint` falls through to anonymous logout (200), invalid Bearer returns 401, post-logout redirect tests verify actual redirect logic (`internal/oidc/controller/oidc_controller_test.go`).
 
 ### Changed
 
