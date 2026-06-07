@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -11,12 +12,21 @@ import (
 
 	"github.com/rushairer/gosso/internal/auth/middleware"
 	authService "github.com/rushairer/gosso/internal/auth/service"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
+
+// passkeyAuthService defines the auth service methods used by PasskeyController.
+type passkeyAuthService interface {
+	LoginByPasskey(ctx context.Context, accountID, ip, userAgent string) (*authService.LoginResult, error)
+	ValidateMFAToken(ctx context.Context, mfaToken string) (*tokenDomain.AccessTokenClaims, error)
+	MarkPasskeyMFAVerified(ctx context.Context, mfaTokenJTI string) error
+	CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip, userAgent string) (*authService.LoginResult, error)
+}
 
 // PasskeyController handles Passkey authentication endpoints.
 type PasskeyController struct {
 	passkeySvc *authService.PasskeyService
-	authSvc    authService.AuthOrchestrator
+	authSvc    passkeyAuthService
 	tokenMgr   authService.TokenManager
 	logger     *zap.Logger
 }
@@ -24,7 +34,7 @@ type PasskeyController struct {
 // NewPasskeyController creates a new Passkey controller instance.
 func NewPasskeyController(
 	passkeySvc *authService.PasskeyService,
-	authSvc authService.AuthOrchestrator,
+	authSvc passkeyAuthService,
 	tokenMgr authService.TokenManager,
 	logger *zap.Logger,
 ) *PasskeyController {

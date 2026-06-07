@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"crypto/subtle"
 	"errors"
 	"net/http"
@@ -13,14 +14,29 @@ import (
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	authService "github.com/rushairer/gosso/internal/auth/service"
+	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/utility"
 )
 
+// authServiceDeps defines the auth service methods used by AuthController.
+type authServiceDeps interface {
+	LoginByUsernamePassword(ctx context.Context, req *authService.LoginRequest) (*authService.LoginResult, error)
+	VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfaType, ip, userAgent string) (*authService.LoginResult, error)
+	Logout(ctx context.Context, accountID, sessionID string, accessTokenJTI string, tokenExpiresAt time.Time) error
+	RefreshTokens(ctx context.Context, refreshToken string) (*authService.RefreshResult, error)
+	ValidateSession(ctx context.Context, sessionID string) (*sessionDomain.Session, error)
+	ListSessions(ctx context.Context, accountID string) ([]*sessionDomain.Session, error)
+	RevokeSession(ctx context.Context, accountID, sessionID string) error
+	ConfirmVerificationCredential(ctx context.Context, credType, identifier, accountID string) error
+	MFAService() *authService.MFAService
+	PasskeyService() *authService.PasskeyService
+}
+
 // AuthController authentication controller
 type AuthController struct {
-	authSvc          authService.AuthOrchestrator
+	authSvc          authServiceDeps
 	tokenMgr         authService.TokenManager
 	socialSvc        *authService.SocialLoginService
 	verificationSvc  *authService.VerificationService
@@ -46,7 +62,7 @@ func getClaimsFromContext(ctx *gin.Context) (*tokenDomain.AccessTokenClaims, boo
 
 // NewAuthController creates a new instance of AuthController
 func NewAuthController(
-	authSvc authService.AuthOrchestrator,
+	authSvc authServiceDeps,
 	tokenMgr authService.TokenManager,
 	socialSvc *authService.SocialLoginService,
 	verificationSvc *authService.VerificationService,

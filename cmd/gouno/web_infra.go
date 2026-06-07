@@ -1,0 +1,84 @@
+package gouno
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"time"
+
+	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/config"
+	"github.com/rushairer/gosso/internal/audit/service"
+	"github.com/rushairer/gosso/internal/cache"
+)
+
+// initDatabase initializes the database connection
+func initDatabase(cfg config.GoUnoConfig, logger *zap.Logger) (*sql.DB, error) {
+	defaultDriver := cfg.DatabaseConfig.GetDefaultDriver()
+	if defaultDriver == nil {
+		return nil, fmt.Errorf("default database driver not found")
+	}
+
+	db, err := sql.Open(defaultDriver.Driver, defaultDriver.DSN)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	db.SetMaxOpenConns(cfg.DatabaseConfig.MaxOpenConns)
+	db.SetMaxIdleConns(cfg.DatabaseConfig.MaxIdleConns)
+	db.SetConnMaxLifetime(time.Duration(cfg.DatabaseConfig.ConnMaxLifetimeSec) * time.Second)
+	db.SetConnMaxIdleTime(time.Duration(cfg.DatabaseConfig.ConnMaxIdleTimeSec) * time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	logger.Sugar().Info("database connected")
+	return db, nil
+}
+
+// initRedis initializes the Redis connection
+func initRedis(cfg config.GoUnoConfig, logger *zap.Logger) (*cache.RedisClient, error) {
+	redis, err := cache.NewRedisClient(
+		cfg.RedisConfig.DSN,
+		cfg.RedisConfig.MaxActiveConns,
+		time.Duration(cfg.RedisConfig.PoolTimeoutSeconds)*time.Second,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to redis: %w", err)
+	}
+
+	logger.Sugar().Info("redis connected")
+	return redis, nil
+}
+
+// listenAuditErrors listens for audit errors and logs them
+func listenAuditErrors(ctx context.Context, auditor *service.Auditor, logger *zap.Logger) {
+	for {
+		select {
+		case err, ok := <-auditor.ErrorChan():
+			if !ok {
+				return
+			}
+			logger.Error("Audit batch error", zap.Error(err))
+		case <-ctx.Done():
+			// Drain remaining buffered errors before exiting
+			for {
+				select {
+				case err, ok := <-auditor.ErrorChan():
+					if !ok {
+						return
+					}
+					logger.Error("Audit batch error (draining)", zap.Error(err))
+				default:
+					return
+				}
+			}
+		}
+	}
+}

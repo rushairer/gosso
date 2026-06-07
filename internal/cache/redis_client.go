@@ -209,8 +209,8 @@ func (r *RedisClient) SAdd(ctx context.Context, key string, members ...interface
 }
 
 // SAddWithTTL atomically adds a member to a set and sets a TTL using a Lua script.
-// This prevents the partial-failure scenario where SADD succeeds but EXPIRE fails,
-// leaving the set without a TTL and allowing unbounded growth.
+// The Lua script ensures SADD and EXPIRE execute atomically within Redis,
+// eliminating any window for partial execution.
 func (r *RedisClient) SAddWithTTL(ctx context.Context, key string, member string, ttl time.Duration) error {
 	script := redis.NewScript(`redis.call('SADD', KEYS[1], ARGV[1]); return redis.call('EXPIRE', KEYS[1], ARGV[2])`)
 	_, err := script.Run(ctx, r.client, []string{key}, member, int(ttl.Seconds())).Result()

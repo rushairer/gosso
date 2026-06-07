@@ -58,8 +58,6 @@ func (m *mockAccountService) ListAccounts(_ context.Context, _, _ int, _ string)
 func (m *mockAccountService) SuspendAccount(_ context.Context, _ string) error  { return nil }
 func (m *mockAccountService) ActivateAccount(_ context.Context, _ string) error { return nil }
 
-func (m *mockAccountService) SetSessionRevoker(_ accountService.SessionRevoker)            {}
-func (m *mockAccountService) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter)  {}
 func (m *mockAccountService) GetAccountRoles(_ context.Context, _ string) ([]*accountDomain.Role, error) {
 	return nil, nil
 }

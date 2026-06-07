@@ -34,34 +34,12 @@ type mockAuthOrchForPasskey struct {
 	completePasskeyMFALoginFn    func() (*service.LoginResult, error)
 }
 
-func (m *mockAuthOrchForPasskey) LoginByUsernamePassword(_ context.Context, _ *service.LoginRequest) (*service.LoginResult, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
 func (m *mockAuthOrchForPasskey) LoginByPasskey(_ context.Context, _, _, _ string) (*service.LoginResult, error) {
 	if m.loginByPasskeyFn != nil {
 		return m.loginByPasskeyFn()
 	}
 	return nil, fmt.Errorf("not implemented")
 }
-
-func (m *mockAuthOrchForPasskey) VerifyMFALogin(_ context.Context, _, _, _, _, _ string) (*service.LoginResult, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (m *mockAuthOrchForPasskey) Logout(_ context.Context, _, _, _ string, _ time.Time) error {
-	return nil
-}
-func (m *mockAuthOrchForPasskey) RefreshTokens(_ context.Context, _ string) (*service.RefreshResult, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-func (m *mockAuthOrchForPasskey) ValidateSession(_ context.Context, _ string) (*sessionDomain.Session, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-func (m *mockAuthOrchForPasskey) ListSessions(_ context.Context, _ string) ([]*sessionDomain.Session, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-func (m *mockAuthOrchForPasskey) RevokeSession(_ context.Context, _, _ string) error { return nil }
 
 func (m *mockAuthOrchForPasskey) ValidateMFAToken(_ context.Context, _ string) (*tokenDomain.AccessTokenClaims, error) {
 	if m.validateMFATokenFn != nil {
@@ -77,18 +55,11 @@ func (m *mockAuthOrchForPasskey) MarkPasskeyMFAVerified(_ context.Context, _ str
 	return nil
 }
 
-func (m *mockAuthOrchForPasskey) MFAService() *service.MFAService         { return nil }
-func (m *mockAuthOrchForPasskey) PasskeyService() *service.PasskeyService { return nil }
-
 func (m *mockAuthOrchForPasskey) CompletePasskeyMFALogin(_ context.Context, _, _, _ string) (*service.LoginResult, error) {
 	if m.completePasskeyMFALoginFn != nil {
 		return m.completePasskeyMFALoginFn()
 	}
 	return nil, fmt.Errorf("not implemented")
-}
-
-func (m *mockAuthOrchForPasskey) ConfirmVerificationCredential(_ context.Context, _, _, _ string) error {
-	return fmt.Errorf("not implemented")
 }
 
 type mockTokenMgrForPasskey struct{}
@@ -175,8 +146,6 @@ func (m *mockAccountSvcForPasskey) BindFederatedIdentity(_ context.Context, _ st
 func (m *mockAccountSvcForPasskey) UnbindFederatedIdentity(_ context.Context, _, _ string) error {
 	return fmt.Errorf("not implemented")
 }
-func (m *mockAccountSvcForPasskey) SetSessionRevoker(_ accountService.SessionRevoker)           {}
-func (m *mockAccountSvcForPasskey) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter) {}
 
 // ──────────────────────────────────────────────
 // RegisterBegin

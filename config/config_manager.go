@@ -37,24 +37,17 @@ func NewConfigManager(
 
 	// Bind CLI flags to the local viper instance
 	if cmd != nil {
-		if f := cmd.Flags().Lookup("address"); f != nil {
-			if err := v.BindPFlag("web_server.address", f); err != nil {
-				log.Printf("Warning: failed to bind flag 'address': %v", err)
-			}
+		flagBindings := map[string]string{
+			"address": "web_server.address",
+			"port":    "web_server.port",
+			"debug":   "web_server.debug",
+			"env":     "gouno_env",
 		}
-		if f := cmd.Flags().Lookup("port"); f != nil {
-			if err := v.BindPFlag("web_server.port", f); err != nil {
-				log.Printf("Warning: failed to bind flag 'port': %v", err)
-			}
-		}
-		if f := cmd.Flags().Lookup("debug"); f != nil {
-			if err := v.BindPFlag("web_server.debug", f); err != nil {
-				log.Printf("Warning: failed to bind flag 'debug': %v", err)
-			}
-		}
-		if f := cmd.Flags().Lookup("env"); f != nil {
-			if err := v.BindPFlag("gouno_env", f); err != nil {
-				log.Printf("Warning: failed to bind flag 'env': %v", err)
+		for flagName, viperKey := range flagBindings {
+			if f := cmd.Flags().Lookup(flagName); f != nil {
+				if err := v.BindPFlag(viperKey, f); err != nil {
+					log.Printf("Warning: failed to bind flag '%s': %v", flagName, err)
+				}
 			}
 		}
 	}

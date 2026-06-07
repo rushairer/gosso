@@ -42,10 +42,6 @@ func (m *mockAuthOrchestrator) LoginByUsernamePassword(_ context.Context, _ *ser
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (m *mockAuthOrchestrator) LoginByPasskey(_ context.Context, _, _, _ string) (*service.LoginResult, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
 func (m *mockAuthOrchestrator) VerifyMFALogin(_ context.Context, _, _, _, _, _ string) (*service.LoginResult, error) {
 	if m.mfaVerifyFn != nil {
 		return m.mfaVerifyFn()
@@ -86,18 +82,6 @@ func (m *mockAuthOrchestrator) RevokeSession(_ context.Context, _, _ string) err
 		return m.revokeSessionFn()
 	}
 	return nil
-}
-
-func (m *mockAuthOrchestrator) ValidateMFAToken(_ context.Context, _ string) (*tokenDomain.AccessTokenClaims, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (m *mockAuthOrchestrator) MarkPasskeyMFAVerified(_ context.Context, _ string) error {
-	return fmt.Errorf("not implemented")
-}
-
-func (m *mockAuthOrchestrator) CompletePasskeyMFALogin(_ context.Context, _, _, _ string) (*service.LoginResult, error) {
-	return nil, fmt.Errorf("not implemented")
 }
 
 func (m *mockAuthOrchestrator) ConfirmVerificationCredential(_ context.Context, _, _, _ string) error {

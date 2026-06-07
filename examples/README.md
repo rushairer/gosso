@@ -9,9 +9,7 @@ examples/
 ├── README.md              # 本文件
 ├── account/               # 账号模块示例
 │   └── main.go
-├── redis/                 # Redis 缓存与会话示例
-│   └── main.go
-└── metadata/              # Metadata 类型使用示例
+└── redis/                 # Redis 缓存与会话示例
     └── main.go
 ```
 
@@ -25,9 +23,6 @@ go run ./examples/account
 
 # 运行 Redis 示例
 go run ./examples/redis
-
-# 运行 Metadata 示例
-go run ./examples/metadata
 ```
 
 ### 方式 2：编译后运行
@@ -36,12 +31,10 @@ go run ./examples/metadata
 # 编译所有示例
 go build -o bin/account_example ./examples/account
 go build -o bin/redis_example ./examples/redis
-go build -o bin/metadata_example ./examples/metadata
 
 # 运行编译好的程序
 ./bin/account_example
 ./bin/redis_example
-./bin/metadata_example
 ```
 
 ### 方式 3：使用 Makefile（如果项目提供）
@@ -115,35 +108,6 @@ redisClient, err := cache.NewRedisClient(
 )
 ```
 
-### 3. Metadata 类型使用示例 (`metadata/`)
-
-展示如何安全地使用 `map[string]any` 类型的 Metadata 字段：
-
-- ✅ 创建账号时设置 Metadata
-- ✅ 使用 MetadataHelper 安全访问各种类型
-- ✅ 独立函数访问模式
-- ✅ 实际业务场景（权限检查）
-
-**前置条件**：
-- 无（独立运行）
-
-**输出示例**：
-```
-========== Metadata 使用示例 ==========
-
-=== 示例 1: 创建账号时设置 Metadata ===
-账号创建成功: 张三
-部门: engineering
-级别: 3
-标签: [senior backend go]
-
-=== 示例 2: 使用 MetadataHelper 安全访问 ===
-部门: engineering
-级别: 3
-入职日期: 2020-01-01
-...
-```
-
 ## 🔧 常见问题
 
 ### 1. 数据库连接失败
@@ -191,7 +155,6 @@ go clean -modcache
 
 - [任务 2 快速开始](../doc/task-02-quickstart.md) - 账号模块详细说明
 - [任务 3 快速开始](../doc/task-03-quickstart.md) - Redis 缓存详细说明
-- [Metadata 类型决策](../doc/metadata-type-decision.md) - Metadata 字段设计说明
 
 ## 🎯 最佳实践
 
@@ -215,14 +178,6 @@ go run ./cmd/migrate up
 # 3. 运行示例
 go run ./examples/account
 go run ./examples/redis
-go run ./examples/metadata
-```
-
-### 仅测试示例（不依赖外部服务）
-
-```bash
-# Metadata 示例无需外部依赖
-go run ./examples/metadata
 ```
 
 ## 💡 贡献新示例
