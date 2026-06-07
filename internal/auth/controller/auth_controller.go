@@ -18,7 +18,7 @@ import (
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // authServiceDeps defines the auth service methods used by AuthController.
@@ -594,7 +594,7 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 	}
 	if err := c.verificationSvc.ValidateCredentialOwnership(ctx, tc.AccountID, string(credType), req.Identifier); err != nil {
 		c.logger.Warn("Credential ownership validation failed", zap.Error(err))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "identifier not associated with this account"))
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request"))
 		return
 	}
 
@@ -642,7 +642,7 @@ func (c *AuthController) ConfirmVerification(ctx *gin.Context) {
 	// Find credential and mark it as verified via service layer
 	if err := c.authSvc.ConfirmVerificationCredential(ctx, req.Type, req.Identifier, tc.AccountID); err != nil {
 		c.logger.Warn("Failed to confirm verification credential", zap.Error(err), zap.String("type", req.Type), zap.String("identifier", utility.MaskIdentifier(req.Type, req.Identifier)))
-		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "credential not found"))
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid verification code"))
 		return
 	}
 

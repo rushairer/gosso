@@ -7,7 +7,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // SMSService SMS sending service interface

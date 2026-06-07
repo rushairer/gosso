@@ -1,12 +1,16 @@
 package domain
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/argon2"
 )
 
 // CredentialType represents the type of credential.
@@ -20,9 +24,12 @@ const (
 	CredentialTypeWebAuthn   CredentialType = "webauthn"
 	CredentialTypeBackupCode CredentialType = "backup_code"
 
-	// BcryptCost is the bcrypt cost factor for password hashing.
-	// 12 provides a good balance between security and performance (2026 recommendation).
-	BcryptCost = 12
+	// Argon2id parameters (OWASP 2023 recommendation for server-side hashing).
+	Argon2Time    = 1         // iterations
+	Argon2Memory  = 64 * 1024 // 64 MB
+	Argon2Threads = 4         // parallelism
+	Argon2SaltLen = 16        // bytes
+	Argon2KeyLen  = 32        // bytes
 )
 
 // Credential is the credential domain model.
@@ -128,32 +135,81 @@ func (c *Credential) SoftDelete() {
 	c.DeletedAt = &now
 }
 
-// VerifyPassword verifies the plaintext password (password credentials only).
-// Supports both legacy bcrypt-only hashes and new SHA-256+bcrypt hashes.
+// VerifyPassword verifies the plaintext password against the stored Argon2id hash.
 func (c *Credential) VerifyPassword(plainPassword string) bool {
 	if c.Type != CredentialTypePassword {
 		return false
 	}
-	// Try legacy bcrypt hash first (backward compatible with existing hashes).
-	if err := bcrypt.CompareHashAndPassword([]byte(c.Value), []byte(plainPassword)); err == nil {
-		return true
-	}
-	// Try SHA-256 pre-hashed format.
-	return bcrypt.CompareHashAndPassword([]byte(c.Value), []byte(preHashPassword(plainPassword))) == nil
+	return verifyArgon2id(plainPassword, c.Value)
 }
 
-// HashPassword hashes a plaintext password using SHA-256 + bcrypt.
-// The SHA-256 pre-hash allows arbitrary-length passwords to bypass bcrypt's 72-byte truncation.
+// HashPassword hashes a plaintext password using Argon2id with PHC format encoding.
+// Format: $argon2id$v=19$m=65536,t=1,p=4$<salt_b64>$<hash_b64>
 func HashPassword(password string) (string, error) {
-	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(preHashPassword(password)), BcryptCost)
-	if err != nil {
+	salt := make([]byte, Argon2SaltLen)
+	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
-	return string(hashedBytes), nil
+
+	hash := argon2.IDKey([]byte(password), salt, Argon2Time, Argon2Memory, Argon2Threads, Argon2KeyLen)
+
+	saltB64 := base64.RawStdEncoding.EncodeToString(salt)
+	hashB64 := base64.RawStdEncoding.EncodeToString(hash)
+
+	return fmt.Sprintf("$argon2id$v=19$m=%d,t=%d,p=%d$%s$%s",
+		Argon2Memory, Argon2Time, Argon2Threads, saltB64, hashB64), nil
 }
 
-// preHashPassword returns the hex-encoded SHA-256 digest of the password.
-func preHashPassword(password string) string {
-	h := sha256.Sum256([]byte(password))
-	return hex.EncodeToString(h[:])
+// verifyArgon2id parses a PHC-encoded argon2id hash and verifies the password.
+func verifyArgon2id(password, encodedHash string) bool {
+	p, salt, hash, err := parseArgon2idHash(encodedHash)
+	if err != nil {
+		return false
+	}
+
+	computedHash := argon2.IDKey([]byte(password), salt, p.time, p.memory, p.threads, uint32(len(hash)))
+	return subtle.ConstantTimeCompare(computedHash, hash) == 1
+}
+
+type argon2idParams struct {
+	memory  uint32
+	time    uint32
+	threads uint8
+}
+
+// parseArgon2idHash decodes a PHC-formatted argon2id hash string.
+func parseArgon2idHash(encodedHash string) (*argon2idParams, []byte, []byte, error) {
+	parts := strings.Split(encodedHash, "$")
+	if len(parts) != 6 {
+		return nil, nil, nil, errors.New("invalid argon2id hash format")
+	}
+
+	if parts[1] != "argon2id" {
+		return nil, nil, nil, errors.New("not an argon2id hash")
+	}
+
+	var version int
+	if _, err := fmt.Sscanf(parts[2], "v=%d", &version); err != nil {
+		return nil, nil, nil, fmt.Errorf("invalid version: %w", err)
+	}
+	if version != argon2.Version {
+		return nil, nil, nil, fmt.Errorf("unsupported argon2id version: %d", version)
+	}
+
+	p := &argon2idParams{}
+	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &p.memory, &p.time, &p.threads); err != nil {
+		return nil, nil, nil, fmt.Errorf("invalid argon2id params: %w", err)
+	}
+
+	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("invalid salt encoding: %w", err)
+	}
+
+	hash, err := base64.RawStdEncoding.DecodeString(parts[5])
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("invalid hash encoding: %w", err)
+	}
+
+	return p, salt, hash, nil
 }

@@ -13,7 +13,7 @@ import (
 	dbutil "github.com/rushairer/gosso/internal/db"
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 	"github.com/rushairer/gosso/internal/oauth2/repository"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 const (

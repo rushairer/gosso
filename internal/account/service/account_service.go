@@ -18,7 +18,7 @@ import (
 	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
 	dbutil "github.com/rushairer/gosso/internal/db"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // AccountService defines the account service interface.
@@ -368,8 +368,8 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		s.logger.Error("Failed to revoke sessions after account deletion", zap.String("account_id", accountID), zap.Error(revokeErr))
 	}
 
-	// 6. Audit log
-	s.auditLog(ctx, auditDomain.NewRecord(
+	// 6. Audit log (sync — critical security event)
+	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountDelete,
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
@@ -457,8 +457,8 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 			zap.String("account_id", accountID), zap.Error(revokeErr))
 	}
 
-	// 8. Audit log
-	s.auditLog(ctx, auditDomain.NewRecord(
+	// 8. Audit log (sync — critical security event)
+	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionPasswordChange,
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
@@ -536,7 +536,7 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 		return err
 	}
 
-	s.auditLog(ctx, auditDomain.NewRecord(
+	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionRoleAssign,
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
@@ -557,7 +557,7 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 		return err
 	}
 
-	s.auditLog(ctx, auditDomain.NewRecord(
+	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionRoleRemove,
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
@@ -592,7 +592,7 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 			zap.String("account_id", accountID), zap.Error(revokeErr))
 	}
 
-	s.auditLog(ctx, auditDomain.NewRecord(
+	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountSuspend,
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
@@ -686,6 +686,14 @@ func (s *accountServiceImpl) auditLog(ctx context.Context, record *auditDomain.A
 	if s.auditor != nil {
 		if err := s.auditor.Log(ctx, record); err != nil {
 			s.logger.Warn("Failed to submit audit record", zap.Error(err))
+		}
+	}
+}
+
+func (s *accountServiceImpl) auditLogSync(ctx context.Context, record *auditDomain.AuditRecord) {
+	if s.auditor != nil {
+		if err := s.auditor.LogSync(ctx, record); err != nil {
+			s.logger.Error("Failed to write audit record synchronously", zap.Error(err))
 		}
 	}
 }

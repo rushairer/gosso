@@ -153,6 +153,17 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		return
 	}
 
+	// Verify IP binding — reject refresh from a different IP to prevent token theft.
+	// If the original token has no IP recorded (legacy), skip validation.
+	if oldRefreshToken.IP != "" && oldRefreshToken.IP != ctx.ClientIP() {
+		c.logger.Warn("Refresh token IP mismatch",
+			zap.String("original_ip", oldRefreshToken.IP),
+			zap.String("current_ip", ctx.ClientIP()),
+			zap.String("account_id", oldRefreshToken.AccountID))
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "refresh token IP mismatch"})
+		return
+	}
+
 	// Verify client binding before rotation (RFC 6749 §6: client_id MUST match)
 	if req.ClientID != oldRefreshToken.ClientID {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "client_id mismatch or missing"})

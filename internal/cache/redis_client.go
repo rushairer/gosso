@@ -10,7 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // RedisClient wraps the Redis client and provides a unified cache operation interface

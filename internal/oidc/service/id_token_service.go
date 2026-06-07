@@ -13,7 +13,7 @@ import (
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // IDTokenClaims OIDC ID Token claims

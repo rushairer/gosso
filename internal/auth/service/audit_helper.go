@@ -17,3 +17,13 @@ func auditLog(ctx context.Context, auditor *auditService.Auditor, logger *zap.Lo
 		}
 	}
 }
+
+// auditLogSync writes an audit record synchronously for critical security events
+// where loss on crash is unacceptable (login failures, account deletion, role changes).
+func auditLogSync(ctx context.Context, auditor *auditService.Auditor, logger *zap.Logger, record *auditDomain.AuditRecord) {
+	if auditor != nil {
+		if err := auditor.LogSync(ctx, record); err != nil {
+			logger.Error("Failed to write audit record synchronously", zap.Error(err))
+		}
+	}
+}

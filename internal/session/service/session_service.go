@@ -14,7 +14,7 @@ import (
 
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/session/domain"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 const (

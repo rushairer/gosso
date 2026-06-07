@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	"github.com/rushairer/gosso/internal/audit"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 )
 
@@ -18,20 +19,32 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		return nil, fmt.Errorf("%w: %s", ErrInvalidRefreshToken, err)
 	}
 
-	// 2. Validate session BEFORE rotation (prevents orphaned token on failure)
+	// 2. Verify IP binding — reject refresh from a different IP to prevent token theft
+	if oldRT.IP != "" {
+		currentIP := audit.IPFromContext(ctx)
+		if currentIP != "" && oldRT.IP != currentIP {
+			s.logger.Warn("Refresh token IP mismatch",
+				zap.String("original_ip", oldRT.IP),
+				zap.String("current_ip", currentIP),
+				zap.String("account_id", oldRT.AccountID))
+			return nil, ErrInvalidRefreshToken
+		}
+	}
+
+	// 3. Validate session BEFORE rotation (prevents orphaned token on failure)
 	sessionID := oldRT.SessionID
 	session, err := s.sessionSvc.ValidateSession(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrSessionInvalid, err)
 	}
 
-	// 3. Validate account BEFORE rotation
+	// 4. Validate account BEFORE rotation
 	account, err := s.accountSvc.FindAccountByID(ctx, oldRT.AccountID)
 	if err != nil || account == nil || account.Status != accountDomain.AccountStatusActive {
 		return nil, ErrAccountNotActive
 	}
 
-	// 4. Build claims and generate new access token BEFORE rotating refresh token.
+	// 5. Build claims and generate new access token BEFORE rotating refresh token.
 	// If access token generation fails, the old refresh token remains valid so the
 	// client can retry instead of being locked out.
 	claims, err := s.buildTokenClaims(ctx, oldRT.AccountID, session.ID)
@@ -44,13 +57,13 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		return nil, fmt.Errorf("generate access token: %w", err)
 	}
 
-	// 5. Rotate refresh token (old token deleted from Redis)
+	// 6. Rotate refresh token (old token deleted from Redis)
 	newRefreshToken, err := s.tokenSvc.RotateRefreshToken(ctx, refreshToken)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrInvalidRefreshToken, err)
 	}
 
-	// 6. Refresh session
+	// 7. Refresh session
 	if err := s.sessionSvc.RefreshSession(ctx, sessionID); err != nil {
 		s.logger.Warn("Failed to refresh session", zap.Error(err), zap.String("session_id", sessionID))
 	}

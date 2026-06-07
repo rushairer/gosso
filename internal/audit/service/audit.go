@@ -11,7 +11,7 @@ import (
 
 	"github.com/rushairer/gosso/internal/audit"
 	"github.com/rushairer/gosso/internal/audit/domain"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 const (
@@ -185,4 +185,53 @@ func (a *Auditor) submit(ctx context.Context, record *domain.AuditRecord) error 
 	}
 
 	return a.batchflow.Submit(ctx, request)
+}
+
+// LogSync writes an audit record directly to the database, bypassing the batch pipeline.
+// Use for critical security events (login failures, account deletion, role changes) where
+// loss on crash is unacceptable. Safe for nil receiver (no-op).
+func (a *Auditor) LogSync(ctx context.Context, record *domain.AuditRecord) error {
+	if a == nil {
+		return nil
+	}
+
+	// Inject request_id into meta (same logic as Log)
+	if requestID := audit.RequestIDFromContext(ctx); requestID != "" {
+		var meta map[string]any
+		if record.Meta != nil {
+			if err := json.Unmarshal(record.Meta, &meta); err != nil {
+				meta = map[string]any{"request_id": requestID, "parse_error": err.Error()}
+			}
+		}
+		if meta == nil {
+			meta = make(map[string]any)
+		}
+		meta["request_id"] = requestID
+		if marshaled, err := json.Marshal(meta); err == nil {
+			record.Meta = marshaled
+		}
+	}
+
+	query := `INSERT INTO audit_record (id, tx_id, account_id, action, actor, resource, "old", "new", meta, dd, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+
+	var accountID interface{}
+	if record.AccountID != nil {
+		accountID = *record.AccountID
+	}
+
+	_, err := a.db.ExecContext(ctx, query,
+		record.ID,
+		record.TxID,
+		accountID,
+		record.Action,
+		record.Actor,
+		record.Resource,
+		record.Old,
+		record.New,
+		record.Meta,
+		record.CreatedAt.Format("20060102"),
+		record.CreatedAt,
+	)
+	return err
 }

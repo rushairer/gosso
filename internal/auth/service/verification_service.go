@@ -16,7 +16,7 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	"github.com/rushairer/gosso/internal/cache"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 const (

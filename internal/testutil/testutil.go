@@ -16,9 +16,9 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/rushairer/gosso/config"
+	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/cache"
 )
 
@@ -172,8 +172,8 @@ func (e *TestEnv) SeedAccount(ctx context.Context, username, email, password str
 		return "", fmt.Errorf("insert account: %w", err)
 	}
 
-	// Insert password credential (bcrypt hash)
-	hash, err := hashPassword(password)
+	// Insert password credential (argon2id hash)
+	hash, err := accountDomain.HashPassword(password)
 	if err != nil {
 		return "", fmt.Errorf("hash password: %w", err)
 	}
@@ -231,12 +231,4 @@ func runMigrations(db *sql.DB, migrationsPath string) error {
 	}
 
 	return nil
-}
-
-func hashPassword(password string) (string, error) {
-	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
-	if err != nil {
-		return "", err
-	}
-	return string(hashedBytes), nil
 }

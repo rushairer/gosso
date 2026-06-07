@@ -19,7 +19,7 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	dbutil "github.com/rushairer/gosso/internal/db"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 const (

@@ -16,7 +16,7 @@ import (
 
 	"github.com/rushairer/gosso/config"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 var webCmd = &cobra.Command{

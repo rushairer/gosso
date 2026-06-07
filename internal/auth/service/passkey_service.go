@@ -22,7 +22,7 @@ import (
 	"github.com/rushairer/gosso/internal/auth/repository"
 	"github.com/rushairer/gosso/internal/cache"
 	dbutil "github.com/rushairer/gosso/internal/db"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // AccountLookup provides account lookup for passkey registration name resolution.

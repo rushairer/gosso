@@ -10,7 +10,7 @@ import (
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	authService "github.com/rushairer/gosso/internal/auth/service"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // UserInfoService OIDC UserInfo service

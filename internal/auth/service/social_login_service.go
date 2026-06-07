@@ -24,7 +24,7 @@ import (
 	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
 	dbutil "github.com/rushairer/gosso/internal/db"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // OAuthProviderConfig single OAuth provider configuration
@@ -261,7 +261,7 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, ip, userAgent string) (result *LoginResult, err error) {
 	defer func() {
 		if err != nil {
-			auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+			auditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 				auditDomain.ActionLoginFailure,
 				audit.IPFromContext(ctx),
 				&accountID,

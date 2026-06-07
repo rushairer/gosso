@@ -13,9 +13,10 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
+	"github.com/rushairer/gosso/internal/audit"
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/token/domain"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 const (
@@ -183,6 +184,8 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 		ClientID:  clientID,
 		SessionID: sessionID,
 		Scope:     scope,
+		IP:        audit.IPFromContext(ctx),
+		UserAgent: audit.UserAgentFromContext(ctx),
 		ExpiresAt: time.Now().Add(s.refreshExpiry),
 		CreatedAt: time.Now(),
 	}

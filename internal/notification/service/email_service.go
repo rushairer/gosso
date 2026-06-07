@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/config"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 var (

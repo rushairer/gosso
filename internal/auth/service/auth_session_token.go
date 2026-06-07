@@ -12,7 +12,7 @@ import (
 	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // createSessionAndTokens creates a session, generates access and refresh tokens.
@@ -70,6 +70,17 @@ func (s *AuthService) CreateSessionAndTokens(ctx context.Context, account *accou
 // loginAuditLogs logs a login success or failure audit record.
 func (s *AuthService) loginAuditLogs(ctx context.Context, action string, username string, accountID *string, detail map[string]any, meta map[string]any) {
 	auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+		action,
+		username,
+		accountID,
+		utility.MustMarshalJSON(detail),
+		utility.MustMarshalJSON(meta),
+	))
+}
+
+// loginAuditLogsSync logs a login failure audit record synchronously for critical security events.
+func (s *AuthService) loginAuditLogsSync(ctx context.Context, action string, username string, accountID *string, detail map[string]any, meta map[string]any) {
+	auditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		action,
 		username,
 		accountID,

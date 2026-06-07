@@ -23,7 +23,7 @@ import (
 	dbutil "github.com/rushairer/gosso/internal/db"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 const (

@@ -9,7 +9,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/account/repository"
@@ -198,15 +197,15 @@ func TestChangePassword(t *testing.T) {
 	oldPassword := "OldPassword123!"
 	newPassword := "NewPassword456!"
 
-	// Generate a real bcrypt hash for the old password
-	oldHash, err := bcrypt.GenerateFromPassword([]byte(oldPassword), bcrypt.DefaultCost)
+	// Generate a real argon2id hash for the old password
+	oldHash, err := domain.HashPassword(oldPassword)
 	require.NoError(t, err)
 
 	rows := sqlmock.NewRows([]string{
 		"id", "account_id", "credential_type", "identifier", "credential_value",
 		"verified", "primary_credential", "metadata", "created_at", "verified_at", "last_used_at", "deleted_at",
 	}).AddRow(
-		"cred-id", accountID, domain.CredentialTypePassword, "test@example.com", string(oldHash),
+		"cred-id", accountID, domain.CredentialTypePassword, "test@example.com", oldHash,
 		true, true, []byte("{}"), time.Now(), nil, nil, nil,
 	)
 

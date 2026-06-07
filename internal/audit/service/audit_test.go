@@ -6,13 +6,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/rushairer/gosso/internal/audit/domain"
@@ -65,17 +63,15 @@ func TestAudit(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Wait for the auditor to flush
-	time.Sleep(2 * time.Second)
-
-	// Verify the audit record was persisted
-	var count int
-	err = db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM audit_record WHERE account_id = $1 AND action = 'test.action'`,
-		testAccountID,
-	).Scan(&count)
-	require.NoError(t, err)
-	assert.GreaterOrEqual(t, count, 1, "audit record should have been persisted")
+	// Wait for the auditor to flush (poll instead of fixed sleep to avoid flakiness)
+	require.Eventually(t, func() bool {
+		var cnt int
+		err := db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM audit_record WHERE account_id = $1 AND action = 'test.action'`,
+			testAccountID,
+		).Scan(&cnt)
+		return err == nil && cnt >= 1
+	}, 5*time.Second, 100*time.Millisecond, "audit record should have been persisted")
 
 	// Cleanup
 	_, _ = db.ExecContext(ctx, `DELETE FROM audit_record WHERE account_id = $1`, testAccountID)
@@ -86,6 +82,4 @@ func TestAudit(t *testing.T) {
 			_ = err
 		}
 	}()
-
-	os.Setenv("GOUNO_TEST", "true")
 }

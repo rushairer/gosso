@@ -98,11 +98,11 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("web_server.rate_limits.device_code", 10)
 
 	// Database configuration
-	v.SetDefault("database.default", "sqlite")
-	v.SetDefault("database.drivers.sqlite.name", "sqlite")
-	v.SetDefault("database.drivers.sqlite.driver", "sqlite3")
-	v.SetDefault("database.drivers.sqlite.dsn", ":memory:")
-	v.SetDefault("database.drivers.sqlite.log_level", 1)
+	v.SetDefault("database.default", "postgres")
+	v.SetDefault("database.drivers.postgres.name", "postgres")
+	v.SetDefault("database.drivers.postgres.driver", "pgx")
+	v.SetDefault("database.drivers.postgres.dsn", "postgres://postgres:postgres@localhost:5432/gosso?sslmode=disable")
+	v.SetDefault("database.drivers.postgres.log_level", 1)
 	v.SetDefault("database.max_open_conns", 25)
 	v.SetDefault("database.max_idle_conns", 5)
 	v.SetDefault("database.conn_max_lifetime_sec", 300) // 5 minutes

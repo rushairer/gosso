@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Security**: Password hashing upgraded from bcrypt to Argon2id with PHC format encoding (`$argon2id$v=19$m=65536,t=1,p=4$...`) — stronger resistance to GPU/ASIC attacks; parameters: 64MB memory, 1 iteration, 4 threads, 16-byte salt, 32-byte key (`internal/account/domain/credential.go`).
+- **Security**: Error messages in `SendVerification` and `ConfirmVerification` sanitized — `"identifier not associated with this account"` changed to `"invalid request"` and `"credential not found"` changed to `"invalid verification code"` to prevent account correlation and credential enumeration attacks (`internal/auth/controller/auth_controller.go`).
+- Database config defaults changed from SQLite to PostgreSQL — `database.default` now defaults to `"postgres"` with pgx driver and localhost DSN (`config/config_manager.go`).
+- **Security**: Critical security audit events (login failures, account deletion/suspension, password changes, role changes, social login failures) now use synchronous `LogSync` writes instead of async batch pipeline — ensures these events survive crashes (`internal/audit/service/audit.go`, `internal/auth/service/auth_login.go`, `internal/auth/service/social_login_service.go`, `internal/account/service/account_service.go`).
+- Audit test `TestAudit` replaced `time.Sleep(2 * time.Second)` with `require.Eventually` polling (5s timeout, 100ms interval) — eliminates flaky test behavior and removes `GOUNO_TEST` env var side effect (`internal/audit/service/audit_test.go`).
+- `utility` package moved to `internal/utility` — all import paths updated across 25 files to reflect the new location (`internal/utility/`).
+- **Security**: Refresh token device binding — `RefreshToken` now stores `IP` and `UserAgent` from the originating request; refresh requests from a different IP are rejected to prevent token theft (`internal/token/domain/token.go`, `internal/token/service/token_service.go`, `internal/oauth2/controller/oauth2_token.go`, `internal/auth/service/auth_session.go`).
+
 ### Fixed
 - Fix audit `Log()` losing `request_id` when `record.Meta` JSON is malformed — now constructs a new meta with `request_id` instead of submitting without it (`audit/service/audit.go`).
 - Fix `migrate.go` resource leak — replaced `defer` + `log.Fatal` pattern with `withMigrateResources` helper that guarantees cleanup runs before exit; `parseSteps`/`parseVersion` now return errors instead of calling `log.Fatal` (`cmd/gouno/migrate.go`).
@@ -41,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - Migrate email library from `gopkg.in/gomail.v2` to `github.com/wneessen/go-mail` — eliminates goroutine leak on context cancellation, native `context.Context` support for SMTP operations (`internal/notification/service/email_service.go`, `go.mod`).
-- Bcrypt password hashing now uses SHA-256 pre-hash — allows arbitrary-length passwords (up to 1024 bytes) instead of being capped at 72 bytes; backward compatible with existing bcrypt-only hashes (`internal/account/domain/credential.go`, `utility/password.go`).
+- Bcrypt password hashing removed — replaced by Argon2id (see Changed section above).
 - Dockerfile `HEALTHCHECK` now hits `/readiness` instead of `/health` — verifies DB and Redis connectivity, not just process liveness (`Dockerfile`).
 - Device code tests updated to include `ClientID` in mock data for consistency (`oauth2_controller_test.go`).
 - Extract shared `ValidateBearerToken` function from `JWTAuthMiddleware` and `OAuth2Controller.authenticateRequest` to eliminate JWT validation duplication (`auth_middleware.go`, `oauth2_controller.go`).

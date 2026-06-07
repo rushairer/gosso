@@ -19,7 +19,7 @@ import (
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 const (

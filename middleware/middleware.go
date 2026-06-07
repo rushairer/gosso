@@ -10,7 +10,7 @@ import (
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 func TimeoutMiddleware(requestTimeout time.Duration) gin.HandlerFunc {

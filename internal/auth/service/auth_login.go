@@ -14,7 +14,7 @@ import (
 	"github.com/rushairer/gosso/internal/audit"
 	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
-	"github.com/rushairer/gosso/utility"
+	"github.com/rushairer/gosso/internal/utility"
 
 	"go.uber.org/zap"
 )
@@ -44,7 +44,7 @@ func safeAuditReason(err error) string {
 func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginRequest) (result *LoginResult, err error) {
 	defer func() {
 		if err != nil {
-			s.loginAuditLogs(ctx, auditDomain.ActionLoginFailure, req.Username, nil,
+			s.loginAuditLogsSync(ctx, auditDomain.ActionLoginFailure, req.Username, nil,
 				map[string]any{"username": req.Username},
 				map[string]any{"ip": req.IP, "user_agent": req.UserAgent, "reason": safeAuditReason(err)},
 			)
@@ -142,7 +142,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	var mfaAccountID *string
 	defer func() {
 		if err != nil {
-			s.loginAuditLogs(ctx, auditDomain.ActionMFALoginFailure, "", mfaAccountID,
+			s.loginAuditLogsSync(ctx, auditDomain.ActionMFALoginFailure, "", mfaAccountID,
 				map[string]any{"reason": safeAuditReason(err)},
 				map[string]any{"ip": ip, "user_agent": userAgent},
 			)
@@ -216,7 +216,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	var mfaAccountID *string
 	defer func() {
 		if err != nil {
-			s.loginAuditLogs(ctx, auditDomain.ActionMFALoginFailure, "", mfaAccountID,
+			s.loginAuditLogsSync(ctx, auditDomain.ActionMFALoginFailure, "", mfaAccountID,
 				map[string]any{"reason": safeAuditReason(err)},
 				map[string]any{"ip": ip, "user_agent": userAgent},
 			)
@@ -290,7 +290,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAgent string) (result *LoginResult, err error) {
 	defer func() {
 		if err != nil {
-			s.loginAuditLogs(ctx, auditDomain.ActionLoginFailure, accountID, nil,
+			s.loginAuditLogsSync(ctx, auditDomain.ActionLoginFailure, accountID, nil,
 				map[string]any{"method": "passkey", "account_id": accountID},
 				map[string]any{"ip": ip, "user_agent": userAgent, "reason": safeAuditReason(err)},
 			)
