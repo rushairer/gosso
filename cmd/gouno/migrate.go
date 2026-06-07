@@ -3,7 +3,7 @@ package gouno
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"os"
 	"path/filepath"
 
 	"github.com/rushairer/gosso/config"
@@ -21,7 +21,7 @@ var migrateCmd = &cobra.Command{
 	Long: `Database migration management using golang-migrate.
 Available commands:
   migrate up [N]     - Apply all or N up migrations
-  migrate down [N]   - Apply all or N down migrations  
+  migrate down [N]   - Apply all or N down migrations
   migrate drop       - Drop everything inside database
   migrate force V    - Set version V but don't run migration (ignores dirty state)
   migrate version    - Print current migration version
@@ -114,6 +114,7 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, *sql.DB, error) {
 	schemaName := cmd.Flag("schema").Value.String()
 
 	if defaultDriver.Driver != "postgres" {
+		db.Close()
 		return nil, nil, fmt.Errorf("unsupported database driver: %q (only postgres is supported for migrations)", defaultDriver.Driver)
 	}
 
@@ -150,171 +151,173 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, *sql.DB, error) {
 	return m, db, nil
 }
 
-// closeMigrate safely closes the migrate instance and logs any errors
+// closeMigrate safely closes the migrate instance and logs any errors.
 func closeMigrate(m *migrate.Migrate) {
 	if _, err := m.Close(); err != nil {
-		fmt.Printf("Warning: Failed to close migrate instance: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: Failed to close migrate instance: %v\n", err)
+	}
+}
+
+// withMigrateResources initializes migrate resources, runs the given function,
+// then ensures proper cleanup. Returns the function's exit code.
+func withMigrateResources(cmd *cobra.Command, fn func(*migrate.Migrate) error) {
+	m, db, err := initMigrate(cmd)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Migration init failed: %v\n", err)
+		os.Exit(1)
+	}
+	// Cleanup always runs — no deferred log.Fatal to skip it.
+	err = fn(m)
+	closeMigrate(m)
+	db.Close()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
 	}
 }
 
 func runMigrateUp(cmd *cobra.Command, args []string) {
-	m, db, err := initMigrate(cmd)
-	if err != nil {
-		log.Fatalf("Migration init failed: %v", err)
-	}
-	defer closeMigrate(m)
-	defer db.Close()
-
-	if len(args) > 0 {
-		// Up migration with specified step count
-		steps := parseSteps(args[0])
-		if err := m.Steps(steps); err != nil && err != migrate.ErrNoChange {
-			log.Fatalf("Migration up %d steps failed: %v", steps, err)
+	withMigrateResources(cmd, func(m *migrate.Migrate) error {
+		if len(args) > 0 {
+			steps, err := parseSteps(args[0])
+			if err != nil {
+				return err
+			}
+			if err := m.Steps(steps); err != nil && err != migrate.ErrNoChange {
+				return fmt.Errorf("migration up %d steps failed: %w", steps, err)
+			}
+			fmt.Printf("Migration up %d steps completed successfully\n", steps)
+		} else {
+			if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+				return fmt.Errorf("migration up failed: %w", err)
+			}
+			fmt.Println("Migration up completed successfully")
 		}
-		log.Printf("Migration up %d steps completed successfully", steps)
-	} else {
-		// Run all up migrations
-		if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-			log.Fatalf("Migration up failed: %v", err)
-		}
-		log.Println("Migration up completed successfully")
-	}
+		return nil
+	})
 }
 
 func runMigrateDown(cmd *cobra.Command, args []string) {
 	force, _ := cmd.Flags().GetBool("force")
 	if !force {
-		log.Fatal("Refusing to run destructive migration without --force flag. Use: migrate down --force")
+		fmt.Fprintln(os.Stderr, "Refusing to run destructive migration without --force flag. Use: migrate down --force")
+		os.Exit(1)
 	}
 
-	m, db, err := initMigrate(cmd)
-	if err != nil {
-		log.Fatalf("Migration init failed: %v", err)
-	}
-	defer closeMigrate(m)
-	defer db.Close()
-
-	if len(args) > 0 {
-		// Down migration with specified step count
-		steps := parseSteps(args[0])
-		if err := m.Steps(-steps); err != nil && err != migrate.ErrNoChange {
-			log.Fatalf("Migration down %d steps failed: %v", steps, err)
+	withMigrateResources(cmd, func(m *migrate.Migrate) error {
+		if len(args) > 0 {
+			steps, err := parseSteps(args[0])
+			if err != nil {
+				return err
+			}
+			if err := m.Steps(-steps); err != nil && err != migrate.ErrNoChange {
+				return fmt.Errorf("migration down %d steps failed: %w", steps, err)
+			}
+			fmt.Printf("Migration down %d steps completed successfully\n", steps)
+		} else {
+			fmt.Println("WARNING: Rolling back ALL migrations")
+			if err := m.Down(); err != nil && err != migrate.ErrNoChange {
+				return fmt.Errorf("migration down failed: %w", err)
+			}
+			fmt.Println("Migration down completed successfully")
 		}
-		log.Printf("Migration down %d steps completed successfully", steps)
-	} else {
-		// Run all down migrations
-		log.Println("WARNING: Rolling back ALL migrations")
-		if err := m.Down(); err != nil && err != migrate.ErrNoChange {
-			log.Fatalf("Migration down failed: %v", err)
-		}
-		log.Println("Migration down completed successfully")
-	}
+		return nil
+	})
 }
 
 func runMigrateDrop(cmd *cobra.Command, args []string) {
 	force, _ := cmd.Flags().GetBool("force")
 	if !force {
-		log.Fatal("Refusing to drop database without --force flag. Use: migrate drop --force")
+		fmt.Fprintln(os.Stderr, "Refusing to drop database without --force flag. Use: migrate drop --force")
+		os.Exit(1)
 	}
 
-	m, db, err := initMigrate(cmd)
-	if err != nil {
-		log.Fatalf("Migration init failed: %v", err)
-	}
-	defer closeMigrate(m)
-	defer db.Close()
-
-	if err := m.Drop(); err != nil {
-		log.Fatalf("Migration drop failed: %v", err)
-	}
-	log.Println("Database dropped successfully")
+	withMigrateResources(cmd, func(m *migrate.Migrate) error {
+		if err := m.Drop(); err != nil {
+			return fmt.Errorf("migration drop failed: %w", err)
+		}
+		fmt.Println("Database dropped successfully")
+		return nil
+	})
 }
 
 func runMigrateForce(cmd *cobra.Command, args []string) {
-	m, db, err := initMigrate(cmd)
-	if err != nil {
-		log.Fatalf("Migration init failed: %v", err)
-	}
-	defer closeMigrate(m)
-	defer db.Close()
-
-	version := parseVersion(args[0])
-	if err := m.Force(version); err != nil {
-		log.Fatalf("Migration force to version %d failed: %v", version, err)
-	}
-	log.Printf("Migration forced to version %d successfully", version)
+	withMigrateResources(cmd, func(m *migrate.Migrate) error {
+		version, err := parseVersion(args[0])
+		if err != nil {
+			return err
+		}
+		if err := m.Force(version); err != nil {
+			return fmt.Errorf("migration force to version %d failed: %w", version, err)
+		}
+		fmt.Printf("Migration forced to version %d successfully\n", version)
+		return nil
+	})
 }
 
 func runMigrateVersion(cmd *cobra.Command, args []string) {
-	m, db, err := initMigrate(cmd)
-	if err != nil {
-		log.Fatalf("Migration init failed: %v", err)
-	}
-	defer closeMigrate(m)
-	defer db.Close()
+	withMigrateResources(cmd, func(m *migrate.Migrate) error {
+		version, dirty, err := m.Version()
+		if err != nil {
+			return fmt.Errorf("failed to get migration version: %w", err)
+		}
 
-	version, dirty, err := m.Version()
-	if err != nil {
-		log.Fatalf("Failed to get migration version: %v", err)
-	}
-
-	status := "clean"
-	if dirty {
-		status = "dirty"
-	}
-	log.Printf("Current migration version: %d (status: %s)", version, status)
+		status := "clean"
+		if dirty {
+			status = "dirty"
+		}
+		fmt.Printf("Current migration version: %d (status: %s)\n", version, status)
+		return nil
+	})
 }
 
 func runMigrateStatus(cmd *cobra.Command, args []string) {
-	m, db, err := initMigrate(cmd)
-	if err != nil {
-		log.Fatalf("Migration init failed: %v", err)
-	}
-	defer closeMigrate(m)
-	defer db.Close()
-
-	version, dirty, err := m.Version()
-	if err != nil {
-		if err == migrate.ErrNilVersion {
-			log.Println("No migrations have been applied yet")
-			return
+	withMigrateResources(cmd, func(m *migrate.Migrate) error {
+		version, dirty, err := m.Version()
+		if err != nil {
+			if err == migrate.ErrNilVersion {
+				fmt.Println("No migrations have been applied yet")
+				return nil
+			}
+			return fmt.Errorf("failed to get migration version: %w", err)
 		}
-		log.Fatalf("Failed to get migration version: %v", err)
-	}
 
-	status := "clean"
-	if dirty {
-		status = "dirty"
-	}
+		status := "clean"
+		if dirty {
+			status = "dirty"
+		}
 
-	log.Printf("Migration Status:")
-	log.Printf("  Current Version: %d", version)
-	log.Printf("  Status: %s", status)
+		fmt.Printf("Migration Status:\n")
+		fmt.Printf("  Current Version: %d\n", version)
+		fmt.Printf("  Status: %s\n", status)
 
-	if dirty {
-		log.Printf("  Warning: Database is in dirty state. Use 'migrate force VERSION' to resolve.")
-	}
+		if dirty {
+			fmt.Printf("  Warning: Database is in dirty state. Use 'migrate force VERSION' to resolve.\n")
+		}
+		return nil
+	})
 }
 
-// Helper functions
-func parseSteps(s string) int {
+// parseSteps parses a step count string, returning an error instead of calling log.Fatal.
+func parseSteps(s string) (int, error) {
 	var steps int
 	if _, err := fmt.Sscanf(s, "%d", &steps); err != nil {
-		log.Fatalf("Invalid steps number: %s", s)
+		return 0, fmt.Errorf("invalid steps number: %s", s)
 	}
 	if steps <= 0 {
-		log.Fatalf("Steps must be positive number, got: %d", steps)
+		return 0, fmt.Errorf("steps must be positive number, got: %d", steps)
 	}
-	return steps
+	return steps, nil
 }
 
-func parseVersion(s string) int {
+// parseVersion parses a version string, returning an error instead of calling log.Fatal.
+func parseVersion(s string) (int, error) {
 	var version int
 	if _, err := fmt.Sscanf(s, "%d", &version); err != nil {
-		log.Fatalf("Invalid version number: %s", s)
+		return 0, fmt.Errorf("invalid version number: %s", s)
 	}
 	if version < 0 {
-		log.Fatalf("Version must be non-negative, got: %d", version)
+		return 0, fmt.Errorf("version must be non-negative, got: %d", version)
 	}
-	return version
+	return version, nil
 }

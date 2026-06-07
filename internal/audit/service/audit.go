@@ -142,9 +142,11 @@ func (a *Auditor) Log(ctx context.Context, record *domain.AuditRecord) error {
 		var meta map[string]any
 		if record.Meta != nil {
 			if err := json.Unmarshal(record.Meta, &meta); err != nil {
-				a.logger.Warn("Failed to unmarshal audit meta, preserving original",
+				a.logger.Warn("Failed to unmarshal audit meta, replacing with request_id only",
 					zap.Error(err), zap.String("request_id", requestID))
-				// Don't overwrite record.Meta — preserve the original
+				meta = map[string]any{"request_id": requestID, "parse_error": err.Error()}
+				marshaled, _ := json.Marshal(meta)
+				record.Meta = marshaled
 				return a.submit(ctx, record)
 			}
 		}

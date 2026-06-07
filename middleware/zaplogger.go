@@ -9,6 +9,8 @@ import (
 
 // ZapLoggerMiddleware returns a gin.HandlerFunc that logs HTTP requests using zap
 // with structured fields including request_id.
+// Note: this middleware does not log response headers, so CSRF tokens (X-CSRF-Token)
+// and other sensitive response data are never exposed in logs.
 func ZapLoggerMiddleware(logger *zap.Logger) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		start := time.Now()

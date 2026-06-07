@@ -10,8 +10,9 @@ import (
 const MinPasswordLength = 8
 
 // MaxPasswordLength is the maximum allowed password length.
-// Prevents excessive bcrypt CPU usage and memory consumption from oversized inputs.
-const MaxPasswordLength = 72
+// bcrypt is preceded by SHA-256 so the 72-byte bcrypt limit no longer applies;
+// this cap prevents excessive CPU/memory usage from oversized inputs.
+const MaxPasswordLength = 1024
 
 // ValidatePasswordStrength checks that a password meets minimum strength requirements:
 // at least 8 bytes, with at least one uppercase letter, one lowercase letter, and one digit.

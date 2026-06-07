@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Fix audit `Log()` losing `request_id` when `record.Meta` JSON is malformed — now constructs a new meta with `request_id` instead of submitting without it (`audit/service/audit.go`).
+- Fix `migrate.go` resource leak — replaced `defer` + `log.Fatal` pattern with `withMigrateResources` helper that guarantees cleanup runs before exit; `parseSteps`/`parseVersion` now return errors instead of calling `log.Fatal` (`cmd/gouno/migrate.go`).
+- Fix `development.yaml` missing required `session_ttl` and `max_sessions` — added defaults of `24h` and `5` respectively (`config/development.yaml`).
 - Fix `SoftDeleteCredentialsByAccount` SQL referencing non-existent `updated_at` column (`credential_repository_impl.go`).
 - Fix rate limiter key collision — all endpoints now use endpoint-scoped Redis keys (`rate_limit:{endpoint}:{IP}`) instead of shared keys (`middleware/redis_ratelimit.go`, `router/web.go`).
 - Fix Device Code token exchange missing `client_id` binding validation — rejects device codes issued to a different client (`oauth2_device.go`).
@@ -36,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Add slow transaction monitoring for `SoftDeleteAccount` — warns if transaction exceeds 2 seconds (`account_service.go`).
 
 ### Changed
+- Migrate email library from `gopkg.in/gomail.v2` to `github.com/wneessen/go-mail` — eliminates goroutine leak on context cancellation, native `context.Context` support for SMTP operations (`internal/notification/service/email_service.go`, `go.mod`).
+- Bcrypt password hashing now uses SHA-256 pre-hash — allows arbitrary-length passwords (up to 1024 bytes) instead of being capped at 72 bytes; backward compatible with existing bcrypt-only hashes (`internal/account/domain/credential.go`, `utility/password.go`).
+- Dockerfile `HEALTHCHECK` now hits `/readiness` instead of `/health` — verifies DB and Redis connectivity, not just process liveness (`Dockerfile`).
 - Device code tests updated to include `ClientID` in mock data for consistency (`oauth2_controller_test.go`).
 - Extract shared `ValidateBearerToken` function from `JWTAuthMiddleware` and `OAuth2Controller.authenticateRequest` to eliminate JWT validation duplication (`auth_middleware.go`, `oauth2_controller.go`).
 - Add dedicated 30-second SMTP timeout to `EmailService.send()` to bound email send duration independently of context (`email_service.go`).

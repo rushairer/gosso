@@ -7,8 +7,8 @@ import (
 	"html/template"
 	"time"
 
+	"github.com/wneessen/go-mail"
 	"go.uber.org/zap"
-	"gopkg.in/gomail.v2"
 
 	"github.com/rushairer/gosso/config"
 	"github.com/rushairer/gosso/utility"
@@ -42,19 +42,36 @@ var (
 
 // EmailService email sending service
 type EmailService struct {
-	dialer *gomail.Dialer
+	client *mail.Client
 	from   string
 	logger *zap.Logger
 }
 
 // NewEmailService creates a new email service instance.
-// Note: gomail v2 does not support context.Context. The send method uses a dedicated
-// 30-second SMTP timeout to bound operation duration. The underlying goroutine may
-// complete independently after the caller returns on timeout or context cancellation.
 func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) *EmailService {
 	logger = utility.EnsureLogger(logger)
+
+	opts := []mail.Option{
+		mail.WithPort(cfg.Port),
+		mail.WithTLSPolicy(mail.TLSOpportunistic),
+		mail.WithTimeout(30 * time.Second),
+	}
+	if cfg.Username != "" {
+		opts = append(opts,
+			mail.WithSMTPAuth(mail.SMTPAuthPlain),
+			mail.WithUsername(cfg.Username),
+			mail.WithPassword(cfg.Password),
+		)
+	}
+
+	client, err := mail.NewClient(cfg.Host, opts...)
+	if err != nil {
+		logger.Error("Failed to create mail client, email sending will fail",
+			zap.String("host", cfg.Host), zap.Error(err))
+	}
+
 	return &EmailService{
-		dialer: gomail.NewDialer(cfg.Host, cfg.Port, cfg.Username, cfg.Password),
+		client: client,
 		from:   cfg.From,
 		logger: logger,
 	}
@@ -83,46 +100,32 @@ func (s *EmailService) SendPasswordResetLink(ctx context.Context, to, resetLink 
 }
 
 func (s *EmailService) send(ctx context.Context, to, subject, htmlBody string) error {
-	msg := gomail.NewMessage()
-	msg.SetHeader("From", s.from)
-	msg.SetHeader("To", to)
-	msg.SetHeader("Subject", subject)
-	msg.SetBody("text/html", htmlBody)
+	if s.client == nil {
+		return fmt.Errorf("send email: mail client not initialized")
+	}
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- s.dialer.DialAndSend(msg)
-	}()
+	msg := mail.NewMsg()
+	if err := msg.From(s.from); err != nil {
+		return fmt.Errorf("set from address: %w", err)
+	}
+	if err := msg.To(to); err != nil {
+		return fmt.Errorf("set to address: %w", err)
+	}
+	msg.Subject(subject)
+	msg.SetBodyString(mail.TypeTextHTML, htmlBody)
 
-	// Use a dedicated SMTP timeout to bound the overall operation duration,
-	// since gomail does not support context propagation to the underlying TCP connection.
-	const smtpTimeout = 30 * time.Second
-
-	select {
-	case err := <-errCh:
-		if err != nil {
-			s.logger.Error("Failed to send email",
-				zap.String("to", maskEmail(to)),
-				zap.Error(err))
-			return fmt.Errorf("send email: %w", err)
-		}
-	case <-time.After(smtpTimeout):
-		s.logger.Warn("Email send timed out; SMTP goroutine will complete independently",
+	if err := s.client.DialAndSendWithContext(ctx, msg); err != nil {
+		s.logger.Error("Failed to send email",
 			zap.String("to", maskEmail(to)),
-			zap.Duration("timeout", smtpTimeout))
-		return fmt.Errorf("send email: SMTP timeout after %s", smtpTimeout)
-	case <-ctx.Done():
-		s.logger.Warn("Email send interrupted by context; SMTP goroutine will complete independently",
-			zap.String("to", maskEmail(to)),
-			zap.Error(ctx.Err()))
-		return fmt.Errorf("send email: %w", ctx.Err())
+			zap.Error(err))
+		return fmt.Errorf("send email: %w", err)
 	}
 
 	s.logger.Info("Email sent", zap.String("to", maskEmail(to)))
 	return nil
 }
 
-// maskEmail masks PII in email addresses (e.g., "user@example.com" -> "u***@e***.com")
+// maskEmail masks PII in email addresses
 func maskEmail(email string) string {
 	return utility.MaskEmail(email)
 }

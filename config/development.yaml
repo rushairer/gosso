@@ -48,6 +48,8 @@ auth:
     device_code_expiry: 10m
     device_code_interval: 5s
     id_token_expiry: 15m
+    session_ttl: 24h
+    max_sessions: 5
     default_scopes:
         - openid
         - profile

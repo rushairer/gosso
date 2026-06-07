@@ -45,11 +45,6 @@ linters:
       - linters:
           - gocritic
         text: "singleCaseSwitch"
-      # migrate.go uses log.Fatal which is acceptable for CLI commands
-      - path: cmd/gouno/migrate\.go
-        linters:
-          - gocritic
-        text: "exitAfterDefer"
       # defer tx.Rollback() is standard Go pattern — error is intentionally ignored
       - linters:
           - errcheck

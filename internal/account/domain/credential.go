@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"time"
 
 	"github.com/google/uuid"
@@ -127,18 +129,31 @@ func (c *Credential) SoftDelete() {
 }
 
 // VerifyPassword verifies the plaintext password (password credentials only).
+// Supports both legacy bcrypt-only hashes and new SHA-256+bcrypt hashes.
 func (c *Credential) VerifyPassword(plainPassword string) bool {
 	if c.Type != CredentialTypePassword {
 		return false
 	}
-	return bcrypt.CompareHashAndPassword([]byte(c.Value), []byte(plainPassword)) == nil
+	// Try legacy bcrypt hash first (backward compatible with existing hashes).
+	if err := bcrypt.CompareHashAndPassword([]byte(c.Value), []byte(plainPassword)); err == nil {
+		return true
+	}
+	// Try SHA-256 pre-hashed format.
+	return bcrypt.CompareHashAndPassword([]byte(c.Value), []byte(preHashPassword(plainPassword))) == nil
 }
 
-// HashPassword hashes a plaintext password using bcrypt.
+// HashPassword hashes a plaintext password using SHA-256 + bcrypt.
+// The SHA-256 pre-hash allows arbitrary-length passwords to bypass bcrypt's 72-byte truncation.
 func HashPassword(password string) (string, error) {
-	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), BcryptCost)
+	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(preHashPassword(password)), BcryptCost)
 	if err != nil {
 		return "", err
 	}
 	return string(hashedBytes), nil
+}
+
+// preHashPassword returns the hex-encoded SHA-256 digest of the password.
+func preHashPassword(password string) string {
+	h := sha256.Sum256([]byte(password))
+	return hex.EncodeToString(h[:])
 }

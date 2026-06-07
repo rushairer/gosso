@@ -27,7 +27,7 @@ func TestNewEmailService(t *testing.T) {
 	svc := NewEmailService(cfg, nil)
 
 	assert.Equal(t, "noreply@example.com", svc.from)
-	assert.NotNil(t, svc.dialer)
+	assert.NotNil(t, svc.client)
 	assert.NotNil(t, svc.logger)
 }
 
