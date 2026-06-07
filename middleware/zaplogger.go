@@ -1,11 +1,42 @@
 package middleware
 
 import (
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
+
+// sensitiveQueryParams are query parameter names whose values should be redacted in logs.
+var sensitiveQueryParams = map[string]bool{
+	"token":          true,
+	"code":           true,
+	"code_verifier":  true,
+	"client_secret":  true,
+	"password":       true,
+	"refresh_token":  true,
+	"access_token":   true,
+	"id_token":       true,
+}
+
+// sanitizeQuery replaces sensitive query parameter values with [REDACTED].
+func sanitizeQuery(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return "[PARSE_ERROR]"
+	}
+	for key := range values {
+		if sensitiveQueryParams[strings.ToLower(key)] {
+			values.Set(key, "[REDACTED]")
+		}
+	}
+	return values.Encode()
+}
 
 // ZapLoggerMiddleware returns a gin.HandlerFunc that logs HTTP requests using zap
 // with structured fields including request_id.
@@ -26,7 +57,7 @@ func ZapLoggerMiddleware(logger *zap.Logger) gin.HandlerFunc {
 			zap.Int("status", status),
 			zap.String("method", ctx.Request.Method),
 			zap.String("path", path),
-			zap.String("query", query),
+			zap.String("query", sanitizeQuery(query)),
 			zap.String("ip", ctx.ClientIP()),
 			zap.String("user_agent", ctx.Request.UserAgent()),
 			zap.Duration("latency", latency),

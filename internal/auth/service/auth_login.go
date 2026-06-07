@@ -450,6 +450,7 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 		if verified != "1" {
 			return ErrPasskeyNotVerified
 		}
+		return nil
 	case "totp":
 		// TOTP / backup code
 		valid, verr := s.mfaSvc.VerifyTOTP(ctx, accountID, mfaCode)
@@ -471,7 +472,6 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 	default:
 		return fmt.Errorf("unsupported mfa type: %s", mfaType)
 	}
-	return nil
 }
 
 // clearLoginRateLimits removes per-user rate limit counters after successful login.

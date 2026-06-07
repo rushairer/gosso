@@ -10,6 +10,10 @@ import (
 	"github.com/spf13/viper"
 )
 
+// defaultPostgresDSN is the default development DSN.
+// Validate() rejects this value to prevent production from accidentally using dev credentials.
+const defaultPostgresDSN = "postgres://postgres:postgres@localhost:5432/gosso?sslmode=disable"
+
 type ConfigManager struct {
 	configMutex sync.RWMutex
 	config      *GoUnoConfig
@@ -101,7 +105,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("database.default", "postgres")
 	v.SetDefault("database.drivers.postgres.name", "postgres")
 	v.SetDefault("database.drivers.postgres.driver", "pgx")
-	v.SetDefault("database.drivers.postgres.dsn", "postgres://postgres:postgres@localhost:5432/gosso?sslmode=disable")
+	v.SetDefault("database.drivers.postgres.dsn", defaultPostgresDSN)
 	v.SetDefault("database.drivers.postgres.log_level", 1)
 	v.SetDefault("database.max_open_conns", 25)
 	v.SetDefault("database.max_idle_conns", 5)

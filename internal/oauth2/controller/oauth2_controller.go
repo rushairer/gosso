@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -121,7 +122,7 @@ func (c *OAuth2Controller) authenticateRequest(ctx *gin.Context) (string, bool) 
 	claims, err := authMiddleware.ValidateBearerToken(ctx, c.tokenSvc, c.sessionValidator)
 	if err != nil {
 		status := http.StatusUnauthorized
-		if err.Error() == "token scope not allowed" {
+		if errors.Is(err, authMiddleware.ErrTokenScopeNotAllowed) {
 			status = http.StatusForbidden
 		}
 		ctx.JSON(status, gin.H{"error": err.Error()})

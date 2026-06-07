@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -16,6 +17,10 @@ import (
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
+
+// ErrTokenScopeNotAllowed is returned when a scoped token (e.g. MFA token)
+// attempts to access a general endpoint that does not permit scoped access.
+var ErrTokenScopeNotAllowed = errors.New("token scope not allowed")
 
 // TokenValidator defines the minimal interface for token validation.
 type TokenValidator interface {
@@ -38,7 +43,7 @@ func ValidateBearerToken(ctx *gin.Context, tokenSvc TokenValidator, sessionValid
 
 	// Reject tokens with non-empty scope (e.g. MFA tokens) from accessing general endpoints
 	if claims.Scope != "" {
-		return nil, fmt.Errorf("token scope not allowed")
+		return nil, ErrTokenScopeNotAllowed
 	}
 
 	// Verify the session still exists (invalidates tokens after account deletion/suspension)
@@ -62,7 +67,7 @@ func JWTAuthMiddleware(tokenSvc *tokenService.TokenService, sessionValidator ses
 		claims, err := ValidateBearerToken(ctx, tokenSvc, sessionValidator)
 		if err != nil {
 			status := http.StatusUnauthorized
-			if err.Error() == "token scope not allowed" {
+			if errors.Is(err, ErrTokenScopeNotAllowed) {
 				status = http.StatusForbidden
 			}
 			ctx.AbortWithStatusJSON(status, gouno.NewErrorResponse(status, err.Error()))

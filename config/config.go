@@ -181,6 +181,9 @@ func (c *GoUnoConfig) Validate() error {
 	if c.DatabaseConfig.GetDefaultDriver().DSN == "" {
 		return fmt.Errorf("database: default driver DSN is empty")
 	}
+	if c.DatabaseConfig.GetDefaultDriver().DSN == defaultPostgresDSN {
+		return fmt.Errorf("database: default driver DSN must be explicitly configured (the development default is not allowed)")
+	}
 	if c.RedisConfig.DSN == "" {
 		return fmt.Errorf("redis: DSN is empty")
 	}

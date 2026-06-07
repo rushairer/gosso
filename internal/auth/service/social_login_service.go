@@ -85,6 +85,9 @@ func NewSocialLoginService(
 // SetMFAChecker sets the MFA checker dependency (setter injection to avoid circular constructor deps).
 // Must be called during initialization; not safe for concurrent use.
 func (s *SocialLoginService) SetMFAChecker(checker MFAChecker) {
+	if checker == nil {
+		panic("SetMFAChecker: checker must not be nil")
+	}
 	s.mfaChecker = checker
 }
 
@@ -126,11 +129,6 @@ func (s *SocialLoginService) GetAuthURL(ctx context.Context, provider, state str
 
 // HandleCallback handles the third-party callback
 func (s *SocialLoginService) HandleCallback(ctx context.Context, provider, code, ip, userAgent string) (*LoginResult, error) {
-	if s.mfaChecker == nil {
-		s.logger.Error("SocialLoginService: MFAChecker not set, this is a programming error")
-		return nil, ErrSocialMisconfigured
-	}
-
 	p, ok := s.providers[provider]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)

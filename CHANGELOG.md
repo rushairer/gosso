@@ -13,11 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ForgotPassword` log now masks email address using `utility.MaskEmail` instead of logging raw PII (`internal/auth/controller/auth_controller.go`).
 - `docker-compose.test.yml` PostgreSQL password now requires `POSTGRES_PASSWORD` environment variable — no longer falls back to hardcoded `gosso123`.
 - `development.yaml` OAuth provider section now includes comments warning that `client_id` and `client_secret` must be set via environment variables.
+- Access log query parameters now sanitize sensitive values (`token`, `code`, `code_verifier`, `client_secret`, `password`, etc.) — replaces raw query string logging with `[REDACTED]` placeholders (`middleware/zaplogger.go`).
+- `Validate()` now rejects the default development database DSN in production — prevents accidental use of `postgres:postgres` credentials (`config/config.go`, `config/config_manager.go`).
 
 ### Added
 - Verification code settings (`verify_code_ttl`, `verify_cooldown_ttl`, `verify_code_max_attempts`) and password reset settings (`password_reset_token_ttl`, `password_reset_cooldown_ttl`, `password_reset_max_attempts`) are now configurable via `auth` config section — existing hardcoded values serve as defaults (`config/config.go`, `internal/auth/service/verification_service.go`, `internal/auth/service/password_reset_service.go`, `internal/auth/module.go`).
 
 ### Changed
+- `SetMFAChecker` now panics on nil — consistent with `WithSessionRevoker` and `WithOAuth2ClientDeleter` fail-fast pattern; removed redundant nil check in `HandleCallback` (`internal/auth/service/social_login_service.go`).
 - `late_bind.go` type assertions now use comma-ok pattern with explicit panic messages — prevents confusing nil pointer dereference on type mismatch (`internal/account/service/late_bind.go`).
 - Makefile binary name changed from `gouno` to `gosso` — consistent with Dockerfile and CI build (`Makefile`).
 - Makefile `test-integration` target now includes `./internal/token/service/` and `./internal/account/` packages with `-p 1` flag — consistent with CI pipeline (`Makefile`).
@@ -53,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Fix `TokenRevoker` nil-check returning `fmt.Errorf` instead of sentinel error — added `ErrTokenRevokerNotConfigured` (`session_service.go`).
 - Fix `ConsentService` silently succeeding when `consentRepo` is nil — constructor now panics if repository is not provided (`consent_service.go`).
 - Fix `ConsentRepository` not accepting `*sql.Tx` — `Upsert` and `Delete` now use transactions consistent with all other repositories (`consent_repository.go`, `consent_repository_impl.go`).
+- Fix token scope check using brittle `err.Error()` string comparison — replaced with `errors.Is(err, ErrTokenScopeNotAllowed)` sentinel error (`internal/auth/middleware/auth_middleware.go`, `internal/oauth2/controller/oauth2_controller.go`).
+- Fix `verifyMFACode` passkey case relying on implicit switch fallthrough for success path — added explicit `return nil` (`internal/auth/service/auth_login.go`).
 - Fix OIDC logout `validateBearerToken` not checking token scope or session validity — now reuses shared `ValidateBearerToken` with session validation (`oidc_controller.go`).
 - Fix `clearLoginRateLimits` using `:` separator while `login_attempts` keys use `/` — rate limit counter was never cleared after successful login (`auth_login.go`).
 

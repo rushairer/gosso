@@ -34,7 +34,6 @@ var (
 
 	// Social login errors
 	ErrUnsupportedProvider = errors.New("unsupported provider")
-	ErrSocialMisconfigured = errors.New("social login service misconfigured")
 )
 
 // Scope constants for JWT token claims
