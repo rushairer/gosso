@@ -309,7 +309,7 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 			}
 		}
 	} else {
-		return fmt.Errorf("TokenRevoker not configured; cannot revoke tokens on account revocation")
+		return ErrTokenRevokerNotConfigured
 	}
 
 	// Delete individual session keys.
@@ -418,7 +418,7 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 			return fmt.Errorf("revoke tokens for session: %w", err)
 		}
 	} else {
-		return fmt.Errorf("TokenRevoker not configured; cannot revoke tokens on session revocation")
+		return ErrTokenRevokerNotConfigured
 	}
 
 	// Delete session key
@@ -480,7 +480,7 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 					zap.String("session_id", sid), zap.Error(err))
 			}
 		} else {
-			return fmt.Errorf("TokenRevoker not configured; cannot revoke tokens during session limit enforcement")
+			return ErrTokenRevokerNotConfigured
 		}
 		keys = append(keys, s.buildSessionKey(sid))
 	}
@@ -507,7 +507,8 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 
 // Error definitions
 var (
-	ErrSessionNotFound     = errors.New("session not found")
-	ErrSessionExpired      = errors.New("session expired")
-	ErrSessionAccessDenied = errors.New("session not found or access denied")
+	ErrSessionNotFound              = errors.New("session not found")
+	ErrSessionExpired               = errors.New("session expired")
+	ErrSessionAccessDenied          = errors.New("session not found or access denied")
+	ErrTokenRevokerNotConfigured    = errors.New("token revoker not configured")
 )

@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/internal/auth/middleware"
+	"github.com/rushairer/gosso/middleware"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 )
 
@@ -49,14 +49,8 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
-	accountID, exists := ctx.Get(middleware.ContextKeyAccountID)
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	accountIDStr, ok := accountID.(string)
-	if !ok || accountIDStr == "" {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	accountIDStr, ok := middleware.GetAccountID(ctx)
+	if !ok {
 		return
 	}
 

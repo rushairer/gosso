@@ -10,7 +10,7 @@ import (
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/internal/auth/middleware"
+	"github.com/rushairer/gosso/middleware"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 )
@@ -65,14 +65,8 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 		return
 	}
 
-	accountIDRaw, exists := ctx.Get(middleware.ContextKeyAccountID)
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
-		return
-	}
-	accountID, ok := accountIDRaw.(string)
-	if !ok || accountID == "" {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+	accountID, ok := middleware.GetAccountID(ctx)
+	if !ok {
 		return
 	}
 
@@ -123,14 +117,8 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 
 // ListClients GET /api/oauth2/clients
 func (c *ClientController) ListClients(ctx *gin.Context) {
-	accountIDRaw, exists := ctx.Get(middleware.ContextKeyAccountID)
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
-		return
-	}
-	accountID, ok := accountIDRaw.(string)
-	if !ok || accountID == "" {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+	accountID, ok := middleware.GetAccountID(ctx)
+	if !ok {
 		return
 	}
 
@@ -151,7 +139,7 @@ func (c *ClientController) ListClients(ctx *gin.Context) {
 func (c *ClientController) GetClient(ctx *gin.Context) {
 	clientID := ctx.Param("client_id")
 
-	accountID, ok := getAccountID(ctx)
+	accountID, ok := middleware.GetAccountID(ctx)
 	if !ok {
 		return
 	}
@@ -174,7 +162,7 @@ func (c *ClientController) GetClient(ctx *gin.Context) {
 func (c *ClientController) UpdateClient(ctx *gin.Context) {
 	clientID := ctx.Param("client_id")
 
-	accountID, ok := getAccountID(ctx)
+	accountID, ok := middleware.GetAccountID(ctx)
 	if !ok {
 		return
 	}
@@ -256,7 +244,7 @@ type UpdateClientRequest struct {
 func (c *ClientController) DeleteClient(ctx *gin.Context) {
 	clientID := ctx.Param("client_id")
 
-	accountID, ok := getAccountID(ctx)
+	accountID, ok := middleware.GetAccountID(ctx)
 	if !ok {
 		return
 	}
@@ -278,21 +266,6 @@ func (c *ClientController) DeleteClient(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("client deleted"))
-}
-
-// getAccountID extracts the account ID from the gin context with safe type assertion.
-func getAccountID(ctx *gin.Context) (string, bool) {
-	raw, exists := ctx.Get(middleware.ContextKeyAccountID)
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
-		return "", false
-	}
-	accountID, ok := raw.(string)
-	if !ok || accountID == "" {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
-		return "", false
-	}
-	return accountID, true
 }
 
 var validGrantTypes = []string{

@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Fix `%w: %w` double error wrapping that made `errors.Is()` unreliable (`auth_session.go`, `auth_login.go`, `social_login_service.go`).
 - Fix account status checks to use `IsActive()` consistently (`auth_login.go`).
 - Fix Docker Redis health check using `REDISCLI_AUTH` env var instead of `-a` flag to avoid password exposure in process listings (`docker-compose.yml`).
+- Fix duplicate step numbers in `SoftDeleteAccount` and `ChangePassword` comments (`account_service.go`).
+- Fix login rate limit key collision risk — changed separator from `:` to `/` in `login_attempts` keys (`auth_login.go`).
+- Fix `TokenRevoker` nil-check returning `fmt.Errorf` instead of sentinel error — added `ErrTokenRevokerNotConfigured` (`session_service.go`).
+- Fix `ConsentService` silently succeeding when `consentRepo` is nil — constructor now panics if repository is not provided (`consent_service.go`).
+- Fix `ConsentRepository` not accepting `*sql.Tx` — `Upsert` and `Delete` now use transactions consistent with all other repositories (`consent_repository.go`, `consent_repository_impl.go`).
+- Fix OIDC logout `validateBearerToken` not checking token scope or session validity — now reuses shared `ValidateBearerToken` with session validation (`oidc_controller.go`).
 
 ### Added
 - Audit logging for `UpdateAccount`, `BindFederatedIdentity`, and `UnbindFederatedIdentity` (`account_service.go`).
@@ -33,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Device code tests updated to include `ClientID` in mock data for consistency (`oauth2_controller_test.go`).
 - Extract shared `ValidateBearerToken` function from `JWTAuthMiddleware` and `OAuth2Controller.authenticateRequest` to eliminate JWT validation duplication (`auth_middleware.go`, `oauth2_controller.go`).
 - Add dedicated 30-second SMTP timeout to `EmailService.send()` to bound email send duration independently of context (`email_service.go`).
+- Unify AccountID extraction from gin context — added shared `middleware.GetAccountID` helper, replaced all inline extraction patterns across controllers (`middleware/account.go`, `client_controller.go`, `oauth2_authorize.go`, `oauth2_revoke.go`, `passkey_controller.go`, `admin_controller.go`).
 
 ### Added
 - `MaxBodySizeMiddleware` limits request body size (default 10MB, configurable via `web_server.max_body_size`) — prevents memory exhaustion from oversized requests (`middleware/middleware.go`, `config/config.go`).

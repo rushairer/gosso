@@ -159,7 +159,7 @@ func setupUserInfoEngine(accountSvc *mockAccountService, credRepo *mockCredentia
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 	userInfoSvc := oidcService.NewUserInfoService(accountSvc, credRepo, nil)
 
-	ctrl := NewOIDCController(discoverySvc, nil, userInfoSvc, nil, nil, nil, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(discoverySvc, nil, userInfoSvc, nil, nil, nil, nil, "https://sso.example.com", zap.NewNop())
 	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
 	oidcGroup := engine.Group("/oidc")
 	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
@@ -274,7 +274,7 @@ func TestUserInfo_NoClaims(t *testing.T) {
 
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 	userInfoSvc := oidcService.NewUserInfoService(&mockAccountService{}, &mockCredentialRepo{}, nil)
-	ctrl := NewOIDCController(discoverySvc, nil, userInfoSvc, nil, nil, nil, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(discoverySvc, nil, userInfoSvc, nil, nil, nil, nil, "https://sso.example.com", zap.NewNop())
 	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
 	oidcGroup := engine.Group("/oidc")
 	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
@@ -419,7 +419,7 @@ func setupLogoutEngine(t *testing.T, clientRepo *mockClientRepo) (*gin.Engine, *
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
-	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, clientRepo, tokenSvc, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, clientRepo, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	engine := gin.New()
 	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
@@ -459,7 +459,7 @@ func TestLogout_ExpiredIDTokenHint(t *testing.T) {
 	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, zap.NewNop())
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
-	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -493,7 +493,7 @@ func TestLogout_IDTokenHint_WrongIssuer(t *testing.T) {
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
-	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, nil, tokenSvc, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -522,7 +522,7 @@ func TestLogout_IDTokenHint_NoAudience(t *testing.T) {
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
-	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, nil, tokenSvc, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -553,7 +553,7 @@ func TestLogout_IDTokenHint_WrongSignature(t *testing.T) {
 	otherKeySvc, err := tokenService.NewKeyService("", "", zap.NewNop())
 	require.NoError(t, err)
 
-	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -587,7 +587,7 @@ func TestLogout_BearerToken_InvalidSignature(t *testing.T) {
 	otherKeySvc, err := tokenService.NewKeyService("", "", zap.NewNop())
 	require.NoError(t, err)
 
-	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -631,7 +631,7 @@ func TestLogout_PostLogoutRedirect_InvalidURI(t *testing.T) {
 		},
 	}
 
-	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, clientRepo, tokenSvc, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, clientRepo, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -672,7 +672,7 @@ func TestLogout_PostLogoutRedirect_ValidURI(t *testing.T) {
 		},
 	}
 
-	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, clientRepo, tokenSvc, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, clientRepo, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -712,7 +712,7 @@ func TestLogout_PostLogoutRedirect_ClientNotFound(t *testing.T) {
 		},
 	}
 
-	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, clientRepo, tokenSvc, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, clientRepo, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -747,7 +747,7 @@ func TestLogout_ClientIDMismatch(t *testing.T) {
 	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, zap.NewNop())
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
-	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()

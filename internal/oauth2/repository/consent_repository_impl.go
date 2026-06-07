@@ -20,7 +20,7 @@ func NewConsentRepository(db *sql.DB) ConsentRepository {
 }
 
 // Upsert inserts or updates a consent record.
-func (r *consentRepositoryImpl) Upsert(ctx context.Context, consent *domain.Consent) error {
+func (r *consentRepositoryImpl) Upsert(ctx context.Context, tx *sql.Tx, consent *domain.Consent) error {
 	scopesJSON, err := json.Marshal(consent.Scopes)
 	if err != nil {
 		return fmt.Errorf("marshal scopes: %w", err)
@@ -33,7 +33,7 @@ func (r *consentRepositoryImpl) Upsert(ctx context.Context, consent *domain.Cons
 		DO UPDATE SET scopes = EXCLUDED.scopes, granted_at = EXCLUDED.granted_at
 		RETURNING id, created_at, updated_at`
 
-	return r.db.QueryRowContext(ctx, query,
+	return tx.QueryRowContext(ctx, query,
 		consent.AccountID,
 		consent.ClientID,
 		scopesJSON,
@@ -74,9 +74,9 @@ func (r *consentRepositoryImpl) FindByAccountAndClient(ctx context.Context, acco
 }
 
 // Delete removes a consent record.
-func (r *consentRepositoryImpl) Delete(ctx context.Context, accountID, clientID string) error {
+func (r *consentRepositoryImpl) Delete(ctx context.Context, tx *sql.Tx, accountID, clientID string) error {
 	query := `DELETE FROM oauth2_consents WHERE account_id = $1 AND client_id = $2`
-	_, err := r.db.ExecContext(ctx, query, accountID, clientID)
+	_, err := tx.ExecContext(ctx, query, accountID, clientID)
 	if err != nil {
 		return fmt.Errorf("delete consent: %w", err)
 	}

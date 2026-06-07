@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/cache"
+	dbutil "github.com/rushairer/gosso/internal/db"
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 	"github.com/rushairer/gosso/internal/oauth2/repository"
 	"github.com/rushairer/gosso/utility"
@@ -22,15 +24,20 @@ const (
 // ConsentService handles user consent for OAuth2 authorization.
 // Uses the database as the source of truth with Redis as a write-through cache.
 type ConsentService struct {
+	db          *sql.DB
 	consentRepo repository.ConsentRepository
 	redis       *cache.RedisClient
 	logger      *zap.Logger
 }
 
-// NewConsentService creates a new consent service instance
-func NewConsentService(consentRepo repository.ConsentRepository, redis *cache.RedisClient, logger *zap.Logger) *ConsentService {
+// NewConsentService creates a new consent service instance.
+func NewConsentService(db *sql.DB, consentRepo repository.ConsentRepository, redis *cache.RedisClient, logger *zap.Logger) *ConsentService {
 	logger = utility.EnsureLogger(logger)
+	if consentRepo == nil {
+		panic("consent repository is required")
+	}
 	return &ConsentService{
+		db:          db,
 		consentRepo: consentRepo,
 		redis:       redis,
 		logger:      logger,
@@ -56,9 +63,6 @@ func (s *ConsentService) GetConsent(ctx context.Context, accountID, clientID str
 	}
 
 	// Cache miss or error — read from DB
-	if s.consentRepo == nil {
-		return nil, nil
-	}
 	consent, err := s.consentRepo.FindByAccountAndClient(ctx, accountID, clientID)
 	if err != nil {
 		return nil, fmt.Errorf("get consent from DB: %w", err)
@@ -81,10 +85,11 @@ func (s *ConsentService) GetConsent(ctx context.Context, accountID, clientID str
 func (s *ConsentService) SaveConsent(ctx context.Context, consent *domain.Consent) error {
 	consent.GrantedAt = time.Now()
 
-	if s.consentRepo != nil {
-		if err := s.consentRepo.Upsert(ctx, consent); err != nil {
-			return fmt.Errorf("save consent to DB: %w", err)
-		}
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.consentRepo.Upsert(ctx, tx, consent)
+	})
+	if err != nil {
+		return fmt.Errorf("save consent to DB: %w", err)
 	}
 
 	// Write-through to Redis cache
@@ -107,10 +112,11 @@ func (s *ConsentService) SaveConsent(ctx context.Context, consent *domain.Consen
 
 // DeleteConsent deletes the user's consent record from both DB and Redis cache.
 func (s *ConsentService) DeleteConsent(ctx context.Context, accountID, clientID string) error {
-	if s.consentRepo != nil {
-		if err := s.consentRepo.Delete(ctx, accountID, clientID); err != nil {
-			return fmt.Errorf("delete consent from DB: %w", err)
-		}
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.consentRepo.Delete(ctx, tx, accountID, clientID)
+	})
+	if err != nil {
+		return fmt.Errorf("delete consent from DB: %w", err)
 	}
 
 	key := s.buildConsentKey(accountID, clientID)

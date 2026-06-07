@@ -10,7 +10,7 @@ import (
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/internal/auth/middleware"
+	"github.com/rushairer/gosso/middleware"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
@@ -114,9 +114,8 @@ func (c *PasskeyController) RegisterComplete(ctx *gin.Context) {
 
 // resolveAccountForPasskey extracts the authenticated account's ID, username, and display name.
 func (c *PasskeyController) resolveAccountForPasskey(ctx *gin.Context) (accountID, username, displayName string, ok bool) {
-	accountID = ctx.GetString(middleware.ContextKeyAccountID)
-	if accountID == "" {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+	accountID, ok = middleware.GetAccountID(ctx)
+	if !ok {
 		return "", "", "", false
 	}
 
@@ -317,9 +316,8 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 
 // ListCredentials GET /api/auth/passkeys
 func (c *PasskeyController) ListCredentials(ctx *gin.Context) {
-	accountID := ctx.GetString(middleware.ContextKeyAccountID)
-	if accountID == "" {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+	accountID, ok := middleware.GetAccountID(ctx)
+	if !ok {
 		return
 	}
 
@@ -335,9 +333,8 @@ func (c *PasskeyController) ListCredentials(ctx *gin.Context) {
 
 // DeleteCredential DELETE /api/auth/passkeys/:id
 func (c *PasskeyController) DeleteCredential(ctx *gin.Context) {
-	accountID := ctx.GetString(middleware.ContextKeyAccountID)
-	if accountID == "" {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+	accountID, ok := middleware.GetAccountID(ctx)
+	if !ok {
 		return
 	}
 

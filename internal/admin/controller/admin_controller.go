@@ -12,7 +12,7 @@ import (
 
 	accountRepository "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
-	"github.com/rushairer/gosso/internal/auth/middleware"
+	"github.com/rushairer/gosso/middleware"
 )
 
 // AdminController handles admin operations

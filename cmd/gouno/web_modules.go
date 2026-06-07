@@ -85,7 +85,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
 	}
 	clientCtrl := oauth2Controller.NewClientController(oauth2Mod.ClientService, logger)
-	oidcCtrl := oidcController.NewOIDCController(oidcMod.DiscoveryService, oidcMod.JWKSService, oidcMod.UserInfoService, oidcMod.LogoutService, oauth2Mod.ClientRepo, tokenSvc, cfg.AuthConfig.Issuer, logger)
+	oidcCtrl := oidcController.NewOIDCController(oidcMod.DiscoveryService, oidcMod.JWKSService, oidcMod.UserInfoService, oidcMod.LogoutService, oauth2Mod.ClientRepo, tokenSvc, authMod.SessionService, cfg.AuthConfig.Issuer, logger)
 	adminCtrl := adminController.NewAdminController(accountMod.Service, logger)
 
 	var passkeyCtrl *authController.PasskeyController

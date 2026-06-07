@@ -368,7 +368,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		s.logger.Error("Failed to revoke sessions after account deletion", zap.String("account_id", accountID), zap.Error(revokeErr))
 	}
 
-	// 5. Audit log
+	// 6. Audit log
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountDelete,
 		audit.IPFromContext(ctx),
@@ -457,7 +457,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 			zap.String("account_id", accountID), zap.Error(revokeErr))
 	}
 
-	// 7. Audit log
+	// 8. Audit log
 	s.auditLog(ctx, auditDomain.NewRecord(
 		auditDomain.ActionPasswordChange,
 		audit.IPFromContext(ctx),

@@ -13,20 +13,22 @@ import (
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	oauth2Repo "github.com/rushairer/gosso/internal/oauth2/repository"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
+	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
 
 // OIDCController OIDC protocol controller
 type OIDCController struct {
-	discoverySvc *oidcService.DiscoveryService
-	jwksSvc      *oidcService.JWKSService
-	userInfoSvc  *oidcService.UserInfoService
-	logoutSvc    *oidcService.LogoutService
-	clientRepo   oauth2Repo.OAuth2ClientRepository
-	tokenSvc     *tokenService.TokenService
-	issuer       string
-	logger       *zap.Logger
+	discoverySvc     *oidcService.DiscoveryService
+	jwksSvc          *oidcService.JWKSService
+	userInfoSvc      *oidcService.UserInfoService
+	logoutSvc        *oidcService.LogoutService
+	clientRepo       oauth2Repo.OAuth2ClientRepository
+	tokenSvc         *tokenService.TokenService
+	sessionValidator sessionDomain.SessionValidator
+	issuer           string
+	logger           *zap.Logger
 }
 
 // NewOIDCController creates a new instance of OIDCController
@@ -37,18 +39,20 @@ func NewOIDCController(
 	logoutSvc *oidcService.LogoutService,
 	clientRepo oauth2Repo.OAuth2ClientRepository,
 	tokenSvc *tokenService.TokenService,
+	sessionValidator sessionDomain.SessionValidator,
 	issuer string,
 	logger *zap.Logger,
 ) *OIDCController {
 	return &OIDCController{
-		discoverySvc: discoverySvc,
-		jwksSvc:      jwksSvc,
-		userInfoSvc:  userInfoSvc,
-		logoutSvc:    logoutSvc,
-		clientRepo:   clientRepo,
-		tokenSvc:     tokenSvc,
-		issuer:       issuer,
-		logger:       logger,
+		discoverySvc:     discoverySvc,
+		jwksSvc:          jwksSvc,
+		userInfoSvc:      userInfoSvc,
+		logoutSvc:        logoutSvc,
+		clientRepo:       clientRepo,
+		tokenSvc:         tokenSvc,
+		sessionValidator: sessionValidator,
+		issuer:           issuer,
+		logger:           logger,
 	}
 }
 
@@ -162,12 +166,10 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 // validateBearerToken validates the Bearer token from the Authorization header.
 // Returns nil if no Bearer header is present. Aborts the request if the token is invalid.
 func (c *OIDCController) validateBearerToken(ctx *gin.Context) *tokenDomain.AccessTokenClaims {
-	authHeader := ctx.GetHeader("Authorization")
-	if !strings.HasPrefix(authHeader, "Bearer ") {
+	if ctx.GetHeader("Authorization") == "" {
 		return nil
 	}
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	claims, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx, tokenString)
+	claims, err := middleware.ValidateBearerToken(ctx, c.tokenSvc, c.sessionValidator)
 	if err != nil {
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid session"))
 		ctx.Abort()

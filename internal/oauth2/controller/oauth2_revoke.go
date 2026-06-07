@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/internal/auth/middleware"
+	"github.com/rushairer/gosso/middleware"
 )
 
 // Revoke POST /oauth2/revoke
@@ -20,14 +20,8 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 	}
 
 	// Verify the refresh token belongs to the authenticated user before revoking.
-	accountID, exists := ctx.Get(middleware.ContextKeyAccountID)
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	accountIDStr, ok := accountID.(string)
+	accountIDStr, ok := middleware.GetAccountID(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	rt, err := c.tokenSvc.ValidateRefreshToken(ctx, req.Token)

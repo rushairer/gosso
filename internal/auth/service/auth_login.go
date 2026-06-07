@@ -54,7 +54,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	// 0. Check rate limit for login failures (keyed on IP + normalized username).
 	// Fail-open: if Redis is unavailable, login proceeds to avoid total lockout.
 	normalizedUsername := strings.ToLower(req.Username)
-	attemptsKey := fmt.Sprintf("login_attempts:%s:%s", req.IP, normalizedUsername)
+	attemptsKey := fmt.Sprintf("login_attempts/%s/%s", req.IP, normalizedUsername)
 	count, incrErr := s.redis.CheckAndIncr(ctx, attemptsKey, s.loginMaxAttempts, s.loginRateLimitWindow)
 	if incrErr != nil {
 		s.logger.Warn("Failed to check login rate limit, proceeding anyway", zap.Error(incrErr))

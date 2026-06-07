@@ -2,8 +2,12 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"testing"
+	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -12,18 +16,58 @@ import (
 	"github.com/rushairer/gosso/internal/testutil"
 )
 
-func setupTestConsentService(t *testing.T) (*ConsentService, func()) {
+// mockConsentRepository is an in-memory implementation for testing.
+type mockConsentRepository struct {
+	store map[string]*domain.Consent
+}
+
+func newMockConsentRepository() *mockConsentRepository {
+	return &mockConsentRepository{store: make(map[string]*domain.Consent)}
+}
+
+func (m *mockConsentRepository) key(accountID, clientID string) string {
+	return fmt.Sprintf("%s:%s", accountID, clientID)
+}
+
+func (m *mockConsentRepository) Upsert(_ context.Context, _ *sql.Tx, consent *domain.Consent) error {
+	m.store[m.key(consent.AccountID, consent.ClientID)] = consent
+	return nil
+}
+
+func (m *mockConsentRepository) FindByAccountAndClient(_ context.Context, accountID, clientID string) (*domain.Consent, error) {
+	c, ok := m.store[m.key(accountID, clientID)]
+	if !ok {
+		return nil, nil
+	}
+	return c, nil
+}
+
+func (m *mockConsentRepository) Delete(_ context.Context, _ *sql.Tx, accountID, clientID string) error {
+	delete(m.store, m.key(accountID, clientID))
+	return nil
+}
+
+func setupTestConsentService(t *testing.T) (*ConsentService, sqlmock.Sqlmock, func()) {
 	t.Helper()
 	logger := zap.NewNop()
 
 	redisClient, mr := testutil.SetupTestRedis(t)
-	cleanup := mr.Close
 
-	return NewConsentService(nil, redisClient, logger), cleanup
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	repo := newMockConsentRepository()
+	svc := NewConsentService(db, repo, redisClient, logger)
+
+	cleanup := func() {
+		mr.Close()
+		db.Close()
+	}
+	return svc, mock, cleanup
 }
 
 func TestSaveAndGetConsent(t *testing.T) {
-	svc, cleanup := setupTestConsentService(t)
+	svc, mock, cleanup := setupTestConsentService(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -34,6 +78,8 @@ func TestSaveAndGetConsent(t *testing.T) {
 		Scopes:    []string{"openid", "profile"},
 	}
 
+	mock.ExpectBegin()
+	mock.ExpectCommit()
 	err := svc.SaveConsent(ctx, consent)
 	require.NoError(t, err)
 
@@ -47,11 +93,13 @@ func TestSaveAndGetConsent(t *testing.T) {
 	assert.False(t, got.GrantedAt.IsZero())
 
 	// Clean up
+	mock.ExpectBegin()
+	mock.ExpectCommit()
 	_ = svc.DeleteConsent(ctx, "account-001", "client-001")
 }
 
 func TestGetConsent_NotFound(t *testing.T) {
-	svc, cleanup := setupTestConsentService(t)
+	svc, _, cleanup := setupTestConsentService(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -62,7 +110,7 @@ func TestGetConsent_NotFound(t *testing.T) {
 }
 
 func TestDeleteConsent(t *testing.T) {
-	svc, cleanup := setupTestConsentService(t)
+	svc, mock, cleanup := setupTestConsentService(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -73,10 +121,14 @@ func TestDeleteConsent(t *testing.T) {
 		Scopes:    []string{"openid"},
 	}
 
+	mock.ExpectBegin()
+	mock.ExpectCommit()
 	err := svc.SaveConsent(ctx, consent)
 	require.NoError(t, err)
 
 	// Delete
+	mock.ExpectBegin()
+	mock.ExpectCommit()
 	err = svc.DeleteConsent(ctx, "account-002", "client-002")
 	require.NoError(t, err)
 
@@ -84,4 +136,68 @@ func TestDeleteConsent(t *testing.T) {
 	got, err := svc.GetConsent(ctx, "account-002", "client-002")
 	require.NoError(t, err)
 	assert.Nil(t, got)
+}
+
+func TestNewConsentService_NilRepo_Panics(t *testing.T) {
+	logger := zap.NewNop()
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	assert.Panics(t, func() {
+		NewConsentService(db, nil, redisClient, logger)
+	})
+}
+
+func TestSaveConsent_UpdatesCache(t *testing.T) {
+	svc, mock, cleanup := setupTestConsentService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	consent := &domain.Consent{
+		AccountID: "account-003",
+		ClientID:  "client-003",
+		Scopes:    []string{"openid"},
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+	err := svc.SaveConsent(ctx, consent)
+	require.NoError(t, err)
+
+	// Delete from DB only — cache should still have it
+	delete(svc.consentRepo.(*mockConsentRepository).store, "account-003:client-003")
+
+	// GetConsent should return from cache even though DB has no record
+	got, err := svc.GetConsent(ctx, "account-003", "client-003")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "account-003", got.AccountID)
+}
+
+func TestGetConsent_CacheMiss_FallbackToDB(t *testing.T) {
+	svc, _, cleanup := setupTestConsentService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Save directly to DB (mock repo), bypassing cache
+	repo := svc.consentRepo.(*mockConsentRepository)
+	now := time.Now()
+	repo.store["account-004:client-004"] = &domain.Consent{
+		AccountID: "account-004",
+		ClientID:  "client-004",
+		Scopes:    []string{"profile"},
+		GrantedAt: now,
+	}
+
+	// GetConsent should find it via DB fallback
+	got, err := svc.GetConsent(ctx, "account-004", "client-004")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, []string{"profile"}, got.Scopes)
 }
