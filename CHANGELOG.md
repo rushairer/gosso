@@ -18,14 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Fix `BindFederatedIdentity` TOCTOU race — duplicate check moved inside transaction (`account_service.go`).
 - Fix `%w: %w` double error wrapping that made `errors.Is()` unreliable (`auth_session.go`, `auth_login.go`, `social_login_service.go`).
 - Fix account status checks to use `IsActive()` consistently (`auth_login.go`).
+- Fix Docker Redis health check using `REDISCLI_AUTH` env var instead of `-a` flag to avoid password exposure in process listings (`docker-compose.yml`).
 
 ### Added
 - Audit logging for `UpdateAccount`, `BindFederatedIdentity`, and `UnbindFederatedIdentity` (`account_service.go`).
 - Add audit action constants: `ActionAccountUpdate`, `ActionFederatedIdentityBind`, `ActionFederatedIdentityUnbind` (`audit/domain/actions.go`).
 - Document gomail goroutine leak limitation on context cancellation (`email_service.go`).
+- Add rate limiting to social login redirect endpoint `GET /api/auth/social/:provider` to prevent abuse (`auth_controller.go`).
+- Add CSRF token rotation — tokens are regenerated after each successful validation to prevent fixation attacks (`middleware/csrf.go`).
+- Add `PasswordResetWaitTimeout` config option (`auth.password_reset_wait_timeout`) to make graceful shutdown timeout configurable (`config/config.go`, `password_reset_service.go`).
+- Add slow transaction monitoring for `SoftDeleteAccount` — warns if transaction exceeds 2 seconds (`account_service.go`).
 
 ### Changed
 - Device code tests updated to include `ClientID` in mock data for consistency (`oauth2_controller_test.go`).
+- Extract shared `ValidateBearerToken` function from `JWTAuthMiddleware` and `OAuth2Controller.authenticateRequest` to eliminate JWT validation duplication (`auth_middleware.go`, `oauth2_controller.go`).
+- Add dedicated 30-second SMTP timeout to `EmailService.send()` to bound email send duration independently of context (`email_service.go`).
 
 ### Added
 - `MaxBodySizeMiddleware` limits request body size (default 10MB, configurable via `web_server.max_body_size`) — prevents memory exhaustion from oversized requests (`middleware/middleware.go`, `config/config.go`).

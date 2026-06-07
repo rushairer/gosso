@@ -84,7 +84,7 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 			return
 		}
 
-		setCSRFCookie(ctx, cookieName, secure)
+		rotateCSRFCookie(ctx, cookieName, secure)
 		ctx.Next()
 	}
 }
@@ -114,6 +114,28 @@ func setCSRFCookie(ctx *gin.Context, cookieName string, secure bool) {
 
 	// Also return in response header for SPA consumption
 	ctx.Header(csrfHeaderName, cookie)
+}
+
+// rotateCSRFCookie generates a new CSRF token and replaces the existing cookie.
+// Called after successful validation to prevent token fixation attacks.
+// Falls back to keeping the old token if generation fails.
+func rotateCSRFCookie(ctx *gin.Context, cookieName string, secure bool) {
+	newToken, err := generateCSRFToken()
+	if err != nil {
+		// Fallback: keep the old token rather than failing the request
+		return
+	}
+
+	http.SetCookie(ctx.Writer, &http.Cookie{
+		Name:     cookieName,
+		Value:    newToken,
+		Path:     "/",
+		MaxAge:   int((4 * time.Hour).Seconds()),
+		HttpOnly: false,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+	ctx.Header(csrfHeaderName, newToken)
 }
 
 // generateCSRFToken generates a cryptographically secure random CSRF token.

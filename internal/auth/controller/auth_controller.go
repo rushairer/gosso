@@ -107,7 +107,11 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, jwtAuth gin.Handler
 		auth.POST("/mfa/verify", mfaVerifyHandlers...)
 
 		// Social login endpoints (unauthenticated)
-		auth.GET("/social/:provider", c.SocialAuthURL)
+		socialHandlers := []gin.HandlerFunc{c.SocialAuthURL}
+		if len(socialLimit) > 0 && socialLimit[0] != nil {
+			socialHandlers = []gin.HandlerFunc{socialLimit[0], c.SocialAuthURL}
+		}
+		auth.GET("/social/:provider", socialHandlers...)
 		socialCallbackHandlers := []gin.HandlerFunc{c.SocialCallback}
 		if len(socialLimit) > 0 && socialLimit[0] != nil {
 			socialCallbackHandlers = []gin.HandlerFunc{socialLimit[0], c.SocialCallback}

@@ -134,6 +134,9 @@ type AuthConfig struct {
 	BackupCodeCount    int           `mapstructure:"backup_code_count"`
 	BackupCodeLength   int           `mapstructure:"backup_code_length"`
 
+	// Password reset settings (0 = use built-in defaults)
+	PasswordResetWaitTimeout time.Duration `mapstructure:"password_reset_wait_timeout"`
+
 	// OIDC settings
 	IDTokenExpiry time.Duration `mapstructure:"id_token_expiry"`
 }

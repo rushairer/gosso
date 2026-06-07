@@ -333,6 +333,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 
 	// 4. Soft-delete in transaction
 	now := time.Now()
+	txStart := time.Now()
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		if err := s.credentialRepo.SoftDeleteCredentialsByAccount(ctx, tx, accountID, now); err != nil {
@@ -349,6 +350,12 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		}
 		return s.accountRepo.SoftDeleteAccount(ctx, tx, accountID, now)
 	})
+	txDuration := time.Since(txStart)
+	if txDuration > 2*time.Second {
+		s.logger.Warn("Slow account soft-delete transaction",
+			zap.String("account_id", accountID),
+			zap.Duration("duration", txDuration))
+	}
 	if err != nil {
 		return err
 	}

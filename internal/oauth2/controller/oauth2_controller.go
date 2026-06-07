@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	authMiddleware "github.com/rushairer/gosso/internal/auth/middleware"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
@@ -113,37 +114,18 @@ func NewOAuth2Controller(
 // authenticateRequest extracts and validates the access token from the Authorization header.
 // Returns the account ID on success, or an empty string and writes an error response on failure.
 //
-// This intentionally duplicates JWTAuthMiddleware logic because OAuth2 endpoints
-// need inline authentication within handler methods (e.g. consent, device authorization)
-// rather than pre-handler middleware — the same endpoint may serve both authenticated
-// and unauthenticated flows.
+// This uses ValidateBearerToken from auth/middleware for the shared validation logic,
+// but serves inline within handler methods because OAuth2 endpoints may serve both
+// authenticated and unauthenticated flows on the same route.
 func (c *OAuth2Controller) authenticateRequest(ctx *gin.Context) (string, bool) {
-	tokenString := ""
-	if authHeader := ctx.GetHeader("Authorization"); authHeader != "" {
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
-			tokenString = parts[1]
-		}
-	}
-	if tokenString == "" {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return "", false
-	}
-
-	claims, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx.Request.Context(), tokenString)
+	claims, err := authMiddleware.ValidateBearerToken(ctx, c.tokenSvc, c.sessionValidator)
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return "", false
-	}
-	if claims.Scope != "" {
-		ctx.JSON(http.StatusForbidden, gin.H{"error": "forbidden", "error_description": "scoped token not allowed"})
-		return "", false
-	}
-	if c.sessionValidator != nil && claims.SessionID != "" {
-		if _, err := c.sessionValidator.ValidateSession(ctx.Request.Context(), claims.SessionID); err != nil {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-			return "", false
+		status := http.StatusUnauthorized
+		if err.Error() == "token scope not allowed" {
+			status = http.StatusForbidden
 		}
+		ctx.JSON(status, gin.H{"error": err.Error()})
+		return "", false
 	}
 	return claims.AccountID, true
 }

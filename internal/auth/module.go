@@ -114,6 +114,9 @@ func InitializeAuthModule(
 	verificationSvc := service.NewVerificationService(redis, emailSvc, smsSvc, credentialRepo, logger)
 
 	passwordResetSvc := service.NewPasswordResetService(redis, credentialRepo, emailSvc, sessionSvc, accountSvc, db, baseURL, logger)
+	if authConfig.PasswordResetWaitTimeout > 0 {
+		passwordResetSvc.SetWaitTimeout(authConfig.PasswordResetWaitTimeout)
+	}
 
 	return &AuthModule{
 		AuthService:          authSvc,

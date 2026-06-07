@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"time"
 
 	"go.uber.org/zap"
 	"gopkg.in/gomail.v2"
@@ -47,9 +48,9 @@ type EmailService struct {
 }
 
 // NewEmailService creates a new email service instance.
-// Note: gomail v2 does not support context.Context or connection timeouts.
-// The SMTP connection uses the OS-level TCP timeout. Consider upgrading to a
-// context-aware mail library if goroutine leaks are observed under load.
+// Note: gomail v2 does not support context.Context. The send method uses a dedicated
+// 30-second SMTP timeout to bound operation duration. The underlying goroutine may
+// complete independently after the caller returns on timeout or context cancellation.
 func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) *EmailService {
 	logger = utility.EnsureLogger(logger)
 	return &EmailService{
@@ -93,6 +94,10 @@ func (s *EmailService) send(ctx context.Context, to, subject, htmlBody string) e
 		errCh <- s.dialer.DialAndSend(msg)
 	}()
 
+	// Use a dedicated SMTP timeout to bound the overall operation duration,
+	// since gomail does not support context propagation to the underlying TCP connection.
+	const smtpTimeout = 30 * time.Second
+
 	select {
 	case err := <-errCh:
 		if err != nil {
@@ -101,12 +106,13 @@ func (s *EmailService) send(ctx context.Context, to, subject, htmlBody string) e
 				zap.Error(err))
 			return fmt.Errorf("send email: %w", err)
 		}
+	case <-time.After(smtpTimeout):
+		s.logger.Warn("Email send timed out; SMTP goroutine will complete independently",
+			zap.String("to", maskEmail(to)),
+			zap.Duration("timeout", smtpTimeout))
+		return fmt.Errorf("send email: SMTP timeout after %s", smtpTimeout)
 	case <-ctx.Done():
-		// KNOWN LIMITATION: gomail does not support context cancellation.
-		// The goroutine above will finish sending the email even after we return here.
-		// This is acceptable because gomail's DialAndSend opens its own SMTP connection
-		// and the goroutine will exit once the send completes or times out internally.
-		s.logger.Warn("Email send interrupted by context; goroutine will complete independently",
+		s.logger.Warn("Email send interrupted by context; SMTP goroutine will complete independently",
 			zap.String("to", maskEmail(to)),
 			zap.Error(ctx.Err()))
 		return fmt.Errorf("send email: %w", ctx.Err())

@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -14,12 +16,46 @@ import (
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
 
+// TokenValidator defines the minimal interface for token validation.
+type TokenValidator interface {
+	ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*tokenDomain.AccessTokenClaims, error)
+}
+
 const (
 	// ContextKeyAccountID stores the account ID in gin.Context
 	ContextKeyAccountID = "account_id"
 	// ContextKeyClaims stores the JWT claims in gin.Context
 	ContextKeyClaims = "jwt_claims"
 )
+
+// ValidateBearerToken extracts and validates the Bearer token from the request.
+// Returns the claims on success, or nil with an error on failure.
+// This is the shared logic used by both JWTAuthMiddleware and inline authentication in handlers.
+func ValidateBearerToken(ctx *gin.Context, tokenSvc TokenValidator, sessionValidator sessionDomain.SessionValidator) (*tokenDomain.AccessTokenClaims, error) {
+	tokenString := extractBearerToken(ctx)
+	if tokenString == "" {
+		return nil, fmt.Errorf("missing authorization")
+	}
+
+	claims, err := tokenSvc.ValidateAccessTokenWithContext(ctx.Request.Context(), tokenString)
+	if err != nil {
+		return nil, fmt.Errorf("invalid or expired token")
+	}
+
+	// Reject tokens with non-empty scope (e.g. MFA tokens) from accessing general endpoints
+	if claims.Scope != "" {
+		return nil, fmt.Errorf("token scope not allowed")
+	}
+
+	// Verify the session still exists (invalidates tokens after account deletion/suspension)
+	if sessionValidator != nil && claims.SessionID != "" {
+		if _, err := sessionValidator.ValidateSession(ctx.Request.Context(), claims.SessionID); err != nil {
+			return nil, fmt.Errorf("session expired or revoked")
+		}
+	}
+
+	return claims, nil
+}
 
 // JWTAuthMiddleware is the JWT authentication middleware.
 // sessionValidator is required — it verifies the session still exists in Redis,
@@ -29,30 +65,14 @@ func JWTAuthMiddleware(tokenSvc *tokenService.TokenService, sessionValidator ses
 		panic("JWTAuthMiddleware: sessionValidator must not be nil — session validation is required for security")
 	}
 	return func(ctx *gin.Context) {
-		tokenString := extractBearerToken(ctx)
-		if tokenString == "" {
-			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "missing authorization"))
-			return
-		}
-
-		claims, err := tokenSvc.ValidateAccessTokenWithContext(ctx.Request.Context(), tokenString)
+		claims, err := ValidateBearerToken(ctx, tokenSvc, sessionValidator)
 		if err != nil {
-			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid or expired token"))
-			return
-		}
-
-		// Reject tokens with non-empty scope (e.g. MFA tokens) from accessing general endpoints
-		if claims.Scope != "" {
-			ctx.AbortWithStatusJSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "token scope not allowed"))
-			return
-		}
-
-		// Verify the session still exists (invalidates tokens after account deletion/suspension)
-		if claims.SessionID != "" {
-			if _, err := sessionValidator.ValidateSession(ctx.Request.Context(), claims.SessionID); err != nil {
-				ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "session expired or revoked"))
-				return
+			status := http.StatusUnauthorized
+			if err.Error() == "token scope not allowed" {
+				status = http.StatusForbidden
 			}
+			ctx.AbortWithStatusJSON(status, gouno.NewErrorResponse(status, err.Error()))
+			return
 		}
 
 		ctx.Set(ContextKeyAccountID, claims.AccountID)

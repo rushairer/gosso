@@ -78,6 +78,7 @@ type PasswordResetService struct {
 	logger         *zap.Logger
 	wg             sync.WaitGroup
 	revokeSem      chan struct{} // limits concurrent session-revoke goroutines
+	waitTimeout    time.Duration // timeout for Wait() during graceful shutdown
 }
 
 // NewPasswordResetService creates a new password reset service instance
@@ -102,6 +103,14 @@ func NewPasswordResetService(
 		baseURL:        baseURL,
 		logger:         logger,
 		revokeSem:      make(chan struct{}, 10),
+		waitTimeout:    60 * time.Second,
+	}
+}
+
+// SetWaitTimeout overrides the default timeout for Wait() during graceful shutdown.
+func (s *PasswordResetService) SetWaitTimeout(d time.Duration) {
+	if d > 0 {
+		s.waitTimeout = d
 	}
 }
 
@@ -286,14 +295,15 @@ func (s *PasswordResetService) buildCooldownKey(email string) string {
 
 // Wait blocks until all background goroutines (e.g., session revocation) complete.
 // Call this during graceful shutdown to ensure in-flight operations finish.
-// Returns after 60 seconds even if goroutines are still running, to avoid
+// Returns after the configured timeout even if goroutines are still running, to avoid
 // blocking shutdown indefinitely when Redis is unreachable.
 func (s *PasswordResetService) Wait() {
 	done := make(chan struct{})
 	go func() { s.wg.Wait(); close(done) }()
 	select {
 	case <-done:
-	case <-time.After(60 * time.Second):
-		s.logger.Warn("Timeout waiting for background password reset goroutines")
+	case <-time.After(s.waitTimeout):
+		s.logger.Warn("Timeout waiting for background password reset goroutines",
+			zap.Duration("timeout", s.waitTimeout))
 	}
 }
