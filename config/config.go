@@ -13,7 +13,6 @@ type GoUnoConfig struct {
 	RedisConfig        RedisConfig          `mapstructure:"redis"`
 	TaskPipelineConfig TaskPipelineConfig   `mapstructure:"task_pipeline"`
 	SMTPConfig         SMTPConfig           `mapstructure:"smtp"`
-	CaptchaConfig      CaptchaConfig        `mapstructure:"captcha"`
 	LogConfig          LogConfig            `mapstructure:"log"`
 	AuthConfig         AuthConfig           `mapstructure:"auth"`
 	CORSConfig         CORSConfig           `mapstructure:"cors"`
@@ -99,10 +98,6 @@ type SMTPConfig struct {
 	Username string `mapstructure:"username"`
 	Password string `mapstructure:"password"`
 	From     string `mapstructure:"from"`
-}
-
-type CaptchaConfig struct {
-	Type string `mapstructure:"type"`
 }
 
 type LogConfig struct {

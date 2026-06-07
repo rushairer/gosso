@@ -1,6 +1,6 @@
 # Production configuration
 # Sensitive values can be overridden with GOUNO_ prefixed env vars.
-# Example: GOUNO_AUTH_JWT_SECRET=my-secret GOUNO_DATABASE_DRIVERS_POSTGRES_DSN=host=...
+# Example: GOUNO_AUTH_ISSUER=https://sso.example.com GOUNO_DATABASE_DRIVERS_POSTGRES_DSN=host=...
 web_server:
     address: 0.0.0.0
     port: 8080
@@ -20,20 +20,10 @@ web_server:
 database:
     default: postgres
     drivers:
-        sqlite:
-            name: sqlite
-            driver: sqlite3
-            dsn: ./data/gosso.db
-            log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
-        mysql:
-            name: mysql
-            driver: mysql
-            dsn: "${GOUNO_MYSQL_DSN}"
-            log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
         postgres:
             name: postgres
             driver: pgx
-            dsn: "${GOUNO_DB_DSN}"
+            dsn: "${GOUNO_DATABASE_DRIVERS_POSTGRES_DSN}"
             log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
 redis:
     dsn: "${GOUNO_REDIS_DSN}"
@@ -49,8 +39,6 @@ smtp:
     username: "${GOUNO_SMTP_USERNAME}"
     password: "${GOUNO_SMTP_PASSWORD}"
     from: "${GOUNO_SMTP_FROM}"
-captcha:
-    type: math
 log:
     level: 0 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
 auth:

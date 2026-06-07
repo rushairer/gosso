@@ -1,6 +1,6 @@
 # Test configuration
 # Sensitive values can be overridden with GOUNO_ prefixed env vars.
-# Example: GOUNO_AUTH_JWT_SECRET=my-secret GOUNO_DATABASE_DRIVERS_POSTGRES_DSN=host=...
+# Example: GOUNO_AUTH_ISSUER=http://localhost:8080 GOUNO_DATABASE_DRIVERS_POSTGRES_DSN=host=...
 web_server:
     address: 0.0.0.0
     port: 8080
@@ -12,16 +12,6 @@ web_server:
 database:
     default: postgres
     drivers:
-        sqlite:
-            name: sqlite
-            driver: sqlite3
-            dsn: ":memory:"
-            log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
-        mysql:
-            name: mysql
-            driver: mysql
-            dsn: gosso:gosso123@tcp(mysql:3308)/gosso_test?charset=utf8mb4&parseTime=True&loc=Local
-            log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
         postgres:
             name: postgres
             driver: pgx
@@ -41,14 +31,12 @@ smtp:
     username: ""
     password: ""
     from: "noreply@gosso.com"
-captcha:
-    type: math
 log:
     level: -1 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
 auth:
     issuer: "http://localhost:8080"
     access_token_expiry: 15m
-    refresh_token_expiry: 720h
+    refresh_token_expiry: 24h
     authorization_code_expiry: 10m
     id_token_expiry: 15m
     default_scopes:

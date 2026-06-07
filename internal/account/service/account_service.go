@@ -67,6 +67,14 @@ type AccountService interface {
 
 	// GetAccountRoles returns the roles assigned to the account.
 	GetAccountRoles(ctx context.Context, accountID string) ([]*domain.Role, error)
+
+	// SetSessionRevoker sets the session revoker dependency.
+	// Used to break the circular dependency between AccountModule and AuthModule.
+	SetSessionRevoker(revoker SessionRevoker)
+
+	// SetOAuth2ClientDeleter sets the OAuth2 client deleter dependency.
+	// Used to break the circular dependency between AccountModule and OAuth2Module.
+	SetOAuth2ClientDeleter(deleter OAuth2ClientDeleter)
 }
 
 // RegisterAccountRequest is the request payload for account registration.
@@ -129,6 +137,9 @@ func NewAccountService(
 // Setter injection is used here to break the circular dependency between AccountModule and AuthModule.
 // Must be called during initialization; not safe for concurrent use.
 func (s *accountServiceImpl) SetSessionRevoker(revoker SessionRevoker) {
+	if revoker == nil {
+		panic("SetSessionRevoker: revoker must not be nil")
+	}
 	s.sessionRevoker = revoker
 }
 
@@ -136,6 +147,9 @@ func (s *accountServiceImpl) SetSessionRevoker(revoker SessionRevoker) {
 // Setter injection is used here to break the circular dependency between AccountModule and OAuth2Module.
 // Must be called during initialization; not safe for concurrent use.
 func (s *accountServiceImpl) SetOAuth2ClientDeleter(deleter OAuth2ClientDeleter) {
+	if deleter == nil {
+		panic("SetOAuth2ClientDeleter: deleter must not be nil")
+	}
 	s.oauth2ClientDeleter = deleter
 }
 
@@ -279,7 +293,15 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		return errors.New("account ID is required")
 	}
 
-	// 2. Check if already deleted (idempotent)
+	// 2. Fail-fast: ensure dependencies are configured before starting the transaction
+	if s.sessionRevoker == nil {
+		return fmt.Errorf("SessionRevoker not configured; cannot revoke sessions on account deletion")
+	}
+	if s.oauth2ClientDeleter == nil {
+		return fmt.Errorf("OAuth2ClientDeleter not configured; cannot cascade-delete OAuth2 clients")
+	}
+
+	// 3. Check if already deleted (idempotent)
 	account, err := s.accountRepo.FindByID(ctx, accountID)
 	if err != nil {
 		return fmt.Errorf("find account: %w", err)
@@ -288,7 +310,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		return nil
 	}
 
-	// 3. Soft-delete in transaction
+	// 4. Soft-delete in transaction
 	now := time.Now()
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
@@ -301,12 +323,8 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		if err := s.roleRepo.SoftDeleteRolesByAccountID(ctx, tx, accountID, now); err != nil {
 			return err
 		}
-		if s.oauth2ClientDeleter != nil {
-			if err := s.oauth2ClientDeleter.SoftDeleteOAuth2ClientsByAccount(ctx, tx, accountID, now); err != nil {
-				return err
-			}
-		} else {
-			return fmt.Errorf("OAuth2ClientDeleter not configured; cannot cascade-delete OAuth2 clients")
+		if err := s.oauth2ClientDeleter.SoftDeleteOAuth2ClientsByAccount(ctx, tx, accountID, now); err != nil {
+			return err
 		}
 		return s.accountRepo.SoftDeleteAccount(ctx, tx, accountID, now)
 	})
@@ -314,16 +332,12 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		return err
 	}
 
-	// 4. Revoke all active sessions and refresh tokens.
+	// 5. Revoke all active sessions and refresh tokens.
 	// Access tokens are invalidated by the JWT middleware's session existence check
 	// (JWTAuthMiddleware validates sessions on every authenticated request), so explicit
 	// blacklisting of access token JTIs is not required here.
-	if s.sessionRevoker != nil {
-		if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
-			s.logger.Error("Failed to revoke sessions after account deletion", zap.String("account_id", accountID), zap.Error(revokeErr))
-		}
-	} else {
-		return fmt.Errorf("SessionRevoker not configured; cannot revoke sessions on account deletion")
+	if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
+		s.logger.Error("Failed to revoke sessions after account deletion", zap.String("account_id", accountID), zap.Error(revokeErr))
 	}
 
 	// 5. Audit log
@@ -372,29 +386,34 @@ func (s *accountServiceImpl) VerifyCredential(ctx context.Context, accountID str
 
 // ChangePassword changes the account password.
 func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error {
-	// 1. Find password credential
+	// 1. Fail-fast: ensure session revoker is configured before modifying data
+	if s.sessionRevoker == nil {
+		return fmt.Errorf("SessionRevoker not configured; cannot revoke sessions on password change")
+	}
+
+	// 2. Find password credential
 	passwordCred, err := s.credentialRepo.FindPasswordCredential(ctx, accountID)
 	if err != nil {
 		return fmt.Errorf("find password credential: %w", err)
 	}
 
-	// 2. Verify old password
+	// 3. Verify old password
 	if !passwordCred.VerifyPassword(oldPassword) {
 		return errors.New("incorrect old password")
 	}
 
-	// 3. Validate new password strength
+	// 4. Validate new password strength
 	if err := utility.ValidatePasswordStrength(newPassword); err != nil {
 		return err
 	}
 
-	// 4. Hash new password
+	// 5. Hash new password
 	newPasswordHash, err := domain.HashPassword(newPassword)
 	if err != nil {
 		return fmt.Errorf("hash new password: %w", err)
 	}
 
-	// 5. Update password
+	// 6. Update password
 	passwordCred.Value = string(newPasswordHash)
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
@@ -404,14 +423,10 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 		return err
 	}
 
-	// 6. Revoke all existing sessions so that any attacker with a stolen session is kicked out
-	if s.sessionRevoker != nil {
-		if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
-			s.logger.Error("Failed to revoke sessions after password change",
-				zap.String("account_id", accountID), zap.Error(revokeErr))
-		}
-	} else {
-		return fmt.Errorf("SessionRevoker not configured; cannot revoke sessions on password change")
+	// 7. Revoke all existing sessions so that any attacker with a stolen session is kicked out
+	if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
+		s.logger.Error("Failed to revoke sessions after password change",
+			zap.String("account_id", accountID), zap.Error(revokeErr))
 	}
 
 	// 7. Audit log
@@ -507,6 +522,11 @@ func (s *accountServiceImpl) ListAccounts(ctx context.Context, page, pageSize in
 
 // SuspendAccount suspends the account atomically.
 func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID string) error {
+	// Fail-fast: ensure session revoker is configured before modifying data
+	if s.sessionRevoker == nil {
+		return fmt.Errorf("SessionRevoker not configured; cannot revoke sessions on account suspension")
+	}
+
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		return s.accountRepo.SuspendAccount(ctx, tx, accountID)
 	})
@@ -515,13 +535,9 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 	}
 
 	// Revoke all active sessions so the suspended user loses access immediately
-	if s.sessionRevoker != nil {
-		if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
-			s.logger.Error("Failed to revoke sessions after account suspension",
-				zap.String("account_id", accountID), zap.Error(revokeErr))
-		}
-	} else {
-		return fmt.Errorf("SessionRevoker not configured; cannot revoke sessions on account suspension")
+	if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
+		s.logger.Error("Failed to revoke sessions after account suspension",
+			zap.String("account_id", accountID), zap.Error(revokeErr))
 	}
 
 	s.auditLog(ctx, auditDomain.NewRecord(

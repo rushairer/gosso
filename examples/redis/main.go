@@ -9,7 +9,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/cache"
-	"github.com/rushairer/gosso/internal/captcha/service"
 	"github.com/rushairer/gosso/internal/session/domain"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
@@ -43,10 +42,7 @@ func main() {
 	// ==================== 示例 2: 会话管理 ====================
 	sessionExample(ctx, redisClient, logger)
 
-	// ==================== 示例 3: 验证码服务 ====================
-	captchaExample(ctx, redisClient, logger)
-
-	// ==================== 示例 4: Token 黑名单 ====================
+	// ==================== 示例 3: Token 黑名单 ====================
 	blacklistExample(ctx, redisClient, logger)
 }
 
@@ -152,57 +148,6 @@ func sessionExample(ctx context.Context, redisClient *cache.RedisClient, logger 
 		return
 	}
 	logger.Info("Session deleted")
-}
-
-func captchaExample(ctx context.Context, redisClient *cache.RedisClient, logger *zap.Logger) {
-	logger.Info("========== Captcha Service ==========")
-
-	// 创建验证码服务
-	captchaSvc := service.NewCaptchaService(redisClient, logger)
-	captchaSvc.SetCaptchaTTL(5 * time.Minute)
-
-	// 生成数学验证码
-	mathCaptcha, question, err := captchaSvc.GenerateMathCaptcha(ctx)
-	if err != nil {
-		logger.Error("Failed to generate math captcha", zap.Error(err))
-		return
-	}
-	logger.Info("Math captcha generated",
-		zap.String("captcha_id", mathCaptcha.ID.String()),
-		zap.String("question", question),
-		zap.String("answer", mathCaptcha.Answer))
-
-	// 验证数学验证码（正确答案）
-	err = captchaSvc.VerifyCaptcha(ctx, mathCaptcha.ID, mathCaptcha.Answer)
-	if err != nil {
-		logger.Error("Captcha verification failed", zap.Error(err))
-	} else {
-		logger.Info("Math captcha verified successfully")
-	}
-
-	// 生成数字验证码
-	digitCaptcha, code, err := captchaSvc.GenerateDigitCaptcha(ctx)
-	if err != nil {
-		logger.Error("Failed to generate digit captcha", zap.Error(err))
-		return
-	}
-	logger.Info("Digit captcha generated",
-		zap.String("captcha_id", digitCaptcha.ID.String()),
-		zap.String("code", code))
-
-	// 验证数字验证码（错误答案）
-	err = captchaSvc.VerifyCaptcha(ctx, digitCaptcha.ID, "000000")
-	if err != nil {
-		logger.Warn("Captcha verification failed as expected", zap.Error(err))
-	}
-
-	// 验证数字验证码（正确答案）
-	err = captchaSvc.VerifyCaptcha(ctx, digitCaptcha.ID, code)
-	if err != nil {
-		logger.Error("Captcha verification failed", zap.Error(err))
-	} else {
-		logger.Info("Digit captcha verified successfully")
-	}
 }
 
 func blacklistExample(ctx context.Context, redisClient *cache.RedisClient, logger *zap.Logger) {

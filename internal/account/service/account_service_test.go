@@ -27,6 +27,44 @@ func (s *stubOAuth2ClientDeleter) SoftDeleteOAuth2ClientsByAccount(_ context.Con
 	return nil
 }
 
+// TestSetSessionRevoker_NilPanics tests that setting a nil session revoker panics
+func TestSetSessionRevoker_NilPanics(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	impl := accountService.(*accountServiceImpl)
+
+	assert.Panics(t, func() {
+		impl.SetSessionRevoker(nil)
+	})
+}
+
+// TestSetOAuth2ClientDeleter_NilPanics tests that setting a nil OAuth2 client deleter panics
+func TestSetOAuth2ClientDeleter_NilPanics(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	impl := accountService.(*accountServiceImpl)
+
+	assert.Panics(t, func() {
+		impl.SetOAuth2ClientDeleter(nil)
+	})
+}
+
 
 // TestRegisterAccount tests account registration
 func TestRegisterAccount(t *testing.T) {
@@ -255,4 +293,53 @@ func TestSoftDeleteAccount(t *testing.T) {
 	// Verify results
 	assert.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestSuspendAccount tests suspending an account
+func TestSuspendAccount(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	impl := accountService.(*accountServiceImpl)
+	impl.SetSessionRevoker(&stubSessionRevoker{})
+	impl.SetOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
+
+	accountID := "test-account-id"
+
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE accounts SET status").
+		WithArgs(sqlmock.AnyArg(), accountID, "suspended", "active").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	err = accountService.SuspendAccount(context.Background(), accountID)
+
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestSuspendAccount_NilSessionRevoker tests that SuspendAccount fails fast when session revoker is not configured
+func TestSuspendAccount_NilSessionRevoker(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+
+	err = accountService.SuspendAccount(context.Background(), "test-account-id")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "SessionRevoker not configured")
 }

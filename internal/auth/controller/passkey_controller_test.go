@@ -175,6 +175,8 @@ func (m *mockAccountSvcForPasskey) BindFederatedIdentity(_ context.Context, _ st
 func (m *mockAccountSvcForPasskey) UnbindFederatedIdentity(_ context.Context, _, _ string) error {
 	return fmt.Errorf("not implemented")
 }
+func (m *mockAccountSvcForPasskey) SetSessionRevoker(_ accountService.SessionRevoker)           {}
+func (m *mockAccountSvcForPasskey) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter) {}
 
 // ──────────────────────────────────────────────
 // RegisterBegin

@@ -87,9 +87,6 @@ func (cm *ConfigManager) Config() GoUnoConfig {
 }
 
 func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
-	// Captcha configuration
-	v.SetDefault("captcha.type", "math")
-
 	// Web server configuration
 	v.SetDefault("web_server.debug", false)
 	v.SetDefault("web_server.address", "0.0.0.0")
