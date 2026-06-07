@@ -25,9 +25,9 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 	corsConfig := buildCORSConfig(cfg)
 
 	engine.Use(
+		middleware.RecoveryMiddleware(logger),
 		cors.New(corsConfig),
 		middleware.RequestIDMiddleware(),
-		middleware.RecoveryMiddleware(logger),
 		middleware.ZapLoggerMiddleware(logger),
 		middleware.SecurityHeadersMiddleware(!cfg.WebServerConfig.Debug),
 		middleware.MaxBodySizeMiddleware(cfg.WebServerConfig.MaxBodySize),

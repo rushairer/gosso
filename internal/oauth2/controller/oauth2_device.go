@@ -220,6 +220,11 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		return
 	}
 
+	if dc.ClientID != req.ClientID {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "device code was not issued to this client"})
+		return
+	}
+
 	if dc.IsExpired() {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "expired_token", "error_description": "device code has expired"})
 		return

@@ -64,14 +64,15 @@ return {allowed, remaining, reset_at, retry_after}
 `)
 
 // RedisRateLimitMiddleware Redis-based distributed sliding window rate limiter middleware.
+// endpoint: identifies the rate-limited resource (e.g., "login", "token") to avoid key collisions.
 // keyFunc: extracts rate limit key from request (e.g., IP, accountID).
 // limit: max requests within the window.
 // window: time window duration.
 // failOpen: if true, allows requests when Redis is unavailable (fail-open);
 // if false, rejects requests with 503 when Redis is unavailable (fail-closed).
-func RedisRateLimitMiddleware(rds *cache.RedisClient, keyFunc func(*gin.Context) string, limit int, window time.Duration, failOpen bool, logger *zap.Logger) gin.HandlerFunc {
+func RedisRateLimitMiddleware(rds *cache.RedisClient, endpoint string, keyFunc func(*gin.Context) string, limit int, window time.Duration, failOpen bool, logger *zap.Logger) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		key := fmt.Sprintf("rate_limit:%s", keyFunc(ctx))
+		key := fmt.Sprintf("rate_limit:%s:%s", endpoint, keyFunc(ctx))
 
 		result, err := rds.RunScript(ctx, slidingWindowScript,
 			[]string{key},

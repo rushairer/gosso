@@ -947,6 +947,7 @@ func TestToken_DeviceCode_AuthorizationPending(t *testing.T) {
 			getFn: func() (*oauth2Domain.DeviceCode, error) {
 				return &oauth2Domain.DeviceCode{
 					DeviceCode: "dc-123",
+					ClientID:   "cid-test",
 					Status:     oauth2Domain.DeviceCodeStatusPending,
 					ExpiresAt:  time.Now().Add(10 * time.Minute),
 					Interval:   5,
@@ -977,6 +978,7 @@ func TestToken_DeviceCode_AccessDenied(t *testing.T) {
 			getFn: func() (*oauth2Domain.DeviceCode, error) {
 				return &oauth2Domain.DeviceCode{
 					DeviceCode: "dc-123",
+					ClientID:   "cid-test",
 					Status:     oauth2Domain.DeviceCodeStatusDenied,
 					ExpiresAt:  time.Now().Add(10 * time.Minute),
 					Interval:   5,
@@ -1007,6 +1009,7 @@ func TestToken_DeviceCode_ExpiredToken(t *testing.T) {
 			getFn: func() (*oauth2Domain.DeviceCode, error) {
 				return &oauth2Domain.DeviceCode{
 					DeviceCode: "dc-123",
+					ClientID:   "cid-test",
 					Status:     oauth2Domain.DeviceCodeStatusPending,
 					ExpiresAt:  time.Now().Add(-1 * time.Minute),
 					Interval:   5,
@@ -1037,6 +1040,7 @@ func TestToken_DeviceCode_SlowDown(t *testing.T) {
 			getFn: func() (*oauth2Domain.DeviceCode, error) {
 				return &oauth2Domain.DeviceCode{
 					DeviceCode: "dc-123",
+					ClientID:   "cid-test",
 					Status:     oauth2Domain.DeviceCodeStatusPending,
 					ExpiresAt:  time.Now().Add(10 * time.Minute),
 					Interval:   5,

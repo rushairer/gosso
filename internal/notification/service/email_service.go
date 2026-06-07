@@ -102,6 +102,13 @@ func (s *EmailService) send(ctx context.Context, to, subject, htmlBody string) e
 			return fmt.Errorf("send email: %w", err)
 		}
 	case <-ctx.Done():
+		// KNOWN LIMITATION: gomail does not support context cancellation.
+		// The goroutine above will finish sending the email even after we return here.
+		// This is acceptable because gomail's DialAndSend opens its own SMTP connection
+		// and the goroutine will exit once the send completes or times out internally.
+		s.logger.Warn("Email send interrupted by context; goroutine will complete independently",
+			zap.String("to", maskEmail(to)),
+			zap.Error(ctx.Err()))
 		return fmt.Errorf("send email: %w", ctx.Err())
 	}
 

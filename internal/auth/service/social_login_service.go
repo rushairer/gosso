@@ -273,7 +273,7 @@ func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, i
 
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrAccountNotFound, err)
+		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, err)
 	}
 
 	if account.Status != accountDomain.AccountStatusActive {

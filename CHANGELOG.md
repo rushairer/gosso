@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Fix `SoftDeleteCredentialsByAccount` SQL referencing non-existent `updated_at` column (`credential_repository_impl.go`).
+- Fix rate limiter key collision — all endpoints now use endpoint-scoped Redis keys (`rate_limit:{endpoint}:{IP}`) instead of shared keys (`middleware/redis_ratelimit.go`, `router/web.go`).
+- Fix Device Code token exchange missing `client_id` binding validation — rejects device codes issued to a different client (`oauth2_device.go`).
+- Fix middleware chain order — `RecoveryMiddleware` now runs first to catch panics from CORS/RequestID middleware (`web_engine.go`).
+- Fix TOTP verification: infrastructure errors no longer silently fall through to backup code verification; empty `mfa_type` is now rejected (`auth_login.go`).
+- Fix `clearLoginRateLimits` clearing per-IP limits — only per-user rate limits are cleared on successful login (`auth_login.go`).
+- Fix `RevokeSession` silently ignoring token revocation errors — now fails on error (`session_service.go`).
+- Fix `BindFederatedIdentity` TOCTOU race — duplicate check moved inside transaction (`account_service.go`).
+- Fix `%w: %w` double error wrapping that made `errors.Is()` unreliable (`auth_session.go`, `auth_login.go`, `social_login_service.go`).
+- Fix account status checks to use `IsActive()` consistently (`auth_login.go`).
+
+### Added
+- Audit logging for `UpdateAccount`, `BindFederatedIdentity`, and `UnbindFederatedIdentity` (`account_service.go`).
+- Add audit action constants: `ActionAccountUpdate`, `ActionFederatedIdentityBind`, `ActionFederatedIdentityUnbind` (`audit/domain/actions.go`).
+- Document gomail goroutine leak limitation on context cancellation (`email_service.go`).
+
+### Changed
+- Device code tests updated to include `ClientID` in mock data for consistency (`oauth2_controller_test.go`).
+
 ### Added
 - `MaxBodySizeMiddleware` limits request body size (default 10MB, configurable via `web_server.max_body_size`) — prevents memory exhaustion from oversized requests (`middleware/middleware.go`, `config/config.go`).
 - Dedicated rate limits for OAuth2 `/introspect` and `/device/code` endpoints (configurable via `web_server.rate_limits.introspect` and `web_server.rate_limits.device_code`) — prevents CPU exhaustion from bcrypt-heavy introspect calls (`router/web.go`, `config/config.go`).

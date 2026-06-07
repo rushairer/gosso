@@ -78,7 +78,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	}
 
 	// 2. Check account status
-	if account.Status != accountDomain.AccountStatusActive {
+	if !account.IsActive() {
 		return nil, ErrInvalidCredentials
 	}
 
@@ -177,7 +177,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	// 3. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrAccountNotFound, err)
+		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, err)
 	}
 	if !account.IsActive() {
 		return nil, ErrInvalidCredentials
@@ -254,7 +254,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	// 3. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrAccountNotFound, err)
+		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, err)
 	}
 	if !account.IsActive() {
 		return nil, ErrInvalidCredentials
@@ -304,7 +304,7 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 	}
 
 	// 2. Check account status
-	if account.Status != accountDomain.AccountStatusActive {
+	if !account.IsActive() {
 		return nil, ErrInvalidCredentials
 	}
 
@@ -450,17 +450,19 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 		if verified != "1" {
 			return ErrPasskeyNotVerified
 		}
-	case "totp", "":
+	case "totp":
 		// TOTP / backup code
 		valid, verr := s.mfaSvc.VerifyTOTP(ctx, accountID, mfaCode)
 		if verr != nil {
-			s.logger.Error("TOTP verification error, trying backup code", zap.Error(verr), zap.String("account_id", accountID))
-		} else if valid {
+			return fmt.Errorf("totp verification error: %w", verr)
+		}
+		if valid {
 			return nil
 		}
+		// TOTP code was invalid — try backup codes
 		valid, berr := s.mfaSvc.VerifyBackupCode(ctx, accountID, mfaCode)
 		if berr != nil {
-			s.logger.Warn("Backup code verification error", zap.Error(berr), zap.String("account_id", accountID))
+			return fmt.Errorf("backup code verification error: %w", berr)
 		}
 		if !valid {
 			return ErrInvalidMFACode
@@ -472,16 +474,14 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 	return nil
 }
 
-// clearLoginRateLimits removes per-user and per-IP rate limit counters after successful login.
+// clearLoginRateLimits removes per-user rate limit counters after successful login.
+// Per-IP limits are intentionally preserved to prevent abuse from distributed attacks
+// that use many accounts from the same IP.
 func (s *AuthService) clearLoginRateLimits(ctx context.Context, ip string, username *string) {
 	if username != nil {
 		key := fmt.Sprintf("login_attempts:%s:%s", ip, strings.ToLower(*username))
 		if err := s.redis.Del(ctx, key); err != nil {
 			s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key", key), zap.Error(err))
 		}
-	}
-	ipKey := fmt.Sprintf("login_attempts_ip:%s", ip)
-	if err := s.redis.Del(ctx, ipKey); err != nil {
-		s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key", ipKey), zap.Error(err))
 	}
 }

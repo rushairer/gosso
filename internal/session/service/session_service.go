@@ -415,10 +415,7 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 	// Prevents orphaned tokens that could still be rotated after session deletion.
 	if s.tokenRevoker != nil {
 		if err := s.tokenRevoker.RevokeAllForSession(ctx, sessionID); err != nil {
-			s.logger.Warn("Failed to revoke tokens for session during revocation",
-				zap.String("session_id", sessionID),
-				zap.String("account_id", accountID),
-				zap.Error(err))
+			return fmt.Errorf("revoke tokens for session: %w", err)
 		}
 	} else {
 		return fmt.Errorf("TokenRevoker not configured; cannot revoke tokens on session revocation")

@@ -15,14 +15,14 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	// 1. Validate old refresh token (read-only, no rotation)
 	oldRT, err := s.tokenSvc.ValidateRefreshToken(ctx, refreshToken)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidRefreshToken, err)
+		return nil, fmt.Errorf("%w: %s", ErrInvalidRefreshToken, err)
 	}
 
 	// 2. Validate session BEFORE rotation (prevents orphaned token on failure)
 	sessionID := oldRT.SessionID
 	session, err := s.sessionSvc.ValidateSession(ctx, sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrSessionInvalid, err)
+		return nil, fmt.Errorf("%w: %s", ErrSessionInvalid, err)
 	}
 
 	// 3. Validate account BEFORE rotation
@@ -47,7 +47,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	// 5. Rotate refresh token (old token deleted from Redis)
 	newRefreshToken, err := s.tokenSvc.RotateRefreshToken(ctx, refreshToken)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidRefreshToken, err)
+		return nil, fmt.Errorf("%w: %s", ErrInvalidRefreshToken, err)
 	}
 
 	// 6. Refresh session

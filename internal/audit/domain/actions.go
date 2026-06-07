@@ -10,11 +10,16 @@ const (
 
 	// Account actions
 	ActionAccountRegister = "account.register"
+	ActionAccountUpdate   = "account.update"
 	ActionAccountDelete   = "account.delete"
 	ActionAccountSuspend  = "account.suspend"
 	ActionAccountActivate = "account.activate"
 	ActionPasswordChange  = "account.password.change"
 	ActionPasswordReset   = "account.password.reset"
+
+	// Federated identity actions
+	ActionFederatedIdentityBind   = "account.federated_identity.bind"
+	ActionFederatedIdentityUnbind = "account.federated_identity.unbind"
 
 	// Role actions
 	ActionRoleAssign = "account.role.assign"

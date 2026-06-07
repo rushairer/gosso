@@ -288,9 +288,22 @@ func (s *accountServiceImpl) FindAccountByUsername(ctx context.Context, username
 func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.Account) error {
 	account.UpdatedAt = time.Now()
 
-	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		return s.accountRepo.UpdateAccount(ctx, tx, account)
 	})
+	if err != nil {
+		return err
+	}
+
+	s.auditLog(ctx, auditDomain.NewRecord(
+		auditDomain.ActionAccountUpdate,
+		audit.IPFromContext(ctx),
+		stringPtr(account.ID),
+		utility.MustMarshalJSON(map[string]any{"account_id": account.ID}),
+		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+	))
+
+	return nil
 }
 
 // SoftDeleteAccount soft-deletes an account (cascades to all related data).
@@ -451,13 +464,6 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 
 // BindFederatedIdentity binds a third-party identity.
 func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountID string, provider domain.Provider, providerUserID string, profile map[string]interface{}) error {
-	// 1. Check if already bound
-	existing, err := s.federatedIdentityRepo.FindByProvider(ctx, provider, providerUserID)
-	if err == nil && existing != nil {
-		return errors.New("federated identity already bound")
-	}
-
-	// 2. Create binding
 	now := time.Now()
 	identity := &domain.FederatedIdentity{
 		ID:             uuid.New().String(),
@@ -469,18 +475,49 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 		UpdatedAt:      now,
 	}
 
-	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// Check inside transaction to prevent TOCTOU race condition
+		existing, err := s.federatedIdentityRepo.FindByProvider(ctx, provider, providerUserID)
+		if err == nil && existing != nil {
+			return errors.New("federated identity already bound")
+		}
 		return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
 	})
+	if err != nil {
+		return err
+	}
+
+	s.auditLog(ctx, auditDomain.NewRecord(
+		auditDomain.ActionFederatedIdentityBind,
+		audit.IPFromContext(ctx),
+		stringPtr(accountID),
+		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "provider": string(provider), "provider_user_id": providerUserID}),
+		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+	))
+
+	return nil
 }
 
 // UnbindFederatedIdentity unbinds a third-party identity.
 func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accountID, identityID string) error {
 	now := time.Now()
 
-	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		return s.federatedIdentityRepo.SoftDeleteByID(ctx, tx, accountID, identityID, now)
 	})
+	if err != nil {
+		return err
+	}
+
+	s.auditLog(ctx, auditDomain.NewRecord(
+		auditDomain.ActionFederatedIdentityUnbind,
+		audit.IPFromContext(ctx),
+		stringPtr(accountID),
+		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "identity_id": identityID}),
+		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+	))
+
+	return nil
 }
 
 // AssignRole assigns a role to the account.
