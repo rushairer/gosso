@@ -229,6 +229,11 @@ func (s *TokenService) ValidateRefreshToken(ctx context.Context, token string) (
 		return nil, fmt.Errorf("unmarshal refresh token: %w", err)
 	}
 
+	// Defense-in-depth: explicit expiry check in addition to Redis TTL.
+	if !rt.ExpiresAt.IsZero() && time.Now().After(rt.ExpiresAt) {
+		return nil, fmt.Errorf("refresh token expired")
+	}
+
 	return &rt, nil
 }
 
@@ -389,8 +394,7 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 // RevokeAccessToken blacklists an access token by its JTI so it can no longer be used.
 func (s *TokenService) RevokeAccessToken(ctx context.Context, jti string, expiresAt time.Time) error {
 	if s.blacklist == nil {
-		s.logger.Warn("RevokeAccessToken called but blacklist is nil, token not revoked", zap.String("jti", jti))
-		return nil
+		return ErrBlacklistNotConfigured
 	}
 	return s.blacklist.RevokeToken(ctx, jti, "logout", expiresAt)
 }
@@ -400,8 +404,7 @@ func (s *TokenService) RevokeAccessToken(ctx context.Context, jti string, expire
 // The revocation record automatically expires after accessExpiry duration.
 func (s *TokenService) RevokeAccountTokens(ctx context.Context, accountID string) error {
 	if s.blacklist == nil {
-		s.logger.Warn("RevokeAccountTokens called but blacklist is nil", zap.String("account_id", accountID))
-		return nil
+		return ErrBlacklistNotConfigured
 	}
 
 	// Double the TTL to ensure the revocation key outlives even the latest-issued token.

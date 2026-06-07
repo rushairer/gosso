@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	authMiddleware "github.com/rushairer/gosso/internal/auth/middleware"
+	"github.com/rushairer/gosso/internal/cache"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
@@ -68,6 +69,7 @@ type OAuth2Controller struct {
 	clientAuth       oauth2Service.ClientAuthenticator
 	accountValidator AccountValidator
 	sessionValidator sessionDomain.SessionValidator
+	redis            *cache.RedisClient
 	issuer           string
 	consentTmpl      *template.Template
 	deviceTmpl       *template.Template
@@ -84,6 +86,7 @@ func NewOAuth2Controller(
 	deviceCodeSvc DeviceCodeManager,
 	accountValidator AccountValidator,
 	sessionValidator sessionDomain.SessionValidator,
+	redis *cache.RedisClient,
 	issuer string,
 	logger *zap.Logger,
 ) (*OAuth2Controller, error) {
@@ -105,6 +108,7 @@ func NewOAuth2Controller(
 		clientAuth:       oauth2Service.ClientAuthenticator{},
 		accountValidator: accountValidator,
 		sessionValidator: sessionValidator,
+		redis:            redis,
 		issuer:           issuer,
 		consentTmpl:      consentTmpl,
 		deviceTmpl:       deviceTmpl,
@@ -121,11 +125,11 @@ func NewOAuth2Controller(
 func (c *OAuth2Controller) authenticateRequest(ctx *gin.Context) (string, bool) {
 	claims, err := authMiddleware.ValidateBearerToken(ctx, c.tokenSvc, c.sessionValidator)
 	if err != nil {
-		status := http.StatusUnauthorized
 		if errors.Is(err, authMiddleware.ErrTokenScopeNotAllowed) {
-			status = http.StatusForbidden
+			ctx.JSON(http.StatusForbidden, gin.H{"error": "forbidden", "error_description": "insufficient scope"})
+		} else {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "error_description": "invalid or expired token"})
 		}
-		ctx.JSON(status, gin.H{"error": err.Error()})
 		return "", false
 	}
 	return claims.AccountID, true
@@ -196,6 +200,9 @@ func intersectScopes(requested, allowed []string) []string {
 
 // csrfTokenFromCookie reads the CSRF token from the request cookie for server-side template injection.
 func csrfTokenFromCookie(ctx *gin.Context) string {
-	cookie, _ := ctx.Cookie("csrf_token")
+	cookie, _ := ctx.Cookie("__Host-csrf_token")
+	if cookie == "" {
+		cookie, _ = ctx.Cookie("csrf_token")
+	}
 	return cookie
 }

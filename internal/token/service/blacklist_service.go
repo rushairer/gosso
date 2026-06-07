@@ -54,8 +54,9 @@ func (s *BlacklistService) RevokeToken(ctx context.Context, jti string, reason s
 		return fmt.Errorf("marshal token blacklist: %w", err)
 	}
 
-	// Calculate TTL: time from now until token expiration
-	ttl := time.Until(expiresAt)
+	// Calculate TTL: time from now until token expiration, with a 5-minute buffer
+	// to account for clock skew between Redis and JWT validation.
+	ttl := time.Until(expiresAt) + 5*time.Minute
 	if ttl <= 0 {
 		// Token has already expired, no need to add to blacklist
 		s.logger.Warn("Token already expired, skip blacklist", zap.String("jti", jti))

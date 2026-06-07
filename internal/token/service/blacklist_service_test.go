@@ -157,8 +157,8 @@ func TestBlacklistService_AutoExpiration(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, revoked)
 
-	// Fast-forward miniredis past expiration
-	mr.FastForward(3 * time.Second)
+	// Fast-forward miniredis past expiration (2s token TTL + 5min buffer)
+	mr.FastForward(5*time.Minute + 3*time.Second)
 
 	// After expiration, it should be automatically removed from the blacklist
 	revoked, err = service.IsTokenRevoked(ctx, jti)

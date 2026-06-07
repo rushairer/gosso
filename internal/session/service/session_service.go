@@ -26,6 +26,8 @@ const (
 	DefaultSessionTTL = 24 * time.Hour
 	// DefaultMaxSessions is the default maximum concurrent sessions per account.
 	DefaultMaxSessions = 10
+	// DefaultMaxSessionAge is the default absolute maximum session lifetime (7 days).
+	DefaultMaxSessionAge = 7 * 24 * time.Hour
 )
 
 // revokeAccountSessionsScript atomically reads all session IDs from the
@@ -47,11 +49,12 @@ type TokenRevoker interface {
 
 // SessionService manages user sessions backed by Redis.
 type SessionService struct {
-	redis       *cache.RedisClient
-	logger      *zap.Logger
-	sessionTTL  time.Duration
-	maxSessions int
-	tokenRevoker TokenRevoker
+	redis         *cache.RedisClient
+	logger        *zap.Logger
+	sessionTTL    time.Duration
+	maxSessionAge time.Duration
+	maxSessions   int
+	tokenRevoker  TokenRevoker
 }
 
 // NewSessionService creates a new session service instance.
@@ -59,10 +62,11 @@ func NewSessionService(redis *cache.RedisClient, logger *zap.Logger) *SessionSer
 	logger = utility.EnsureLogger(logger)
 
 	return &SessionService{
-		redis:       redis,
-		logger:      logger,
-		sessionTTL:  DefaultSessionTTL,
-		maxSessions: DefaultMaxSessions,
+		redis:         redis,
+		logger:        logger,
+		sessionTTL:    DefaultSessionTTL,
+		maxSessionAge: DefaultMaxSessionAge,
+		maxSessions:   DefaultMaxSessions,
 	}
 }
 
@@ -88,6 +92,15 @@ func (s *SessionService) SetSessionTTL(ttl time.Duration) {
 		return
 	}
 	s.sessionTTL = ttl
+}
+
+// SetMaxSessionAge sets the absolute maximum session lifetime regardless of activity.
+// Must be called during initialization; not safe for concurrent use.
+func (s *SessionService) SetMaxSessionAge(age time.Duration) {
+	if age <= 0 {
+		return
+	}
+	s.maxSessionAge = age
 }
 
 // CreateSession creates a new session.
@@ -232,6 +245,12 @@ func (s *SessionService) RefreshSession(ctx context.Context, sessionID string) e
 		return err
 	}
 
+	// Reject refresh if session has exceeded absolute max lifetime
+	if s.maxSessionAge > 0 && time.Since(session.CreatedAt) > s.maxSessionAge {
+		s.expireSession(ctx, sessionID)
+		return ErrSessionExpired
+	}
+
 	session.UpdateActivity()
 
 	data, err := json.Marshal(session)
@@ -260,15 +279,34 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 		return nil, err
 	}
 
-	// Check if session has expired
+	// Check absolute max session lifetime (prevents indefinite session extension)
+	if s.maxSessionAge > 0 && time.Since(session.CreatedAt) > s.maxSessionAge {
+		s.logger.Warn("Session exceeded max lifetime",
+			zap.String("session_id", sessionID),
+			zap.Duration("max_age", s.maxSessionAge))
+		s.expireSession(ctx, sessionID)
+		return nil, ErrSessionExpired
+	}
+
+	// Check if session has expired due to inactivity
 	if session.IsExpired(s.sessionTTL) {
 		s.logger.Warn("Session expired", zap.String("session_id", sessionID))
-		// Delete the expired session
-		_ = s.DeleteSession(ctx, sessionID)
+		s.expireSession(ctx, sessionID)
 		return nil, ErrSessionExpired
 	}
 
 	return session, nil
+}
+
+// expireSession cascades token revocation and deletes the session.
+func (s *SessionService) expireSession(ctx context.Context, sessionID string) {
+	if s.tokenRevoker != nil {
+		if err := s.tokenRevoker.RevokeAllForSession(ctx, sessionID); err != nil {
+			s.logger.Warn("Failed to revoke tokens for expired session",
+				zap.String("session_id", sessionID), zap.Error(err))
+		}
+	}
+	_ = s.DeleteSession(ctx, sessionID)
 }
 
 // buildSessionKey builds the Redis key for a session.

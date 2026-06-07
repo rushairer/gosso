@@ -223,6 +223,15 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 		}
 	}()
 
+	// 0. Check IP-level rate limit
+	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", ip)
+	ipCount, ipIncrErr := s.redis.CheckAndIncr(ctx, ipAttemptsKey, s.loginMaxAttemptsPerIP, s.loginRateLimitWindow)
+	if ipIncrErr != nil {
+		s.logger.Warn("Failed to check IP login rate limit, proceeding anyway", zap.Error(ipIncrErr))
+	} else if ipCount >= int64(s.loginMaxAttemptsPerIP) {
+		return nil, ErrAccountLocked
+	}
+
 	// 1. Validate MFA token
 	claims, err := s.tokenSvc.ValidateAccessTokenWithContext(ctx, mfaToken)
 	if err != nil {
@@ -296,6 +305,15 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 			)
 		}
 	}()
+
+	// 0. Check IP-level rate limit
+	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", ip)
+	ipCount, ipIncrErr := s.redis.CheckAndIncr(ctx, ipAttemptsKey, s.loginMaxAttemptsPerIP, s.loginRateLimitWindow)
+	if ipIncrErr != nil {
+		s.logger.Warn("Failed to check IP login rate limit, proceeding anyway", zap.Error(ipIncrErr))
+	} else if ipCount >= int64(s.loginMaxAttemptsPerIP) {
+		return nil, ErrAccountLocked
+	}
 
 	// 1. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)

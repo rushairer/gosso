@@ -11,10 +11,10 @@ web_server:
     write_timeout: 30s
     request_timeout: 10s
     rate_limits:
-        login: 5
-        token: 10
+        login: 10
+        token: 30
         passkey: 10
-        api: 60
+        api: 120
         introspect: 20
         device_code: 10
 database:
@@ -46,7 +46,7 @@ auth:
     session_ttl: 24h
     max_sessions: 10
     access_token_expiry: 15m
-    refresh_token_expiry: 720h
+    refresh_token_expiry: 168h
     authorization_code_expiry: 10m
     device_code_expiry: 10m
     device_code_interval: 5s

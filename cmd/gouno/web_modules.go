@@ -80,7 +80,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	accountService.BindOAuth2ClientDeleter(accountMod.Service, &oauth2ClientDeleterAdapter{clientRepo: oauth2Mod.ClientRepo})
 
 	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, !cfg.WebServerConfig.Debug, logger)
-	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &accountValidatorAdapter{accountSvc: accountMod.Service}, authMod.SessionService, cfg.AuthConfig.Issuer, logger)
+	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &accountValidatorAdapter{accountSvc: accountMod.Service}, authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
 	}

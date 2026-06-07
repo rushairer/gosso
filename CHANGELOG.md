@@ -15,9 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `development.yaml` OAuth provider section now includes comments warning that `client_id` and `client_secret` must be set via environment variables.
 - Access log query parameters now sanitize sensitive values (`token`, `code`, `code_verifier`, `client_secret`, `password`, etc.) — replaces raw query string logging with `[REDACTED]` placeholders (`middleware/zaplogger.go`).
 - `Validate()` now rejects the default development database DSN in production — prevents accidental use of `postgres:postgres` credentials (`config/config.go`, `config/config_manager.go`).
-
-### Added
-- Verification code settings (`verify_code_ttl`, `verify_cooldown_ttl`, `verify_code_max_attempts`) and password reset settings (`password_reset_token_ttl`, `password_reset_cooldown_ttl`, `password_reset_max_attempts`) are now configurable via `auth` config section — existing hardcoded values serve as defaults (`config/config.go`, `internal/auth/service/verification_service.go`, `internal/auth/service/password_reset_service.go`, `internal/auth/module.go`).
+- OAuth2 CSRF cookie name mismatch fix — `csrfTokenFromCookie` now reads `__Host-csrf_token` first with fallback to `csrf_token` (`internal/oauth2/controller/oauth2_controller.go`).
+- Passkey login (`LoginByPasskey`, `CompletePasskeyMFALogin`) now enforces IP-level rate limiting (`internal/auth/service/auth_login.go`).
+- PKCE parameters (`code_challenge`, `code_challenge_method`, `nonce`) are now stored server-side in Redis during GET /authorize and validated on POST /authorize to prevent form field tampering (`internal/oauth2/controller/oauth2_authorize.go`).
+- Token revocation (`RevokeAccessToken`, `RevokeAccountTokens`) now returns `ErrBlacklistNotConfigured` error instead of silently succeeding when blacklist service is nil (`internal/token/service/token_service.go`).
+- `authenticateRequest` no longer leaks internal error messages to OAuth2 clients — returns fixed `"unauthorized"` or `"forbidden"` descriptions (`internal/oauth2/controller/oauth2_controller.go`).
+- Blacklist TTL now includes a 5-minute buffer to account for clock skew between Redis and JWT validation (`internal/token/service/blacklist_service.go`).
+- `isPlausibleJWT` now validates that the JWT header segment is valid base64url encoding — prevents trivial CSRF bypass with garbage Bearer tokens (`middleware/csrf.go`).
+- Session expiration now cascades token revocation — expired sessions trigger `RevokeAllForSession` before deletion (`internal/session/service/session_service.go`).
+- Sessions now have an absolute maximum lifetime (default 7 days) in addition to idle timeout — prevents indefinite session extension via activity refresh (`internal/session/service/session_service.go`).
+- Refresh token validation now includes explicit `ExpiresAt` check as defense-in-depth beyond Redis TTL (`internal/token/service/token_service.go`).
+- SocialCallback responses now include `Cache-Control: no-store` and `Pragma: no-cache` headers to prevent token caching by proxies (`internal/auth/controller/auth_controller.go`).
 
 ### Changed
 - `SetMFAChecker` now panics on nil — consistent with `WithSessionRevoker` and `WithOAuth2ClientDeleter` fail-fast pattern; removed redundant nil check in `HandleCallback` (`internal/auth/service/social_login_service.go`).
@@ -26,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Makefile `test-integration` target now includes `./internal/token/service/` and `./internal/account/` packages with `-p 1` flag — consistent with CI pipeline (`Makefile`).
 - `docker-compose.yml` health check endpoint changed from `/health` to `/readiness` — consistent with Dockerfile and verifies DB+Redis connectivity (`docker-compose.yml`).
 - CI pipeline now includes `go mod tidy` verification step — prevents dependency drift (`.github/workflows/ci.yml`).
+- Refresh token expiry reduced from 720h (30 days) to 168h (7 days) in development and production configs (`config/development.yaml`, `config/production.yaml`).
+- Production rate limits increased: login 5→10, token 10→30, api 60→120 (`config/production.yaml`).
+- `NewOAuth2Controller` now accepts a `*cache.RedisClient` parameter for PKCE consent state storage (`internal/oauth2/controller/oauth2_controller.go`, `cmd/gouno/web_modules.go`).
 
 ### Changed
 - **Security**: Password hashing upgraded from bcrypt to Argon2id with PHC format encoding (`$argon2id$v=19$m=65536,t=1,p=4$...`) — stronger resistance to GPU/ASIC attacks; parameters: 64MB memory, 1 iteration, 4 threads, 16-byte salt, 32-byte key (`internal/account/domain/credential.go`).

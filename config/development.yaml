@@ -43,7 +43,7 @@ log:
 auth:
     issuer: "http://localhost:8080"
     access_token_expiry: 15m
-    refresh_token_expiry: 720h
+    refresh_token_expiry: 168h
     authorization_code_expiry: 10m
     device_code_expiry: 10m
     device_code_interval: 5s

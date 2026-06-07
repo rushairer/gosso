@@ -38,6 +38,7 @@
             <input type="hidden" name="code_challenge" value="{{.CodeChallenge}}">
             <input type="hidden" name="code_challenge_method" value="{{.CodeChallengeMethod}}">
             <input type="hidden" name="nonce" value="{{.Nonce}}">
+            <input type="hidden" name="consent_id" value="{{.ConsentID}}">
             <input type="hidden" name="csrf_token" id="csrf_token" value="{{.CSRFToken}}">
             <div class="actions">
                 <button type="submit" name="approved" value="false" class="btn btn-deny">Deny</button>
@@ -49,7 +50,8 @@
             (function() {
                 var el = document.getElementById('csrf_token');
                 if (!el.value) {
-                    el.value = document.cookie.match(/csrf_token=([^;]+)/)?.[1] || '';
+                    el.value = document.cookie.match(/__Host-csrf_token=([^;]+)/)?.[1]
+                        || document.cookie.match(/csrf_token=([^;]+)/)?.[1] || '';
                 }
             })();
         </script>

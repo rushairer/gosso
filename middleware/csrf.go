@@ -3,6 +3,7 @@ package middleware
 import (
 	"crypto/rand"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -147,8 +148,14 @@ func generateCSRFToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// isPlausibleJWT checks if a token has the basic JWT format (three non-empty dot-separated segments).
+// isPlausibleJWT checks if a token has the basic JWT format (three non-empty dot-separated segments)
+// and validates that the header segment is valid base64url encoding.
 func isPlausibleJWT(token string) bool {
 	parts := strings.Split(token, ".")
-	return len(parts) == 3 && len(parts[0]) > 0 && len(parts[1]) > 0 && len(parts[2]) > 0
+	if len(parts) != 3 || len(parts[0]) == 0 || len(parts[1]) == 0 || len(parts[2]) == 0 {
+		return false
+	}
+	// Validate the header segment is valid base64url encoding
+	_, err := base64.RawURLEncoding.DecodeString(parts[0])
+	return err == nil
 }

@@ -2,14 +2,28 @@ package controller
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/middleware"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 )
+
+const consentStateTTL = 10 * time.Minute
+const consentStateKeyPrefix = "consent_state:"
+
+// consentState stores the PKCE and authorization parameters from the GET /authorize request.
+// It is persisted in Redis to prevent tampering between the consent page render and the POST.
+type consentState struct {
+	CodeChallenge       string `json:"code_challenge"`
+	CodeChallengeMethod string `json:"code_challenge_method"`
+	Nonce               string `json:"nonce"`
+}
 
 // Authorize GET /oauth2/authorize
 func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
@@ -54,6 +68,20 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
+	// Store PKCE + nonce parameters server-side to prevent tampering in the consent form.
+	consentID := uuid.New().String()
+	if c.redis != nil {
+		stateData, _ := json.Marshal(consentState{
+			CodeChallenge:       codeChallenge,
+			CodeChallengeMethod: codeChallengeMethod,
+			Nonce:               nonce,
+		})
+		if err := c.redis.Set(ctx, consentStateKeyPrefix+consentID, string(stateData), consentStateTTL); err != nil {
+			c.logger.Warn("Failed to store consent state, falling back to form-only", zap.Error(err))
+			consentID = ""
+		}
+	}
+
 	existingConsent, consentErr := c.consentSvc.GetConsent(ctx, accountIDStr, clientID)
 	if consentErr != nil {
 		c.logger.Warn("Failed to get consent, showing consent page", zap.Error(consentErr), zap.String("account_id", accountIDStr), zap.String("client_id", clientID))
@@ -71,7 +99,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 				"Scopes": requestedScopes, "Scope": scope, "State": state,
 				"RedirectURI": redirectURI, "CodeChallenge": codeChallenge,
 				"CodeChallengeMethod": codeChallengeMethod, "Nonce": nonce,
-				"CSRFToken": csrfTokenFromCookie(ctx),
+				"CSRFToken": csrfTokenFromCookie(ctx), "ConsentID": consentID,
 			}); err != nil {
 				c.logger.Error("Failed to render consent template", zap.Error(err))
 				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -101,6 +129,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		"CodeChallengeMethod": codeChallengeMethod,
 		"Nonce":               nonce,
 		"CSRFToken":           csrfTokenFromCookie(ctx),
+		"ConsentID":           consentID,
 	}); err != nil {
 		c.logger.Error("Failed to render consent template", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -119,6 +148,7 @@ type ConsentRequest struct {
 	CodeChallenge       string `form:"code_challenge"`
 	CodeChallengeMethod string `form:"code_challenge_method"`
 	Nonce               string `form:"nonce"`
+	ConsentID           string `form:"consent_id"`
 }
 
 // SubmitConsent POST /oauth2/authorize
@@ -141,6 +171,30 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	if !req.Approved {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "consent_denied"})
 		return
+	}
+
+	// Validate PKCE parameters against server-stored consent state to prevent tampering.
+	if c.redis != nil && req.ConsentID != "" {
+		stateKey := consentStateKeyPrefix + req.ConsentID
+		stateData, err := c.redis.Get(ctx, stateKey)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid or expired consent session"})
+			return
+		}
+		// Delete immediately to prevent replay
+		_ = c.redis.Del(ctx, stateKey)
+
+		var stored consentState
+		if err := json.Unmarshal([]byte(stateData), &stored); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid consent session data"})
+			return
+		}
+		if req.CodeChallenge != stored.CodeChallenge ||
+			req.CodeChallengeMethod != stored.CodeChallengeMethod ||
+			req.Nonce != stored.Nonce {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "PKCE parameters mismatch"})
+			return
+		}
 	}
 
 	// Validate client exists

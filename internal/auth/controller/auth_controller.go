@@ -533,6 +533,10 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 		return
 	}
 
+	// Prevent caching of responses containing tokens
+	ctx.Header("Cache-Control", "no-store")
+	ctx.Header("Pragma", "no-cache")
+
 	if result.RequiresMFA {
 		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
 			"requires_mfa":   true,
