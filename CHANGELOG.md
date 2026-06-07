@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Fix `ConsentService` silently succeeding when `consentRepo` is nil — constructor now panics if repository is not provided (`consent_service.go`).
 - Fix `ConsentRepository` not accepting `*sql.Tx` — `Upsert` and `Delete` now use transactions consistent with all other repositories (`consent_repository.go`, `consent_repository_impl.go`).
 - Fix OIDC logout `validateBearerToken` not checking token scope or session validity — now reuses shared `ValidateBearerToken` with session validation (`oidc_controller.go`).
+- Fix `clearLoginRateLimits` using `:` separator while `login_attempts` keys use `/` — rate limit counter was never cleared after successful login (`auth_login.go`).
 
 ### Added
 - Audit logging for `UpdateAccount`, `BindFederatedIdentity`, and `UnbindFederatedIdentity` (`account_service.go`).
@@ -46,6 +47,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Extract shared `ValidateBearerToken` function from `JWTAuthMiddleware` and `OAuth2Controller.authenticateRequest` to eliminate JWT validation duplication (`auth_middleware.go`, `oauth2_controller.go`).
 - Add dedicated 30-second SMTP timeout to `EmailService.send()` to bound email send duration independently of context (`email_service.go`).
 - Unify AccountID extraction from gin context — added shared `middleware.GetAccountID` helper, replaced all inline extraction patterns across controllers (`middleware/account.go`, `client_controller.go`, `oauth2_authorize.go`, `oauth2_revoke.go`, `passkey_controller.go`, `admin_controller.go`).
+- Consolidate `ContextKeyAccountID` and `ContextKeyClaims` constants into top-level `middleware` package — eliminates duplicate definitions in `internal/auth/middleware` (`middleware/requestid.go`, `internal/auth/middleware/auth_middleware.go`).
+- Replace hardcoded `"jwt_claims"` string literals with `middleware.ContextKeyClaims` constant (`auth_controller.go`, `oidc_controller.go`).
+- Increase minimum password length from 8 to 12 characters (`utility/password.go`).
+- Reduce production session TTL from 720h (30 days) to 24h (`config/production.yaml`).
 
 ### Added
 - `MaxBodySizeMiddleware` limits request body size (default 10MB, configurable via `web_server.max_body_size`) — prevents memory exhaustion from oversized requests (`middleware/middleware.go`, `config/config.go`).

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
+	"github.com/rushairer/gosso/middleware"
 
 	"github.com/rushairer/gosso/internal/audit"
 	authService "github.com/rushairer/gosso/internal/auth/service"
@@ -20,13 +21,6 @@ import (
 type TokenValidator interface {
 	ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*tokenDomain.AccessTokenClaims, error)
 }
-
-const (
-	// ContextKeyAccountID stores the account ID in gin.Context
-	ContextKeyAccountID = "account_id"
-	// ContextKeyClaims stores the JWT claims in gin.Context
-	ContextKeyClaims = "jwt_claims"
-)
 
 // ValidateBearerToken extracts and validates the Bearer token from the request.
 // Returns the claims on success, or nil with an error on failure.
@@ -75,8 +69,8 @@ func JWTAuthMiddleware(tokenSvc *tokenService.TokenService, sessionValidator ses
 			return
 		}
 
-		ctx.Set(ContextKeyAccountID, claims.AccountID)
-		ctx.Set(ContextKeyClaims, claims)
+		ctx.Set(middleware.ContextKeyAccountID, claims.AccountID)
+		ctx.Set(middleware.ContextKeyClaims, claims)
 		ctx.Next()
 	}
 }
@@ -96,7 +90,7 @@ func extractBearerToken(ctx *gin.Context) string {
 // AdminRequiredMiddleware checks for admin role (must be used after JWTAuthMiddleware)
 func AdminRequiredMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		claimsRaw, exists := ctx.Get(ContextKeyClaims)
+		claimsRaw, exists := ctx.Get(middleware.ContextKeyClaims)
 		if !exists {
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "missing authorization"))
 			return

@@ -479,7 +479,7 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 // that use many accounts from the same IP.
 func (s *AuthService) clearLoginRateLimits(ctx context.Context, ip string, username *string) {
 	if username != nil {
-		key := fmt.Sprintf("login_attempts:%s:%s", ip, strings.ToLower(*username))
+		key := fmt.Sprintf("login_attempts/%s/%s", ip, strings.ToLower(*username))
 		if err := s.redis.Del(ctx, key); err != nil {
 			s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key", key), zap.Error(err))
 		}

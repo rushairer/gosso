@@ -9,7 +9,8 @@ import (
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/internal/auth/middleware"
+	"github.com/rushairer/gosso/middleware"
+	authMiddleware "github.com/rushairer/gosso/internal/auth/middleware"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	oauth2Repo "github.com/rushairer/gosso/internal/oauth2/repository"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
@@ -169,7 +170,7 @@ func (c *OIDCController) validateBearerToken(ctx *gin.Context) *tokenDomain.Acce
 	if ctx.GetHeader("Authorization") == "" {
 		return nil
 	}
-	claims, err := middleware.ValidateBearerToken(ctx, c.tokenSvc, c.sessionValidator)
+	claims, err := authMiddleware.ValidateBearerToken(ctx, c.tokenSvc, c.sessionValidator)
 	if err != nil {
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid session"))
 		ctx.Abort()

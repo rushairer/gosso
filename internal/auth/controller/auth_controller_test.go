@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/rushairer/gosso/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -151,7 +152,7 @@ func setupAuthControllerWithClaims(authSvc *mockAuthOrchestrator, tokenMgr *mock
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	engine.Use(func(ctx *gin.Context) {
-		ctx.Set("jwt_claims", claims)
+		ctx.Set(middleware.ContextKeyClaims, claims)
 		ctx.Next()
 	})
 

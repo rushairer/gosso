@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	gm "github.com/rushairer/gosso/middleware"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
@@ -83,7 +84,7 @@ func TestAdminRequired_HasAdminRole(t *testing.T) {
 	// Pre-set claims in context via middleware
 	engine2 := setupGin()
 	engine2.GET("/admin", func(ctx *gin.Context) {
-		ctx.Set(ContextKeyClaims, &tokenDomain.AccessTokenClaims{
+		ctx.Set(gm.ContextKeyClaims, &tokenDomain.AccessTokenClaims{
 			Roles: []string{"admin", "user"},
 		})
 		ctx.Next()
@@ -101,7 +102,7 @@ func TestAdminRequired_HasAdminRole(t *testing.T) {
 func TestAdminRequired_NonAdminRole(t *testing.T) {
 	engine := setupGin()
 	engine.GET("/admin", func(ctx *gin.Context) {
-		ctx.Set(ContextKeyClaims, &tokenDomain.AccessTokenClaims{
+		ctx.Set(gm.ContextKeyClaims, &tokenDomain.AccessTokenClaims{
 			Roles: []string{"user", "viewer"},
 		})
 		ctx.Next()
@@ -132,7 +133,7 @@ func TestAdminRequired_NoClaims(t *testing.T) {
 func TestAdminRequired_EmptyRoles(t *testing.T) {
 	engine := setupGin()
 	engine.GET("/admin", func(ctx *gin.Context) {
-		ctx.Set(ContextKeyClaims, &tokenDomain.AccessTokenClaims{
+		ctx.Set(gm.ContextKeyClaims, &tokenDomain.AccessTokenClaims{
 			Roles: []string{},
 		})
 		ctx.Next()

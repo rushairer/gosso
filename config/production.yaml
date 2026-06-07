@@ -43,7 +43,7 @@ log:
     level: 0 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
 auth:
     issuer: "${GOUNO_AUTH_ISSUER}"
-    session_ttl: 720h
+    session_ttl: 24h
     max_sessions: 10
     access_token_expiry: 15m
     refresh_token_expiry: 720h

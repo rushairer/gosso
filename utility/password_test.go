@@ -7,16 +7,18 @@ func TestValidatePasswordStrength(t *testing.T) {
 		name    string
 		wantErr bool
 	}{
-		{"ValidP@ss1", false},
-		{"Short1A", true},            // too short
-		{"alllowercase1A", false},    // valid: has upper 'A', lower, digit '1', 15 chars
-		{"ALLUPPERCASE1A", true},     // no lowercase
-		{"NoDigitHereAa", true},      // no digit
-		{"12345678Aa", false},        // valid
-		{"", true},                   // empty
-		{"Ab1", true},                // too short
-		{"Abcdefg1", false},          // valid: upper+lower+digit, 8 chars
-		{"!@#$%^&*Aa1", false},       // special chars ok
+		{"ValidP@ssw0rd!", false},
+		{"Short1A", true},               // too short
+		{"alllowercase1A", false},       // valid: has upper 'A', lower, digit '1', 15 chars
+		{"ALLUPPERCASE1A", true},        // no lowercase
+		{"NoDigitHereAa", true},         // no digit
+		{"1234567890Aa", false},         // valid: 12 chars
+		{"", true},                      // empty
+		{"Ab1", true},                   // too short
+		{"Abcdefghij1", true},           // 11 chars, below minimum
+		{"Abcdefghij1K", false},         // valid: upper+lower+digit, 12 chars
+		{"!@#$%^&*Aa1x", false},         // special chars ok, 12 chars
+		{"Short1Ab", true},              // 8 chars, below new minimum
 	}
 
 	for _, tt := range tests {

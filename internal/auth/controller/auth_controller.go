@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
+	"github.com/rushairer/gosso/middleware"
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
@@ -47,7 +48,7 @@ type AuthController struct {
 
 // getClaimsFromContext extracts and validates JWT claims from gin.Context
 func getClaimsFromContext(ctx *gin.Context) (*tokenDomain.AccessTokenClaims, bool) {
-	jwtClaims, exists := ctx.Get("jwt_claims")
+	jwtClaims, exists := ctx.Get(middleware.ContextKeyClaims)
 	if !exists {
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
 		return nil, false
