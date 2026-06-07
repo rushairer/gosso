@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- Removed hardcoded database password from `config/test.yaml` — now references `GOUNO_DATABASE_DRIVERS_POSTGRES_DSN` environment variable instead of plaintext `gosso123`.
+- Removed hardcoded password placeholder from `config/redis.conf` — password is now set via `--requirepass` at startup through `docker-compose.yml`.
+- `ForgotPassword` log now masks email address using `utility.MaskEmail` instead of logging raw PII (`internal/auth/controller/auth_controller.go`).
+- `docker-compose.test.yml` PostgreSQL password now requires `POSTGRES_PASSWORD` environment variable — no longer falls back to hardcoded `gosso123`.
+- `development.yaml` OAuth provider section now includes comments warning that `client_id` and `client_secret` must be set via environment variables.
+
+### Added
+- Verification code settings (`verify_code_ttl`, `verify_cooldown_ttl`, `verify_code_max_attempts`) and password reset settings (`password_reset_token_ttl`, `password_reset_cooldown_ttl`, `password_reset_max_attempts`) are now configurable via `auth` config section — existing hardcoded values serve as defaults (`config/config.go`, `internal/auth/service/verification_service.go`, `internal/auth/service/password_reset_service.go`, `internal/auth/module.go`).
+
+### Changed
+- `late_bind.go` type assertions now use comma-ok pattern with explicit panic messages — prevents confusing nil pointer dereference on type mismatch (`internal/account/service/late_bind.go`).
+- Makefile binary name changed from `gouno` to `gosso` — consistent with Dockerfile and CI build (`Makefile`).
+- Makefile `test-integration` target now includes `./internal/token/service/` and `./internal/account/` packages with `-p 1` flag — consistent with CI pipeline (`Makefile`).
+- `docker-compose.yml` health check endpoint changed from `/health` to `/readiness` — consistent with Dockerfile and verifies DB+Redis connectivity (`docker-compose.yml`).
+- CI pipeline now includes `go mod tidy` verification step — prevents dependency drift (`.github/workflows/ci.yml`).
+
 ### Changed
 - **Security**: Password hashing upgraded from bcrypt to Argon2id with PHC format encoding (`$argon2id$v=19$m=65536,t=1,p=4$...`) — stronger resistance to GPU/ASIC attacks; parameters: 64MB memory, 1 iteration, 4 threads, 16-byte salt, 32-byte key (`internal/account/domain/credential.go`).
 - **Security**: Error messages in `SendVerification` and `ConfirmVerification` sanitized — `"identifier not associated with this account"` changed to `"invalid request"` and `"credential not found"` changed to `"invalid verification code"` to prevent account correlation and credential enumeration attacks (`internal/auth/controller/auth_controller.go`).

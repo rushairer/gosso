@@ -18,7 +18,7 @@ import (
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
-	"github.com/rushairer/gosso/internal/utility"
+	utility "github.com/rushairer/gosso/internal/utility"
 )
 
 // authServiceDeps defines the auth service methods used by AuthController.
@@ -663,7 +663,7 @@ func (c *AuthController) ForgotPassword(ctx *gin.Context) {
 	}
 
 	if err := c.passwordResetSvc.RequestReset(ctx, req.Email); err != nil {
-		c.logger.Error("Password reset request failed", zap.String("email", req.Email), zap.Error(err))
+		c.logger.Error("Password reset request failed", zap.String("email", utility.MaskEmail(req.Email)), zap.Error(err))
 	}
 
 	// Always return 200 to prevent email enumeration

@@ -69,11 +69,14 @@ type SMSSender interface {
 
 // VerificationService verification code management service
 type VerificationService struct {
-	redis        *cache.RedisClient
-	emailSvc     EmailSender
-	smsSvc       SMSSender
+	redis          *cache.RedisClient
+	emailSvc       EmailSender
+	smsSvc         SMSSender
 	credentialRepo accountRepo.CredentialRepository
-	logger       *zap.Logger
+	logger         *zap.Logger
+	codeTTL        time.Duration
+	cooldownTTL    time.Duration
+	maxAttempts    int
 }
 
 // NewVerificationService creates a new verification service instance
@@ -91,6 +94,30 @@ func NewVerificationService(
 		smsSvc:         smsSvc,
 		credentialRepo: credentialRepo,
 		logger:         logger,
+		codeTTL:        VerifyCodeTTL,
+		cooldownTTL:    VerifyCooldownTTL,
+		maxAttempts:    VerifyCodeAttempts,
+	}
+}
+
+// SetCodeTTL overrides the default verification code TTL.
+func (s *VerificationService) SetCodeTTL(d time.Duration) {
+	if d > 0 {
+		s.codeTTL = d
+	}
+}
+
+// SetCooldownTTL overrides the default verification cooldown TTL.
+func (s *VerificationService) SetCooldownTTL(d time.Duration) {
+	if d > 0 {
+		s.cooldownTTL = d
+	}
+}
+
+// SetMaxAttempts overrides the default verification max attempts.
+func (s *VerificationService) SetMaxAttempts(n int) {
+	if n > 0 {
+		s.maxAttempts = n
 	}
 }
 
@@ -147,12 +174,12 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 	}
 
 	codeKey := s.buildCodeKey(credType, identifier)
-	if err := s.redis.Set(ctx, codeKey, jsonData, VerifyCodeTTL); err != nil {
+	if err := s.redis.Set(ctx, codeKey, jsonData, s.codeTTL); err != nil {
 		return fmt.Errorf("store code: %w", err)
 	}
 
 	// Set cooldown (fail-open: if Redis is down, we lose cooldown but can still verify)
-	if err := s.redis.Set(ctx, cooldownKey, []byte("1"), VerifyCooldownTTL); err != nil {
+	if err := s.redis.Set(ctx, cooldownKey, []byte("1"), s.cooldownTTL); err != nil {
 		s.logger.Warn("Failed to set cooldown", zap.Error(err))
 	}
 
@@ -169,7 +196,7 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 
 	// Atomically verify code and increment attempts
 	resultJSON, err := s.redis.RunScript(ctx, verifyAndIncrementScript, []string{codeKey},
-		code, VerifyCodeAttempts, int(VerifyCodeTTL.Seconds())).Result()
+		code, s.maxAttempts, int(s.codeTTL.Seconds())).Result()
 	if err != nil {
 		return "", fmt.Errorf("verify code: %w", err)
 	}

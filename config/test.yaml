@@ -1,6 +1,7 @@
 # Test configuration
-# Sensitive values can be overridden with GOUNO_ prefixed env vars.
-# Example: GOUNO_AUTH_ISSUER=http://localhost:8080 GOUNO_DATABASE_DRIVERS_POSTGRES_DSN=host=...
+# Sensitive values MUST be overridden with GOUNO_ prefixed env vars.
+# Example:
+#   GOUNO_DATABASE_DRIVERS_POSTGRES_DSN="host=127.0.0.1 user=gosso password=<password> dbname=gosso_test port=5434 sslmode=disable TimeZone=Asia/Shanghai"
 web_server:
     address: 0.0.0.0
     port: 8080
@@ -15,7 +16,7 @@ database:
         postgres:
             name: postgres
             driver: pgx
-            dsn: host=127.0.0.1 user=gosso password=gosso123 dbname=gosso_test port=5434 sslmode=disable TimeZone=Asia/Shanghai
+            dsn: ${GOUNO_DATABASE_DRIVERS_POSTGRES_DSN}
             log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
 redis:
     dsn: redis://127.0.0.1:6381/0

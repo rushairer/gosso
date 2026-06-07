@@ -75,6 +75,9 @@ cors:
     allow_credentials: true
     max_age: 86400
 oauth_providers:
+    # IMPORTANT: Set client_id and client_secret via environment variables.
+    # Example: GOUNO_OAUTH_PROVIDERS_GOOGLE_CLIENT_ID=xxx
+    #          GOUNO_OAUTH_PROVIDERS_GOOGLE_CLIENT_SECRET=xxx
     google:
         client_id: ""
         client_secret: ""

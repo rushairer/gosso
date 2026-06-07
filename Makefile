@@ -1,5 +1,5 @@
 DEFAULT:=./cmd
-OUTPUT:=./bin/gouno
+OUTPUT:=./bin/gosso
 default: build
 
 build:
@@ -40,7 +40,7 @@ test-ui:
 test-integration:
 	@echo "🧪 Running integration tests..."
 	@echo "📋 Ensure docker-compose.test.yml is running (make docker-test-up)"
-	go test -tags=integration -v -count=1 -timeout=120s ./internal/auth/service/ ./internal/session/service/ ./middleware/
+	go test -p 1 -tags=integration -v -count=1 -timeout=120s ./internal/auth/service/ ./internal/session/service/ ./internal/token/service/ ./internal/account/ ./middleware/
 
 docker-dev-up:
 	@echo "🚀 启动开发环境..."

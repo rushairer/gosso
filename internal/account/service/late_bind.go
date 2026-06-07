@@ -11,11 +11,19 @@ package service
 // BindSessionRevoker sets the session revoker on an AccountService after construction.
 // Panics if svc is not an *accountServiceImpl (should never happen in production).
 func BindSessionRevoker(svc AccountService, revoker SessionRevoker) {
-	svc.(*accountServiceImpl).setSessionRevoker(revoker)
+	impl, ok := svc.(*accountServiceImpl)
+	if !ok {
+		panic("BindSessionRevoker: svc is not *accountServiceImpl")
+	}
+	impl.setSessionRevoker(revoker)
 }
 
 // BindOAuth2ClientDeleter sets the OAuth2 client deleter on an AccountService after construction.
 // Panics if svc is not an *accountServiceImpl (should never happen in production).
 func BindOAuth2ClientDeleter(svc AccountService, deleter OAuth2ClientDeleter) {
-	svc.(*accountServiceImpl).setOAuth2ClientDeleter(deleter)
+	impl, ok := svc.(*accountServiceImpl)
+	if !ok {
+		panic("BindOAuth2ClientDeleter: svc is not *accountServiceImpl")
+	}
+	impl.setOAuth2ClientDeleter(deleter)
 }

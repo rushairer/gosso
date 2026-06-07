@@ -112,10 +112,28 @@ func InitializeAuthModule(
 	emailSvc := notificationService.NewEmailService(smtpConfig, logger)
 	smsSvc := notificationService.NewStubSMSService(logger)
 	verificationSvc := service.NewVerificationService(redis, emailSvc, smsSvc, credentialRepo, logger)
+	if authConfig.VerifyCodeTTL > 0 {
+		verificationSvc.SetCodeTTL(authConfig.VerifyCodeTTL)
+	}
+	if authConfig.VerifyCooldownTTL > 0 {
+		verificationSvc.SetCooldownTTL(authConfig.VerifyCooldownTTL)
+	}
+	if authConfig.VerifyCodeMaxAttempts > 0 {
+		verificationSvc.SetMaxAttempts(authConfig.VerifyCodeMaxAttempts)
+	}
 
 	passwordResetSvc := service.NewPasswordResetService(redis, credentialRepo, emailSvc, sessionSvc, accountSvc, db, baseURL, logger)
 	if authConfig.PasswordResetWaitTimeout > 0 {
 		passwordResetSvc.SetWaitTimeout(authConfig.PasswordResetWaitTimeout)
+	}
+	if authConfig.PasswordResetTokenTTL > 0 {
+		passwordResetSvc.SetTokenTTL(authConfig.PasswordResetTokenTTL)
+	}
+	if authConfig.PasswordResetCooldownTTL > 0 {
+		passwordResetSvc.SetCooldownTTL(authConfig.PasswordResetCooldownTTL)
+	}
+	if authConfig.PasswordResetMaxAttempts > 0 {
+		passwordResetSvc.SetMaxAttempts(authConfig.PasswordResetMaxAttempts)
 	}
 
 	return &AuthModule{

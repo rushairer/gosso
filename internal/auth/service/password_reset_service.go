@@ -79,6 +79,9 @@ type PasswordResetService struct {
 	wg             sync.WaitGroup
 	revokeSem      chan struct{} // limits concurrent session-revoke goroutines
 	waitTimeout    time.Duration // timeout for Wait() during graceful shutdown
+	tokenTTL       time.Duration
+	cooldownTTL    time.Duration
+	maxAttempts    int
 }
 
 // NewPasswordResetService creates a new password reset service instance
@@ -104,6 +107,9 @@ func NewPasswordResetService(
 		logger:         logger,
 		revokeSem:      make(chan struct{}, 10),
 		waitTimeout:    60 * time.Second,
+		tokenTTL:       PasswordResetTokenTTL,
+		cooldownTTL:    PasswordResetCooldownTTL,
+		maxAttempts:    PasswordResetMaxAttempts,
 	}
 }
 
@@ -111,6 +117,27 @@ func NewPasswordResetService(
 func (s *PasswordResetService) SetWaitTimeout(d time.Duration) {
 	if d > 0 {
 		s.waitTimeout = d
+	}
+}
+
+// SetTokenTTL overrides the default password reset token TTL.
+func (s *PasswordResetService) SetTokenTTL(d time.Duration) {
+	if d > 0 {
+		s.tokenTTL = d
+	}
+}
+
+// SetCooldownTTL overrides the default password reset cooldown TTL.
+func (s *PasswordResetService) SetCooldownTTL(d time.Duration) {
+	if d > 0 {
+		s.cooldownTTL = d
+	}
+}
+
+// SetMaxAttempts overrides the default password reset max attempts.
+func (s *PasswordResetService) SetMaxAttempts(n int) {
+	if n > 0 {
+		s.maxAttempts = n
 	}
 }
 
@@ -163,12 +190,12 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 	}
 
 	tokenKey := s.buildTokenKey(tokenHash)
-	if err := s.redis.Set(ctx, tokenKey, jsonData, PasswordResetTokenTTL); err != nil {
+	if err := s.redis.Set(ctx, tokenKey, jsonData, s.tokenTTL); err != nil {
 		return fmt.Errorf("store reset token: %w", err)
 	}
 
 	// Set cooldown (fail-open: if Redis is down, we lose cooldown but can still reset)
-	if err := s.redis.Set(ctx, cooldownKey, []byte("1"), PasswordResetCooldownTTL); err != nil {
+	if err := s.redis.Set(ctx, cooldownKey, []byte("1"), s.cooldownTTL); err != nil {
 		s.logger.Warn("Failed to set reset cooldown", zap.Error(err))
 	}
 
@@ -202,7 +229,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 
 	// Atomically check attempts, increment counter, and get data
 	result, err := s.redis.RunScript(ctx, checkAndIncrementAttemptsScript, []string{tokenKey},
-		PasswordResetMaxAttempts, int(PasswordResetTokenTTL.Seconds())).Result()
+		s.maxAttempts, int(s.tokenTTL.Seconds())).Result()
 	if err == redis.Nil || result == nil {
 		return errors.New("invalid or expired reset token")
 	}
