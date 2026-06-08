@@ -146,11 +146,11 @@ func (m *mockTokenManager) AccessExpiry() time.Duration {
 // ──────────────────────────────────────────────
 
 type mockCredentialRepoForController struct {
-	findByAccountAndTypeResults map[accountDomain.CredentialType][]*accountDomain.Credential
-	findByAccountAndTypeErr     error
-	findByTypeAndIdentifierFn   func(ctx context.Context, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error)
-	createCredentialsErr        error
-	softDeleteCredentialErr     error
+	findByAccountAndTypeResults    map[accountDomain.CredentialType][]*accountDomain.Credential
+	findByAccountAndTypeErr        error
+	findByTypeAndIdentifierFn      func(ctx context.Context, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error)
+	createCredentialsErr           error
+	softDeleteCredentialErr        error
 	verifyFirstUnverifiedTOTPOK    bool
 	verifyFirstUnverifiedTOTPError error
 }
@@ -814,7 +814,7 @@ func TestMFAActivate_NoPendingEnrollment(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectCommit()
 
-	reqBody := fmt.Sprintf(`{"code":"%s"}`, code)
+	reqBody := fmt.Sprintf(`{"code":%q}`, code)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/activate", bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -852,7 +852,7 @@ func TestMFAActivate_Success(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectCommit()
 
-	reqBody := fmt.Sprintf(`{"code":"%s"}`, code)
+	reqBody := fmt.Sprintf(`{"code":%q}`, code)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/activate", bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -890,7 +890,7 @@ func TestMFAActivate_VerifyFirstError(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectRollback()
 
-	reqBody := fmt.Sprintf(`{"code":"%s"}`, code)
+	reqBody := fmt.Sprintf(`{"code":%q}`, code)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/activate", bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

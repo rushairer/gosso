@@ -18,7 +18,7 @@ import (
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
- authDomain "github.com/rushairer/gosso/internal/auth/domain"
+	authDomain "github.com/rushairer/gosso/internal/auth/domain"
 	"github.com/rushairer/gosso/internal/auth/repository"
 	"github.com/rushairer/gosso/internal/auth/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
@@ -101,8 +101,8 @@ func (m *mockAccountLookupForPasskey) FindAccountByID(_ context.Context, _ strin
 // ──────────────────────────────────────────────
 
 type mockWebAuthnCredRepo struct {
-	findByAccountIDResults  []*authDomain.WebAuthnCredential
-	findByAccountIDErr      error
+	findByAccountIDResults   []*authDomain.WebAuthnCredential
+	findByAccountIDErr       error
 	findByCredentialIDResult *authDomain.WebAuthnCredential
 	findByCredentialIDErr    error
 	softDeleteCredentialErr  error

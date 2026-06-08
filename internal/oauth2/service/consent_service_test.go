@@ -47,21 +47,6 @@ func (m *mockConsentRepository) Delete(_ context.Context, _ *sql.Tx, accountID, 
 	return nil
 }
 
-// errorConsentRepo always returns errors for testing error paths.
-type errorConsentRepo struct{}
-
-func (m *errorConsentRepo) Upsert(_ context.Context, _ *sql.Tx, _ *domain.Consent) error {
-	return fmt.Errorf("db unavailable")
-}
-
-func (m *errorConsentRepo) FindByAccountAndClient(_ context.Context, _, _ string) (*domain.Consent, error) {
-	return nil, fmt.Errorf("db unavailable")
-}
-
-func (m *errorConsentRepo) Delete(_ context.Context, _ *sql.Tx, _, _ string) error {
-	return fmt.Errorf("db unavailable")
-}
-
 func setupTestConsentService(t *testing.T) (*ConsentService, sqlmock.Sqlmock, func()) {
 	t.Helper()
 	logger := zap.NewNop()
