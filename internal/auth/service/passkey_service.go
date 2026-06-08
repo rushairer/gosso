@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -340,7 +339,7 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, requestID string,
 		return fmt.Errorf("read request body: %w", err)
 	}
 	if int64(len(bodyBytes)) > maxPasskeyRequestBodySize {
-		return errors.New("request body too large")
+		return ErrRequestBodyTooLarge
 	}
 	request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 

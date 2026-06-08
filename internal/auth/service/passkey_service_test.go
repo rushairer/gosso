@@ -494,8 +494,7 @@ func TestCompleteMFALogin_RequestBodyTooLarge(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", largeBody)
 
 	err := svc.CompleteMFALogin(context.Background(), requestID, "acct-1", req)
-	// Characterization: CompleteMFALogin uses errors.New instead of ErrRequestBodyTooLarge sentinel
-	assert.ErrorContains(t, err, "request body too large")
+	assert.ErrorIs(t, err, ErrRequestBodyTooLarge)
 }
 
 // ──────────────────────────────────────────────
