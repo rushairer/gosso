@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -32,6 +34,13 @@ func setupTestSessionService(t *testing.T) (*SessionService, func()) {
 type stubTokenRevoker struct{}
 
 func (s *stubTokenRevoker) RevokeAllForSession(_ context.Context, _ string) error { return nil }
+
+// errorTokenRevoker implements TokenRevoker for testing; always returns an error.
+type errorTokenRevoker struct{}
+
+func (e *errorTokenRevoker) RevokeAllForSession(_ context.Context, _ string) error {
+	return errors.New("revoker failure")
+}
 
 // ──────────────────────────────────────────────
 // Constructor and config (no Redis needed)
@@ -539,4 +548,184 @@ func TestSessionService_EnforceSessionLimit_NoRevoker(t *testing.T) {
 	svc.SetMaxSessions(5)
 	err := svc.EnforceSessionLimit(context.Background(), "any-account")
 	assert.ErrorIs(t, err, ErrTokenRevokerNotConfigured)
+}
+
+// ──────────────────────────────────────────────
+// Error paths via closed Redis client
+// ──────────────────────────────────────────────
+
+func TestSessionService_CreateSession_ClosedRedis(t *testing.T) {
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
+
+	session := &domain.Session{
+		AccountID: uuid.New().String(),
+		Username:  "testuser",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	}
+
+	// Close the underlying Redis client before creating
+	require.NoError(t, service.redis.GetClient().Close())
+
+	err := service.CreateSession(context.Background(), session)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "create session")
+}
+
+func TestSessionService_GetSession_ClosedRedis(t *testing.T) {
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
+
+	require.NoError(t, service.redis.GetClient().Close())
+
+	_, err := service.GetSession(context.Background(), "any-id")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "get session")
+}
+
+func TestSessionService_UpdateSession_ClosedRedis(t *testing.T) {
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
+
+	require.NoError(t, service.redis.GetClient().Close())
+
+	session := &domain.Session{ID: uuid.New().String(), AccountID: "a1", Username: "u"}
+	err := service.UpdateSession(context.Background(), session)
+	assert.Error(t, err)
+}
+
+func TestSessionService_RefreshSession_ClosedRedis(t *testing.T) {
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
+
+	require.NoError(t, service.redis.GetClient().Close())
+
+	err := service.RefreshSession(context.Background(), "any-id")
+	assert.Error(t, err)
+}
+
+func TestSessionService_ListSessionsByAccount_ClosedRedis(t *testing.T) {
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
+
+	require.NoError(t, service.redis.GetClient().Close())
+
+	_, err := service.ListSessionsByAccount(context.Background(), "any-account")
+	assert.Error(t, err)
+}
+
+func TestSessionService_RevokeAllForAccount_ClosedRedis(t *testing.T) {
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
+
+	require.NoError(t, service.redis.GetClient().Close())
+
+	err := service.RevokeAllForAccount(context.Background(), "any-account")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "revoke account sessions")
+}
+
+func TestSessionService_DeleteSession_NotFound(t *testing.T) {
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
+
+	// Deleting a nonexistent session should succeed (no-op).
+	// Exercises the else-if branch where GetSession returns ErrSessionNotFound.
+	err := service.DeleteSession(context.Background(), uuid.New().String())
+	assert.NoError(t, err)
+}
+
+func TestSessionService_ListSessionsByAccount_StaleEntries(t *testing.T) {
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	accountID := uuid.New().String()
+	validID := uuid.New().String()
+	staleID := uuid.New().String()
+
+	// Manually create a valid session key in Redis (bypasses CreateSession
+	// to avoid EnforceSessionLimit's cjson Lua script failing in miniredis).
+	session := &domain.Session{ID: validID, AccountID: accountID, Username: "u", IP: "1.1.1.1", UserAgent: "a"}
+	data, err := json.Marshal(session)
+	require.NoError(t, err)
+	require.NoError(t, service.redis.Set(ctx, service.buildSessionKey(validID), data, 10*time.Second))
+
+	// Build the account index with both valid and stale entries
+	indexKey := service.buildAccountSessionsKey(accountID)
+	rdb := service.redis.GetClient()
+	require.NoError(t, rdb.SAdd(ctx, indexKey, validID).Err())
+	require.NoError(t, rdb.SAdd(ctx, indexKey, staleID).Err())
+
+	// Verify index has 2 entries
+	members, err := service.redis.SMembers(ctx, indexKey)
+	require.NoError(t, err)
+	require.Len(t, members, 2)
+
+	sessions, err := service.ListSessionsByAccount(ctx, accountID)
+	require.NoError(t, err)
+	// Should return only the valid session; stale entry cleaned up
+	require.Len(t, sessions, 1)
+	assert.Equal(t, validID, sessions[0].ID)
+
+	// Verify stale entry was removed from the index
+	members, err = service.redis.SMembers(ctx, indexKey)
+	require.NoError(t, err)
+	assert.Len(t, members, 1)
+	assert.Equal(t, validID, members[0])
+}
+
+func TestSessionService_RevokeSession_RevokerError(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+
+	logger := zap.NewNop()
+	svc := NewSessionService(redisClient, logger)
+	svc.SetSessionTTL(10 * time.Second)
+	svc.SetTokenRevoker(&stubTokenRevoker{})
+
+	ctx := context.Background()
+	session := &domain.Session{AccountID: "a1", Username: "u", IP: "1.1.1.1", UserAgent: "a"}
+	require.NoError(t, svc.CreateSession(ctx, session))
+
+	// Swap to error revoker after session creation
+	svc.SetTokenRevoker(&errorTokenRevoker{})
+
+	err := svc.RevokeSession(ctx, "a1", session.ID)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "revoke tokens for session")
+}
+
+func TestSessionService_ValidateSession_ExpiredByMaxAge_RevokerError(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+
+	logger := zap.NewNop()
+	svc := NewSessionService(redisClient, logger)
+	svc.SetSessionTTL(10 * time.Second)
+	svc.SetMaxSessionAge(1 * time.Millisecond)
+	svc.SetTokenRevoker(&errorTokenRevoker{})
+
+	ctx := context.Background()
+	session := &domain.Session{AccountID: "a1", Username: "u", IP: "1.1.1.1", UserAgent: "a"}
+	require.NoError(t, svc.CreateSession(ctx, session))
+
+	time.Sleep(5 * time.Millisecond)
+
+	// Should return ErrSessionExpired even though token revocation fails
+	// (revoker error is only logged as a warning)
+	_, err := svc.ValidateSession(ctx, session.ID)
+	assert.ErrorIs(t, err, ErrSessionExpired)
+}
+
+func TestSessionService_EnforceSessionLimit_ClosedRedis(t *testing.T) {
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
+
+	require.NoError(t, service.redis.GetClient().Close())
+
+	err := service.EnforceSessionLimit(context.Background(), "any-account")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "evict oldest sessions")
 }
