@@ -259,7 +259,7 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, ip, userAgent string) (result *LoginResult, err error) {
 	defer func() {
 		if err != nil {
-			auditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+			auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 				auditDomain.ActionLoginFailure,
 				audit.IPFromContext(ctx),
 				&accountID,
@@ -376,7 +376,7 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 	}
 
 	// Audit log for social login account creation
-	auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountRegister,
 		audit.IPFromContext(ctx),
 		&account.ID,

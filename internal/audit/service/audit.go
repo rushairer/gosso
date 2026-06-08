@@ -235,3 +235,24 @@ func (a *Auditor) LogSync(ctx context.Context, record *domain.AuditRecord) error
 	)
 	return err
 }
+
+// AuditLog is a convenience helper that submits an audit record asynchronously
+// and logs a warning on failure. Safe when auditor is nil.
+func AuditLog(ctx context.Context, auditor *Auditor, logger *zap.Logger, record *domain.AuditRecord) {
+	if auditor != nil {
+		if err := auditor.Log(ctx, record); err != nil {
+			logger.Warn("Failed to submit audit record", zap.Error(err))
+		}
+	}
+}
+
+// AuditLogSync writes an audit record synchronously for critical security events
+// where loss on crash is unacceptable (login failures, account deletion, role changes).
+// Safe when auditor is nil.
+func AuditLogSync(ctx context.Context, auditor *Auditor, logger *zap.Logger, record *domain.AuditRecord) {
+	if auditor != nil {
+		if err := auditor.LogSync(ctx, record); err != nil {
+			logger.Error("Failed to write audit record synchronously", zap.Error(err))
+		}
+	}
+}

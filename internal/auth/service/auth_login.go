@@ -13,6 +13,7 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/audit"
 	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
+	auditService "github.com/rushairer/gosso/internal/audit/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
 
@@ -387,7 +388,7 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 	if accountID != "" {
 		acctID = &accountID
 	}
-	auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionLogout,
 		audit.IPFromContext(ctx),
 		acctID,
