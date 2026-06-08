@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,8 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	gm "github.com/rushairer/gosso/middleware"
+	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	gm "github.com/rushairer/gosso/middleware"
 )
 
 func init() {
@@ -78,9 +81,6 @@ func TestAdminRequired_HasAdminRole(t *testing.T) {
 		ctx.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
-	w := httptest.NewRecorder()
-
 	// Pre-set claims in context via middleware
 	engine2 := setupGin()
 	engine2.GET("/admin", func(ctx *gin.Context) {
@@ -92,8 +92,8 @@ func TestAdminRequired_HasAdminRole(t *testing.T) {
 		ctx.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
-	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/admin", nil)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
 	engine2.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -195,4 +195,156 @@ func TestJWTAuth_TokenFromQuery(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, "query-token", resp["token"])
+}
+
+// ──────────────────────────────────────────────
+// ValidateBearerToken
+// ──────────────────────────────────────────────
+
+// mockTokenValidator implements TokenValidator for testing.
+type mockTokenValidator struct {
+	claims *tokenDomain.AccessTokenClaims
+	err    error
+}
+
+func (m *mockTokenValidator) ValidateAccessTokenWithContext(_ context.Context, _ string) (*tokenDomain.AccessTokenClaims, error) {
+	return m.claims, m.err
+}
+
+// mockSessionValidator implements sessionDomain.SessionValidator for testing.
+type mockSessionValidator struct {
+	session *sessionDomain.Session
+	err     error
+}
+
+func (m *mockSessionValidator) ValidateSession(_ context.Context, _ string) (*sessionDomain.Session, error) {
+	return m.session, m.err
+}
+
+func TestValidateBearerToken_MissingToken(t *testing.T) {
+	engine := setupGin()
+	engine.GET("/test", func(ctx *gin.Context) {
+		claims, err := ValidateBearerToken(ctx, &mockTokenValidator{}, nil)
+		assert.Nil(t, claims)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "missing authorization")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+}
+
+func TestValidateBearerToken_InvalidToken(t *testing.T) {
+	engine := setupGin()
+	engine.GET("/test", func(ctx *gin.Context) {
+		claims, err := ValidateBearerToken(ctx, &mockTokenValidator{err: fmt.Errorf("token expired")}, nil)
+		assert.Nil(t, claims)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid or expired token")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Authorization", "Bearer badtoken")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+}
+
+func TestValidateBearerToken_ScopedToken_Rejected(t *testing.T) {
+	engine := setupGin()
+	engine.GET("/test", func(ctx *gin.Context) {
+		claims, err := ValidateBearerToken(ctx, &mockTokenValidator{
+			claims: &tokenDomain.AccessTokenClaims{
+				Scope: "mfa:verify",
+			},
+		}, nil)
+		assert.Nil(t, claims)
+		assert.ErrorIs(t, err, ErrTokenScopeNotAllowed)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Authorization", "Bearer mfa-token")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+}
+
+func TestValidateBearerToken_ExpiredSession(t *testing.T) {
+	engine := setupGin()
+	engine.GET("/test", func(ctx *gin.Context) {
+		claims, err := ValidateBearerToken(ctx, &mockTokenValidator{
+			claims: &tokenDomain.AccessTokenClaims{
+				AccountID: "acct-001",
+				SessionID: "sess-001",
+			},
+		}, &mockSessionValidator{err: fmt.Errorf("session not found")})
+		assert.Nil(t, claims)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "session expired")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Authorization", "Bearer goodtoken")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+}
+
+func TestValidateBearerToken_Success(t *testing.T) {
+	engine := setupGin()
+	engine.GET("/test", func(ctx *gin.Context) {
+		claims, err := ValidateBearerToken(ctx, &mockTokenValidator{
+			claims: &tokenDomain.AccessTokenClaims{
+				AccountID: "acct-001",
+				SessionID: "sess-001",
+			},
+		}, &mockSessionValidator{
+			session: &sessionDomain.Session{ID: "sess-001"},
+		})
+		assert.NoError(t, err)
+		assert.NotNil(t, claims)
+		assert.Equal(t, "acct-001", claims.AccountID)
+		ctx.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Authorization", "Bearer validtoken")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestValidateBearerToken_NilSessionValidator(t *testing.T) {
+	engine := setupGin()
+	engine.GET("/test", func(ctx *gin.Context) {
+		claims, err := ValidateBearerToken(ctx, &mockTokenValidator{
+			claims: &tokenDomain.AccessTokenClaims{
+				AccountID: "acct-001",
+				SessionID: "sess-001",
+			},
+		}, nil)
+		assert.NoError(t, err)
+		assert.NotNil(t, claims)
+		assert.Equal(t, "acct-001", claims.AccountID)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Authorization", "Bearer validtoken")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+}
+
+// ──────────────────────────────────────────────
+// AuditMetadataMiddleware
+// ──────────────────────────────────────────────
+
+func TestAuditMetadataMiddleware(t *testing.T) {
+	engine := setupGin()
+	engine.GET("/test", AuditMetadataMiddleware(), func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("User-Agent", "TestAgent/1.0")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
 }

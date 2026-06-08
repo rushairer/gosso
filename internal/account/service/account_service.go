@@ -216,7 +216,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 			ID:                uuid.New().String(),
 			AccountID:         account.ID,
 			Type:              domain.CredentialTypePassword,
-			Value:             string(passwordHash),
+			Value:             passwordHash,
 			Verified:          true,
 			PrimaryCredential: false,
 			Metadata:          make(map[string]interface{}),
@@ -442,7 +442,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	}
 
 	// 6. Update password
-	passwordCred.Value = string(newPasswordHash)
+	passwordCred.Value = newPasswordHash
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		return s.credentialRepo.UpdateCredential(ctx, tx, passwordCred)

@@ -1,6 +1,9 @@
 package utility
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // MaskEmail masks an email address for safe display.
 // Example: "user@example.com" -> "u***@e***.com"
@@ -17,7 +20,8 @@ func MaskEmail(email string) string {
 			prefixLen := len([]rune(domain[:dotIdx]))
 			maskedDomain = string(domainRunes[0]) + "***" + string(domainRunes[prefixLen:])
 		} else {
-			maskedDomain = string([]rune(domain)[0]) + "***"
+			r, _ := utf8.DecodeRuneInString(domain)
+			maskedDomain = string(r) + "***"
 		}
 		return maskedLocal + "@" + maskedDomain
 	}

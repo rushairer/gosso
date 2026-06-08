@@ -1,0 +1,829 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+	"github.com/pquerna/otp/totp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+)
+
+// ──────────────────────────────────────────────
+// safeAuditReason
+// ──────────────────────────────────────────────
+
+func TestSafeAuditReason(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected string
+	}{
+		{"invalid credentials", ErrInvalidCredentials, "invalid_credentials"},
+		{"account locked", ErrAccountLocked, "account_locked"},
+		{"account inactive", ErrAccountNotActive, "account_inactive"},
+		{"invalid mfa code", ErrInvalidMFACode, "invalid_mfa_code"},
+		{"invalid mfa token", ErrInvalidMFAToken, "invalid_mfa_token"},
+		{"invalid mfa token scope", ErrInvalidMFATokenScope, "invalid_mfa_token"},
+		{"account not found", ErrAccountNotFound, "account_not_found"},
+		{"unknown error", errors.New("something"), "internal_error"},
+		{"wrapped credentials", fmt.Errorf("wrap: %w", ErrInvalidCredentials), "invalid_credentials"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, safeAuditReason(tt.err))
+		})
+	}
+}
+
+// ──────────────────────────────────────────────
+// Setters
+// ──────────────────────────────────────────────
+
+func TestAuthServiceSetters(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	assert.Equal(t, defaultLoginRateLimitWindow, fixture.svc.loginRateLimitWindow)
+	assert.Equal(t, defaultLoginMaxAttempts, fixture.svc.loginMaxAttempts)
+	assert.Equal(t, defaultLoginMaxAttemptsPerIP, fixture.svc.loginMaxAttemptsPerIP)
+	assert.Equal(t, defaultMFAVerificationTTL, fixture.svc.mfaVerificationTTL)
+
+	fixture.svc.SetLoginRateLimitWindow(30 * time.Minute)
+	fixture.svc.SetLoginMaxAttempts(10)
+	fixture.svc.SetLoginMaxAttemptsPerIP(50)
+	fixture.svc.SetMFAVerificationTTL(10 * time.Minute)
+
+	assert.Equal(t, 30*time.Minute, fixture.svc.loginRateLimitWindow)
+	assert.Equal(t, 10, fixture.svc.loginMaxAttempts)
+	assert.Equal(t, 50, fixture.svc.loginMaxAttemptsPerIP)
+	assert.Equal(t, 10*time.Minute, fixture.svc.mfaVerificationTTL)
+
+	// No-op on non-positive values
+	fixture.svc.SetLoginRateLimitWindow(0)
+	fixture.svc.SetLoginMaxAttempts(-1)
+	fixture.svc.SetLoginMaxAttemptsPerIP(0)
+	fixture.svc.SetMFAVerificationTTL(-1 * time.Minute)
+
+	assert.Equal(t, 30*time.Minute, fixture.svc.loginRateLimitWindow)
+	assert.Equal(t, 10, fixture.svc.loginMaxAttempts)
+	assert.Equal(t, 50, fixture.svc.loginMaxAttemptsPerIP)
+	assert.Equal(t, 10*time.Minute, fixture.svc.mfaVerificationTTL)
+}
+
+// ──────────────────────────────────────────────
+// LoginByUsernamePassword
+// ──────────────────────────────────────────────
+
+func TestLoginByUsernamePassword_Success(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	// updateCredentialLastUsed -> RunInTransaction -> BeginTx + Commit
+	fixture.sqlMock.ExpectBegin()
+	fixture.sqlMock.ExpectCommit()
+
+	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+		Username:  "testuser",
+		Password:  "password123",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.False(t, result.RequiresMFA)
+	assert.NotEmpty(t, result.AccessToken)
+	assert.NotEmpty(t, result.RefreshToken)
+	assert.NotNil(t, result.Session)
+	assert.Equal(t, "account-001", result.Account.ID)
+	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
+}
+
+func TestLoginByUsernamePassword_AccountNotFound(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+		Username:  "unknown",
+		Password:  "password123",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	})
+
+	assert.ErrorIs(t, err, ErrInvalidCredentials)
+	assert.Nil(t, result)
+}
+
+func TestLoginByUsernamePassword_WrongPassword(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+		Username:  "testuser",
+		Password:  "wrongpassword",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	})
+
+	assert.ErrorIs(t, err, ErrInvalidCredentials)
+	assert.Nil(t, result)
+}
+
+func TestLoginByUsernamePassword_InactiveAccount(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+	fixture.accountSvc.byID["account-001"].Status = accountDomain.AccountStatusSuspended
+
+	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+		Username:  "testuser",
+		Password:  "password123",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	})
+
+	assert.ErrorIs(t, err, ErrInvalidCredentials)
+	assert.Nil(t, result)
+}
+
+func TestLoginByUsernamePassword_RateLimited(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+	fixture.svc.SetLoginMaxAttempts(2)
+
+	// First attempt: wrong password, counter=1, not locked
+	_, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+		Username:  "testuser",
+		Password:  "wrong",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	})
+	assert.ErrorIs(t, err, ErrInvalidCredentials)
+
+	// Second attempt: counter=2 >= maxAttempts=2 -> locked
+	_, err = fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+		Username:  "testuser",
+		Password:  "password123",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	})
+	assert.ErrorIs(t, err, ErrAccountLocked)
+}
+
+func TestLoginByUsernamePassword_MFARequired(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+	fixture.credRepo.credMap["account-001:totp"] = []*accountDomain.Credential{
+		{ID: "totp-1", Type: accountDomain.CredentialTypeTOTP, Verified: true},
+	}
+
+	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+		Username:  "testuser",
+		Password:  "password123",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.RequiresMFA)
+	assert.NotEmpty(t, result.AccessToken)
+	assert.Contains(t, result.MFATypes, "totp")
+}
+
+// ──────────────────────────────────────────────
+// RefreshTokens
+// ──────────────────────────────────────────────
+
+func TestRefreshTokens_Success(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	// Login to get session + refresh token
+	fixture.sqlMock.ExpectBegin()
+	fixture.sqlMock.ExpectCommit()
+
+	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+		Username:  "testuser",
+		Password:  "password123",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	})
+	require.NoError(t, err)
+	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
+
+	refreshResult, err := fixture.svc.RefreshTokens(context.Background(), loginResult.RefreshToken)
+	require.NoError(t, err)
+	assert.NotEmpty(t, refreshResult.AccessToken)
+	assert.NotEmpty(t, refreshResult.RefreshToken)
+	assert.NotEqual(t, loginResult.RefreshToken, refreshResult.RefreshToken)
+	assert.Equal(t, loginResult.Session.ID, refreshResult.SessionID)
+}
+
+func TestRefreshTokens_InvalidToken(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	_, err := fixture.svc.RefreshTokens(context.Background(), "garbage-token")
+	assert.ErrorIs(t, err, ErrInvalidRefreshToken)
+}
+
+// ──────────────────────────────────────────────
+// Logout
+// ──────────────────────────────────────────────
+
+func TestLogout_Success(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	fixture.sqlMock.ExpectBegin()
+	fixture.sqlMock.ExpectCommit()
+
+	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+		Username:  "testuser",
+		Password:  "password123",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	})
+	require.NoError(t, err)
+	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
+
+	err = fixture.svc.Logout(context.Background(), "account-001", loginResult.Session.ID, "", time.Time{})
+	assert.NoError(t, err)
+}
+
+func TestLogout_WithAccessToken(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	fixture.sqlMock.ExpectBegin()
+	fixture.sqlMock.ExpectCommit()
+
+	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+		Username:  "testuser",
+		Password:  "password123",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	})
+	require.NoError(t, err)
+	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
+
+	err = fixture.svc.Logout(context.Background(), "account-001", loginResult.Session.ID, "fake-jti", time.Now().Add(15*time.Minute))
+	assert.NoError(t, err)
+}
+
+// ──────────────────────────────────────────────
+// ValidateMFAToken
+// ──────────────────────────────────────────────
+
+func TestValidateMFAToken_Success(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	mfaToken, err := fixture.tokenSvc.GenerateShortLivedToken(&tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		},
+		AccountID: "account-001",
+		Scope:     ScopeMFA,
+	})
+	require.NoError(t, err)
+
+	claims, err := fixture.svc.ValidateMFAToken(context.Background(), mfaToken)
+	require.NoError(t, err)
+	assert.Equal(t, "account-001", claims.AccountID)
+	assert.Equal(t, ScopeMFA, claims.Scope)
+}
+
+func TestValidateMFAToken_InvalidScope(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	token, err := fixture.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+	})
+	require.NoError(t, err)
+
+	_, err = fixture.svc.ValidateMFAToken(context.Background(), token)
+	assert.ErrorIs(t, err, ErrInvalidMFATokenScope)
+}
+
+func TestValidateMFAToken_InvalidToken(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	_, err := fixture.svc.ValidateMFAToken(context.Background(), "garbage-token")
+	assert.ErrorIs(t, err, ErrInvalidMFAToken)
+}
+
+// ──────────────────────────────────────────────
+// MarkPasskeyMFAVerified
+// ──────────────────────────────────────────────
+
+func TestMarkPasskeyMFAVerified(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	ctx := context.Background()
+	jti := uuid.New().String()
+
+	err := fixture.svc.MarkPasskeyMFAVerified(ctx, jti)
+	require.NoError(t, err)
+
+	val, err := fixture.redis.Get(ctx, fmt.Sprintf("webauthn:mfa_verified:%s", jti))
+	require.NoError(t, err)
+	assert.Equal(t, "1", val)
+}
+
+// ──────────────────────────────────────────────
+// Accessors
+// ──────────────────────────────────────────────
+
+func TestMFAServiceAccessor(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	assert.NotNil(t, fixture.svc.MFAService())
+}
+
+func TestPasskeyServiceAccessor(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	assert.NotNil(t, fixture.svc.PasskeyService())
+}
+
+func TestTokenServiceAccessor(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	assert.NotNil(t, fixture.svc.TokenService())
+}
+
+// ──────────────────────────────────────────────
+// ConfirmVerificationCredential
+// ──────────────────────────────────────────────
+
+func TestConfirmVerificationCredential_UnsupportedType(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	err := fixture.svc.ConfirmVerificationCredential(context.Background(), "sms", "+1234567890", "account-001")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported credential type")
+}
+
+func TestConfirmVerificationCredential_NotFound(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	err := fixture.svc.ConfirmVerificationCredential(context.Background(), "email", "nobody@example.com", "account-001")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "find credential")
+}
+
+func TestConfirmVerificationCredential_WrongAccount(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	email := "user@example.com"
+	fixture.credRepo.typeAndIDCreds[string(accountDomain.CredentialTypeEmail)+":"+email] = &accountDomain.Credential{
+		ID:         "cred-001",
+		AccountID:  "account-001",
+		Type:       accountDomain.CredentialTypeEmail,
+		Identifier: &email,
+		Verified:   false,
+	}
+
+	err := fixture.svc.ConfirmVerificationCredential(context.Background(), "email", email, "account-999")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "does not belong")
+}
+
+func TestConfirmVerificationCredential_Success(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	email := "verified@example.com"
+	fixture.credRepo.typeAndIDCreds[string(accountDomain.CredentialTypeEmail)+":"+email] = &accountDomain.Credential{
+		ID:         "cred-002",
+		AccountID:  "account-002",
+		Type:       accountDomain.CredentialTypeEmail,
+		Identifier: &email,
+		Verified:   false,
+	}
+
+	fixture.sqlMock.ExpectBegin()
+	fixture.sqlMock.ExpectCommit()
+
+	err := fixture.svc.ConfirmVerificationCredential(context.Background(), "email", email, "account-002")
+	require.NoError(t, err)
+	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
+
+	cred := fixture.credRepo.typeAndIDCreds[string(accountDomain.CredentialTypeEmail)+":"+email]
+	assert.True(t, cred.Verified)
+	assert.NotNil(t, cred.VerifiedAt)
+}
+
+// ──────────────────────────────────────────────
+// LoginByPasskey
+// ──────────────────────────────────────────────
+
+func TestLoginByPasskey_AccountNotFound(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	result, err := fixture.svc.LoginByPasskey(context.Background(), "nonexistent", "127.0.0.1", "test-agent")
+	assert.ErrorIs(t, err, ErrInvalidCredentials)
+	assert.Nil(t, result)
+}
+
+func TestLoginByPasskey_InactiveAccount(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+	fixture.accountSvc.byID["account-001"].Status = accountDomain.AccountStatusSuspended
+
+	result, err := fixture.svc.LoginByPasskey(context.Background(), "account-001", "127.0.0.1", "test-agent")
+	assert.ErrorIs(t, err, ErrInvalidCredentials)
+	assert.Nil(t, result)
+}
+
+func TestLoginByPasskey_Success(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	result, err := fixture.svc.LoginByPasskey(context.Background(), "account-001", "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.False(t, result.RequiresMFA)
+	assert.NotEmpty(t, result.AccessToken)
+	assert.NotEmpty(t, result.RefreshToken)
+	assert.NotNil(t, result.Session)
+	assert.Equal(t, "account-001", result.Account.ID)
+}
+
+func TestLoginByPasskey_MFARequired(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+	fixture.credRepo.credMap["account-001:totp"] = []*accountDomain.Credential{
+		{ID: "totp-1", Type: accountDomain.CredentialTypeTOTP, Verified: true},
+	}
+
+	result, err := fixture.svc.LoginByPasskey(context.Background(), "account-001", "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.RequiresMFA)
+	assert.NotEmpty(t, result.AccessToken)
+	assert.Contains(t, result.MFATypes, "totp")
+}
+
+func TestLoginByPasskey_IPRateLimited(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+	fixture.svc.SetLoginMaxAttemptsPerIP(2)
+
+	// First call succeeds (CheckAndIncr returns 1, 1 < 2 → proceed)
+	result, err := fixture.svc.LoginByPasskey(context.Background(), "account-001", "10.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Second call from same IP is rate limited
+	result2, err := fixture.svc.LoginByPasskey(context.Background(), "account-001", "10.0.0.1", "test-agent")
+	assert.ErrorIs(t, err, ErrAccountLocked)
+	assert.Nil(t, result2)
+}
+
+// ──────────────────────────────────────────────
+// VerifyMFALogin
+// ──────────────────────────────────────────────
+
+func TestVerifyMFALogin_InvalidMFAToken(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	result, err := fixture.svc.VerifyMFALogin(context.Background(), "garbage-token", "123456", "totp", "127.0.0.1", "test-agent")
+	assert.ErrorIs(t, err, ErrInvalidMFAToken)
+	assert.Nil(t, result)
+}
+
+func TestVerifyMFALogin_InvalidScope(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	// Generate a regular access token (scope != "mfa")
+	token, err := fixture.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+	})
+	require.NoError(t, err)
+
+	result, err := fixture.svc.VerifyMFALogin(context.Background(), token, "123456", "totp", "127.0.0.1", "test-agent")
+	assert.ErrorIs(t, err, ErrInvalidMFATokenScope)
+	assert.Nil(t, result)
+}
+
+func TestVerifyMFALogin_UnsupportedMFAType(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	mfaToken, err := fixture.tokenSvc.GenerateShortLivedToken(&tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		},
+		AccountID: "account-001",
+		Scope:     ScopeMFA,
+	})
+	require.NoError(t, err)
+
+	result, err := fixture.svc.VerifyMFALogin(context.Background(), mfaToken, "123456", "sms", "127.0.0.1", "test-agent")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported mfa type")
+	assert.Nil(t, result)
+}
+
+func TestVerifyMFALogin_PasskeyNotVerified(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	mfaToken, err := fixture.tokenSvc.GenerateShortLivedToken(&tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		},
+		AccountID: "account-001",
+		Scope:     ScopeMFA,
+	})
+	require.NoError(t, err)
+
+	// No Redis flag set → passkey not verified
+	result, err := fixture.svc.VerifyMFALogin(context.Background(), mfaToken, "", "passkey", "127.0.0.1", "test-agent")
+	assert.ErrorIs(t, err, ErrPasskeyNotVerified)
+	assert.Nil(t, result)
+}
+
+func TestVerifyMFALogin_Success(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	// Generate a real TOTP secret and store it as a verified credential
+	secret, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      "http://localhost:8080",
+		AccountName: "account-001",
+	})
+	require.NoError(t, err)
+
+	fixture.credRepo.credMap["account-001:totp"] = []*accountDomain.Credential{
+		{ID: "totp-001", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: secret.Secret(), Verified: true},
+	}
+
+	// Generate a valid TOTP code
+	code, err := totp.GenerateCode(secret.Secret(), time.Now())
+	require.NoError(t, err)
+
+	// Generate MFA token
+	mfaToken, err := fixture.tokenSvc.GenerateShortLivedToken(&tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		},
+		AccountID: "account-001",
+		Scope:     ScopeMFA,
+	})
+	require.NoError(t, err)
+
+	result, err := fixture.svc.VerifyMFALogin(context.Background(), mfaToken, code, "totp", "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.False(t, result.RequiresMFA)
+	assert.NotEmpty(t, result.AccessToken)
+	assert.NotEmpty(t, result.RefreshToken)
+	assert.Equal(t, "account-001", result.Account.ID)
+}
+
+// ──────────────────────────────────────────────
+// CompletePasskeyMFALogin
+// ──────────────────────────────────────────────
+
+func TestCompletePasskeyMFALogin_InvalidMFAToken(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	result, err := fixture.svc.CompletePasskeyMFALogin(context.Background(), "garbage-token", "127.0.0.1", "test-agent")
+	assert.ErrorIs(t, err, ErrInvalidMFAToken)
+	assert.Nil(t, result)
+}
+
+func TestCompletePasskeyMFALogin_InvalidScope(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	token, err := fixture.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+	})
+	require.NoError(t, err)
+
+	result, err := fixture.svc.CompletePasskeyMFALogin(context.Background(), token, "127.0.0.1", "test-agent")
+	assert.ErrorIs(t, err, ErrInvalidMFATokenScope)
+	assert.Nil(t, result)
+}
+
+func TestCompletePasskeyMFALogin_PasskeyNotVerified(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	mfaToken, err := fixture.tokenSvc.GenerateShortLivedToken(&tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		},
+		AccountID: "account-001",
+		Scope:     ScopeMFA,
+	})
+	require.NoError(t, err)
+
+	result, err := fixture.svc.CompletePasskeyMFALogin(context.Background(), mfaToken, "127.0.0.1", "test-agent")
+	assert.ErrorIs(t, err, ErrPasskeyNotVerified)
+	assert.Nil(t, result)
+}
+
+func TestCompletePasskeyMFALogin_AccountNotFound(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	jti := uuid.New().String()
+	mfaToken, err := fixture.tokenSvc.GenerateShortLivedToken(&tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		},
+		AccountID: "nonexistent",
+		Scope:     ScopeMFA,
+	})
+	require.NoError(t, err)
+
+	// Set passkey verified flag
+	err = fixture.redis.Set(context.Background(), fmt.Sprintf("webauthn:mfa_verified:%s", jti), "1", 5*time.Minute)
+	require.NoError(t, err)
+
+	result, err := fixture.svc.CompletePasskeyMFALogin(context.Background(), mfaToken, "127.0.0.1", "test-agent")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrAccountNotFound)
+	assert.Nil(t, result)
+}
+
+func TestCompletePasskeyMFALogin_Success(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	jti := uuid.New().String()
+	mfaToken, err := fixture.tokenSvc.GenerateShortLivedToken(&tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		},
+		AccountID: "account-001",
+		Scope:     ScopeMFA,
+	})
+	require.NoError(t, err)
+
+	// Set passkey verified flag
+	err = fixture.redis.Set(context.Background(), fmt.Sprintf("webauthn:mfa_verified:%s", jti), "1", 5*time.Minute)
+	require.NoError(t, err)
+
+	result, err := fixture.svc.CompletePasskeyMFALogin(context.Background(), mfaToken, "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.False(t, result.RequiresMFA)
+	assert.NotEmpty(t, result.AccessToken)
+	assert.NotEmpty(t, result.RefreshToken)
+	assert.Equal(t, "account-001", result.Account.ID)
+}
+
+// ──────────────────────────────────────────────
+// CheckMFA delegation
+// ──────────────────────────────────────────────
+
+func TestCheckMFA_NoMFA(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	result, err := fixture.svc.CheckMFA(context.Background(), fixture.accountSvc.byID["account-001"])
+	assert.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestCheckMFA_WithMFA(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+	fixture.credRepo.credMap["account-001:totp"] = []*accountDomain.Credential{
+		{ID: "totp-1", Type: accountDomain.CredentialTypeTOTP, Verified: true},
+	}
+
+	result, err := fixture.svc.CheckMFA(context.Background(), fixture.accountSvc.byID["account-001"])
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.RequiresMFA)
+}
+
+// ──────────────────────────────────────────────
+// ValidateSession / ListSessions delegation
+// ──────────────────────────────────────────────
+
+func TestValidateSession_Delegation(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	_, err := fixture.svc.ValidateSession(context.Background(), "nonexistent-session")
+	assert.Error(t, err)
+}
+
+func TestListSessions_Delegation(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	sessions, err := fixture.svc.ListSessions(context.Background(), "account-999")
+	require.NoError(t, err)
+	assert.Empty(t, sessions)
+}

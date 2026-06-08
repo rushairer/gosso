@@ -11,14 +11,14 @@ import (
 
 // sensitiveQueryParams are query parameter names whose values should be redacted in logs.
 var sensitiveQueryParams = map[string]bool{
-	"token":          true,
-	"code":           true,
-	"code_verifier":  true,
-	"client_secret":  true,
-	"password":       true,
-	"refresh_token":  true,
-	"access_token":   true,
-	"id_token":       true,
+	"token":         true,
+	"code":          true,
+	"code_verifier": true,
+	"client_secret": true,
+	"password":      true,
+	"refresh_token": true,
+	"access_token":  true,
+	"id_token":      true,
 }
 
 // sanitizeQuery replaces sensitive query parameter values with [REDACTED].

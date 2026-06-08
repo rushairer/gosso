@@ -325,3 +325,87 @@ func TestFindAll_DefaultPagination(t *testing.T) {
 func strPtr(s string) *string {
 	return &s
 }
+
+// ──────────────────────────────────────────────
+// SuspendAccount
+// ──────────────────────────────────────────────
+
+func TestSuspendAccount_Success(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	tx, _ := db.Begin()
+
+	mock.ExpectExec("UPDATE accounts SET status").
+		WithArgs(sqlmock.AnyArg(), "account-001", "suspended", "active").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	repo := NewAccountRepository(db)
+	err = repo.SuspendAccount(context.Background(), tx, "account-001")
+
+	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestSuspendAccount_InvalidTransition(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	tx, _ := db.Begin()
+
+	mock.ExpectExec("UPDATE accounts SET status").
+		WithArgs(sqlmock.AnyArg(), "account-001", "suspended", "active").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	repo := NewAccountRepository(db)
+	err = repo.SuspendAccount(context.Background(), tx, "account-001")
+
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidStatusTransition))
+}
+
+// ──────────────────────────────────────────────
+// ActivateAccount
+// ──────────────────────────────────────────────
+
+func TestActivateAccount_Success(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	tx, _ := db.Begin()
+
+	mock.ExpectExec("UPDATE accounts SET status").
+		WithArgs(sqlmock.AnyArg(), "account-001", "active", "suspended").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	repo := NewAccountRepository(db)
+	err = repo.ActivateAccount(context.Background(), tx, "account-001")
+
+	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestActivateAccount_InvalidTransition(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	tx, _ := db.Begin()
+
+	mock.ExpectExec("UPDATE accounts SET status").
+		WithArgs(sqlmock.AnyArg(), "account-001", "active", "suspended").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	repo := NewAccountRepository(db)
+	err = repo.ActivateAccount(context.Background(), tx, "account-001")
+
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidStatusTransition))
+}

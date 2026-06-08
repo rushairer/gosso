@@ -9,13 +9,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
-	"github.com/rushairer/gosso/middleware"
 
 	"github.com/rushairer/gosso/internal/audit"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
+	"github.com/rushairer/gosso/middleware"
 )
 
 // ErrTokenScopeNotAllowed is returned when a scoped token (e.g. MFA token)

@@ -245,9 +245,9 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 			WHERE %s
 			ORDER BY created_at DESC
 			LIMIT $%d OFFSET $%d`, where, paramIdx, paramIdx+1)
-	selectArgs := append(args, pageSize, offset)
+	args = append(args, pageSize, offset)
 
-	rows, err := r.db.QueryContext(ctx, selectQuery, selectArgs...)
+	rows, err := r.db.QueryContext(ctx, selectQuery, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query accounts: %w", err)
 	}

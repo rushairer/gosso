@@ -335,6 +335,7 @@ redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
 redis.call('SET', KEYS[2], ARGV[3], 'EX', ARGV[2])
 return 1
 `)
+
 // Returns the JSON data if the transition succeeded, or nil if the status was not "authorized".
 var claimAuthorizedScript = redis.NewScript(`
 local cjson = require('cjson')

@@ -15,9 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/middleware"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
+	"github.com/rushairer/gosso/middleware"
 )
 
 // ──────────────────────────────────────────────
@@ -242,6 +242,140 @@ func TestGetClient_IDORProtection(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+// ──────────────────────────────────────────────
+// Error-path tests for coverage
+// ──────────────────────────────────────────────
+
+func TestRegisterClient_InvalidRedirectScheme(t *testing.T) {
+	clientSvc := &mockOAuth2ClientService{}
+	engine := setupClientController(clientSvc)
+
+	body := `{"name":"Test","redirect_uris":["javascript:alert(1)"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/oauth2/clients", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestRegisterClient_InvalidPostLogoutURI(t *testing.T) {
+	clientSvc := &mockOAuth2ClientService{}
+	engine := setupClientController(clientSvc)
+
+	body := `{"name":"Test","redirect_uris":["https://app.example.com/callback"],"post_logout_redirect_uris":["javascript:alert(1)"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/oauth2/clients", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestRegisterClient_ServiceError(t *testing.T) {
+	clientSvc := &mockOAuth2ClientService{
+		registerFn: func() (*oauth2Domain.OAuth2Client, string, error) {
+			return nil, "", fmt.Errorf("db error")
+		},
+	}
+	engine := setupClientController(clientSvc)
+
+	body := `{"name":"Test","redirect_uris":["https://app.example.com/callback"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/oauth2/clients", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestListClients_ServiceError(t *testing.T) {
+	clientSvc := &mockOAuth2ClientService{
+		findByAcctFn: func() ([]*oauth2Domain.OAuth2Client, error) {
+			return nil, fmt.Errorf("db error")
+		},
+	}
+	engine := setupClientController(clientSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/oauth2/clients", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestUpdateClient_InvalidRedirectScheme(t *testing.T) {
+	client := newTestClient("account-001")
+	clientSvc := &mockOAuth2ClientService{
+		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return client, nil
+		},
+	}
+	engine := setupClientController(clientSvc)
+
+	body := `{"redirect_uris":["javascript:alert(1)"]}`
+	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/cid-abc123", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUpdateClient_InvalidPostLogoutURI(t *testing.T) {
+	client := newTestClient("account-001")
+	clientSvc := &mockOAuth2ClientService{
+		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return client, nil
+		},
+	}
+	engine := setupClientController(clientSvc)
+
+	body := `{"post_logout_redirect_uris":["javascript:alert(1)"]}`
+	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/cid-abc123", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUpdateClient_ServiceError(t *testing.T) {
+	client := newTestClient("account-001")
+	clientSvc := &mockOAuth2ClientService{
+		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return client, nil
+		},
+		updateFn: func() error { return fmt.Errorf("db error") },
+	}
+	engine := setupClientController(clientSvc)
+
+	body := `{"name":"Updated App"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/cid-abc123", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestDeleteClient_ServiceError(t *testing.T) {
+	client := newTestClient("account-001")
+	clientSvc := &mockOAuth2ClientService{
+		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return client, nil
+		},
+		deleteFn: func() error { return fmt.Errorf("db error") },
+	}
+	engine := setupClientController(clientSvc)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/oauth2/clients/cid-abc123", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
 func TestUpdateClient_Success(t *testing.T) {

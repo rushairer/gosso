@@ -13,11 +13,11 @@ import (
 
 // OAuth2Module holds all initialized OAuth2 services and repositories.
 type OAuth2Module struct {
-	ClientService    service.OAuth2ClientService
-	AuthCodeService  *service.AuthCodeService
-	ConsentService   *service.ConsentService
+	ClientService     service.OAuth2ClientService
+	AuthCodeService   *service.AuthCodeService
+	ConsentService    *service.ConsentService
 	DeviceCodeService *service.DeviceCodeService
-	ClientRepo       repository.OAuth2ClientRepository
+	ClientRepo        repository.OAuth2ClientRepository
 }
 
 // InitializeOAuth2Module initializes the OAuth2 module

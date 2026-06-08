@@ -13,11 +13,11 @@ import (
 
 // OIDCModule holds all initialized OIDC services.
 type OIDCModule struct {
-	IDTokenService    *oidcService.IDTokenService
-	DiscoveryService  *oidcService.DiscoveryService
-	JWKSService       *oidcService.JWKSService
-	UserInfoService   *oidcService.UserInfoService
-	LogoutService     *oidcService.LogoutService
+	IDTokenService   *oidcService.IDTokenService
+	DiscoveryService *oidcService.DiscoveryService
+	JWKSService      *oidcService.JWKSService
+	UserInfoService  *oidcService.UserInfoService
+	LogoutService    *oidcService.LogoutService
 }
 
 // InitializeOIDCModule initializes the OIDC module

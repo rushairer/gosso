@@ -27,11 +27,11 @@ import (
 )
 
 const (
-	PasswordResetTokenKeyPrefix = "password_reset:token:"
-	PasswordResetCooldownPrefix = "password_reset:cooldown:"
-	PasswordResetTokenLength    = 32
-	PasswordResetTokenTTL       = 30 * time.Minute
-	PasswordResetCooldownTTL    = 60 * time.Second
+	PasswordResetTokenKeyPrefix    = "password_reset:token:"
+	PasswordResetCooldownPrefix    = "password_reset:cooldown:"
+	PasswordResetTokenLength       = 32
+	PasswordResetTokenTTL          = 30 * time.Minute
+	PasswordResetCooldownTTL       = 60 * time.Second
 	PasswordResetMaxAttempts       = 5
 	PasswordResetRevokeTimeout     = 30 * time.Second
 	PasswordResetRetryDelay        = 100 * time.Millisecond
@@ -56,6 +56,9 @@ local updated = cjson.encode(obj)
 redis.call('SETEX', KEYS[1], ARGV[2], updated)
 return updated
 `)
+
+// PasswordResetEmailSender abstracts email delivery for password-reset links.
+// Implementations must not leak whether the address is registered.
 type PasswordResetEmailSender interface {
 	SendPasswordResetLink(ctx context.Context, to, resetLink string) error
 }

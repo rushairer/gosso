@@ -82,3 +82,36 @@ func TestValidateScope_Empty(t *testing.T) {
 	result := c.ValidateScope([]string{})
 	assert.Nil(t, result)
 }
+
+// ──────────────────────────────────────────────
+// ValidatePostLogoutRedirectURI
+// ──────────────────────────────────────────────
+
+func TestValidatePostLogoutRedirectURI_Valid(t *testing.T) {
+	c := &OAuth2Client{
+		PostLogoutRedirectURIs: []string{"https://app.example.com/logout", "https://app.example.com/bye"},
+	}
+	assert.True(t, c.ValidatePostLogoutRedirectURI("https://app.example.com/logout"))
+	assert.True(t, c.ValidatePostLogoutRedirectURI("https://app.example.com/bye"))
+}
+
+func TestValidatePostLogoutRedirectURI_NoMatch(t *testing.T) {
+	c := &OAuth2Client{
+		PostLogoutRedirectURIs: []string{"https://app.example.com/logout"},
+	}
+	assert.False(t, c.ValidatePostLogoutRedirectURI("https://evil.com/logout"))
+}
+
+func TestValidatePostLogoutRedirectURI_EmptyList(t *testing.T) {
+	c := &OAuth2Client{PostLogoutRedirectURIs: []string{}}
+	assert.False(t, c.ValidatePostLogoutRedirectURI("https://app.example.com/logout"))
+}
+
+// ──────────────────────────────────────────────
+// isValidRedirectScheme edge cases
+// ──────────────────────────────────────────────
+
+func TestValidateRedirectURI_WithFragment(t *testing.T) {
+	c := newTestClient()
+	assert.False(t, c.ValidateRedirectURI("https://app.example.com/callback#fragment"))
+}

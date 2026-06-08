@@ -11,7 +11,7 @@ import (
 
 // Sentinel errors for repository operations
 var (
-	ErrAccountNotFound        = errors.New("account not found")
+	ErrAccountNotFound         = errors.New("account not found")
 	ErrInvalidStatusTransition = errors.New("invalid account status transition")
 )
 

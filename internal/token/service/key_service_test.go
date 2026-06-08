@@ -74,3 +74,28 @@ func TestKeyID_Stable(t *testing.T) {
 
 	assert.Equal(t, svc1.KeyID(), svc2.KeyID())
 }
+
+// ──────────────────────────────────────────────
+// BigEndianBytes table-driven test
+// ──────────────────────────────────────────────
+
+func TestBigEndianBytes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    int
+		expected []byte
+	}{
+		{"zero", 0, []byte{0}},
+		{"one", 1, []byte{1}},
+		{"255", 255, []byte{0xff}},
+		{"256", 256, []byte{1, 0}},
+		{"65536", 65536, []byte{1, 0, 0}},
+		{"large", 0x01020304, []byte{1, 2, 3, 4}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := BigEndianBytes(tt.input)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}

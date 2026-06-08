@@ -12,10 +12,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/middleware"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	"github.com/rushairer/gosso/middleware"
 )
 
 // DeviceCodeRequestRequest is the device code initiation request body.
@@ -146,7 +146,7 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 		"ClientName": client.Name,
 		"Scopes":     dc.Scopes,
 		"CSRFToken":  csrfTokenFromCookie(ctx),
-		"CSPNonce":  middleware.GetCSPNonce(ctx),
+		"CSPNonce":   middleware.GetCSPNonce(ctx),
 	}); err != nil {
 		c.logger.Error("Failed to render device template", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})

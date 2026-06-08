@@ -570,8 +570,8 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 
 // Error definitions
 var (
-	ErrSessionNotFound              = errors.New("session not found")
-	ErrSessionExpired               = errors.New("session expired")
-	ErrSessionAccessDenied          = errors.New("session not found or access denied")
-	ErrTokenRevokerNotConfigured    = errors.New("token revoker not configured")
+	ErrSessionNotFound           = errors.New("session not found")
+	ErrSessionExpired            = errors.New("session expired")
+	ErrSessionAccessDenied       = errors.New("session not found or access denied")
+	ErrTokenRevokerNotConfigured = errors.New("token revoker not configured")
 )

@@ -15,6 +15,8 @@ import (
 	"github.com/rushairer/gosso/internal/utility"
 )
 
+// TimeoutMiddleware returns a Gin handler that aborts with 408 when a request
+// exceeds the given duration.
 func TimeoutMiddleware(requestTimeout time.Duration) gin.HandlerFunc {
 	return timeout.New(
 		timeout.WithTimeout(requestTimeout),
@@ -26,6 +28,8 @@ func TimeoutMiddleware(requestTimeout time.Duration) gin.HandlerFunc {
 	)
 }
 
+// RecoveryMiddleware returns a Gin handler that recovers from panics, logs the
+// stack trace, and responds with 500.
 func RecoveryMiddleware(logger *zap.Logger) gin.HandlerFunc {
 	logger = utility.EnsureLogger(logger)
 	return gin.CustomRecovery(

@@ -246,3 +246,241 @@ func TestKeyService(t *testing.T) {
 	assert.NotNil(t, keySvc.PublicKey())
 	assert.NotEmpty(t, keySvc.KeyID())
 }
+
+// ──────────────────────────────────────────────
+// GenerateShortLivedToken
+// ──────────────────────────────────────────────
+
+func TestGenerateShortLivedToken(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	customExpiry := time.Now().Add(30 * time.Second)
+	claims := &domain.AccessTokenClaims{
+		AccountID: "account-short",
+		SessionID: "session-short",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(customExpiry),
+		},
+	}
+
+	tokenString, err := svc.GenerateShortLivedToken(claims)
+	require.NoError(t, err)
+	assert.NotEmpty(t, tokenString)
+
+	parsed, err := svc.ValidateAccessTokenWithContext(context.Background(), tokenString)
+	require.NoError(t, err)
+	assert.Equal(t, "account-short", parsed.AccountID)
+
+	// Verify the ExpiresAt is close to our custom value, not the default 15m
+	assert.WithinDuration(t, customExpiry, parsed.ExpiresAt.Time, 2*time.Second)
+}
+
+func TestGenerateShortLivedToken_DefaultExpiry(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	// No ExpiresAt set — should fall back to configured accessExpiry
+	claims := &domain.AccessTokenClaims{
+		AccountID: "account-default",
+		SessionID: "session-default",
+	}
+
+	tokenString, err := svc.GenerateShortLivedToken(claims)
+	require.NoError(t, err)
+
+	parsed, err := svc.ValidateAccessTokenWithContext(context.Background(), tokenString)
+	require.NoError(t, err)
+
+	// Should be ~15 minutes from now
+	expectedExpiry := time.Now().Add(svc.AccessExpiry())
+	assert.WithinDuration(t, expectedExpiry, parsed.ExpiresAt.Time, 2*time.Second)
+}
+
+// ──────────────────────────────────────────────
+// AccessExpiry getter
+// ──────────────────────────────────────────────
+
+func TestAccessExpiry(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	assert.Equal(t, 15*time.Minute, svc.AccessExpiry())
+}
+
+// ──────────────────────────────────────────────
+// IntrospectToken
+// ──────────────────────────────────────────────
+
+func TestIntrospectToken_Active(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	claims := &domain.AccessTokenClaims{
+		AccountID: "account-introspect",
+		Roles:     []string{"user"},
+		SessionID: "session-introspect",
+	}
+
+	tokenString, err := svc.GenerateAccessToken(claims)
+	require.NoError(t, err)
+
+	result, err := svc.IntrospectToken(ctx, tokenString)
+	require.NoError(t, err)
+	assert.Equal(t, true, result["active"])
+	assert.Equal(t, "account-introspect", result["sub"])
+	assert.Equal(t, "session-introspect", result["sid"])
+	assert.Equal(t, "Bearer", result["token_type"])
+	assert.Equal(t, []string{"user"}, result["roles"])
+	assert.NotNil(t, result["exp"])
+	assert.NotNil(t, result["iat"])
+	assert.NotNil(t, result["iss"])
+	assert.NotNil(t, result["jti"])
+}
+
+func TestIntrospectToken_Inactive(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	result, err := svc.IntrospectToken(context.Background(), "garbage-token")
+	require.NoError(t, err)
+	assert.Equal(t, false, result["active"])
+}
+
+func TestIntrospectToken_Revoked(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	claims := &domain.AccessTokenClaims{
+		AccountID: "account-revoked",
+		SessionID: "session-revoked",
+	}
+
+	tokenString, err := svc.GenerateAccessToken(claims)
+	require.NoError(t, err)
+
+	parsed, err := svc.ValidateAccessTokenWithContext(ctx, tokenString)
+	require.NoError(t, err)
+
+	// Revoke
+	err = svc.blacklist.RevokeToken(ctx, parsed.ID, "test", parsed.ExpiresAt.Time)
+	require.NoError(t, err)
+
+	result, err := svc.IntrospectToken(ctx, tokenString)
+	require.NoError(t, err)
+	assert.Equal(t, false, result["active"])
+}
+
+// ──────────────────────────────────────────────
+// RevokeAllForSession
+// ──────────────────────────────────────────────
+
+func TestRevokeAllForSession(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	rt, err := svc.GenerateRefreshToken(ctx, "acct-revoke-all", "client-1", "session-revoke-all", "openid")
+	require.NoError(t, err)
+
+	err = svc.RevokeAllForSession(ctx, "session-revoke-all")
+	require.NoError(t, err)
+
+	// Token should be gone
+	_, err = svc.ValidateRefreshToken(ctx, rt.Token)
+	assert.Error(t, err)
+}
+
+func TestRevokeAllForSession_Empty(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	err := svc.RevokeAllForSession(context.Background(), "nonexistent-session")
+	require.NoError(t, err)
+}
+
+// ──────────────────────────────────────────────
+// RevokeAccessToken
+// ──────────────────────────────────────────────
+
+func TestRevokeAccessToken(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	claims := &domain.AccessTokenClaims{
+		AccountID: "acct-revoke-access",
+		SessionID: "session-revoke-access",
+	}
+
+	tokenString, err := svc.GenerateAccessToken(claims)
+	require.NoError(t, err)
+
+	parsed, err := svc.ValidateAccessTokenWithContext(ctx, tokenString)
+	require.NoError(t, err)
+
+	err = svc.RevokeAccessToken(ctx, parsed.ID, parsed.ExpiresAt.Time)
+	require.NoError(t, err)
+
+	// Should be rejected now
+	_, err = svc.ValidateAccessTokenWithContext(ctx, tokenString)
+	assert.Error(t, err)
+}
+
+func TestRevokeAccessToken_NilBlacklist(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	svc.blacklist = nil
+	err := svc.RevokeAccessToken(context.Background(), "any-jti", time.Now().Add(time.Hour))
+	assert.ErrorIs(t, err, ErrBlacklistNotConfigured)
+}
+
+// ──────────────────────────────────────────────
+// RevokeAccountTokens
+// ──────────────────────────────────────────────
+
+func TestRevokeAccountTokens(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Generate a token
+	claims := &domain.AccessTokenClaims{
+		AccountID: "acct-account-revoke",
+		SessionID: "session-account-revoke",
+	}
+	tokenString, err := svc.GenerateAccessToken(claims)
+	require.NoError(t, err)
+
+	parsed, err := svc.ValidateAccessTokenWithContext(ctx, tokenString)
+	require.NoError(t, err)
+
+	// Revoke all tokens for account
+	// Sleep 1s to ensure revocation timestamp (Unix-second precision) lands
+	// in a different second than the token's IssuedAt.
+	time.Sleep(time.Second)
+
+	err = svc.RevokeAccountTokens(ctx, parsed.AccountID)
+	require.NoError(t, err)
+
+	// The previously valid token should now be rejected
+	_, err = svc.ValidateAccessTokenWithContext(ctx, tokenString)
+	assert.Error(t, err)
+}
+
+func TestRevokeAccountTokens_NilBlacklist(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	svc.blacklist = nil
+	err := svc.RevokeAccountTokens(context.Background(), "any-account")
+	assert.ErrorIs(t, err, ErrBlacklistNotConfigured)
+}

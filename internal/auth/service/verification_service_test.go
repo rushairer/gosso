@@ -2,12 +2,16 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/testutil"
 )
@@ -155,4 +159,231 @@ func TestVerifyCode_CodeReuse(t *testing.T) {
 	_, err = svc.VerifyCode(ctx, "email", "reuse@example.com", code)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "expired or not found")
+}
+
+// ──────────────────────────────────────────────
+// Setter tests
+// ──────────────────────────────────────────────
+
+func TestVerificationService_SetCodeTTL(t *testing.T) {
+	svc := NewVerificationService(nil, nil, nil, nil, nil)
+	svc.SetCodeTTL(5 * time.Minute)
+	assert.Equal(t, 5*time.Minute, svc.codeTTL)
+
+	// zero/negative should be no-op
+	svc.SetCodeTTL(0)
+	assert.Equal(t, 5*time.Minute, svc.codeTTL)
+	svc.SetCodeTTL(-1)
+	assert.Equal(t, 5*time.Minute, svc.codeTTL)
+}
+
+func TestVerificationService_SetCooldownTTL(t *testing.T) {
+	svc := NewVerificationService(nil, nil, nil, nil, nil)
+	svc.SetCooldownTTL(30 * time.Second)
+	assert.Equal(t, 30*time.Second, svc.cooldownTTL)
+
+	svc.SetCooldownTTL(0)
+	assert.Equal(t, 30*time.Second, svc.cooldownTTL)
+}
+
+func TestVerificationService_SetMaxAttempts(t *testing.T) {
+	svc := NewVerificationService(nil, nil, nil, nil, nil)
+	svc.SetMaxAttempts(3)
+	assert.Equal(t, 3, svc.maxAttempts)
+
+	svc.SetMaxAttempts(0)
+	assert.Equal(t, 3, svc.maxAttempts)
+}
+
+// ──────────────────────────────────────────────
+// Unsupported type test
+// ──────────────────────────────────────────────
+
+func TestSendCode_UnsupportedType(t *testing.T) {
+	svc, _, cleanup, _ := setupTestVerificationService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	err := svc.SendCode(ctx, "sms_unsupported", "+1234567890", "account-xxx")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported credential type")
+}
+
+// ──────────────────────────────────────────────
+// VerifyCodeForAccount tests
+// ──────────────────────────────────────────────
+
+func TestVerifyCodeForAccount_Success(t *testing.T) {
+	svc, _, cleanup, emailSvc := setupTestVerificationService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	err := svc.SendCode(ctx, "email", "vca-ok@example.com", "acct-vca")
+	require.NoError(t, err)
+	require.Len(t, emailSvc.sentCodes, 1)
+	code := emailSvc.sentCodes[0]
+
+	err = svc.VerifyCodeForAccount(ctx, "email", "vca-ok@example.com", code, "acct-vca")
+	assert.NoError(t, err)
+}
+
+func TestVerifyCodeForAccount_WrongAccount(t *testing.T) {
+	svc, _, cleanup, emailSvc := setupTestVerificationService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	err := svc.SendCode(ctx, "email", "vca-wrong@example.com", "acct-real")
+	require.NoError(t, err)
+	require.Len(t, emailSvc.sentCodes, 1)
+	code := emailSvc.sentCodes[0]
+
+	err = svc.VerifyCodeForAccount(ctx, "email", "vca-wrong@example.com", code, "acct-impostor")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "does not belong to this account")
+}
+
+// ──────────────────────────────────────────────
+// ValidateCredentialOwnership tests
+// ──────────────────────────────────────────────
+
+func TestValidateCredentialOwnership_Success(t *testing.T) {
+	svc, _, cleanup, _ := setupTestVerificationService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// The VerificationService was created with nil credentialRepo,
+	// so we re-create with a mock.
+	mockRepo := &mockCredRepoForVerification{
+		creds: []*accountDomain.Credential{
+			{ID: "c1", AccountID: "acct-own", Type: accountDomain.CredentialTypeEmail, Identifier: strPtr("owner@example.com")},
+		},
+	}
+
+	svc2 := NewVerificationService(nil, nil, nil, mockRepo, nil)
+	err := svc2.ValidateCredentialOwnership(ctx, "acct-own", "email", "owner@example.com")
+	assert.NoError(t, err)
+
+	_ = svc // suppress unused
+	_ = cleanup
+}
+
+func TestValidateCredentialOwnership_NotOwned(t *testing.T) {
+	mockRepo := &mockCredRepoForVerification{
+		creds: []*accountDomain.Credential{
+			{ID: "c1", AccountID: "acct-own", Type: accountDomain.CredentialTypeEmail, Identifier: strPtr("owner@example.com")},
+		},
+	}
+
+	svc := NewVerificationService(nil, nil, nil, mockRepo, nil)
+	err := svc.ValidateCredentialOwnership(context.Background(), "acct-own", "email", "other@example.com")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not associated with this account")
+}
+
+func TestValidateCredentialOwnership_RepoError(t *testing.T) {
+	mockRepo := &mockCredRepoForVerification{
+		err: fmt.Errorf("database down"),
+	}
+
+	svc := NewVerificationService(nil, nil, nil, mockRepo, nil)
+	err := svc.ValidateCredentialOwnership(context.Background(), "acct-x", "email", "x@example.com")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "lookup credentials")
+}
+
+// ──────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────
+
+type mockCredRepoForVerification struct {
+	creds []*accountDomain.Credential
+	err   error
+}
+
+func (m *mockCredRepoForVerification) CreateCredentials(_ context.Context, _ *sql.Tx, _ []*accountDomain.Credential) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockCredRepoForVerification) FindByAccountAndType(_ context.Context, _ string, _ accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.creds, nil
+}
+
+func (m *mockCredRepoForVerification) FindByTypeAndIdentifier(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockCredRepoForVerification) FindPasswordCredential(_ context.Context, _ string) (*accountDomain.Credential, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockCredRepoForVerification) UpdateCredential(_ context.Context, _ *sql.Tx, _ *accountDomain.Credential) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockCredRepoForVerification) SoftDeleteCredentialsByAccount(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockCredRepoForVerification) SoftDeleteCredential(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockCredRepoForVerification) VerifyFirstUnverifiedTOTP(_ context.Context, _ *sql.Tx, _ string) (bool, error) {
+	return false, fmt.Errorf("not implemented")
+}
+
+func (m *mockCredRepoForVerification) FindByAccountAndTypeForUpdate(_ context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func strPtr(s string) *string { return &s }
+
+// ──────────────────────────────────────────────
+// Pure helper tests (no Redis required)
+// ──────────────────────────────────────────────
+
+func TestGenerateNumericCode(t *testing.T) {
+	for _, length := range []int{4, 6, 8} {
+		t.Run(fmt.Sprintf("length_%d", length), func(t *testing.T) {
+			code, err := generateNumericCode(length)
+			require.NoError(t, err)
+			assert.Len(t, code, length)
+			for _, c := range code {
+				assert.True(t, c >= '0' && c <= '9', "unexpected char: %c", c)
+			}
+		})
+	}
+}
+
+func TestGenerateNumericCode_Unique(t *testing.T) {
+	seen := make(map[string]bool)
+	for i := 0; i < 100; i++ {
+		code, err := generateNumericCode(6)
+		require.NoError(t, err)
+		seen[code] = true
+	}
+	assert.Greater(t, len(seen), 90)
+}
+
+func TestBuildCodeKey(t *testing.T) {
+	svc := NewVerificationService(nil, nil, nil, nil, nil)
+	got := svc.buildCodeKey("email", "user@example.com")
+	assert.Equal(t, "verify:code:email:user@example.com", got)
+}
+
+func TestBuildCooldownKey(t *testing.T) {
+	svc := NewVerificationService(nil, nil, nil, nil, nil)
+	got := svc.buildCooldownKey("phone", "+1234567890")
+	assert.Equal(t, "verify:cooldown:phone:+1234567890", got)
+}
+
+func TestMaskIdentifier_DelegatesToUtility(t *testing.T) {
+	result := maskIdentifier("email", "test@example.com")
+	assert.NotEmpty(t, result)
 }

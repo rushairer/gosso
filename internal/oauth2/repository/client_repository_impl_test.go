@@ -230,3 +230,26 @@ func TestSoftDelete_NotFound(t *testing.T) {
 
 	assert.ErrorIs(t, err, domain.ErrClientNotFound)
 }
+
+// ──────────────────────────────────────────────
+// SoftDeleteByAccountID
+// ──────────────────────────────────────────────
+
+func TestSoftDeleteByAccountID_Success(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	tx, _ := db.Begin()
+
+	mock.ExpectExec("UPDATE oauth2_clients").
+		WithArgs(sqlmock.AnyArg(), "account-001").
+		WillReturnResult(sqlmock.NewResult(0, 2))
+
+	repo := NewOAuth2ClientRepository(db)
+	err = repo.SoftDeleteByAccountID(context.Background(), tx, "account-001", time.Now())
+
+	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}

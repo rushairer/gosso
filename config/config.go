@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+// GoUnoConfig is the top-level application configuration loaded from YAML and
+// environment variables (prefix GOUNO_). It is populated by ConfigManager and
+// validated before the application starts.
 type GoUnoConfig struct {
 	WebServerConfig    WebServerConfig      `mapstructure:"web_server"`
 	DatabaseConfig     DatabaseConfig       `mapstructure:"database"`
@@ -19,18 +22,20 @@ type GoUnoConfig struct {
 	OAuthProviders     OAuthProvidersConfig `mapstructure:"oauth_providers"`
 }
 
+// WebServerConfig holds Gin HTTP server settings including timeouts,
+// body-size limits, trusted proxies, and per-endpoint rate limits.
 type WebServerConfig struct {
-	Debug              bool             `mapstructure:"debug"`
-	Address            string           `mapstructure:"address"`
-	Port               string           `mapstructure:"port"`
-	IdleTimeout        time.Duration    `mapstructure:"idle_timeout"`
-	ReadTimeout        time.Duration    `mapstructure:"read_timeout"`
-	ReadHeaderTimeout  time.Duration    `mapstructure:"read_header_timeout"`
-	WriteTimeout       time.Duration    `mapstructure:"write_timeout"`
-	RequestTimeout     time.Duration    `mapstructure:"request_timeout"`
-	MaxBodySize        int64            `mapstructure:"max_body_size"`
-	TrustedProxies     []string         `mapstructure:"trusted_proxies"`
-	RateLimits         RateLimitsConfig `mapstructure:"rate_limits"`
+	Debug             bool             `mapstructure:"debug"`
+	Address           string           `mapstructure:"address"`
+	Port              string           `mapstructure:"port"`
+	IdleTimeout       time.Duration    `mapstructure:"idle_timeout"`
+	ReadTimeout       time.Duration    `mapstructure:"read_timeout"`
+	ReadHeaderTimeout time.Duration    `mapstructure:"read_header_timeout"`
+	WriteTimeout      time.Duration    `mapstructure:"write_timeout"`
+	RequestTimeout    time.Duration    `mapstructure:"request_timeout"`
+	MaxBodySize       int64            `mapstructure:"max_body_size"`
+	TrustedProxies    []string         `mapstructure:"trusted_proxies"`
+	RateLimits        RateLimitsConfig `mapstructure:"rate_limits"`
 }
 
 // RateLimitsConfig per-endpoint rate limit configuration (requests per minute)
@@ -43,8 +48,12 @@ type RateLimitsConfig struct {
 	DeviceCode int `mapstructure:"device_code"` // Device code endpoint, default 10
 }
 
+// DatabaseConfigDriverName is a named key for a database driver
+// (e.g. "postgres").
 type DatabaseConfigDriverName string
 
+// DatabaseConfigDriver describes a single database driver entry including its
+// Go driver name, DSN, and ORM log level.
 type DatabaseConfigDriver struct {
 	Name     DatabaseConfigDriverName `mapstructure:"name"`
 	Driver   string                   `mapstructure:"driver"`
@@ -52,6 +61,8 @@ type DatabaseConfigDriver struct {
 	LogLevel int                      `mapstructure:"log_level"`
 }
 
+// DatabaseConfig holds connection-pool tuning and the set of named database
+// drivers. Exactly one driver must be marked as Default.
 type DatabaseConfig struct {
 	Default            DatabaseConfigDriverName                          `mapstructure:"default"`
 	Drivers            map[DatabaseConfigDriverName]DatabaseConfigDriver `mapstructure:"drivers"`
@@ -77,12 +88,15 @@ func (c DatabaseConfig) GetDefaultDriver() *DatabaseConfigDriver {
 	}
 }
 
+// RedisConfig holds the Redis connection DSN and pool parameters.
 type RedisConfig struct {
 	DSN                string `mapstructure:"dsn"`
 	MaxActiveConns     int    `mapstructure:"max_active_conns"`
 	PoolTimeoutSeconds int    `mapstructure:"pool_timeout_seconds"`
 }
 
+// TaskPipelineConfig configures the async batch-processing pipeline used by
+// background workers (e.g. audit logging).
 type TaskPipelineConfig struct {
 	// FlushSize is the maximum capacity for batch processing
 	FlushSize uint32 `mapstructure:"flush_size"`
@@ -92,6 +106,8 @@ type TaskPipelineConfig struct {
 	FlushInterval time.Duration `mapstructure:"flush_interval"`
 }
 
+// SMTPConfig holds outbound email (SMTP) settings used for password-reset
+// and verification emails. When Host is empty the email subsystem is disabled.
 type SMTPConfig struct {
 	Host      string `mapstructure:"host"`
 	Port      int    `mapstructure:"port"`
@@ -101,11 +117,15 @@ type SMTPConfig struct {
 	TLSPolicy string `mapstructure:"tls_policy"`
 }
 
+// LogConfig holds logging configuration.
 type LogConfig struct {
 	// Log level: -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
 	Level int `mapstructure:"level"`
 }
 
+// AuthConfig holds authentication and authorization settings including token
+// lifetimes, OAuth2/OIDC issuer, WebAuthn parameters, MFA defaults, and
+// rate-limiting knobs for login, password reset, and verification flows.
 type AuthConfig struct {
 	Issuer                  string        `mapstructure:"issuer"`
 	AccessTokenExpiry       time.Duration `mapstructure:"access_token_expiry"`
@@ -136,20 +156,21 @@ type AuthConfig struct {
 	BackupCodeLength   int           `mapstructure:"backup_code_length"`
 
 	// Password reset settings (0 = use built-in defaults)
-	PasswordResetWaitTimeout  time.Duration `mapstructure:"password_reset_wait_timeout"`
-	PasswordResetTokenTTL     time.Duration `mapstructure:"password_reset_token_ttl"`
-	PasswordResetCooldownTTL  time.Duration `mapstructure:"password_reset_cooldown_ttl"`
-	PasswordResetMaxAttempts  int           `mapstructure:"password_reset_max_attempts"`
+	PasswordResetWaitTimeout time.Duration `mapstructure:"password_reset_wait_timeout"`
+	PasswordResetTokenTTL    time.Duration `mapstructure:"password_reset_token_ttl"`
+	PasswordResetCooldownTTL time.Duration `mapstructure:"password_reset_cooldown_ttl"`
+	PasswordResetMaxAttempts int           `mapstructure:"password_reset_max_attempts"`
 
 	// Verification code settings (0 = use built-in defaults)
-	VerifyCodeTTL        time.Duration `mapstructure:"verify_code_ttl"`
-	VerifyCooldownTTL    time.Duration `mapstructure:"verify_cooldown_ttl"`
-	VerifyCodeMaxAttempts int          `mapstructure:"verify_code_max_attempts"`
+	VerifyCodeTTL         time.Duration `mapstructure:"verify_code_ttl"`
+	VerifyCooldownTTL     time.Duration `mapstructure:"verify_cooldown_ttl"`
+	VerifyCodeMaxAttempts int           `mapstructure:"verify_code_max_attempts"`
 
 	// OIDC settings
 	IDTokenExpiry time.Duration `mapstructure:"id_token_expiry"`
 }
 
+// CORSConfig configures Cross-Origin Resource Sharing (CORS) headers.
 type CORSConfig struct {
 	AllowedOrigins   []string `mapstructure:"allowed_origins"`
 	AllowedMethods   []string `mapstructure:"allowed_methods"`
@@ -158,6 +179,8 @@ type CORSConfig struct {
 	MaxAge           int      `mapstructure:"max_age"`
 }
 
+// OAuthProviderConfig describes a single external OAuth 2.0 identity provider
+// (e.g. Google, GitHub, WeChat).
 type OAuthProviderConfig struct {
 	ClientID     string   `mapstructure:"client_id"`
 	ClientSecret string   `mapstructure:"client_secret"`
@@ -168,6 +191,7 @@ type OAuthProviderConfig struct {
 	UserInfoURL  string   `mapstructure:"userinfo_url"`
 }
 
+// OAuthProvidersConfig aggregates all configured social-login providers.
 type OAuthProvidersConfig struct {
 	Google OAuthProviderConfig `mapstructure:"google"`
 	GitHub OAuthProviderConfig `mapstructure:"github"`

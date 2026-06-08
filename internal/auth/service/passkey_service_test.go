@@ -3,13 +3,16 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/auth/domain"
 )
 
@@ -151,4 +154,126 @@ func TestNewPasskeyService_NilLogger(t *testing.T) {
 	svc := NewPasskeyService(nil, nil, nil, nil, nil, nil)
 	assert.NotNil(t, svc)
 	assert.NotNil(t, svc.logger)
+}
+
+type mockAccountLookupForPasskey struct {
+	account *accountDomain.Account
+	err     error
+}
+
+func (m *mockAccountLookupForPasskey) FindAccountByID(_ context.Context, _ string) (*accountDomain.Account, error) {
+	return m.account, m.err
+}
+
+// ──────────────────────────────────────────────
+// toCredentialSlice
+// ──────────────────────────────────────────────
+
+func TestToCredentialSlice_Nil(t *testing.T) {
+	result := toCredentialSlice(nil)
+	assert.Nil(t, result)
+}
+
+func TestToCredentialSlice_Empty(t *testing.T) {
+	result := toCredentialSlice([]*domain.WebAuthnCredential{})
+	assert.NotNil(t, result)
+	assert.Len(t, result, 0)
+}
+
+func TestToCredentialSlice_Data(t *testing.T) {
+	input := []*domain.WebAuthnCredential{
+		{ID: "cred-1", AccountID: "acct-1"},
+		{ID: "cred-2", AccountID: "acct-2"},
+	}
+	result := toCredentialSlice(input)
+	require.Len(t, result, 2)
+	assert.Equal(t, "cred-1", result[0].ID)
+	assert.Equal(t, "acct-2", result[1].AccountID)
+}
+
+// ──────────────────────────────────────────────
+// transportsToStrings
+// ──────────────────────────────────────────────
+
+func TestTransportsToStrings_Nil(t *testing.T) {
+	result := transportsToStrings(nil)
+	assert.Nil(t, result)
+}
+
+func TestTransportsToStrings_Empty(t *testing.T) {
+	result := transportsToStrings([]protocol.AuthenticatorTransport{})
+	assert.Nil(t, result)
+}
+
+func TestTransportsToStrings_Data(t *testing.T) {
+	input := []protocol.AuthenticatorTransport{
+		protocol.USB,
+		protocol.Internal,
+	}
+	result := transportsToStrings(input)
+	require.Len(t, result, 2)
+	assert.Equal(t, "usb", result[0])
+	assert.Equal(t, "internal", result[1])
+}
+
+// ──────────────────────────────────────────────
+// SetChallengeTTL
+// ──────────────────────────────────────────────
+
+func TestPasskeyService_SetChallengeTTL(t *testing.T) {
+	svc := &PasskeyService{challengeTTL: defaultChallengeTTL, logger: zap.NewNop()}
+	assert.Equal(t, defaultChallengeTTL, svc.challengeTTL)
+	svc.SetChallengeTTL(10 * time.Minute)
+	assert.Equal(t, 10*time.Minute, svc.challengeTTL)
+}
+
+func TestPasskeyService_SetChallengeTTL_ZeroIgnored(t *testing.T) {
+	svc := &PasskeyService{challengeTTL: defaultChallengeTTL, logger: zap.NewNop()}
+	svc.SetChallengeTTL(0)
+	assert.Equal(t, defaultChallengeTTL, svc.challengeTTL)
+}
+
+// ──────────────────────────────────────────────
+// ResolveAccountForRegistration
+// ──────────────────────────────────────────────
+
+func TestResolveAccountForRegistration_WithUsernameAndDisplayName(t *testing.T) {
+	userName := "alice"
+	account := &accountDomain.Account{
+		ID:          "acct-1",
+		Username:    &userName,
+		DisplayName: "Alice Smith",
+	}
+	svc := &PasskeyService{
+		accountLookup: &mockAccountLookupForPasskey{account: account},
+		logger:        zap.NewNop(),
+	}
+	username, displayName, err := svc.ResolveAccountForRegistration(context.Background(), "acct-1")
+	require.NoError(t, err)
+	assert.Equal(t, "alice", username)
+	assert.Equal(t, "Alice Smith", displayName)
+}
+
+func TestResolveAccountForRegistration_FallbackToAccountID(t *testing.T) {
+	account := &accountDomain.Account{
+		ID: "acct-2",
+	}
+	svc := &PasskeyService{
+		accountLookup: &mockAccountLookupForPasskey{account: account},
+		logger:        zap.NewNop(),
+	}
+	username, displayName, err := svc.ResolveAccountForRegistration(context.Background(), "acct-2")
+	require.NoError(t, err)
+	assert.Equal(t, "acct-2", username)
+	assert.Equal(t, "acct-2", displayName)
+}
+
+func TestResolveAccountForRegistration_AccountNotFound(t *testing.T) {
+	svc := &PasskeyService{
+		accountLookup: &mockAccountLookupForPasskey{err: errors.New("not found")},
+		logger:        zap.NewNop(),
+	}
+	_, _, err := svc.ResolveAccountForRegistration(context.Background(), "acct-999")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "resolve account")
 }

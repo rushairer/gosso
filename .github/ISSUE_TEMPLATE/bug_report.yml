@@ -1,0 +1,80 @@
+name: Bug Report
+description: Report a bug in gosso
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please fill in the details below so we can reproduce and fix it.
+
+        **Security vulnerabilities**: Do NOT open a public issue. Use GitHub's private vulnerability reporting or email the maintainers directly. See [CONTRIBUTING.md](../../CONTRIBUTING.md#reporting-vulnerabilities).
+  - type: input
+    id: version
+    attributes:
+      label: gosso version
+      description: Output of `./bin/gosso version` or the Git commit SHA.
+      placeholder: "e.g. v0.1.0 or abc1234"
+    validations:
+      required: true
+  - type: input
+    id: go-version
+    attributes:
+      label: Go version
+      description: Output of `go version`.
+      placeholder: "e.g. go1.25.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Docker / container
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to reproduce the behavior.
+      placeholder: |
+        1. Start gosso with `make run`
+        2. Call `GET /oauth2/authorize?...`
+        3. Observe error response
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or error output
+      description: Paste relevant log output. Please redact any secrets, tokens, or passwords before posting.
+      render: shell
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: Paste your `config/config.yaml` (redact secrets). Or describe relevant config differences from defaults.
+      render: yaml
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Anything else that might help (screenshots, related issues, environment notes).

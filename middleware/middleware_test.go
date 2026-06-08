@@ -1,8 +1,10 @@
 package middleware
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -148,4 +150,185 @@ func TestGenerateCSRFToken_Unique(t *testing.T) {
 	t2, err := generateCSRFToken()
 	require.NoError(t, err)
 	assert.NotEqual(t, t1, t2)
+}
+func TestRecoveryMiddleware_Panic(t *testing.T) {
+	logger := zap.NewNop()
+	r := gin.New()
+	r.Use(RecoveryMiddleware(logger))
+	r.GET("/panic", func(_ *gin.Context) { panic("test panic") })
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/panic", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestRecoveryMiddleware_NoPanic(t *testing.T) {
+	logger := zap.NewNop()
+	r := gin.New()
+	r.Use(RecoveryMiddleware(logger))
+	r.GET("/ok", func(c *gin.Context) { c.String(200, "ok") })
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/ok", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, 200, w.Code)
+}
+
+// ──────────────────────────────────────────────
+// SecurityHeadersMiddleware
+// ──────────────────────────────────────────────
+
+func TestSecurityHeadersMiddleware_Dev(t *testing.T) {
+	r := gin.New()
+	r.Use(SecurityHeadersMiddleware(false))
+	r.GET("/test", func(c *gin.Context) { c.String(200, "ok") })
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/test", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, 200, w.Code)
+	assert.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
+	assert.Equal(t, "DENY", w.Header().Get("X-Frame-Options"))
+	assert.Equal(t, "strict-origin-when-cross-origin", w.Header().Get("Referrer-Policy"))
+	assert.Equal(t, "same-origin", w.Header().Get("Cross-Origin-Opener-Policy"))
+	assert.Empty(t, w.Header().Get("Strict-Transport-Security"))
+}
+
+func TestSecurityHeadersMiddleware_Prod(t *testing.T) {
+	r := gin.New()
+	r.Use(SecurityHeadersMiddleware(true))
+	r.GET("/test", func(c *gin.Context) { c.String(200, "ok") })
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/test", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, 200, w.Code)
+	assert.NotEmpty(t, w.Header().Get("Strict-Transport-Security"))
+	assert.Contains(t, w.Header().Get("Strict-Transport-Security"), "max-age=31536000")
+}
+
+func TestSecurityHeadersMiddleware_CSPNonce(t *testing.T) {
+	r := gin.New()
+	r.Use(SecurityHeadersMiddleware(false))
+	r.GET("/test", func(c *gin.Context) {
+		nonce := GetCSPNonce(c)
+		c.String(200, nonce)
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/test", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, 200, w.Code)
+	body := w.Body.String()
+	assert.NotEmpty(t, body)
+	cspHeader := w.Header().Get("Content-Security-Policy")
+	assert.Contains(t, cspHeader, "'nonce-"+body+"'")
+}
+
+// ──────────────────────────────────────────────
+// MaxBodySizeMiddleware
+// ──────────────────────────────────────────────
+
+func TestMaxBodySizeMiddleware_UnderLimit(t *testing.T) {
+	r := gin.New()
+	r.Use(MaxBodySizeMiddleware(1024))
+	r.POST("/test", func(c *gin.Context) { c.String(200, "ok") })
+
+	w := httptest.NewRecorder()
+	body := strings.NewReader("small body")
+	req, _ := http.NewRequest("POST", "/test", body)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, 200, w.Code)
+}
+
+func TestMaxBodySizeMiddleware_OverLimit(t *testing.T) {
+	var readErr error
+	r := gin.New()
+	r.Use(MaxBodySizeMiddleware(5))
+	r.POST("/test", func(c *gin.Context) {
+		_, readErr = io.ReadAll(c.Request.Body)
+		c.String(200, "ok")
+	})
+
+	w := httptest.NewRecorder()
+	body := strings.NewReader("this body is longer than five bytes")
+	req, _ := http.NewRequest("POST", "/test", body)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, 200, w.Code)
+	require.Error(t, readErr)
+	assert.Contains(t, readErr.Error(), "request body too large")
+}
+
+// ──────────────────────────────────────────────
+// GetAccountID
+// ──────────────────────────────────────────────
+
+func TestGetAccountID_Success(t *testing.T) {
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Set(ContextKeyAccountID, "account-123")
+
+	id, ok := GetAccountID(ctx)
+	assert.True(t, ok)
+	assert.Equal(t, "account-123", id)
+}
+
+func TestGetAccountID_Missing(t *testing.T) {
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+
+	id, ok := GetAccountID(ctx)
+	assert.False(t, ok)
+	assert.Empty(t, id)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestGetAccountID_Empty(t *testing.T) {
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Set(ContextKeyAccountID, "")
+
+	id, ok := GetAccountID(ctx)
+	assert.False(t, ok)
+	assert.Empty(t, id)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestGetAccountID_WrongType(t *testing.T) {
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Set(ContextKeyAccountID, 12345)
+
+	id, ok := GetAccountID(ctx)
+	assert.False(t, ok)
+	assert.Empty(t, id)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+// ──────────────────────────────────────────────
+// CSP nonce helpers
+// ──────────────────────────────────────────────
+
+func TestGetCSPNonce_NotSet(t *testing.T) {
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+
+	nonce := GetCSPNonce(ctx)
+	assert.Empty(t, nonce)
+}
+
+func TestGenerateCSPNonce_Unique(t *testing.T) {
+	n1 := generateCSPNonce()
+	n2 := generateCSPNonce()
+	assert.NotEqual(t, n1, n2)
+	assert.NotEmpty(t, n1)
+	assert.NotEmpty(t, n2)
 }

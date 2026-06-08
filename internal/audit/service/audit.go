@@ -25,20 +25,23 @@ const (
 	auditConcurrency   = 100
 	auditErrorChanSize = 1024
 
-	// auditDrainGracePeriod is how long Wait() sleeps after cancelling the context.
+	// auditDrainGracePeriod is how long Wait() sleeps after canceling the context.
 	// batchflow uses a hardcoded 2s drain grace period; we add 500ms margin.
 	auditDrainGracePeriod = 2500 * time.Millisecond
 )
 
+// Auditor batches and asynchronously writes audit-log records to the database.
 type Auditor struct {
-	db              *sql.DB
-	batchflow       *batchflow.BatchFlow
-	recordSchema    *batchflow.SQLSchema
-	cancel          context.CancelFunc
-	logger          *zap.Logger
+	db               *sql.DB
+	batchflow        *batchflow.BatchFlow
+	recordSchema     *batchflow.SQLSchema
+	cancel           context.CancelFunc
+	logger           *zap.Logger
 	drainGracePeriod time.Duration
 }
 
+// NewAuditor creates an Auditor backed by the given database. Call [Auditor.Wait]
+// before process exit to flush pending records.
 func NewAuditor(_ context.Context, db *sql.DB, logger *zap.Logger) *Auditor {
 	logger = utility.EnsureLogger(logger)
 	auditorCtx, cancel := context.WithCancel(context.Background())

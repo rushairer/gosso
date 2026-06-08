@@ -10,9 +10,9 @@ import (
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/middleware"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
+	"github.com/rushairer/gosso/middleware"
 )
 
 // ClientController handles OAuth2 client management endpoints

@@ -100,3 +100,33 @@ func TestNewSocialLoginService_DefaultHTTPClient(t *testing.T) {
 	assert.NotNil(t, svc.httpClient)
 	assert.Equal(t, 10*time.Second, svc.httpClient.Timeout)
 }
+
+// ──────────────────────────────────────────────
+// GenerateAuthState
+// ──────────────────────────────────────────────
+
+func TestGenerateAuthState(t *testing.T) {
+	state, err := GenerateAuthState()
+	require.NoError(t, err)
+	assert.Len(t, state, 64) // 32 bytes = 64 hex chars
+}
+
+func TestGenerateAuthState_Unique(t *testing.T) {
+	s1, err := GenerateAuthState()
+	require.NoError(t, err)
+	s2, err := GenerateAuthState()
+	require.NoError(t, err)
+	assert.NotEqual(t, s1, s2)
+}
+
+// ──────────────────────────────────────────────
+// SetAuditor
+// ──────────────────────────────────────────────
+
+func TestSocialLoginService_SetAuditor(t *testing.T) {
+	svc := newTestSocialLoginService()
+	assert.Nil(t, svc.auditor)
+	// SetAuditor accepts nil (no-op for audit-disabled mode)
+	svc.SetAuditor(nil)
+	assert.Nil(t, svc.auditor)
+}

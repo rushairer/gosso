@@ -12,11 +12,11 @@ import (
 
 // AccountModule holds the account service and shared repositories.
 type AccountModule struct {
-	Service              service.AccountService
-	AccountRepo          repository.AccountRepository
-	CredentialRepo       repository.CredentialRepository
+	Service               service.AccountService
+	AccountRepo           repository.AccountRepository
+	CredentialRepo        repository.CredentialRepository
 	FederatedIdentityRepo repository.FederatedIdentityRepository
-	RoleRepo             repository.RoleRepository
+	RoleRepo              repository.RoleRepository
 }
 
 // InitializeAccountModule initializes the account module (dependency injection)
@@ -38,10 +38,10 @@ func InitializeAccountModule(db *sql.DB, auditor *auditService.Auditor, logger *
 	)
 
 	return &AccountModule{
-		Service:              accountService,
-		AccountRepo:          accountRepo,
-		CredentialRepo:       credentialRepo,
+		Service:               accountService,
+		AccountRepo:           accountRepo,
+		CredentialRepo:        credentialRepo,
 		FederatedIdentityRepo: federatedIdentityRepo,
-		RoleRepo:             roleRepo,
+		RoleRepo:              roleRepo,
 	}
 }

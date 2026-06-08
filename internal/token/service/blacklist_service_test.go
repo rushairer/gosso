@@ -165,3 +165,45 @@ func TestBlacklistService_AutoExpiration(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, revoked)
 }
+
+// ──────────────────────────────────────────────
+// Account-level revocation tests
+// ──────────────────────────────────────────────
+
+func TestBlacklistService_SetAccountRevokedAfter(t *testing.T) {
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	accountID := "acct-set-revoke"
+	revokedAt := time.Now().Truncate(time.Second)
+	ttl := 1 * time.Hour
+
+	err := service.SetAccountRevokedAfter(ctx, accountID, revokedAt, ttl)
+	require.NoError(t, err)
+
+	got, err := service.GetAccountRevokedAfter(ctx, accountID)
+	require.NoError(t, err)
+	assert.Equal(t, revokedAt.Unix(), got.Unix())
+}
+
+func TestBlacklistService_GetAccountRevokedAfter_NotSet(t *testing.T) {
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	got, err := service.GetAccountRevokedAfter(ctx, "acct-never-set")
+	require.NoError(t, err)
+	assert.True(t, got.IsZero())
+}
+
+func TestBlacklistService_GetRevokeInfo_NotRevoked(t *testing.T) {
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	_, err := service.GetRevokeInfo(ctx, "nonexistent-jti")
+	assert.ErrorIs(t, err, ErrTokenNotRevoked)
+}

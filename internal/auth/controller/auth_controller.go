@@ -10,7 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
-	"github.com/rushairer/gosso/middleware"
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
@@ -19,6 +18,7 @@ import (
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	utility "github.com/rushairer/gosso/internal/utility"
+	"github.com/rushairer/gosso/middleware"
 )
 
 // authServiceDeps defines the auth service methods used by AuthController.
@@ -262,12 +262,6 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
 		"session_id":    result.SessionID,
 	}))
-}
-
-// LogoutRequest logout request body
-type LogoutRequest struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
 }
 
 // Logout POST /api/auth/logout
@@ -581,7 +575,7 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 
 // SendVerificationRequest send verification code request body
 type SendVerificationRequest struct {
-	Type       string `json:"type" binding:"required"`       // "email" or "phone"
+	Type       string `json:"type" binding:"required"`               // "email" or "phone"
 	Identifier string `json:"identifier" binding:"required,max=255"` // email address or phone number
 }
 

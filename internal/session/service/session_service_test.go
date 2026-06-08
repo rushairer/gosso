@@ -261,3 +261,282 @@ func TestSessionService_ErrorDefinitions(t *testing.T) {
 	assert.Equal(t, "session not found", ErrSessionNotFound.Error())
 	assert.Equal(t, "session expired", ErrSessionExpired.Error())
 }
+
+// ──────────────────────────────────────────────
+// Additional setter tests
+// ──────────────────────────────────────────────
+
+func TestSessionService_SetMaxSessionAge(t *testing.T) {
+	svc := NewSessionService(nil, nil)
+	svc.SetMaxSessionAge(2 * time.Hour)
+	assert.Equal(t, 2*time.Hour, svc.maxSessionAge)
+}
+
+func TestSessionService_SetMaxSessionAge_NoOp(t *testing.T) {
+	svc := NewSessionService(nil, nil)
+	original := svc.maxSessionAge
+	svc.SetMaxSessionAge(0)
+	assert.Equal(t, original, svc.maxSessionAge)
+	svc.SetMaxSessionAge(-1 * time.Hour)
+	assert.Equal(t, original, svc.maxSessionAge)
+}
+
+func TestSessionService_SetMaxSessions_Negative(t *testing.T) {
+	svc := NewSessionService(nil, nil)
+	original := svc.maxSessions
+	svc.SetMaxSessions(-1)
+	assert.Equal(t, original, svc.maxSessions)
+}
+
+func TestSessionService_SetSessionTTL_NoOp(t *testing.T) {
+	svc := NewSessionService(nil, nil)
+	original := svc.sessionTTL
+	svc.SetSessionTTL(0)
+	assert.Equal(t, original, svc.sessionTTL)
+	svc.SetSessionTTL(-1 * time.Second)
+	assert.Equal(t, original, svc.sessionTTL)
+}
+
+// ──────────────────────────────────────────────
+// RevokeSession with data
+// ──────────────────────────────────────────────
+
+func TestSessionService_RevokeSession_Success(t *testing.T) {
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	session := &domain.Session{
+		AccountID: "account-001",
+		Username:  "testuser",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	}
+	err := service.CreateSession(ctx, session)
+	require.NoError(t, err)
+
+	err = service.RevokeSession(ctx, "account-001", session.ID)
+	require.NoError(t, err)
+
+	_, err = service.GetSession(ctx, session.ID)
+	assert.Equal(t, ErrSessionNotFound, err)
+}
+
+func TestSessionService_RevokeSession_AccessDenied(t *testing.T) {
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	session := &domain.Session{
+		AccountID: "account-001",
+		Username:  "testuser",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	}
+	err := service.CreateSession(ctx, session)
+	require.NoError(t, err)
+	defer func() { _ = service.DeleteSession(ctx, session.ID) }()
+
+	err = service.RevokeSession(ctx, "account-OTHER", session.ID)
+	assert.ErrorIs(t, err, ErrSessionAccessDenied)
+}
+
+func TestSessionService_RevokeSession_NoTokenRevoker(t *testing.T) {
+	logger := zap.NewNop()
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+
+	svc := NewSessionService(redisClient, logger)
+	svc.SetSessionTTL(10 * time.Second)
+
+	ctx := context.Background()
+
+	session := &domain.Session{
+		AccountID: "account-001",
+		Username:  "testuser",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	}
+	err := svc.CreateSession(ctx, session)
+	require.NoError(t, err)
+	defer func() { _ = svc.DeleteSession(ctx, session.ID) }()
+
+	err = svc.RevokeSession(ctx, "account-001", session.ID)
+	assert.ErrorIs(t, err, ErrTokenRevokerNotConfigured)
+}
+
+// ──────────────────────────────────────────────
+// ListSessionsByAccount with data
+// ──────────────────────────────────────────────
+
+func TestSessionService_ListSessionsByAccount_WithData(t *testing.T) {
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	accountID := uuid.New().String()
+
+	s1 := &domain.Session{AccountID: accountID, Username: "u1", IP: "1.1.1.1", UserAgent: "a"}
+	s2 := &domain.Session{AccountID: accountID, Username: "u1", IP: "2.2.2.2", UserAgent: "b"}
+	require.NoError(t, service.CreateSession(ctx, s1))
+	require.NoError(t, service.CreateSession(ctx, s2))
+	defer func() {
+		_ = service.DeleteSession(ctx, s1.ID)
+		_ = service.DeleteSession(ctx, s2.ID)
+	}()
+
+	sessions, err := service.ListSessionsByAccount(ctx, accountID)
+	require.NoError(t, err)
+	assert.Len(t, sessions, 2)
+}
+
+// ──────────────────────────────────────────────
+// RevokeAllForAccount with data
+// ──────────────────────────────────────────────
+
+func TestSessionService_RevokeAllForAccount_WithData(t *testing.T) {
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	accountID := uuid.New().String()
+
+	s1 := &domain.Session{AccountID: accountID, Username: "u1", IP: "1.1.1.1", UserAgent: "a"}
+	s2 := &domain.Session{AccountID: accountID, Username: "u1", IP: "2.2.2.2", UserAgent: "b"}
+	require.NoError(t, service.CreateSession(ctx, s1))
+	require.NoError(t, service.CreateSession(ctx, s2))
+
+	err := service.RevokeAllForAccount(ctx, accountID)
+	require.NoError(t, err)
+
+	sessions, err := service.ListSessionsByAccount(ctx, accountID)
+	require.NoError(t, err)
+	assert.Len(t, sessions, 0)
+}
+
+func TestSessionService_RevokeAllForAccount_NoTokenRevoker(t *testing.T) {
+	logger := zap.NewNop()
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+
+	svc := NewSessionService(redisClient, logger)
+	svc.SetSessionTTL(10 * time.Second)
+
+	ctx := context.Background()
+	accountID := uuid.New().String()
+
+	session := &domain.Session{AccountID: accountID, Username: "u1", IP: "1.1.1.1", UserAgent: "a"}
+	require.NoError(t, svc.CreateSession(ctx, session))
+	defer func() { _ = svc.DeleteSession(ctx, session.ID) }()
+
+	err := svc.RevokeAllForAccount(ctx, accountID)
+	assert.ErrorIs(t, err, ErrTokenRevokerNotConfigured)
+}
+
+// ──────────────────────────────────────────────
+// ValidateSession expired
+// ──────────────────────────────────────────────
+
+func TestSessionService_ValidateSession_ExpiredByMaxAge(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+
+	logger := zap.NewNop()
+	svc := NewSessionService(redisClient, logger)
+	svc.SetSessionTTL(10 * time.Second)
+	svc.SetMaxSessionAge(1 * time.Millisecond)
+	svc.SetTokenRevoker(&stubTokenRevoker{})
+
+	ctx := context.Background()
+	session := &domain.Session{AccountID: "a1", Username: "u", IP: "1.1.1.1", UserAgent: "a"}
+	require.NoError(t, svc.CreateSession(ctx, session))
+
+	time.Sleep(5 * time.Millisecond)
+
+	_, err := svc.ValidateSession(ctx, session.ID)
+	assert.ErrorIs(t, err, ErrSessionExpired)
+}
+
+// ──────────────────────────────────────────────
+// RefreshSession expired
+// ──────────────────────────────────────────────
+
+func TestSessionService_RefreshSession_ExpiredByMaxAge(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+
+	logger := zap.NewNop()
+	svc := NewSessionService(redisClient, logger)
+	svc.SetSessionTTL(10 * time.Second)
+	svc.SetMaxSessionAge(1 * time.Millisecond)
+	svc.SetTokenRevoker(&stubTokenRevoker{})
+
+	ctx := context.Background()
+	session := &domain.Session{AccountID: "a1", Username: "u", IP: "1.1.1.1", UserAgent: "a"}
+	require.NoError(t, svc.CreateSession(ctx, session))
+
+	time.Sleep(5 * time.Millisecond)
+
+	err := svc.RefreshSession(ctx, session.ID)
+	assert.ErrorIs(t, err, ErrSessionExpired)
+}
+
+// ──────────────────────────────────────────────
+// UpdateSession not found
+// ──────────────────────────────────────────────
+
+func TestSessionService_UpdateSession_NotFound(t *testing.T) {
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
+
+	session := &domain.Session{ID: uuid.New().String(), AccountID: "a1", Username: "u"}
+	err := service.UpdateSession(context.Background(), session)
+	assert.Equal(t, ErrSessionNotFound, err)
+}
+
+// ──────────────────────────────────────────────
+// EnforceSessionLimit
+// ──────────────────────────────────────────────
+
+func TestSessionService_EnforceSessionLimit(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	testutil.SkipIfNoCJSON(t, redisClient)
+
+	logger := zap.NewNop()
+	svc := NewSessionService(redisClient, logger)
+	svc.SetSessionTTL(10 * time.Second)
+	svc.SetMaxSessions(2)
+	svc.SetTokenRevoker(&stubTokenRevoker{})
+
+	ctx := context.Background()
+	accountID := uuid.New().String()
+
+	for i := 0; i < 3; i++ {
+		s := &domain.Session{AccountID: accountID, Username: "u", IP: "1.1.1.1", UserAgent: "a"}
+		require.NoError(t, svc.CreateSession(ctx, s))
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	sessions, err := svc.ListSessionsByAccount(ctx, accountID)
+	require.NoError(t, err)
+	assert.LessOrEqual(t, len(sessions), 2)
+}
+
+func TestSessionService_EnforceSessionLimit_Disabled(t *testing.T) {
+	logger := zap.NewNop()
+	svc := NewSessionService(nil, logger)
+	svc.SetMaxSessions(0)
+	err := svc.EnforceSessionLimit(context.Background(), "any-account")
+	assert.NoError(t, err)
+}
+
+func TestSessionService_EnforceSessionLimit_NoRevoker(t *testing.T) {
+	logger := zap.NewNop()
+	svc := NewSessionService(nil, logger)
+	svc.SetMaxSessions(5)
+	err := svc.EnforceSessionLimit(context.Background(), "any-account")
+	assert.ErrorIs(t, err, ErrTokenRevokerNotConfigured)
+}

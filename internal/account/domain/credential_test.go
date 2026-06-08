@@ -118,3 +118,16 @@ func TestNewPhoneCredential(t *testing.T) {
 	assert.Equal(t, CredentialTypePhone, cred.Type)
 	assert.Equal(t, "+8613800138000", *cred.Identifier)
 }
+
+func TestNewCredential(t *testing.T) {
+	email := "user@example.com"
+	cred := NewCredential("acc-1", CredentialTypeTOTP, &email, "secret-value")
+	assert.NotEmpty(t, cred.ID)
+	assert.Equal(t, "acc-1", cred.AccountID)
+	assert.Equal(t, CredentialTypeTOTP, cred.Type)
+	assert.Equal(t, &email, cred.Identifier)
+	assert.Equal(t, "secret-value", cred.Value)
+	assert.False(t, cred.Verified)
+	assert.NotNil(t, cred.Metadata)
+	assert.False(t, cred.CreatedAt.IsZero())
+}

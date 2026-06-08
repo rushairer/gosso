@@ -42,7 +42,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	configManager, err := config.NewConfigManager(cmd, configPath, env)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
-		os.Exit(1)
+		os.Exit(1) //nolint:gocritic // stop() is best-effort signal cleanup, safe to skip on fatal init error
 	}
 	globalConfig := configManager.Config()
 

@@ -114,7 +114,7 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, *sql.DB, error) {
 	schemaName := cmd.Flag("schema").Value.String()
 
 	if defaultDriver.Driver != "postgres" {
-		db.Close()
+		_ = db.Close()
 		return nil, nil, fmt.Errorf("unsupported database driver: %q (only postgres is supported for migrations)", defaultDriver.Driver)
 	}
 
@@ -125,7 +125,7 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, *sql.DB, error) {
 		SchemaName:      schemaName, // Use schema specified by parameter
 	})
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, nil, fmt.Errorf("failed to create postgres driver: %w", err)
 	}
 
@@ -133,7 +133,7 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, *sql.DB, error) {
 	migrationsPath := cmd.Flag("migrations_path").Value.String()
 	absPath, err := filepath.Abs(migrationsPath)
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, nil, fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
@@ -144,7 +144,7 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, *sql.DB, error) {
 		driver,
 	)
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, nil, fmt.Errorf("failed to create migrate instance: %w", err)
 	}
 
@@ -169,7 +169,7 @@ func withMigrateResources(cmd *cobra.Command, fn func(*migrate.Migrate) error) {
 	// Cleanup always runs — no deferred log.Fatal to skip it.
 	err = fn(m)
 	closeMigrate(m)
-	db.Close()
+	_ = db.Close()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)

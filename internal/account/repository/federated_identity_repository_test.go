@@ -205,3 +205,28 @@ func TestSoftDeleteByID_NotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "federated identity not found")
 	assert.True(t, errors.Is(err, ErrFederatedIdentityNotFound))
 }
+
+// ──────────────────────────────────────────────
+// CreateFederatedIdentity
+// ──────────────────────────────────────────────
+
+func TestCreateFederatedIdentity_Success(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	tx, _ := db.Begin()
+
+	fi := newTestFederatedIdentity()
+	mock.ExpectExec("INSERT INTO federated_identities").
+		WithArgs(fi.ID, fi.AccountID, string(fi.Provider), fi.ProviderUserID,
+			sqlmock.AnyArg(), fi.CreatedAt, fi.UpdatedAt).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	repo := NewFederatedIdentityRepository(db)
+	err = repo.CreateFederatedIdentity(context.Background(), tx, fi)
+
+	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}

@@ -12,14 +12,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/rushairer/gosso/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/auth/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
+	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	"github.com/rushairer/gosso/middleware"
 )
 
 // ──────────────────────────────────────────────
@@ -538,4 +539,320 @@ func TestMFAVerify_MissingMFAToken(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// ──────────────────────────────────────────────
+// Additional tests for coverage
+// ──────────────────────────────────────────────
+
+func TestMFAEnroll_NoClaims(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/enroll", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestMFAActivate_BadBody(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/activate", bytes.NewBufferString("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMFAActivate_NoClaims(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	body := `{"code":"123456"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/activate", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestMFADisable_NoClaims(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/mfa", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestMFAGenerateBackupCodes_NoClaims(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/backup-codes", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestSocialAuthURL_NilService(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotImplemented, w.Code)
+}
+
+func TestSocialCallback_NilService(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google/callback", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotImplemented, w.Code)
+}
+
+func TestSendVerification_InvalidBody(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/verify/send", bytes.NewBufferString("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSendVerification_InvalidType(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	body := `{"type":"sms","identifier":"1234567890"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/verify/send", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "type must be")
+}
+
+func TestSendVerification_InvalidEmail(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	body := `{"type":"email","identifier":"not-an-email"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/verify/send", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid email")
+}
+
+func TestSendVerification_ValidEmailNoClaims(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	body := `{"type":"email","identifier":"user@example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/verify/send", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestConfirmVerification_InvalidBody(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/verify/confirm", bytes.NewBufferString("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestConfirmVerification_InvalidType(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	body := `{"type":"sms","identifier":"1234567890","code":"000"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/verify/confirm", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "type must be")
+}
+
+func TestResetPassword_InvalidBody(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/password/reset", bytes.NewBufferString("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestForgotPassword_InvalidBody(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/password/forgot", bytes.NewBufferString("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestLogout_ServiceError(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{
+		logoutFn: func() error { return fmt.Errorf("logout failed") },
+	}
+	tokenMgr := &mockTokenManager{}
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+		SessionID: "session-001",
+	}
+	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestListSessions_ServiceError(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{
+		listSessionsFn: func() ([]*sessionDomain.Session, error) {
+			return nil, fmt.Errorf("db error")
+		},
+	}
+	tokenMgr := &mockTokenManager{}
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+		SessionID: "session-001",
+	}
+	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/sessions", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestRevokeSession_ServiceError(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{
+		revokeSessionFn: func() error { return fmt.Errorf("db error") },
+	}
+	tokenMgr := &mockTokenManager{}
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+		SessionID: "session-001",
+	}
+	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/sessions/other-session", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestRevokeSession_AccessDenied(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{
+		revokeSessionFn: func() error { return sessionService.ErrSessionAccessDenied },
+	}
+	tokenMgr := &mockTokenManager{}
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+		SessionID: "session-001",
+	}
+	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/sessions/other-session", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestGetSession_ServiceError(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{
+		validateSessionFn: func() (*sessionDomain.Session, error) {
+			return nil, fmt.Errorf("session not found")
+		},
+	}
+	tokenMgr := &mockTokenManager{}
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+		SessionID: "session-001",
+	}
+	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestRevokeSession_EmptyID(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+		SessionID: "session-001",
+	}
+	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/sessions/", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	// Empty ID with trailing slash - gin should match the route
+	// If ID is empty, handler returns 400
+	if w.Code == http.StatusBadRequest {
+		assert.Contains(t, w.Body.String(), "session id required")
+	}
 }

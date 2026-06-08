@@ -16,11 +16,10 @@ import (
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
-	accountService "github.com/rushairer/gosso/internal/account/service"
-	"github.com/rushairer/gosso/middleware"
 	"github.com/rushairer/gosso/internal/auth/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	"github.com/rushairer/gosso/middleware"
 )
 
 // ──────────────────────────────────────────────
@@ -28,10 +27,10 @@ import (
 // ──────────────────────────────────────────────
 
 type mockAuthOrchForPasskey struct {
-	loginByPasskeyFn             func() (*service.LoginResult, error)
-	validateMFATokenFn           func() (*tokenDomain.AccessTokenClaims, error)
-	markPasskeyMFAFn             func() error
-	completePasskeyMFALoginFn    func() (*service.LoginResult, error)
+	loginByPasskeyFn          func() (*service.LoginResult, error)
+	validateMFATokenFn        func() (*tokenDomain.AccessTokenClaims, error)
+	markPasskeyMFAFn          func() error
+	completePasskeyMFALoginFn func() (*service.LoginResult, error)
 }
 
 func (m *mockAuthOrchForPasskey) LoginByPasskey(_ context.Context, _, _, _ string) (*service.LoginResult, error) {
@@ -85,66 +84,12 @@ func (m *mockTokenMgrForPasskey) IntrospectToken(_ context.Context, _ string) (m
 }
 func (m *mockTokenMgrForPasskey) AccessExpiry() time.Duration { return 15 * time.Minute }
 
-type mockAccountSvcForPasskey struct {
-	findByIDFn func() (*accountDomain.Account, error)
-}
-
 type mockAccountLookupForPasskey struct {
 	err error
 }
 
 func (m *mockAccountLookupForPasskey) FindAccountByID(_ context.Context, _ string) (*accountDomain.Account, error) {
 	return nil, m.err
-}
-
-func (m *mockAccountSvcForPasskey) FindAccountByID(_ context.Context, id string) (*accountDomain.Account, error) {
-	if m.findByIDFn != nil {
-		return m.findByIDFn()
-	}
-	return nil, fmt.Errorf("not found")
-}
-
-func (m *mockAccountSvcForPasskey) RegisterAccount(_ context.Context, _ *accountService.RegisterAccountRequest) (*accountDomain.Account, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-func (m *mockAccountSvcForPasskey) ChangePassword(_ context.Context, _, _, _ string) error {
-	return fmt.Errorf("not implemented")
-}
-func (m *mockAccountSvcForPasskey) SoftDeleteAccount(_ context.Context, _ string) error {
-	return fmt.Errorf("not implemented")
-}
-func (m *mockAccountSvcForPasskey) SuspendAccount(_ context.Context, _ string) error {
-	return fmt.Errorf("not implemented")
-}
-func (m *mockAccountSvcForPasskey) ActivateAccount(_ context.Context, _ string) error {
-	return fmt.Errorf("not implemented")
-}
-func (m *mockAccountSvcForPasskey) ListAccounts(_ context.Context, _, _ int, _ string) ([]*accountDomain.Account, int, error) {
-	return nil, 0, fmt.Errorf("not implemented")
-}
-func (m *mockAccountSvcForPasskey) GetAccountRoles(_ context.Context, _ string) ([]*accountDomain.Role, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-func (m *mockAccountSvcForPasskey) AssignRole(_ context.Context, _, _ string) error {
-	return fmt.Errorf("not implemented")
-}
-func (m *mockAccountSvcForPasskey) RemoveRole(_ context.Context, _, _ string) error {
-	return fmt.Errorf("not implemented")
-}
-func (m *mockAccountSvcForPasskey) FindAccountByUsername(_ context.Context, _ string) (*accountDomain.Account, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-func (m *mockAccountSvcForPasskey) UpdateAccount(_ context.Context, _ *accountDomain.Account) error {
-	return fmt.Errorf("not implemented")
-}
-func (m *mockAccountSvcForPasskey) VerifyCredential(_ context.Context, _ string) error {
-	return fmt.Errorf("not implemented")
-}
-func (m *mockAccountSvcForPasskey) BindFederatedIdentity(_ context.Context, _ string, _ accountDomain.Provider, _ string, _ map[string]interface{}) error {
-	return fmt.Errorf("not implemented")
-}
-func (m *mockAccountSvcForPasskey) UnbindFederatedIdentity(_ context.Context, _, _ string) error {
-	return fmt.Errorf("not implemented")
 }
 
 // ──────────────────────────────────────────────

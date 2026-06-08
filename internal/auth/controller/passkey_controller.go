@@ -10,9 +10,9 @@ import (
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/middleware"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	"github.com/rushairer/gosso/middleware"
 )
 
 // passkeyAuthService defines the auth service methods used by PasskeyController.

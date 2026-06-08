@@ -31,10 +31,10 @@ type AccountLookup interface {
 }
 
 const (
-	defaultChallengeTTL       = 5 * time.Minute
-	redisKeyRegChallenge      = "webauthn:reg:%s"
-	redisKeyLoginChallenge    = "webauthn:login:%s"
-	redisKeyMFAChallenge      = "webauthn:mfa:%s"
+	defaultChallengeTTL    = 5 * time.Minute
+	redisKeyRegChallenge   = "webauthn:reg:%s"
+	redisKeyLoginChallenge = "webauthn:login:%s"
+	redisKeyMFAChallenge   = "webauthn:mfa:%s"
 )
 
 // PasskeyCredentialView passkey list view (does not expose sensitive data)
@@ -51,13 +51,13 @@ const maxPasskeyRequestBodySize = 64 << 10 // 64KB — WebAuthn payloads are CBO
 
 // PasskeyService WebAuthn Passkey service
 type PasskeyService struct {
-	web          *wa.WebAuthn
-	credRepo     repository.WebAuthnCredentialRepository
-	redis        *cache.RedisClient
-	db           *sql.DB
+	web           *wa.WebAuthn
+	credRepo      repository.WebAuthnCredentialRepository
+	redis         *cache.RedisClient
+	db            *sql.DB
 	accountLookup AccountLookup
-	logger       *zap.Logger
-	challengeTTL time.Duration
+	logger        *zap.Logger
+	challengeTTL  time.Duration
 }
 
 // NewPasskeyService creates a new PasskeyService instance

@@ -25,6 +25,157 @@ func setupTestClientService(t *testing.T) (*sql.DB, sqlmock.Sqlmock, OAuth2Clien
 	return db, mock, svc
 }
 
+// TestFindByAccountID tests finding clients by account ID
+func TestFindByAccountID(t *testing.T) {
+	db, mock, svc := setupTestClientService(t)
+	defer db.Close()
+
+	ctx := context.Background()
+	now := time.Now()
+
+	redirectURIs, _ := json.Marshal([]string{"http://localhost/callback"})
+	postLogoutURIs, _ := json.Marshal([]string{})
+	grantTypes, _ := json.Marshal([]string{domain.GrantTypeAuthorizationCode})
+	scopes, _ := json.Marshal([]string{"openid"})
+
+	rows := sqlmock.NewRows([]string{
+		"id", "account_id", "client_id", "client_secret_hash",
+		"name", "description", "redirect_uris", "post_logout_redirect_uris", "grant_types", "scopes",
+		"is_confidential", "metadata", "created_at", "updated_at",
+	}).AddRow(
+		"uuid-001", "account-001", "abc123", "$2a$10$hash",
+		"Test App", "desc", redirectURIs, postLogoutURIs, grantTypes, scopes,
+		true, nil, now, now,
+	)
+
+	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").
+		WithArgs("account-001").
+		WillReturnRows(rows)
+
+	clients, err := svc.FindByAccountID(ctx, "account-001")
+	require.NoError(t, err)
+	assert.Len(t, clients, 1)
+	assert.Equal(t, "abc123", clients[0].ClientID)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestFindByAccountID_Empty tests finding clients when account has none
+func TestFindByAccountID_Empty(t *testing.T) {
+	db, mock, svc := setupTestClientService(t)
+	defer db.Close()
+
+	ctx := context.Background()
+
+	rows := sqlmock.NewRows([]string{
+		"id", "account_id", "client_id", "client_secret_hash",
+		"name", "description", "redirect_uris", "post_logout_redirect_uris", "grant_types", "scopes",
+		"is_confidential", "metadata", "created_at", "updated_at",
+	})
+
+	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").
+		WithArgs("account-001").
+		WillReturnRows(rows)
+
+	clients, err := svc.FindByAccountID(ctx, "account-001")
+	require.NoError(t, err)
+	assert.Len(t, clients, 0)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestUpdateClient tests updating an OAuth2 client
+func TestUpdateClient(t *testing.T) {
+	db, mock, svc := setupTestClientService(t)
+	defer db.Close()
+
+	ctx := context.Background()
+	now := time.Now()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("UPDATE oauth2_clients").
+		WithArgs("Updated App", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "uuid-001").
+		WillReturnRows(sqlmock.NewRows([]string{"updated_at"}).AddRow(now))
+	mock.ExpectCommit()
+
+	client := &domain.OAuth2Client{
+		ID:           "uuid-001",
+		Name:         "Updated App",
+		RedirectURIs: []string{"http://localhost/callback"},
+		GrantTypes:   []string{domain.GrantTypeAuthorizationCode},
+		Scopes:       []string{"openid"},
+	}
+
+	err := svc.UpdateClient(ctx, client)
+	require.NoError(t, err)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestUpdateClient_NotFound tests updating a nonexistent client
+func TestUpdateClient_NotFound(t *testing.T) {
+	db, mock, svc := setupTestClientService(t)
+	defer db.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("UPDATE oauth2_clients").
+		WillReturnError(sql.ErrNoRows)
+	mock.ExpectRollback()
+
+	client := &domain.OAuth2Client{
+		ID:           "nonexistent",
+		Name:         "Updated App",
+		RedirectURIs: []string{"http://localhost/callback"},
+		GrantTypes:   []string{domain.GrantTypeAuthorizationCode},
+		Scopes:       []string{"openid"},
+	}
+
+	err := svc.UpdateClient(ctx, client)
+	assert.ErrorIs(t, err, domain.ErrClientNotFound)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestDeleteClient tests deleting an OAuth2 client
+func TestDeleteClient(t *testing.T) {
+	db, mock, svc := setupTestClientService(t)
+	defer db.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE oauth2_clients SET deleted_at").
+		WithArgs(sqlmock.AnyArg(), "uuid-001").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	err := svc.DeleteClient(ctx, "uuid-001")
+	require.NoError(t, err)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestDeleteClient_NotFound tests deleting a nonexistent client
+func TestDeleteClient_NotFound(t *testing.T) {
+	db, mock, svc := setupTestClientService(t)
+	defer db.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE oauth2_clients SET deleted_at").
+		WithArgs(sqlmock.AnyArg(), "nonexistent").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectRollback()
+
+	err := svc.DeleteClient(ctx, "nonexistent")
+	assert.ErrorIs(t, err, domain.ErrClientNotFound)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestRegisterClient(t *testing.T) {
 	db, mock, svc := setupTestClientService(t)
 	defer db.Close()

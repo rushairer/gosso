@@ -10,9 +10,9 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	dbutil "github.com/rushairer/gosso/internal/db"
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 	"github.com/rushairer/gosso/internal/oauth2/repository"
-	dbutil "github.com/rushairer/gosso/internal/db"
 )
 
 // RegisterClientRequest represents a request to register an OAuth2 client

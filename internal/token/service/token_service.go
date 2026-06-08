@@ -20,10 +20,10 @@ import (
 )
 
 const (
-	RefreshTokenKeyPrefix      = "refresh_token:"
-	SessionTokensKeyPrefix     = "session_tokens:"
-	RefreshTokenLength         = 32 // 32 bytes = 64 hex chars
-	MinAccountRevocationTTL    = 5 * time.Minute
+	RefreshTokenKeyPrefix   = "refresh_token:"
+	SessionTokensKeyPrefix  = "session_tokens:"
+	RefreshTokenLength      = 32 // 32 bytes = 64 hex chars
+	MinAccountRevocationTTL = 5 * time.Minute
 )
 
 // TokenService JWT and refresh token service
@@ -102,7 +102,7 @@ func (s *TokenService) GenerateShortLivedToken(claims *domain.AccessTokenClaims)
 	clonedClaims.Issuer = s.issuer
 	clonedClaims.Subject = clonedClaims.AccountID
 	clonedClaims.IssuedAt = jwt.NewNumericDate(now)
-	if clonedClaims.ExpiresAt == nil || clonedClaims.ExpiresAt.Time.IsZero() {
+	if clonedClaims.ExpiresAt == nil || clonedClaims.ExpiresAt.IsZero() {
 		clonedClaims.ExpiresAt = jwt.NewNumericDate(now.Add(s.accessExpiry))
 	}
 
@@ -161,7 +161,7 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 				zap.Error(err), zap.String("account_id", claims.AccountID))
 			return nil, ErrBlacklistUnavailable
 		}
-		if !revokedAfter.IsZero() && claims.IssuedAt.Time.Before(revokedAfter) {
+		if !revokedAfter.IsZero() && claims.IssuedAt.Before(revokedAfter) {
 			return nil, ErrTokenRevoked
 		}
 	}

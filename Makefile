@@ -15,19 +15,21 @@ dev:
 	fi
 	air -c .air.toml
 
+GOPATH_BIN := $(shell go env GOPATH)/bin
+
 lint:
-	@if ! command -v golangci-lint &> /dev/null; then \
+	@if ! command -v golangci-lint &> /dev/null && ! [ -f "$(GOPATH_BIN)/golangci-lint" ]; then \
 		echo "Installing golangci-lint..."; \
-		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2; \
 	fi
-	golangci-lint run ./...
+	$(GOPATH_BIN)/golangci-lint run ./...
 
 lint-fix:
-	@if ! command -v golangci-lint &> /dev/null; then \
+	@if ! command -v golangci-lint &> /dev/null && ! [ -f "$(GOPATH_BIN)/golangci-lint" ]; then \
 		echo "Installing golangci-lint..."; \
-		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2; \
 	fi
-	golangci-lint run --fix ./...
+	$(GOPATH_BIN)/golangci-lint run --fix ./...
 test:
 	go test -v -count=1 ./...
 
@@ -41,6 +43,15 @@ test-integration:
 	@echo "🧪 Running integration tests..."
 	@echo "📋 Ensure docker-compose.test.yml is running (make docker-test-up)"
 	go test -p 1 -tags=integration -v -count=1 -timeout=120s ./internal/auth/service/ ./internal/session/service/ ./internal/token/service/ ./internal/account/ ./middleware/
+
+check: lint test build
+	@echo "✅ All checks passed"
+
+coverage:
+	@echo "📊 Generating coverage report..."
+	go test -coverprofile=coverage.out -covermode=atomic ./...
+	go tool cover -func=coverage.out | tail -1
+	@echo "📄 Full report: go tool cover -html=coverage.out"
 
 docker-dev-up:
 	@echo "🚀 启动开发环境..."
@@ -120,6 +131,8 @@ help:
 	@echo "  test                 - Run unit tests"
 	@echo "  test-ui              - Run tests with goconvey (GUI)"
 	@echo "  test-integration     - Run integration tests (requires docker-test-up)"
+	@echo "  check                - Run lint + test + build (pre-submit)"
+	@echo "  coverage             - Generate test coverage report"
 	@echo ""
 	@echo "🐳 Docker Environment Commands:"
 	@echo "  docker-dev-up        - Start development environment with Docker"
@@ -148,7 +161,7 @@ help:
 	@echo "🆘 Help Commands:"
 	@echo "  help                 - Show this help message"
 
-.PHONY: default build run dev lint lint-fix test test-ui test-integration docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs docker-prod-up docker-prod-down docker-prod-logs env-dev env-test env-prod env-all help
+.PHONY: default build run dev lint lint-fix test test-ui test-integration check coverage docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs docker-prod-up docker-prod-down docker-prod-logs env-dev env-test env-prod env-all help
 # Examples - 示例程序
 .PHONY: examples example-account example-redis example-metadata
 

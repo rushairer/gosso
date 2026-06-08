@@ -273,3 +273,121 @@ func TestRoleRepo_SoftDeleteRolesByAccountID(t *testing.T) {
 	require.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
+
+// ──────────────────────────────────────────────
+// CreateRole
+// ──────────────────────────────────────────────
+
+func TestRoleRepo_CreateRole_Success(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	mock.ExpectBegin()
+	tx, _ := sqlDB.Begin()
+
+	role := newTestRole()
+	mock.ExpectExec("INSERT INTO roles").
+		WithArgs(role.ID, role.Name, role.Description,
+			sqlmock.AnyArg(), sqlmock.AnyArg(),
+			role.CreatedAt, role.UpdatedAt).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	repo := NewRoleRepository(sqlDB)
+	err = repo.CreateRole(context.Background(), tx, role)
+
+	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// ──────────────────────────────────────────────
+// UpdateRole
+// ──────────────────────────────────────────────
+
+func TestRoleRepo_UpdateRole_Success(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	mock.ExpectBegin()
+	tx, _ := sqlDB.Begin()
+
+	role := newTestRole()
+	mock.ExpectExec("UPDATE roles").
+		WithArgs(role.Name, role.Description,
+			sqlmock.AnyArg(), sqlmock.AnyArg(),
+			sqlmock.AnyArg(), role.ID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	repo := NewRoleRepository(sqlDB)
+	err = repo.UpdateRole(context.Background(), tx, role)
+
+	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRoleRepo_UpdateRole_NotFound(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	mock.ExpectBegin()
+	tx, _ := sqlDB.Begin()
+
+	role := newTestRole()
+	mock.ExpectExec("UPDATE roles").
+		WithArgs(role.Name, role.Description,
+			sqlmock.AnyArg(), sqlmock.AnyArg(),
+			sqlmock.AnyArg(), role.ID).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	repo := NewRoleRepository(sqlDB)
+	err = repo.UpdateRole(context.Background(), tx, role)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "role not found")
+	assert.True(t, errors.Is(err, ErrRoleNotFound))
+}
+
+// ──────────────────────────────────────────────
+// SoftDeleteByID
+// ──────────────────────────────────────────────
+
+func TestRoleRepo_SoftDeleteByID_Success(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	mock.ExpectBegin()
+	tx, _ := sqlDB.Begin()
+
+	mock.ExpectExec("UPDATE roles").
+		WithArgs(sqlmock.AnyArg(), "role-001").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	repo := NewRoleRepository(sqlDB)
+	err = repo.SoftDeleteByID(context.Background(), tx, "role-001", time.Now())
+
+	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRoleRepo_SoftDeleteByID_NotFound(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	mock.ExpectBegin()
+	tx, _ := sqlDB.Begin()
+
+	mock.ExpectExec("UPDATE roles").
+		WithArgs(sqlmock.AnyArg(), "nonexistent").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	repo := NewRoleRepository(sqlDB)
+	err = repo.SoftDeleteByID(context.Background(), tx, "nonexistent", time.Now())
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "role not found")
+	assert.True(t, errors.Is(err, ErrRoleNotFound))
+}

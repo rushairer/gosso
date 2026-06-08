@@ -26,7 +26,7 @@ func NewTestDB() (*sql.DB, error) {
 		return nil, fmt.Errorf("open postgres: %w", err)
 	}
 	if err = db.Ping(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
 	return db, nil

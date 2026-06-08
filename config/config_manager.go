@@ -13,6 +13,7 @@ import (
 // Validate() rejects this value to prevent production from accidentally using dev credentials.
 const defaultPostgresDSN = "postgres://postgres:postgres@localhost:5432/gosso?sslmode=disable"
 
+// ConfigManager loads, validates, and exposes the application configuration.
 type ConfigManager struct {
 	config *GoUnoConfig
 }
@@ -103,7 +104,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("database.drivers.postgres.log_level", 1)
 	v.SetDefault("database.max_open_conns", 25)
 	v.SetDefault("database.max_idle_conns", 5)
-	v.SetDefault("database.conn_max_lifetime_sec", 300) // 5 minutes
+	v.SetDefault("database.conn_max_lifetime_sec", 300)  // 5 minutes
 	v.SetDefault("database.conn_max_idle_time_sec", 180) // 3 minutes
 
 	// Auth configuration

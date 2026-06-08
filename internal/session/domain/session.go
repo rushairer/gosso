@@ -12,8 +12,8 @@ type SessionValidator interface {
 
 // Session is the session entity.
 type Session struct {
-	ID           string `json:"id"`
-	AccountID    string `json:"account_id"`
+	ID           string    `json:"id"`
+	AccountID    string    `json:"account_id"`
 	Username     string    `json:"username,omitempty"`
 	IP           string    `json:"ip"`
 	UserAgent    string    `json:"user_agent"`

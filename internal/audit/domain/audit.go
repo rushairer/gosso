@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// AuditRecord represents a single audit-log entry stored in the database.
 type AuditRecord struct {
 	ID        string          `json:"id"`
 	TxID      string          `json:"tx_id"`
@@ -18,6 +19,7 @@ type AuditRecord struct {
 	CreatedAt time.Time       `json:"created_at"`
 }
 
+// AuditEntry represents a pending audit-log entry in the async write queue.
 type AuditEntry struct {
 	ID        string          `json:"id"`
 	TxID      string          `json:"tx_id"`

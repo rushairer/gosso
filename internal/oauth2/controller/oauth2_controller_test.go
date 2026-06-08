@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,12 +56,13 @@ func (m *mockOAuth2ClientSvcForOAuth2) DeleteClient(_ context.Context, _ string)
 }
 
 type mockTokenMgr struct {
-	generateAccessFn    func() (string, error)
-	generateRefreshFn   func() (*tokenDomain.RefreshToken, error)
-	rotateRefreshFn     func() (*tokenDomain.RefreshToken, error)
-	revokeFn            func() error
-	introspectFn        func() (map[string]any, error)
-	validateRefreshFn   func() (*tokenDomain.RefreshToken, error)
+	generateAccessFn  func() (string, error)
+	generateRefreshFn func() (*tokenDomain.RefreshToken, error)
+	rotateRefreshFn   func() (*tokenDomain.RefreshToken, error)
+	revokeFn          func() error
+	introspectFn      func() (map[string]any, error)
+	validateRefreshFn func() (*tokenDomain.RefreshToken, error)
+	validateAccessFn  func() (*tokenDomain.AccessTokenClaims, error)
 }
 
 func (m *mockTokenMgr) GenerateAccessToken(_ *tokenDomain.AccessTokenClaims) (string, error) {
@@ -108,6 +110,9 @@ func (m *mockTokenMgr) ValidateRefreshToken(_ context.Context, _ string) (*token
 }
 
 func (m *mockTokenMgr) ValidateAccessTokenWithContext(_ context.Context, _ string) (*tokenDomain.AccessTokenClaims, error) {
+	if m.validateAccessFn != nil {
+		return m.validateAccessFn()
+	}
 	return &tokenDomain.AccessTokenClaims{AccountID: "account-001"}, nil
 }
 
@@ -279,6 +284,112 @@ func TestToken_MissingGrantType(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, w.Body.String(), "invalid_request")
+}
+
+// ──────────────────────────────────────────────
+// csrfTokenFromCookie (pure function)
+// ──────────────────────────────────────────────
+
+func TestCSRFTokenFromCookie_HostPrefix(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	ctx.Request.AddCookie(&http.Cookie{Name: "__Host-csrf_token", Value: "host-token-123"})
+
+	assert.Equal(t, "host-token-123", csrfTokenFromCookie(ctx))
+}
+
+func TestCSRFTokenFromCookie_Fallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	ctx.Request.AddCookie(&http.Cookie{Name: "csrf_token", Value: "fallback-token-456"})
+
+	assert.Equal(t, "fallback-token-456", csrfTokenFromCookie(ctx))
+}
+
+func TestCSRFTokenFromCookie_NoCookie(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+	assert.Equal(t, "", csrfTokenFromCookie(ctx))
+}
+
+// ──────────────────────────────────────────────
+// NewOAuth2Controller
+// ──────────────────────────────────────────────
+
+func TestNewOAuth2Controller_Success(t *testing.T) {
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{},
+		nil, nil,
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, ctrl)
+	assert.NotNil(t, ctrl.consentTmpl)
+	assert.NotNil(t, ctrl.deviceTmpl)
+	assert.Equal(t, "https://sso.example.com", ctrl.issuer)
+}
+
+// ──────────────────────────────────────────────
+// authenticateRequest
+// ──────────────────────────────────────────────
+
+func TestAuthenticateRequest_NoToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctrl, _ := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{},
+		nil, nil,
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+	accountID, ok := ctrl.authenticateRequest(ctx)
+	assert.False(t, ok)
+	assert.Equal(t, "", accountID)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+// ──────────────────────────────────────────────
+// intersectScopes (pure function)
+// ──────────────────────────────────────────────
+
+func TestIntersectScopes_Empty(t *testing.T) {
+	assert.Nil(t, intersectScopes(nil, nil))
+	assert.Nil(t, intersectScopes([]string{}, nil))
+	assert.Nil(t, intersectScopes(nil, []string{"openid"}))
+}
+
+func TestIntersectScopes_NoMatch(t *testing.T) {
+	assert.Nil(t, intersectScopes([]string{"email"}, []string{"openid", "profile"}))
+}
+
+func TestIntersectScopes_PartialMatch(t *testing.T) {
+	result := intersectScopes([]string{"openid", "email", "profile"}, []string{"openid", "profile", "address"})
+	assert.Equal(t, []string{"openid", "profile"}, result)
+}
+
+func TestIntersectScopes_FullMatch(t *testing.T) {
+	result := intersectScopes([]string{"openid", "profile"}, []string{"openid", "profile", "email"})
+	assert.Equal(t, []string{"openid", "profile"}, result)
 }
 
 func TestToken_UnsupportedGrantType(t *testing.T) {
@@ -1121,4 +1232,495 @@ func TestToken_DeviceCode_MissingDeviceCode(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, w.Body.String(), "invalid_request")
+}
+
+// ──────────────────────────────────────────────
+// authenticateRequest (continued)
+// ──────────────────────────────────────────────
+
+func TestAuthenticateRequest_InvalidToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tokenSvc := &mockTokenMgr{
+		validateAccessFn: func() (*tokenDomain.AccessTokenClaims, error) {
+			return nil, fmt.Errorf("token expired")
+		},
+	}
+	ctrl, _ := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{},
+		nil, nil,
+		tokenSvc,
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	ctx.Request.Header.Set("Authorization", "Bearer bad-token")
+
+	accountID, ok := ctrl.authenticateRequest(ctx)
+	assert.False(t, ok)
+	assert.Equal(t, "", accountID)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestAuthenticateRequest_ScopedToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tokenSvc := &mockTokenMgr{
+		validateAccessFn: func() (*tokenDomain.AccessTokenClaims, error) {
+			return &tokenDomain.AccessTokenClaims{AccountID: "account-001", Scope: "mfa:verify"}, nil
+		},
+	}
+	ctrl, _ := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{},
+		nil, nil,
+		tokenSvc,
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	ctx.Request.Header.Set("Authorization", "Bearer scoped-token")
+
+	accountID, ok := ctrl.authenticateRequest(ctx)
+	assert.False(t, ok)
+	assert.Equal(t, "", accountID)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestAuthenticateRequest_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctrl, _ := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{},
+		nil, nil,
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	ctx.Request.Header.Set("Authorization", "Bearer valid-token")
+
+	accountID, ok := ctrl.authenticateRequest(ctx)
+	assert.True(t, ok)
+	assert.Equal(t, "account-001", accountID)
+}
+
+// ──────────────────────────────────────────────
+// RegisterRoutes
+// ──────────────────────────────────────────────
+
+func TestOAuth2RegisterRoutes_WithRateLimits(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctrl, _ := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{},
+		nil, nil,
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+
+	engine := gin.New()
+	noop := func(ctx *gin.Context) { ctx.Next() }
+	rg := engine.Group("/oauth2")
+	ctrl.RegisterRoutes(rg, noop, noop, noop)
+
+	routes := engine.Routes()
+	pathSet := make(map[string]bool)
+	for _, r := range routes {
+		pathSet[r.Method+" "+r.Path] = true
+	}
+
+	assert.True(t, pathSet["GET /oauth2/authorize"])
+	assert.True(t, pathSet["POST /oauth2/authorize"])
+	assert.True(t, pathSet["POST /oauth2/token"])
+	assert.True(t, pathSet["POST /oauth2/revoke"])
+	assert.True(t, pathSet["POST /oauth2/introspect"])
+	assert.True(t, pathSet["POST /oauth2/device/code"])
+	assert.True(t, pathSet["GET /oauth2/device"])
+	assert.True(t, pathSet["POST /oauth2/device"])
+}
+
+// ──────────────────────────────────────────────
+// Authorize: PKCE / public client paths
+// ──────────────────────────────────────────────
+
+func TestAuthorize_InvalidCodeChallengeMethod(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+
+	client := newConfidentialTestClient()
+	clientSvc := &mockOAuth2ClientSvcForOAuth2{
+		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return client, nil
+		},
+	}
+
+	ctrl, _ := NewOAuth2Controller(
+		clientSvc,
+		nil, nil,
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+
+	engine.GET("/oauth2/authorize", ctrl.Authorize)
+
+	req := httptest.NewRequest(http.MethodGet, "/oauth2/authorize?client_id=cid-test&redirect_uri=https://app.example.com/callback&response_type=code&scope=openid&code_challenge=abc&code_challenge_method=plain", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "code_challenge_method must be S256")
+}
+
+func TestAuthorize_PKCERequiredForPublicClient(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+
+	publicClient := &oauth2Domain.OAuth2Client{
+		ID:             "pub-001",
+		AccountID:      "account-001",
+		ClientID:       "cid-public",
+		Name:           "Public App",
+		RedirectURIs:   []string{"https://app.example.com/callback"},
+		GrantTypes:     []string{"authorization_code"},
+		Scopes:         []string{"openid"},
+		IsConfidential: false,
+	}
+
+	clientSvc := &mockOAuth2ClientSvcForOAuth2{
+		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return publicClient, nil
+		},
+	}
+
+	ctrl, _ := NewOAuth2Controller(
+		clientSvc,
+		nil, nil,
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+
+	engine.GET("/oauth2/authorize", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctrl.Authorize(ctx)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/oauth2/authorize?client_id=cid-public&redirect_uri=https://app.example.com/callback&response_type=code&scope=openid", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "code_challenge is required for public clients")
+}
+
+// ──────────────────────────────────────────────
+// DeviceUserPage
+// ──────────────────────────────────────────────
+
+func TestDeviceUserPage_EmptyUserCode(t *testing.T) {
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{},
+		nil, nil,
+		&mockTokenMgr{},
+		nil, &mockDeviceCodeMgr{},
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.GET("/oauth2/device", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctrl.DeviceUserPage(ctx)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/oauth2/device", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+}
+
+func TestDeviceUserPage_UserCodeNotFound(t *testing.T) {
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{},
+		nil, nil,
+		&mockTokenMgr{},
+		nil, &mockDeviceCodeMgr{
+			getByUserCodeFn: func() (*oauth2Domain.DeviceCode, error) {
+				return nil, fmt.Errorf("not found")
+			},
+		},
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.GET("/oauth2/device", ctrl.DeviceUserPage)
+
+	req := httptest.NewRequest(http.MethodGet, "/oauth2/device?user_code=XXXX-YYYY", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "Invalid or expired code")
+}
+
+func TestDeviceUserPage_ExpiredCode(t *testing.T) {
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{},
+		nil, nil,
+		&mockTokenMgr{},
+		nil, &mockDeviceCodeMgr{
+			getByUserCodeFn: func() (*oauth2Domain.DeviceCode, error) {
+				return &oauth2Domain.DeviceCode{
+					DeviceCode: "dc-expired",
+					UserCode:   "XXXX-YYYY",
+					ClientID:   "cid-test",
+					Status:     oauth2Domain.DeviceCodeStatusPending,
+					ExpiresAt:  time.Now().Add(-10 * time.Minute),
+				}, nil
+			},
+		},
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.GET("/oauth2/device", ctrl.DeviceUserPage)
+
+	req := httptest.NewRequest(http.MethodGet, "/oauth2/device?user_code=XXXX-YYYY", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "expired or is no longer valid")
+}
+
+func TestDeviceUserPage_ValidPendingCode(t *testing.T) {
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+				return newConfidentialTestClient(), nil
+			},
+		},
+		nil, nil,
+		&mockTokenMgr{},
+		nil, &mockDeviceCodeMgr{
+			getByUserCodeFn: func() (*oauth2Domain.DeviceCode, error) {
+				return &oauth2Domain.DeviceCode{
+					DeviceCode: "dc-valid",
+					UserCode:   "XXXX-YYYY",
+					ClientID:   "cid-test",
+					Scopes:     []string{"openid", "profile"},
+					Status:     oauth2Domain.DeviceCodeStatusPending,
+					ExpiresAt:  time.Now().Add(10 * time.Minute),
+				}, nil
+			},
+		},
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.GET("/oauth2/device", ctrl.DeviceUserPage)
+
+	req := httptest.NewRequest(http.MethodGet, "/oauth2/device?user_code=XXXX-YYYY", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "Test App")
+	assert.Contains(t, w.Body.String(), "openid")
+}
+
+// ──────────────────────────────────────────────
+// DeviceUserSubmit
+// ──────────────────────────────────────────────
+
+func TestDeviceUserSubmit_MissingDeviceCode(t *testing.T) {
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{},
+		nil, nil,
+		&mockTokenMgr{},
+		nil, &mockDeviceCodeMgr{},
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/oauth2/device", ctrl.DeviceUserSubmit)
+
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/device", strings.NewReader("user_code=XXXX"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid_request")
+}
+
+func TestDeviceUserSubmit_Approved(t *testing.T) {
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{},
+		nil, nil,
+		&mockTokenMgr{},
+		nil, &mockDeviceCodeMgr{
+			authorizeFn: func() error { return nil },
+		},
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/oauth2/device", ctrl.DeviceUserSubmit)
+
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/device",
+		strings.NewReader("device_code=dc-123&approved=true"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer valid-token")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "granted")
+}
+
+func TestDeviceUserSubmit_Denied(t *testing.T) {
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{},
+		nil, nil,
+		&mockTokenMgr{},
+		nil, &mockDeviceCodeMgr{
+			denyFn: func() error { return nil },
+		},
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/oauth2/device", ctrl.DeviceUserSubmit)
+
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/device",
+		strings.NewReader("device_code=dc-123&approved=false"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer valid-token")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "denied")
+}
+
+// ──────────────────────────────────────────────
+// SubmitConsent
+// ──────────────────────────────────────────────
+
+func TestSubmitConsent_MissingFields(t *testing.T) {
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{},
+		nil, nil,
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader("state=test"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid_request")
+}
+
+func TestSubmitConsent_NotApproved(t *testing.T) {
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{},
+		nil, nil,
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+
+	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid&state=abc"
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer valid-token")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "consent_denied")
 }

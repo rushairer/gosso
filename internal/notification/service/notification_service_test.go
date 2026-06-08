@@ -5,9 +5,11 @@ import (
 	"context"
 	"html/template"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wneessen/go-mail"
 
 	"github.com/rushairer/gosso/config"
 )
@@ -141,4 +143,102 @@ func TestTemplatesInitialized(t *testing.T) {
 	// Ensure they're valid templates
 	_, err := template.New("test").Parse("{{.Code}}")
 	assert.NoError(t, err)
+}
+
+// ──────────────────────────────────────────────
+// SetVerifyCodeTTL / SetPasswordResetTTL
+// ──────────────────────────────────────────────
+
+func TestSetVerifyCodeTTL(t *testing.T) {
+	svc := NewEmailService(config.SMTPConfig{}, nil)
+
+	assert.Equal(t, 10*time.Minute, svc.verifyCodeTTL)
+
+	svc.SetVerifyCodeTTL(5 * time.Minute)
+	assert.Equal(t, 5*time.Minute, svc.verifyCodeTTL)
+
+	// No-op on non-positive values
+	svc.SetVerifyCodeTTL(0)
+	assert.Equal(t, 5*time.Minute, svc.verifyCodeTTL)
+	svc.SetVerifyCodeTTL(-1 * time.Minute)
+	assert.Equal(t, 5*time.Minute, svc.verifyCodeTTL)
+}
+
+func TestSetPasswordResetTTL(t *testing.T) {
+	svc := NewEmailService(config.SMTPConfig{}, nil)
+
+	assert.Equal(t, 30*time.Minute, svc.passwordResetTTL)
+
+	svc.SetPasswordResetTTL(60 * time.Minute)
+	assert.Equal(t, 60*time.Minute, svc.passwordResetTTL)
+
+	// No-op on non-positive values
+	svc.SetPasswordResetTTL(0)
+	assert.Equal(t, 60*time.Minute, svc.passwordResetTTL)
+	svc.SetPasswordResetTTL(-1 * time.Minute)
+	assert.Equal(t, 60*time.Minute, svc.passwordResetTTL)
+}
+
+// ──────────────────────────────────────────────
+// smtpTLSPolicy
+// ──────────────────────────────────────────────
+
+func TestSmtpTLSPolicy(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected mail.TLSPolicy
+	}{
+		{"mandatory", "mandatory", mail.TLSMandatory},
+		{"notls", "notls", mail.NoTLS},
+		{"opportunistic default", "", mail.TLSOpportunistic},
+		{"unknown", "unknown", mail.TLSOpportunistic},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, smtpTLSPolicy(tt.input))
+		})
+	}
+}
+
+// ──────────────────────────────────────────────
+// formatDuration
+// ──────────────────────────────────────────────
+
+func TestFormatDuration(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    time.Duration
+		expected string
+	}{
+		{"1 minute", 1 * time.Minute, "1 minute"},
+		{"5 minutes", 5 * time.Minute, "5 minutes"},
+		{"10 minutes", 10 * time.Minute, "10 minutes"},
+		{"1 hour", 60 * time.Minute, "1 hour"},
+		{"2 hours", 120 * time.Minute, "2 hours"},
+		{"3 hours", 180 * time.Minute, "3 hours"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, formatDuration(tt.input))
+		})
+	}
+}
+
+// ──────────────────────────────────────────────
+// SendVerificationCode / SendPasswordResetLink with nil client
+// ──────────────────────────────────────────────
+
+func TestSendVerificationCode_NilClient(t *testing.T) {
+	svc := NewEmailService(config.SMTPConfig{}, nil)
+	// With empty config, client may still be created but from address is empty.
+	// Either "not initialized" or "set from address" error is expected.
+	err := svc.SendVerificationCode(context.Background(), "test@example.com", "123456")
+	assert.Error(t, err)
+}
+
+func TestSendPasswordResetLink_NilClient(t *testing.T) {
+	svc := NewEmailService(config.SMTPConfig{}, nil)
+	err := svc.SendPasswordResetLink(context.Background(), "test@example.com", "https://example.com/reset")
+	assert.Error(t, err)
 }

@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/middleware"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
+	"github.com/rushairer/gosso/middleware"
 )
 
 const consentStateTTL = 10 * time.Minute

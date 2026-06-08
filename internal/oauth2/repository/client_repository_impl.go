@@ -22,11 +22,11 @@ func NewOAuth2ClientRepository(db *sql.DB) OAuth2ClientRepository {
 
 // clientJSONFields holds raw JSON bytes for the five JSON columns of an oauth2_clients row.
 type clientJSONFields struct {
-	redirectURIs     []byte
-	postLogoutURIs   []byte
-	grantTypes       []byte
-	scopes           []byte
-	metadata         []byte
+	redirectURIs   []byte
+	postLogoutURIs []byte
+	grantTypes     []byte
+	scopes         []byte
+	metadata       []byte
 }
 
 // unmarshalClientJSONFields populates an OAuth2Client's JSON columns from raw bytes.

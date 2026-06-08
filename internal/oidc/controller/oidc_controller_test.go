@@ -20,13 +20,13 @@ import (
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountService "github.com/rushairer/gosso/internal/account/service"
-	"github.com/rushairer/gosso/middleware"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Repo "github.com/rushairer/gosso/internal/oauth2/repository"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
 	"github.com/rushairer/gosso/internal/testutil"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
+	"github.com/rushairer/gosso/middleware"
 )
 
 // ──────────────────────────────────────────────
@@ -58,9 +58,11 @@ func (m *mockAccountService) ChangePassword(_ context.Context, _, _, _ string) e
 func (m *mockAccountService) BindFederatedIdentity(_ context.Context, _ string, _ accountDomain.Provider, _ string, _ map[string]interface{}) error {
 	return nil
 }
-func (m *mockAccountService) UnbindFederatedIdentity(_ context.Context, _, _ string) error { return nil }
-func (m *mockAccountService) AssignRole(_ context.Context, _, _ string) error           { return nil }
-func (m *mockAccountService) RemoveRole(_ context.Context, _, _ string) error           { return nil }
+func (m *mockAccountService) UnbindFederatedIdentity(_ context.Context, _, _ string) error {
+	return nil
+}
+func (m *mockAccountService) AssignRole(_ context.Context, _, _ string) error { return nil }
+func (m *mockAccountService) RemoveRole(_ context.Context, _, _ string) error { return nil }
 func (m *mockAccountService) ListAccounts(_ context.Context, _, _ int, _ string) ([]*accountDomain.Account, int, error) {
 	return nil, 0, nil
 }
@@ -643,8 +645,8 @@ func TestLogout_PostLogoutRedirect_InvalidURI(t *testing.T) {
 
 	// Request with a redirect URI NOT in the client's registered list
 	form := url.Values{
-		"id_token_hint":           {token},
-		"client_id":               {"client-001"},
+		"id_token_hint":            {token},
+		"client_id":                {"client-001"},
 		"post_logout_redirect_uri": {"https://evil.com/redirect"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))
@@ -683,10 +685,10 @@ func TestLogout_PostLogoutRedirect_ValidURI(t *testing.T) {
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
 	form := url.Values{
-		"id_token_hint":           {token},
-		"client_id":               {"client-001"},
+		"id_token_hint":            {token},
+		"client_id":                {"client-001"},
 		"post_logout_redirect_uri": {"https://app.example.com/logout"},
-		"state":                   {"test-state"},
+		"state":                    {"test-state"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -723,8 +725,8 @@ func TestLogout_PostLogoutRedirect_ClientNotFound(t *testing.T) {
 	token := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
 	form := url.Values{
-		"id_token_hint":           {token},
-		"client_id":               {"client-001"},
+		"id_token_hint":            {token},
+		"client_id":                {"client-001"},
 		"post_logout_redirect_uri": {"https://app.example.com/logout"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))

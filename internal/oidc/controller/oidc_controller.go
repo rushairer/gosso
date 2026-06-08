@@ -9,7 +9,6 @@ import (
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
-	"github.com/rushairer/gosso/middleware"
 	authMiddleware "github.com/rushairer/gosso/internal/auth/middleware"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	oauth2Repo "github.com/rushairer/gosso/internal/oauth2/repository"
@@ -17,6 +16,7 @@ import (
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
+	"github.com/rushairer/gosso/middleware"
 )
 
 // OIDCController OIDC protocol controller
