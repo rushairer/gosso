@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `SoftDeleteRolesByAccountID` referenced non-existent `updated_at` column on `account_roles` table — removed from SQL query (`internal/account/repository/role_repository_impl.go`).
+- `SoftDeleteByAccountID` for WebAuthn referenced non-existent `updated_at` column on `webauthn_credentials` table — removed from SQL query (`internal/auth/repository/webauthn_repository_impl.go`).
+
 ### Security
 - `TOTPEncryptionKey` is now unconditionally required in config validation — previously could be empty when WebAuthn was not configured, causing runtime TOTP encryption failures (`config/config.go`).
 - Refresh token IP binding now logs a warning when the original token has an IP but the current request does not — improves observability for potential token theft behind misconfigured proxies (`internal/auth/service/auth_session.go`).
@@ -30,12 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Sessions now have an absolute maximum lifetime (default 7 days) in addition to idle timeout — prevents indefinite session extension via activity refresh (`internal/session/service/session_service.go`).
 - Refresh token validation now includes explicit `ExpiresAt` check as defense-in-depth beyond Redis TTL (`internal/token/service/token_service.go`).
 - SocialCallback responses now include `Cache-Control: no-store` and `Pragma: no-cache` headers to prevent token caching by proxies (`internal/auth/controller/auth_controller.go`).
+- CSP `style-src 'unsafe-inline'` replaced with per-request nonce — prevents style-based XSS injection. Templates now receive `CSPNonce` for inline `<style>` and `<script>` tags (`middleware/middleware.go`, `internal/oauth2/controller/template/consent.html`, `internal/oauth2/controller/template/device.html`).
 
 ### Changed
 - Password validation now requires at least one special character (punctuation or symbol) in addition to uppercase, lowercase, and digit (`internal/utility/password.go`).
 - `BindSessionRevoker` and `BindOAuth2ClientDeleter` now return `error` instead of panicking on type assertion failure — prevents server crash on unexpected input (`internal/account/service/late_bind.go`, `cmd/gouno/web_modules.go`).
 - Email templates now use dynamic expiry text from `EmailService` TTL fields instead of hardcoded "10 minutes" / "30 minutes" — stays in sync with `VerifyCodeTTL` and `PasswordResetTokenTTL` config values (`internal/notification/service/email_service.go`, `internal/auth/module.go`).
-- Audit log helper functions in `account/service` refactored from struct methods to package-level free functions — eliminates code duplication with `auth/service/audit_helper.go` (`internal/account/service/audit_helper.go`, `internal/account/service/account_service.go`).
+- Audit log helper functions deduplicated — `auditLog` and `auditLogSync` from `auth/service/audit_helper.go` and `account/service/audit_helper.go` replaced with exported `AuditLog` and `AuditLogSync` in `internal/audit/service/audit.go` (`internal/auth/service/audit_helper.go`, `internal/account/service/audit_helper.go` deleted).
 - `InitializeAuthModule` now accepts an `AuthModuleConfig` struct instead of 15 positional parameters — improves readability and maintainability (`internal/auth/module.go`, `cmd/gouno/web_modules.go`).
 - `AuthController.RegisterRoutes` now accepts an `AuthRouteConfig` struct instead of 7 positional middleware parameters (`internal/auth/controller/auth_controller.go`, `router/web.go`).
 - `EnforceSessionLimit` now uses an atomic Lua script (`evictOldestSessionsScript`) to read and evict excess sessions in a single Redis EVAL — eliminates TOCTOU window where new sessions could be orphaned (`internal/session/service/session_service.go`).
