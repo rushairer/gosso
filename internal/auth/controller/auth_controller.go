@@ -207,6 +207,8 @@ func (c *AuthController) Login(ctx *gin.Context) {
 	}
 
 	if result.RequiresMFA {
+		ctx.Header("Cache-Control", "no-store")
+		ctx.Header("Pragma", "no-cache")
 		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
 			"requires_mfa":   true,
 			"mfa_token":      result.AccessToken,
@@ -215,6 +217,10 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		}))
 		return
 	}
+
+	// Prevent caching of responses containing tokens
+	ctx.Header("Cache-Control", "no-store")
+	ctx.Header("Pragma", "no-cache")
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
 		"access_token":  result.AccessToken,
@@ -244,6 +250,10 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid refresh token"))
 		return
 	}
+
+	// Prevent caching of responses containing tokens
+	ctx.Header("Cache-Control", "no-store")
+	ctx.Header("Pragma", "no-cache")
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
 		"access_token":  result.AccessToken,
@@ -377,6 +387,10 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid or expired MFA token"))
 		return
 	}
+
+	// Prevent caching of responses containing tokens
+	ctx.Header("Cache-Control", "no-store")
+	ctx.Header("Pragma", "no-cache")
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
 		"access_token":  result.AccessToken,

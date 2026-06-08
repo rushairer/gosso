@@ -43,6 +43,8 @@ log:
     level: 0 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
 auth:
     issuer: "http://localhost:8080"
+    # Dev-only TOTP key — 32 bytes hex. MUST be overridden via GOUNO_AUTH_TOTP_ENCRYPTION_KEY in production.
+    totp_encryption_key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     access_token_expiry: 15m
     refresh_token_expiry: 168h
     authorization_code_expiry: 10m

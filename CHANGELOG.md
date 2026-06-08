@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - `SoftDeleteRolesByAccountID` referenced non-existent `updated_at` column on `account_roles` table — removed from SQL query (`internal/account/repository/role_repository_impl.go`).
 - `SoftDeleteByAccountID` for WebAuthn referenced non-existent `updated_at` column on `webauthn_credentials` table — removed from SQL query (`internal/auth/repository/webauthn_repository_impl.go`).
+- Added missing `totp_encryption_key` to `config/development.yaml` and `config/test.yaml` — previously server would fail config validation on startup unless the key was supplied via environment variable (`config/development.yaml`, `config/test.yaml`).
 
 ### Security
 - `TOTPEncryptionKey` is now unconditionally required in config validation — previously could be empty when WebAuthn was not configured, causing runtime TOTP encryption failures (`config/config.go`).
@@ -34,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Sessions now have an absolute maximum lifetime (default 7 days) in addition to idle timeout — prevents indefinite session extension via activity refresh (`internal/session/service/session_service.go`).
 - Refresh token validation now includes explicit `ExpiresAt` check as defense-in-depth beyond Redis TTL (`internal/token/service/token_service.go`).
 - SocialCallback responses now include `Cache-Control: no-store` and `Pragma: no-cache` headers to prevent token caching by proxies (`internal/auth/controller/auth_controller.go`).
+- `Login`, `Refresh`, and `MFAVerify` responses now consistently include `Cache-Control: no-store` and `Pragma: no-cache` headers — previously only `SocialCallback` set these headers, allowing potential caching of token responses by browsers or proxies (`internal/auth/controller/auth_controller.go`).
 - CSP `style-src 'unsafe-inline'` replaced with per-request nonce — prevents style-based XSS injection. Templates now receive `CSPNonce` for inline `<style>` and `<script>` tags (`middleware/middleware.go`, `internal/oauth2/controller/template/consent.html`, `internal/oauth2/controller/template/device.html`).
 
 ### Changed
