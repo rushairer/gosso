@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -25,6 +26,106 @@ func TestNewConsentRepository(t *testing.T) {
 
 	repo := NewConsentRepository(db)
 	assert.NotNil(t, repo)
+}
+
+// ──────────────────────────────────────────────
+// Upsert — DB error
+// ──────────────────────────────────────────────
+
+func TestConsentRepo_Upsert_DBError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	tx, _ := db.Begin()
+
+	consent := &domain.Consent{
+		AccountID: "account-001",
+		ClientID:  "client-001",
+		Scopes:    []string{"openid"},
+		GrantedAt: time.Now(),
+	}
+
+	mock.ExpectQuery("INSERT INTO oauth2_consents").
+		WillReturnError(fmt.Errorf("connection lost"))
+
+	repo := NewConsentRepository(db)
+	err = repo.Upsert(context.Background(), tx, consent)
+
+	assert.Error(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// ──────────────────────────────────────────────
+// FindByAccountAndClient — generic DB error
+// ──────────────────────────────────────────────
+
+func TestConsentRepo_FindByAccountAndClient_DBError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT (.+) FROM oauth2_consents").
+		WithArgs("account-001", "client-001").
+		WillReturnError(fmt.Errorf("connection lost"))
+
+	repo := NewConsentRepository(db)
+	result, err := repo.FindByAccountAndClient(context.Background(), "account-001", "client-001")
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "find consent")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// ──────────────────────────────────────────────
+// FindByAccountAndClient — corrupt scopes JSON
+// ──────────────────────────────────────────────
+
+func TestConsentRepo_FindByAccountAndClient_CorruptScopes(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	now := time.Now()
+	mock.ExpectQuery("SELECT (.+) FROM oauth2_consents").
+		WithArgs("account-001", "client-001").
+		WillReturnRows(sqlmock.NewRows(
+			[]string{"id", "account_id", "client_id", "scopes", "granted_at", "created_at", "updated_at"},
+		).AddRow("consent-001", "account-001", "client-001", []byte("{invalid"), now, now, now))
+
+	repo := NewConsentRepository(db)
+	result, err := repo.FindByAccountAndClient(context.Background(), "account-001", "client-001")
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "unmarshal scopes")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// ──────────────────────────────────────────────
+// Delete — DB error
+// ──────────────────────────────────────────────
+
+func TestConsentRepo_Delete_DBError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	tx, _ := db.Begin()
+
+	mock.ExpectExec("DELETE FROM oauth2_consents").
+		WithArgs("account-001", "client-001").
+		WillReturnError(fmt.Errorf("connection lost"))
+
+	repo := NewConsentRepository(db)
+	err = repo.Delete(context.Background(), tx, "account-001", "client-001")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "delete consent")
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // ──────────────────────────────────────────────

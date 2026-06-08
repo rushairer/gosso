@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -252,4 +253,280 @@ func TestSoftDeleteByAccountID_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+// ──────────────────────────────────────────────
+// unmarshalClientJSONFields
+// ──────────────────────────────────────────────
+
+func TestUnmarshalClientJSONFields_CorruptRedirectURIs(t *testing.T) {
+	c := &domain.OAuth2Client{}
+	f := &clientJSONFields{
+		redirectURIs: []byte("{invalid"),
+	}
+	err := unmarshalClientJSONFields(c, f)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal redirect_uris")
+}
+
+func TestUnmarshalClientJSONFields_CorruptPostLogoutURIs(t *testing.T) {
+	c := &domain.OAuth2Client{}
+	f := &clientJSONFields{
+		redirectURIs:   []byte(`["https://example.com"]`),
+		postLogoutURIs: []byte("{invalid"),
+	}
+	err := unmarshalClientJSONFields(c, f)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal post_logout_redirect_uris")
+}
+
+func TestUnmarshalClientJSONFields_CorruptGrantTypes(t *testing.T) {
+	c := &domain.OAuth2Client{}
+	f := &clientJSONFields{
+		redirectURIs:   []byte(`["https://example.com"]`),
+		postLogoutURIs: []byte(`[]`),
+		grantTypes:     []byte("{invalid"),
+	}
+	err := unmarshalClientJSONFields(c, f)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal grant_types")
+}
+
+func TestUnmarshalClientJSONFields_CorruptScopes(t *testing.T) {
+	c := &domain.OAuth2Client{}
+	f := &clientJSONFields{
+		redirectURIs:   []byte(`["https://example.com"]`),
+		postLogoutURIs: []byte(`[]`),
+		grantTypes:     []byte(`["authorization_code"]`),
+		scopes:         []byte("{invalid"),
+	}
+	err := unmarshalClientJSONFields(c, f)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal scopes")
+}
+
+func TestUnmarshalClientJSONFields_CorruptMetadata(t *testing.T) {
+	c := &domain.OAuth2Client{}
+	f := &clientJSONFields{
+		redirectURIs:   []byte(`["https://example.com"]`),
+		postLogoutURIs: []byte(`[]`),
+		grantTypes:     []byte(`["authorization_code"]`),
+		scopes:         []byte(`["openid"]`),
+		metadata:       []byte("{invalid"),
+	}
+	err := unmarshalClientJSONFields(c, f)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal metadata")
+}
+
+func TestUnmarshalClientJSONFields_SuccessWithMetadata(t *testing.T) {
+	c := &domain.OAuth2Client{}
+	f := &clientJSONFields{
+		redirectURIs:   []byte(`["https://example.com"]`),
+		postLogoutURIs: []byte(`["https://example.com/logout"]`),
+		grantTypes:     []byte(`["authorization_code"]`),
+		scopes:         []byte(`["openid","profile"]`),
+		metadata:       []byte(`{"key":"value"}`),
+	}
+	err := unmarshalClientJSONFields(c, f)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"https://example.com"}, c.RedirectURIs)
+	assert.Equal(t, []string{"https://example.com/logout"}, c.PostLogoutRedirectURIs)
+	assert.Equal(t, []string{"authorization_code"}, c.GrantTypes)
+	assert.Equal(t, []string{"openid", "profile"}, c.Scopes)
+	assert.Equal(t, "value", c.Metadata["key"])
+}
+
+func TestUnmarshalClientJSONFields_SuccessNilMetadata(t *testing.T) {
+	c := &domain.OAuth2Client{}
+	f := &clientJSONFields{
+		redirectURIs:   []byte(`[]`),
+		postLogoutURIs: []byte(`null`),
+		grantTypes:     []byte(`[]`),
+		scopes:         []byte(`[]`),
+		metadata:       nil,
+	}
+	err := unmarshalClientJSONFields(c, f)
+	require.NoError(t, err)
+	assert.Nil(t, c.Metadata)
+}
+
+// ──────────────────────────────────────────────
+// marshalClientJSONFields
+// ──────────────────────────────────────────────
+
+func TestMarshalClientJSONFields_WithMetadata(t *testing.T) {
+	c := &domain.OAuth2Client{
+		RedirectURIs:           []string{"https://example.com"},
+		PostLogoutRedirectURIs: []string{"https://example.com/logout"},
+		GrantTypes:             []string{"authorization_code"},
+		Scopes:                 []string{"openid"},
+		Metadata:               map[string]any{"foo": "bar"},
+	}
+	f, err := marshalClientJSONFields(c)
+	require.NoError(t, err)
+	assert.NotNil(t, f.metadata)
+
+	var md map[string]any
+	require.NoError(t, json.Unmarshal(f.metadata, &md))
+	assert.Equal(t, "bar", md["foo"])
+}
+
+func TestMarshalClientJSONFields_NilMetadata(t *testing.T) {
+	c := &domain.OAuth2Client{
+		RedirectURIs: []string{"https://example.com"},
+		GrantTypes:   []string{"authorization_code"},
+		Scopes:       []string{"openid"},
+	}
+	f, err := marshalClientJSONFields(c)
+	require.NoError(t, err)
+	assert.Nil(t, f.metadata)
+}
+
+// ──────────────────────────────────────────────
+// FindByClientID — DB error
+// ──────────────────────────────────────────────
+
+func TestFindByClientID_DBError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT .+ FROM oauth2_clients WHERE client_id").
+		WithArgs("cid-abc123").
+		WillReturnError(fmt.Errorf("connection refused"))
+
+	repo := NewOAuth2ClientRepository(db)
+	_, err = repo.FindByClientID(context.Background(), "cid-abc123")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "find oauth2_client by client_id")
+	assert.NotErrorIs(t, err, domain.ErrClientNotFound)
+}
+
+// ──────────────────────────────────────────────
+// FindByAccountID — query/scan/rows errors
+// ──────────────────────────────────────────────
+
+func TestFindByAccountID_QueryError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT .+ FROM oauth2_clients WHERE account_id").
+		WithArgs("account-001").
+		WillReturnError(fmt.Errorf("connection refused"))
+
+	repo := NewOAuth2ClientRepository(db)
+	_, err = repo.FindByAccountID(context.Background(), "account-001")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "find oauth2_clients by account_id")
+}
+
+func TestFindByAccountID_ScanError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	// Return wrong number of columns to trigger scan error
+	mock.ExpectQuery("SELECT .+ FROM oauth2_clients WHERE account_id").
+		WithArgs("account-001").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("only-one-col"))
+
+	repo := NewOAuth2ClientRepository(db)
+	_, err = repo.FindByAccountID(context.Background(), "account-001")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "scan oauth2_client")
+}
+
+// ──────────────────────────────────────────────
+// Create — DB error
+// ──────────────────────────────────────────────
+
+func TestCreate_DBError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	tx, _ := db.Begin()
+
+	c := newTestOAuth2Client()
+	mock.ExpectQuery("INSERT INTO oauth2_clients").
+		WillReturnError(fmt.Errorf("duplicate key"))
+
+	repo := NewOAuth2ClientRepository(db)
+	err = repo.Create(context.Background(), tx, c)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "insert oauth2_client")
+}
+
+// ──────────────────────────────────────────────
+// Update — generic DB error
+// ──────────────────────────────────────────────
+
+func TestUpdate_DBError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	tx, _ := db.Begin()
+
+	c := newTestOAuth2Client()
+	mock.ExpectQuery("UPDATE oauth2_clients").
+		WillReturnError(fmt.Errorf("connection lost"))
+
+	repo := NewOAuth2ClientRepository(db)
+	err = repo.Update(context.Background(), tx, c)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "update oauth2_client")
+	assert.NotErrorIs(t, err, domain.ErrClientNotFound)
+}
+
+// ──────────────────────────────────────────────
+// SoftDelete — exec and RowsAffected errors
+// ──────────────────────────────────────────────
+
+func TestSoftDelete_ExecError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	tx, _ := db.Begin()
+
+	mock.ExpectExec("UPDATE oauth2_clients SET deleted_at").
+		WillReturnError(fmt.Errorf("connection lost"))
+
+	repo := NewOAuth2ClientRepository(db)
+	err = repo.SoftDelete(context.Background(), tx, "client-uuid-001", time.Now())
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "soft delete oauth2_client")
+}
+
+// ──────────────────────────────────────────────
+// SoftDeleteByAccountID — exec error
+// ──────────────────────────────────────────────
+
+func TestSoftDeleteByAccountID_ExecError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	tx, _ := db.Begin()
+
+	mock.ExpectExec("UPDATE oauth2_clients").
+		WillReturnError(fmt.Errorf("connection lost"))
+
+	repo := NewOAuth2ClientRepository(db)
+	err = repo.SoftDeleteByAccountID(context.Background(), tx, "account-001", time.Now())
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "soft delete oauth2_clients by account_id")
 }
