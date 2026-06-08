@@ -20,6 +20,7 @@ import (
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
+	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/auth/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
@@ -95,7 +96,7 @@ func (m *mockAuthOrchestrator) ConfirmVerificationCredential(_ context.Context, 
 	return fmt.Errorf("not implemented")
 }
 
-func (m *mockAuthOrchestrator) MFAService() *service.MFAService { return m.mfaSvc }
+func (m *mockAuthOrchestrator) MFAService() *service.MFAService         { return m.mfaSvc }
 func (m *mockAuthOrchestrator) PasskeyService() *service.PasskeyService { return nil }
 
 type mockTokenManager struct {
@@ -200,6 +201,7 @@ func newTestMFAService(t *testing.T, credRepo accountRepo.CredentialRepository) 
 	svc := service.NewMFAService(credRepo, db, "test-issuer", zap.NewNop())
 	return svc, mock
 }
+
 // ──────────────────────────────────────────────
 // Test helpers
 // ──────────────────────────────────────────────
@@ -1112,4 +1114,392 @@ func TestMFAGenerateBackupCodes_ServiceError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// ──────────────────────────────────────────────
+// RegisterRoutes rate limiting + mfaMgmtHandlers
+// ──────────────────────────────────────────────
+
+func TestRegisterRoutes_WithRateLimits(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+
+	loginRateLimited := func(ctx *gin.Context) {
+		ctx.Header("X-Login-Rate-Limited", "true")
+		ctx.Next()
+	}
+
+	authSvc := &mockAuthOrchestrator{
+		loginFn: func() (*service.LoginResult, error) {
+			return &service.LoginResult{
+				AccessToken: "test-token",
+				Session:     newTestSession(),
+			}, nil
+		},
+	}
+	tokenMgr := &mockTokenManager{}
+
+	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, false, zap.NewNop())
+	api := engine.Group("/api")
+	ctrl.RegisterRoutes(api, AuthRouteConfig{
+		LoginLimit:    loginRateLimited,
+		RefreshLimit:  loginRateLimited,
+		MFALimit:      loginRateLimited,
+		SocialLimit:   loginRateLimited,
+		VerifyLimit:   loginRateLimited,
+		PasswordLimit: loginRateLimited,
+	})
+
+	body := `{"username":"test","password":"password123"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "true", w.Header().Get("X-Login-Rate-Limited"))
+}
+
+func TestMfaMgmtHandlers_NonNil(t *testing.T) {
+	handler := func(ctx *gin.Context) {}
+	result := mfaMgmtHandlers(handler)
+	assert.NotNil(t, result)
+	assert.Len(t, result, 1)
+}
+
+// ──────────────────────────────────────────────
+// Mocks for SocialLoginService (controller-level tests)
+// ──────────────────────────────────────────────
+
+type mockAccountServiceForSocial struct {
+	findAccountByIDFn func(ctx context.Context, accountID string) (*accountDomain.Account, error)
+}
+
+func (m *mockAccountServiceForSocial) RegisterAccount(_ context.Context, _ *accountService.RegisterAccountRequest) (*accountDomain.Account, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockAccountServiceForSocial) FindAccountByID(ctx context.Context, accountID string) (*accountDomain.Account, error) {
+	if m.findAccountByIDFn != nil {
+		return m.findAccountByIDFn(ctx, accountID)
+	}
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockAccountServiceForSocial) FindAccountByUsername(_ context.Context, _ string) (*accountDomain.Account, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockAccountServiceForSocial) UpdateAccount(_ context.Context, _ *accountDomain.Account) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockAccountServiceForSocial) SoftDeleteAccount(_ context.Context, _ string) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockAccountServiceForSocial) VerifyCredential(_ context.Context, _ string) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockAccountServiceForSocial) ChangePassword(_ context.Context, _, _, _ string) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockAccountServiceForSocial) BindFederatedIdentity(_ context.Context, _ string, _ accountDomain.Provider, _ string, _ map[string]interface{}) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockAccountServiceForSocial) UnbindFederatedIdentity(_ context.Context, _, _ string) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockAccountServiceForSocial) AssignRole(_ context.Context, _, _ string) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockAccountServiceForSocial) RemoveRole(_ context.Context, _, _ string) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockAccountServiceForSocial) ListAccounts(_ context.Context, _, _ int, _ string) ([]*accountDomain.Account, int, error) {
+	return nil, 0, fmt.Errorf("not implemented")
+}
+
+func (m *mockAccountServiceForSocial) SuspendAccount(_ context.Context, _ string) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockAccountServiceForSocial) ActivateAccount(_ context.Context, _ string) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockAccountServiceForSocial) GetAccountRoles(_ context.Context, _ string) ([]*accountDomain.Role, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+type mockFederatedIdentityRepoForSocial struct {
+	findByProviderFn func(ctx context.Context, provider accountDomain.Provider, providerUserID string) (*accountDomain.FederatedIdentity, error)
+}
+
+func (m *mockFederatedIdentityRepoForSocial) CreateFederatedIdentity(_ context.Context, _ *sql.Tx, _ *accountDomain.FederatedIdentity) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockFederatedIdentityRepoForSocial) FindByProvider(ctx context.Context, provider accountDomain.Provider, providerUserID string) (*accountDomain.FederatedIdentity, error) {
+	if m.findByProviderFn != nil {
+		return m.findByProviderFn(ctx, provider, providerUserID)
+	}
+	return nil, accountRepo.ErrFederatedIdentityNotFound
+}
+
+func (m *mockFederatedIdentityRepoForSocial) FindByAccountID(_ context.Context, _ string) ([]*accountDomain.FederatedIdentity, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockFederatedIdentityRepoForSocial) SoftDeleteByAccountID(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockFederatedIdentityRepoForSocial) SoftDeleteByID(_ context.Context, _ *sql.Tx, _, _ string, _ time.Time) error {
+	return fmt.Errorf("not implemented")
+}
+
+type mockSessionTokenCreator struct {
+	createFn func(ctx context.Context, account *accountDomain.Account, ip, userAgent string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error)
+}
+
+func (m *mockSessionTokenCreator) CreateSessionAndTokens(ctx context.Context, account *accountDomain.Account, ip, userAgent string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error) {
+	if m.createFn != nil {
+		return m.createFn(ctx, account, ip, userAgent)
+	}
+	return nil, "", nil, fmt.Errorf("not implemented")
+}
+
+// ──────────────────────────────────────────────
+// Social login controller tests
+// ──────────────────────────────────────────────
+
+func setupAuthControllerWithSocial(socialSvc *service.SocialLoginService) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{accessExpiry: 15 * time.Minute}
+	ctrl := NewAuthController(authSvc, tokenMgr, socialSvc, nil, nil, false, zap.NewNop())
+	api := engine.Group("/api")
+	ctrl.RegisterRoutes(api, AuthRouteConfig{})
+	return engine
+}
+
+func newSocialTestServer(t *testing.T, tokenStatus int, tokenBody string, userinfoStatus int, userinfoBody string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(tokenStatus)
+			fmt.Fprint(w, tokenBody)
+		case "/userinfo":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(userinfoStatus)
+			fmt.Fprint(w, userinfoBody)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+}
+
+func TestSocialAuthURL_Success(t *testing.T) {
+	providers := map[string]*service.OAuthProviderConfig{
+		"google": {
+			ClientID:    "test-client-id",
+			RedirectURI: "https://app.example.com/callback",
+			Scopes:      []string{"openid", "email"},
+			AuthURL:     "https://accounts.google.com/o/oauth2/v2/auth",
+		},
+	}
+	socialSvc := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop())
+	engine := setupAuthControllerWithSocial(socialSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusFound, w.Code)
+
+	location := w.Header().Get("Location")
+	assert.Contains(t, location, "accounts.google.com")
+	assert.Contains(t, location, "test-client-id")
+	assert.Contains(t, location, "state=")
+
+	// Verify state cookie is set
+	resp := w.Result()
+	var stateCookie *http.Cookie
+	for _, c := range resp.Cookies() {
+		if c.Name == "oauth_state" {
+			stateCookie = c
+			break
+		}
+	}
+	require.NotNil(t, stateCookie, "expected oauth_state cookie")
+	assert.NotEmpty(t, stateCookie.Value)
+	assert.True(t, stateCookie.HttpOnly)
+}
+
+func TestSocialAuthURL_UnsupportedProvider(t *testing.T) {
+	providers := map[string]*service.OAuthProviderConfig{
+		"google": {
+			ClientID:    "test-client-id",
+			RedirectURI: "https://app.example.com/callback",
+			AuthURL:     "https://accounts.google.com/o/oauth2/v2/auth",
+		},
+	}
+	socialSvc := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop())
+	engine := setupAuthControllerWithSocial(socialSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/facebook", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSocialCallback_MissingState(t *testing.T) {
+	providers := map[string]*service.OAuthProviderConfig{
+		"google": {AuthURL: "https://accounts.google.com/o/oauth2/v2/auth"},
+	}
+	socialSvc := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop())
+	engine := setupAuthControllerWithSocial(socialSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google/callback", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSocialCallback_MismatchedState(t *testing.T) {
+	providers := map[string]*service.OAuthProviderConfig{
+		"google": {AuthURL: "https://accounts.google.com/o/oauth2/v2/auth"},
+	}
+	socialSvc := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop())
+	engine := setupAuthControllerWithSocial(socialSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google/callback?state=state-a&code=test-code", nil)
+	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "state-b"})
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSocialCallback_MissingCode(t *testing.T) {
+	providers := map[string]*service.OAuthProviderConfig{
+		"google": {AuthURL: "https://accounts.google.com/o/oauth2/v2/auth"},
+	}
+	socialSvc := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop())
+	engine := setupAuthControllerWithSocial(socialSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google/callback?state=test-state", nil)
+	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "test-state"})
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSocialCallback_ExchangeFails(t *testing.T) {
+	srv := newSocialTestServer(t, http.StatusBadRequest, `{"error":"invalid_grant"}`, http.StatusOK, `{}`)
+	defer srv.Close()
+
+	providers := map[string]*service.OAuthProviderConfig{
+		"google": {
+			ClientID:     "test-client-id",
+			ClientSecret: "test-secret",
+			RedirectURI:  srv.URL + "/callback",
+			TokenURL:     srv.URL + "/token",
+			UserInfoURL:  srv.URL + "/userinfo",
+		},
+	}
+	socialSvc := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop())
+	engine := setupAuthControllerWithSocial(socialSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google/callback?state=test-state&code=bad-code", nil)
+	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "test-state"})
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestSocialCallback_Success(t *testing.T) {
+	srv := newSocialTestServer(t, http.StatusOK, `{"access_token":"test-social-token"}`, http.StatusOK, `{"id":12345,"email":"user@example.com","name":"Test User","email_verified":true}`)
+	defer srv.Close()
+
+	accountID := "social-account-001"
+	fedIdentityRepo := &mockFederatedIdentityRepoForSocial{
+		findByProviderFn: func(_ context.Context, _ accountDomain.Provider, _ string) (*accountDomain.FederatedIdentity, error) {
+			return accountDomain.NewFederatedIdentity(accountID, accountDomain.Provider("google"), "12345", nil), nil
+		},
+	}
+
+	activeAccount := accountDomain.NewAccount("Test User")
+	activeAccount.ID = accountID
+
+	accountSvc := &mockAccountServiceForSocial{
+		findAccountByIDFn: func(_ context.Context, id string) (*accountDomain.Account, error) {
+			if id == accountID {
+				return activeAccount, nil
+			}
+			return nil, fmt.Errorf("not found")
+		},
+	}
+
+	sessionCreator := &mockSessionTokenCreator{
+		createFn: func(_ context.Context, _ *accountDomain.Account, _, _ string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error) {
+			return &sessionDomain.Session{
+				ID:        "social-session-001",
+				AccountID: accountID,
+				IP:        "127.0.0.1",
+				UserAgent: "test-agent",
+				CreatedAt: time.Now(),
+			}, "social-access-token", &tokenDomain.RefreshToken{Token: "social-refresh-token"}, nil
+		},
+	}
+
+	providers := map[string]*service.OAuthProviderConfig{
+		"google": {
+			ClientID:     "test-client-id",
+			ClientSecret: "test-secret",
+			RedirectURI:  srv.URL + "/callback",
+			Scopes:       []string{"openid", "email"},
+			TokenURL:     srv.URL + "/token",
+			UserInfoURL:  srv.URL + "/userinfo",
+		},
+	}
+	socialSvc := service.NewSocialLoginService(nil, accountSvc, sessionCreator, nil, nil, fedIdentityRepo, providers, zap.NewNop())
+	engine := setupAuthControllerWithSocial(socialSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google/callback?state=test-state&code=good-code", nil)
+	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "test-state"})
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "social-access-token", data["access_token"])
+	assert.Equal(t, "social-refresh-token", data["refresh_token"])
+	assert.Equal(t, "Bearer", data["token_type"])
+	assert.Equal(t, float64(900), data["expires_in"])
+	assert.Equal(t, "social-session-001", data["session_id"])
+
+	// Verify oauth_state cookie is cleared
+	for _, c := range w.Result().Cookies() {
+		if c.Name == "oauth_state" {
+			assert.Equal(t, -1, c.MaxAge)
+		}
+	}
 }
