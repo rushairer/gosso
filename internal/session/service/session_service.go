@@ -460,8 +460,14 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 	for i, cmd := range cmds {
 		data, err := cmd.Result()
 		if err != nil {
-			staleIDs = append(staleIDs, entries[i].rawID)
-			continue
+			// Pipeline results can be unreliable (e.g. miniredis returns
+			// redis.Nil for a valid key when a sibling key is missing).
+			// Retry with a direct GET to confirm whether the key exists.
+			data, err = s.redis.Get(ctx, entries[i].key)
+			if err != nil {
+				staleIDs = append(staleIDs, entries[i].rawID)
+				continue
+			}
 		}
 		var session domain.Session
 		if err := json.Unmarshal([]byte(data), &session); err != nil {
