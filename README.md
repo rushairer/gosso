@@ -312,13 +312,14 @@ Configuration is managed by [Viper](https://github.com/spf13/viper). The config 
 
 | Section | Key fields | Env prefix example |
 |---------|------------|-------------------|
-| `web_server` | address, port, debug, timeouts, max_body_size, trusted_proxies, rate_limits | `GOUNO_WEBSERVER_ADDRESS` |
+| `web_server` | address, port, debug, timeouts, max_body_size, trusted_proxies, rate_limits | `GOUNO_WEB_SERVER_ADDRESS` |
 | `database` | default driver, drivers map, connection pool settings | `GOUNO_DATABASE_DRIVERS_POSTGRES_DSN` |
 | `redis` | dsn, max_active_conns, pool_timeout_seconds | `GOUNO_REDIS_DSN` |
 | `auth` | issuer, token expiries, session_ttl, private_key_path, key_id, WebAuthn, TOTP, MFA, password reset, verification settings | `GOUNO_AUTH_ISSUER` |
-| `cors` | allowed_origins, methods, headers, credentials, max_age | `GOUNO_CORS_ALLOWEDORIGINS` |
+| `cors` | allowed_origins, methods, headers, credentials, max_age | `GOUNO_CORS_ALLOWED_ORIGINS` |
 | `smtp` | host, port, username, password, from, tls_policy | `GOUNO_SMTP_HOST` |
-| `oauth_providers` | google, github, wechat (client_id, client_secret, redirect_uri, scopes) | `GOUNO_OAUTHPROVIDERS_GOOGLE_CLIENTID` |
+| `oauth_providers` | google, github, wechat (client_id, client_secret, redirect_uri, scopes) | `GOUNO_OAUTH_PROVIDERS_GOOGLE_CLIENT_ID` |
+| `task_pipeline` | flush_size, buffer_size, flush_interval | `GOUNO_TASK_PIPELINE_FLUSH_SIZE` |
 | `log` | level (-1=debug, 0=info, 1=warn, 2=error) | `GOUNO_LOG_LEVEL` |
 
 Environment variables override config file values. The prefix is `GOUNO_` and dots are replaced with underscores.
