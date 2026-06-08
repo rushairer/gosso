@@ -236,3 +236,131 @@ func TestGetDeviceCodeByUserCode_CorruptDeviceCode(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unmarshal device code")
 }
+
+// ──────────────────────────────────────────────
+// AuthorizeDeviceCode / DenyDeviceCode / CheckAndUpdatePollRate
+// not-found via TTL pre-check (no cjson required)
+// ──────────────────────────────────────────────
+
+func TestAuthorizeDeviceCode_NotFound(t *testing.T) {
+	svc := setupDeviceCodeServiceBase(t)
+	ctx := context.Background()
+
+	err := svc.AuthorizeDeviceCode(ctx, "nonexistent-device-code", "account-123")
+	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+}
+
+func TestDenyDeviceCode_NotFound(t *testing.T) {
+	svc := setupDeviceCodeServiceBase(t)
+	ctx := context.Background()
+
+	err := svc.DenyDeviceCode(ctx, "nonexistent-device-code")
+	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+}
+
+func TestCheckAndUpdatePollRate_NotFound(t *testing.T) {
+	svc := setupDeviceCodeServiceBase(t)
+	ctx := context.Background()
+
+	err := svc.CheckAndUpdatePollRate(ctx, "nonexistent-device-code")
+	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+}
+
+// ──────────────────────────────────────────────
+// ClaimAuthorizedDeviceCode (requires cjson)
+// ──────────────────────────────────────────────
+
+func TestClaimAuthorizedDeviceCode_Success(t *testing.T) {
+	svc := setupDeviceCodeServiceCJSON(t)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	require.NoError(t, err)
+
+	err = svc.AuthorizeDeviceCode(ctx, dc.DeviceCode, "account-123")
+	require.NoError(t, err)
+
+	claimed, err := svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode)
+	require.NoError(t, err)
+	assert.Equal(t, domain.DeviceCodeStatusUsed, claimed.Status)
+	assert.Equal(t, "account-123", claimed.AccountID)
+}
+
+func TestClaimAuthorizedDeviceCode_AlreadyUsed(t *testing.T) {
+	svc := setupDeviceCodeServiceCJSON(t)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	require.NoError(t, err)
+
+	err = svc.AuthorizeDeviceCode(ctx, dc.DeviceCode, "account-123")
+	require.NoError(t, err)
+
+	_, err = svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode)
+	require.NoError(t, err)
+
+	// Double-claim must be rejected
+	_, err = svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode)
+	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+}
+
+func TestClaimAuthorizedDeviceCode_PendingNotClaimable(t *testing.T) {
+	svc := setupDeviceCodeServiceCJSON(t)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	require.NoError(t, err)
+
+	// Code is still pending — not yet authorized
+	_, err = svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode)
+	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+}
+
+func TestClaimAuthorizedDeviceCode_DeniedNotClaimable(t *testing.T) {
+	svc := setupDeviceCodeServiceCJSON(t)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	require.NoError(t, err)
+
+	err = svc.DenyDeviceCode(ctx, dc.DeviceCode)
+	require.NoError(t, err)
+
+	// Denied code cannot be claimed
+	_, err = svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode)
+	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+}
+
+// ──────────────────────────────────────────────
+// State-machine transitions (requires cjson)
+// ──────────────────────────────────────────────
+
+func TestAuthorizeDeviceCode_AlreadyDenied(t *testing.T) {
+	svc := setupDeviceCodeServiceCJSON(t)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	require.NoError(t, err)
+
+	err = svc.DenyDeviceCode(ctx, dc.DeviceCode)
+	require.NoError(t, err)
+
+	// Cannot authorize a denied code
+	err = svc.AuthorizeDeviceCode(ctx, dc.DeviceCode, "account-123")
+	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+}
+
+func TestDenyDeviceCode_AlreadyAuthorized(t *testing.T) {
+	svc := setupDeviceCodeServiceCJSON(t)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	require.NoError(t, err)
+
+	err = svc.AuthorizeDeviceCode(ctx, dc.DeviceCode, "account-123")
+	require.NoError(t, err)
+
+	// Cannot deny an authorized code
+	err = svc.DenyDeviceCode(ctx, dc.DeviceCode)
+	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+}
