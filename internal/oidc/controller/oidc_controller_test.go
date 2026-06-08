@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -845,4 +846,230 @@ func TestJWKS_Success(t *testing.T) {
 	assert.NotEmpty(t, key["kid"])
 	assert.NotEmpty(t, key["n"])
 	assert.NotEmpty(t, key["e"])
+}
+
+// signValidAccessToken creates an access token with a JTI so it passes ValidateAccessTokenWithContext.
+func signValidAccessToken(t *testing.T, keySvc *tokenService.KeyService, issuer, accountID, sessionID string) string {
+	t.Helper()
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: accountID,
+		SessionID: sessionID,
+	}
+	claims.ID = uuid.New().String()
+	claims.Issuer = issuer
+	claims.IssuedAt = jwt.NewNumericDate(time.Now())
+	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(15 * time.Minute))
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	token.Header["kid"] = keySvc.KeyID()
+	tokenString, err := token.SignedString(keySvc.PrivateKey())
+	require.NoError(t, err)
+	return tokenString
+}
+
+// signValidAccessTokenWithClientID creates an access token with JTI and ClientID.
+func signValidAccessTokenWithClientID(t *testing.T, keySvc *tokenService.KeyService, issuer, accountID, sessionID, clientID string) string {
+	t.Helper()
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: accountID,
+		SessionID: sessionID,
+		ClientID:  clientID,
+	}
+	claims.ID = uuid.New().String()
+	claims.Issuer = issuer
+	claims.IssuedAt = jwt.NewNumericDate(time.Now())
+	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(15 * time.Minute))
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	token.Header["kid"] = keySvc.KeyID()
+	tokenString, err := token.SignedString(keySvc.PrivateKey())
+	require.NoError(t, err)
+	return tokenString
+}
+
+// setupLogoutEngineWithBlacklist creates a logout test engine with a working BlacklistService,
+// so that ValidateAccessTokenWithContext can validate tokens end-to-end.
+func setupLogoutEngineWithBlacklist(t *testing.T, clientRepo *mockClientRepo) (*gin.Engine, *tokenService.KeyService) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	keySvc := setupTestKeyService(t)
+	redisClient, _ := testutil.SetupTestRedis(t)
+	blacklistSvc := tokenService.NewBlacklistService(redisClient, zap.NewNop())
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, zap.NewNop())
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
+
+	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, clientRepo, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+
+	engine := gin.New()
+	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
+
+	return engine, keySvc
+}
+
+// ──────────────────────────────────────────────
+// Logout Tests — Bearer token success paths
+// ──────────────────────────────────────────────
+
+func TestLogout_BearerToken_Success(t *testing.T) {
+	engine, keySvc := setupLogoutEngineWithBlacklist(t, &mockClientRepo{})
+
+	token := signValidAccessToken(t, keySvc, "https://sso.example.com", "account-001", "session-001")
+
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "logged_out", data["status"])
+}
+
+func TestLogout_BearerToken_WithClientID_NoRedirect(t *testing.T) {
+	engine, keySvc := setupLogoutEngineWithBlacklist(t, &mockClientRepo{})
+
+	token := signValidAccessTokenWithClientID(t, keySvc, "https://sso.example.com", "account-001", "session-001", "client-001")
+
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	// ClientID is resolved but no post_logout_redirect_uri → logged_out JSON
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "logged_out", data["status"])
+}
+
+func TestLogout_BearerToken_WithPostLogoutRedirect(t *testing.T) {
+	clientRepo := &mockClientRepo{
+		findByClientIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return &oauth2Domain.OAuth2Client{
+				ClientID:               "client-001",
+				PostLogoutRedirectURIs: []string{"https://app.example.com/logout"},
+			}, nil
+		},
+	}
+	engine, keySvc := setupLogoutEngineWithBlacklist(t, clientRepo)
+
+	token := signValidAccessTokenWithClientID(t, keySvc, "https://sso.example.com", "account-001", "session-001", "client-001")
+
+	form := url.Values{
+		"post_logout_redirect_uri": {"https://app.example.com/logout"},
+		"state":                    {"test-state-123"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusFound, w.Code)
+	location := w.Header().Get("Location")
+	assert.Contains(t, location, "https://app.example.com/logout")
+	assert.Contains(t, location, "state=test-state-123")
+}
+
+func TestLogout_BearerToken_InvalidPostLogoutRedirect(t *testing.T) {
+	clientRepo := &mockClientRepo{
+		findByClientIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return &oauth2Domain.OAuth2Client{
+				ClientID:               "client-001",
+				PostLogoutRedirectURIs: []string{"https://app.example.com/logout"},
+			}, nil
+		},
+	}
+	engine, keySvc := setupLogoutEngineWithBlacklist(t, clientRepo)
+
+	token := signValidAccessTokenWithClientID(t, keySvc, "https://sso.example.com", "account-001", "session-001", "client-001")
+
+	form := url.Values{
+		"post_logout_redirect_uri": {"https://evil.com/steal"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestLogout_BearerToken_WithIDTokenHint_SameAccount(t *testing.T) {
+	keySvc := setupTestKeyService(t)
+	redisClient, _ := testutil.SetupTestRedis(t)
+	blacklistSvc := tokenService.NewBlacklistService(redisClient, zap.NewNop())
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, zap.NewNop())
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
+
+	// Both tokens identify the same account
+	idToken := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
+	accessToken := signValidAccessToken(t, keySvc, "https://sso.example.com", "account-001", "session-001")
+
+	form := url.Values{"id_token_hint": {idToken}}
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "logged_out", data["status"])
+}
+
+func TestLogout_BearerToken_WithIDTokenHint_AccountMismatch(t *testing.T) {
+	keySvc := setupTestKeyService(t)
+	redisClient, _ := testutil.SetupTestRedis(t)
+	blacklistSvc := tokenService.NewBlacklistService(redisClient, zap.NewNop())
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, zap.NewNop())
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
+
+	// id_token_hint identifies account-A, Bearer token identifies account-B
+	idToken := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
+	accessToken := signValidAccessToken(t, keySvc, "https://sso.example.com", "account-002", "session-002")
+
+	form := url.Values{"id_token_hint": {idToken}}
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, float64(http.StatusForbidden), resp["code"])
 }
