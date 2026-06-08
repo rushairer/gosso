@@ -607,3 +607,23 @@ func TestPasswordResetService_Wait(t *testing.T) {
 		t.Fatal("Wait() did not return in time")
 	}
 }
+
+// ──────────────────────────────────────────────
+// buildTokenKey
+// ──────────────────────────────────────────────
+
+func TestBuildTokenKey(t *testing.T) {
+	svc := &PasswordResetService{}
+	assert.Equal(t, "password_reset:token:abc123", svc.buildTokenKey("abc123"))
+	assert.Equal(t, "password_reset:token:", svc.buildTokenKey(""))
+}
+
+// ──────────────────────────────────────────────
+// buildCooldownKey
+// ──────────────────────────────────────────────
+
+func TestPasswordResetBuildCooldownKey(t *testing.T) {
+	svc := &PasswordResetService{}
+	assert.Equal(t, "password_reset:cooldown:user@example.com", svc.buildCooldownKey("User@Example.com"))
+	assert.Equal(t, "password_reset:cooldown:", svc.buildCooldownKey(""))
+}

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,9 +17,21 @@ import (
 	"github.com/rushairer/gosso/internal/auth/domain"
 )
 
+// newTestPasskeyServiceWithDB creates a PasskeyService that uses a sqlmock DB.
+func newTestPasskeyServiceWithDB(t *testing.T, credRepo *mockWebAuthnRepo, sqlDB *sql.DB) *PasskeyService {
+	t.Helper()
+	return &PasskeyService{
+		credRepo: credRepo,
+		db:       sqlDB,
+		logger:   zap.NewNop(),
+	}
+}
+
 // mockWebAuthnRepo implements repository.WebAuthnCredentialRepository for testing
 type mockWebAuthnRepo struct {
 	creds map[string][]*domain.WebAuthnCredential // key: accountID
+	// findByCredentialIDFn overrides FindByCredentialID when set.
+	findByCredentialIDFn func(ctx context.Context, credentialID string) (*domain.WebAuthnCredential, error)
 }
 
 func (m *mockWebAuthnRepo) CreateCredential(_ context.Context, _ *sql.Tx, _ *domain.WebAuthnCredential) error {
@@ -26,6 +39,9 @@ func (m *mockWebAuthnRepo) CreateCredential(_ context.Context, _ *sql.Tx, _ *dom
 }
 
 func (m *mockWebAuthnRepo) FindByCredentialID(_ context.Context, _ string) (*domain.WebAuthnCredential, error) {
+	if m.findByCredentialIDFn != nil {
+		return m.findByCredentialIDFn(context.Background(), "")
+	}
 	return nil, nil
 }
 
@@ -276,4 +292,52 @@ func TestResolveAccountForRegistration_AccountNotFound(t *testing.T) {
 	_, _, err := svc.ResolveAccountForRegistration(context.Background(), "acct-999")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "resolve account")
+}
+
+// ──────────────────────────────────────────────
+// DeleteCredential
+// ──────────────────────────────────────────────
+
+func TestDeleteCredential_NotFound(t *testing.T) {
+	credRepo := &mockWebAuthnRepo{
+		findByCredentialIDFn: func(_ context.Context, _ string) (*domain.WebAuthnCredential, error) {
+			return nil, errors.New("not found")
+		},
+	}
+	svc := newTestPasskeyService(credRepo)
+
+	err := svc.DeleteCredential(context.Background(), "acct-1", "cred-999")
+	assert.ErrorIs(t, err, ErrCredentialNotFound)
+}
+
+func TestDeleteCredential_WrongAccount(t *testing.T) {
+	credRepo := &mockWebAuthnRepo{
+		findByCredentialIDFn: func(_ context.Context, _ string) (*domain.WebAuthnCredential, error) {
+			return &domain.WebAuthnCredential{ID: "cred-1", AccountID: "acct-owner"}, nil
+		},
+	}
+	svc := newTestPasskeyService(credRepo)
+
+	err := svc.DeleteCredential(context.Background(), "acct-other", "cred-1")
+	assert.ErrorIs(t, err, ErrCredentialOwnership)
+}
+
+func TestDeleteCredential_Success(t *testing.T) {
+	sqlDB, sqlMock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	sqlMock.ExpectBegin()
+	sqlMock.ExpectCommit()
+
+	credRepo := &mockWebAuthnRepo{
+		findByCredentialIDFn: func(_ context.Context, _ string) (*domain.WebAuthnCredential, error) {
+			return &domain.WebAuthnCredential{ID: "cred-1", AccountID: "acct-1"}, nil
+		},
+	}
+	svc := newTestPasskeyServiceWithDB(t, credRepo, sqlDB)
+
+	err = svc.DeleteCredential(context.Background(), "acct-1", "cred-1")
+	assert.NoError(t, err)
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
 }

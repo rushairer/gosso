@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -129,4 +132,54 @@ func TestSocialLoginService_SetAuditor(t *testing.T) {
 	// SetAuditor accepts nil (no-op for audit-disabled mode)
 	svc.SetAuditor(nil)
 	assert.Nil(t, svc.auditor)
+}
+
+// ──────────────────────────────────────────────
+// SetMFAChecker
+// ──────────────────────────────────────────────
+
+func TestSetMFAChecker_SetsChecker(t *testing.T) {
+	svc := newTestSocialLoginService()
+	checker := &testMFAChecker{}
+	svc.SetMFAChecker(checker)
+	assert.Equal(t, checker, svc.mfaChecker)
+}
+
+func TestSetMFAChecker_NilPanics(t *testing.T) {
+	svc := newTestSocialLoginService()
+	assert.Panics(t, func() { svc.SetMFAChecker(nil) })
+}
+
+type testMFAChecker struct{}
+
+func (t *testMFAChecker) CheckMFA(_ context.Context, _ *accountDomain.Account) (*LoginResult, error) {
+	return nil, nil
+}
+
+// ──────────────────────────────────────────────
+// isUniqueViolation
+// ──────────────────────────────────────────────
+
+func TestIsUniqueViolation_Nil(t *testing.T) {
+	assert.False(t, isUniqueViolation(nil))
+}
+
+func TestIsUniqueViolation_PgError(t *testing.T) {
+	pgErr := &pgconn.PgError{Code: "23505"}
+	assert.True(t, isUniqueViolation(pgErr))
+}
+
+func TestIsUniqueViolation_PgErrorOtherCode(t *testing.T) {
+	pgErr := &pgconn.PgError{Code: "23503"}
+	assert.False(t, isUniqueViolation(pgErr))
+}
+
+func TestIsUniqueViolation_SQLiteError(t *testing.T) {
+	err := errors.New("UNIQUE constraint failed: users.email")
+	assert.True(t, isUniqueViolation(err))
+}
+
+func TestIsUniqueViolation_RegularError(t *testing.T) {
+	err := errors.New("something else")
+	assert.False(t, isUniqueViolation(err))
 }
