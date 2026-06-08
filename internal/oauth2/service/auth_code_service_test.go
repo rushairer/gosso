@@ -198,3 +198,16 @@ func TestValidateCode_CorruptData(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unmarshal authorization code")
 }
+
+func TestGenerateCode_RedisError(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	svc := NewAuthCodeService(redisClient, zap.NewNop(), 5*time.Minute)
+	ctx := context.Background()
+
+	mr.Close()
+
+	_, err := svc.GenerateCode(ctx, "client", "account", "http://localhost/callback",
+		[]string{"openid"}, "", "", "")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "store authorization code")
+}

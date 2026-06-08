@@ -364,3 +364,149 @@ func TestDenyDeviceCode_AlreadyAuthorized(t *testing.T) {
 	err = svc.DenyDeviceCode(ctx, dc.DeviceCode)
 	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
 }
+
+// ──────────────────────────────────────────────
+// Script error paths (miniredis doesn't support cjson)
+// These exercise the code paths between TTL check and RunScript result
+// handling. If miniredis adds cjson support, convert to CJSON tests.
+// ──────────────────────────────────────────────
+
+func TestClaimAuthorizedDeviceCode_ScriptError(t *testing.T) {
+	svc := setupDeviceCodeServiceBase(t)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	require.NoError(t, err)
+
+	// claimAuthorizedScript uses cjson which fails on miniredis
+	claimed, err := svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode)
+	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+	assert.Nil(t, claimed)
+}
+
+func TestAuthorizeDeviceCode_ScriptError(t *testing.T) {
+	svc := setupDeviceCodeServiceBase(t)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	require.NoError(t, err)
+
+	// authorizeDeviceCodeScript uses cjson which fails on miniredis
+	err = svc.AuthorizeDeviceCode(ctx, dc.DeviceCode, "account-123")
+	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+}
+
+func TestDenyDeviceCode_ScriptError(t *testing.T) {
+	svc := setupDeviceCodeServiceBase(t)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	require.NoError(t, err)
+
+	// denyDeviceCodeScript uses cjson which fails on miniredis
+	err = svc.DenyDeviceCode(ctx, dc.DeviceCode)
+	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+}
+
+func TestCheckAndUpdatePollRate_ScriptError(t *testing.T) {
+	svc := setupDeviceCodeServiceBase(t)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	require.NoError(t, err)
+
+	// checkAndUpdatePollRateScript uses cjson which fails on miniredis
+	err = svc.CheckAndUpdatePollRate(ctx, dc.DeviceCode)
+	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+}
+
+// ──────────────────────────────────────────────
+// Redis connection error paths
+// ──────────────────────────────────────────────
+
+func TestCreateDeviceCode_RedisError(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	ctx := context.Background()
+
+	mr.Close()
+
+	_, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "store device code")
+}
+
+func TestGetDeviceCode_RedisError(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	require.NoError(t, err)
+
+	mr.Close()
+
+	_, err = svc.GetDeviceCode(ctx, dc.DeviceCode)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "get device code")
+}
+
+func TestGetDeviceCodeByUserCode_ResolveError(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	require.NoError(t, err)
+
+	mr.Close()
+
+	_, err = svc.GetDeviceCodeByUserCode(ctx, dc.UserCode)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "resolve user code")
+}
+
+func TestAuthorizeDeviceCode_TTLError(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	require.NoError(t, err)
+
+	mr.Close()
+
+	err = svc.AuthorizeDeviceCode(ctx, dc.DeviceCode, "account-123")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "get device code ttl")
+}
+
+func TestDenyDeviceCode_TTLError(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	require.NoError(t, err)
+
+	mr.Close()
+
+	err = svc.DenyDeviceCode(ctx, dc.DeviceCode)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "get device code ttl")
+}
+
+func TestCheckAndUpdatePollRate_TTLError(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	require.NoError(t, err)
+
+	mr.Close()
+
+	err = svc.CheckAndUpdatePollRate(ctx, dc.DeviceCode)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "get device code ttl")
+}
