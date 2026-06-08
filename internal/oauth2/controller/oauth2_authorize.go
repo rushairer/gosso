@@ -100,6 +100,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 				"RedirectURI": redirectURI, "CodeChallenge": codeChallenge,
 				"CodeChallengeMethod": codeChallengeMethod, "Nonce": nonce,
 				"CSRFToken": csrfTokenFromCookie(ctx), "ConsentID": consentID,
+				"CSPNonce": middleware.GetCSPNonce(ctx),
 			}); err != nil {
 				c.logger.Error("Failed to render consent template", zap.Error(err))
 				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -130,6 +131,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		"Nonce":               nonce,
 		"CSRFToken":           csrfTokenFromCookie(ctx),
 		"ConsentID":           consentID,
+		"CSPNonce":            middleware.GetCSPNonce(ctx),
 	}); err != nil {
 		c.logger.Error("Failed to render consent template", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})

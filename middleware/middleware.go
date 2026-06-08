@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"net/http"
 	"runtime/debug"
 	"time"
@@ -41,8 +43,12 @@ func RecoveryMiddleware(logger *zap.Logger) gin.HandlerFunc {
 
 // SecurityHeadersMiddleware sets common security response headers.
 // HSTS is only set when isProduction is true (meaningless over plain HTTP).
+// A per-request CSP nonce is generated and stored in the Gin context for use in templates.
 func SecurityHeadersMiddleware(isProduction bool) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		nonce := generateCSPNonce()
+		ctx.Set(cspNonceKey, nonce)
+
 		ctx.Header("X-Content-Type-Options", "nosniff")
 		ctx.Header("X-Frame-Options", "DENY")
 		ctx.Header("X-XSS-Protection", "0")
@@ -51,11 +57,30 @@ func SecurityHeadersMiddleware(isProduction bool) gin.HandlerFunc {
 			ctx.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
 		}
 		ctx.Header("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
-		ctx.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'")
+		ctx.Header("Content-Security-Policy",
+			"default-src 'self'; script-src 'self' 'nonce-"+nonce+"'; style-src 'self' 'nonce-"+nonce+"'; img-src 'self' data:; font-src 'self'; connect-src 'self'")
 		ctx.Header("Cross-Origin-Opener-Policy", "same-origin")
 		ctx.Header("Cross-Origin-Resource-Policy", "same-origin")
 		ctx.Next()
 	}
+}
+
+const cspNonceKey = "csp_nonce"
+
+// GetCSPNonce returns the CSP nonce for the current request, or an empty string if not set.
+func GetCSPNonce(ctx *gin.Context) string {
+	if v, ok := ctx.Get(cspNonceKey); ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func generateCSPNonce() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return base64.StdEncoding.EncodeToString(b)
 }
 
 // MaxBodySizeMiddleware limits the request body to the given number of bytes.

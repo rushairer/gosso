@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"github.com/rushairer/gosso/middleware"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
@@ -91,6 +92,7 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 		var buf bytes.Buffer
 		if err := c.deviceTmpl.Execute(&buf, gin.H{
 			"UserCode": "",
+			"CSPNonce": middleware.GetCSPNonce(ctx),
 		}); err != nil {
 			c.logger.Error("Failed to render device template", zap.Error(err))
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -106,6 +108,7 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 		if err := c.deviceTmpl.Execute(&buf, gin.H{
 			"UserCode": "",
 			"Error":    "Invalid or expired code. Please try again.",
+			"CSPNonce": middleware.GetCSPNonce(ctx),
 		}); err != nil {
 			c.logger.Error("Failed to render device template", zap.Error(err))
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -120,6 +123,7 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 		if err := c.deviceTmpl.Execute(&buf, gin.H{
 			"UserCode": "",
 			"Error":    "This code has expired or is no longer valid.",
+			"CSPNonce": middleware.GetCSPNonce(ctx),
 		}); err != nil {
 			c.logger.Error("Failed to render device template", zap.Error(err))
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -142,6 +146,7 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 		"ClientName": client.Name,
 		"Scopes":     dc.Scopes,
 		"CSRFToken":  csrfTokenFromCookie(ctx),
+		"CSPNonce":  middleware.GetCSPNonce(ctx),
 	}); err != nil {
 		c.logger.Error("Failed to render device template", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
