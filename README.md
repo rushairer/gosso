@@ -26,7 +26,7 @@ gosso provides a complete SSO server with OAuth 2.0 authorization, OIDC discover
 - TOTP-based MFA with backup codes
 - Social login (Google, GitHub, WeChat)
 - Password reset via email
-- Email and phone verification codes
+- Email verification codes (phone/SMS gateway not yet connected)
 
 **Security**
 - Per-endpoint rate limiting (fail-closed for security-sensitive endpoints, fail-open for non-critical)
@@ -233,11 +233,11 @@ Stop with the corresponding `make docker-*-down` commands.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/clients` | List OAuth clients (authenticated) |
-| POST | `/api/clients` | Register OAuth client (authenticated) |
-| GET | `/api/clients/:client_id` | Get client details (authenticated) |
-| PUT | `/api/clients/:client_id` | Update client (authenticated) |
-| DELETE | `/api/clients/:client_id` | Delete client (authenticated) |
+| GET | `/api/oauth2/clients` | List OAuth clients (authenticated) |
+| POST | `/api/oauth2/clients` | Register OAuth client (authenticated) |
+| GET | `/api/oauth2/clients/:client_id` | Get client details (authenticated) |
+| PUT | `/api/oauth2/clients/:client_id` | Update client (authenticated) |
+| DELETE | `/api/oauth2/clients/:client_id` | Delete client (authenticated) |
 
 ### Admin
 
@@ -389,7 +389,7 @@ gosso 提供完整的 SSO 服务器，包含 OAuth 2.0 授权、OIDC 发现、JW
 - 基于 TOTP 的 MFA，支持备份码
 - 社交登录（Google、GitHub、微信）
 - 邮件密码重置
-- 邮箱和手机验证码
+- 邮箱验证码（手机短信网关暂未接入）
 
 **安全**
 - 按端点限流（安全敏感端点 fail-closed，非关键端点 fail-open）
@@ -479,7 +479,7 @@ make docker-prod-up
 - **Passkeys**：`/api/passkey/register/*`、`/api/passkey/login/*`、`/api/passkey/mfa/*`、`/api/passkeys`
 - **社交登录**：`/api/auth/social/:provider`、`/api/auth/social/:provider/callback`
 - **验证和密码重置**：`/api/auth/verify/send`、`/api/auth/verify/confirm`、`/api/auth/password/forgot`、`/api/auth/password/reset`
-- **客户端管理**：`/api/clients/*`
+- **客户端管理**：`/api/oauth2/clients/*`
 - **管理后台**：`/api/admin/accounts/*`
 - **健康检查**：`/health`、`/readiness`
 
