@@ -11,6 +11,7 @@ import (
 
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 	"github.com/rushairer/gosso/internal/testutil"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
 // setupDeviceCodeServiceBase creates a DeviceCodeService backed by miniredis
@@ -179,4 +180,59 @@ func TestGenerateUserCode_Uniqueness(t *testing.T) {
 	}
 	// With 8 chars from 31-char charset, collisions in 100 draws are astronomically unlikely
 	assert.Len(t, seen, 100)
+}
+
+func TestGetDeviceCode_CorruptData(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "client", []string{"openid"})
+	require.NoError(t, err)
+
+	// Corrupt the stored device code data
+	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(dc.DeviceCode)
+	mr.Set(key, "not-valid-json")
+
+	_, err = svc.GetDeviceCode(ctx, dc.DeviceCode)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal device code")
+}
+
+func TestGetDeviceCodeByUserCode_WrongLength(t *testing.T) {
+	svc := setupDeviceCodeServiceBase(t)
+	ctx := context.Background()
+
+	_, err := svc.GetDeviceCodeByUserCode(ctx, "ABC")
+	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+
+	_, err = svc.GetDeviceCodeByUserCode(ctx, "ABCDEFGHIJ")
+	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+}
+
+func TestGetDeviceCodeByUserCode_NotFound(t *testing.T) {
+	svc := setupDeviceCodeServiceBase(t)
+	ctx := context.Background()
+
+	_, err := svc.GetDeviceCodeByUserCode(ctx, "ABCD1234")
+	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+}
+
+func TestGetDeviceCodeByUserCode_CorruptDeviceCode(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	ctx := context.Background()
+
+	dc, err := svc.CreateDeviceCode(ctx, "client", []string{"openid"})
+	require.NoError(t, err)
+
+	// Corrupt the device code data (user code mapping still points to it)
+	dcKey := DeviceCodeKeyPrefix + tokenDomain.HashToken(dc.DeviceCode)
+	mr.Set(dcKey, "not-valid-json")
+
+	_, err = svc.GetDeviceCodeByUserCode(ctx, dc.UserCode)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal device code")
 }

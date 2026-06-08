@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -297,4 +298,19 @@ func TestFindByClientID_NotFound(t *testing.T) {
 	assert.Nil(t, client)
 
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRegisterClient_DBError(t *testing.T) {
+	db, mock, svc := setupTestClientService(t)
+	defer db.Close()
+
+	ctx := context.Background()
+	mock.ExpectBegin().WillReturnError(fmt.Errorf("db unavailable"))
+
+	req := &RegisterClientRequest{
+		AccountID: "account-001",
+		Name:      "Test App",
+	}
+	_, _, err := svc.RegisterClient(ctx, req)
+	assert.Error(t, err)
 }

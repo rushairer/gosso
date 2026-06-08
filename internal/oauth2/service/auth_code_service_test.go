@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 	"github.com/rushairer/gosso/internal/testutil"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
 func setupTestAuthCodeService(t *testing.T) (*AuthCodeService, func()) {
@@ -140,4 +142,59 @@ func TestValidateCode_PKCE_Fail(t *testing.T) {
 	wrongVerifier := "wrong-verifier-must-be-at-least-43-characters-long"
 	_, err = svc.ValidateCode(ctx, code.Code, "client-007", "http://localhost/callback", &wrongVerifier)
 	assert.ErrorIs(t, err, domain.ErrPKCEVerificationFailed)
+}
+
+func TestValidateCode_Expired(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	svc := NewAuthCodeService(redisClient, zap.NewNop(), 5*time.Minute)
+
+	ctx := context.Background()
+	code, err := svc.GenerateCode(ctx, "client", "account", "http://localhost/callback",
+		[]string{"openid"}, "", "", "nonce")
+	require.NoError(t, err)
+
+	// Overwrite stored data with expired ExpiresAt while keeping Redis key alive
+	code.ExpiresAt = time.Now().Add(-1 * time.Hour)
+	data, err := json.Marshal(code)
+	require.NoError(t, err)
+	key := AuthCodeKeyPrefix + tokenDomain.HashToken(code.Code)
+	mr.Set(key, string(data))
+
+	_, err = svc.ValidateCode(ctx, code.Code, "client", "http://localhost/callback", nil)
+	assert.ErrorIs(t, err, domain.ErrCodeExpired)
+}
+
+func TestValidateCode_PKCE_NilVerifier(t *testing.T) {
+	svc, cleanup := setupTestAuthCodeService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	codeChallenge := domain.HashPKCEVerifier("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
+	code, err := svc.GenerateCode(ctx, "client", "account", "http://localhost/callback",
+		[]string{"openid"}, codeChallenge, "S256", "")
+	require.NoError(t, err)
+
+	// PKCE challenge was set but verifier is nil
+	_, err = svc.ValidateCode(ctx, code.Code, "client", "http://localhost/callback", nil)
+	assert.ErrorIs(t, err, domain.ErrPKCEVerificationFailed)
+}
+
+func TestValidateCode_CorruptData(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	svc := NewAuthCodeService(redisClient, zap.NewNop(), 5*time.Minute)
+
+	ctx := context.Background()
+	code, err := svc.GenerateCode(ctx, "client", "account", "http://localhost/callback",
+		[]string{"openid"}, "", "", "")
+	require.NoError(t, err)
+
+	// Overwrite stored data with invalid JSON
+	key := AuthCodeKeyPrefix + tokenDomain.HashToken(code.Code)
+	mr.Set(key, "not-valid-json")
+
+	_, err = svc.ValidateCode(ctx, code.Code, "client", "http://localhost/callback", nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal authorization code")
 }

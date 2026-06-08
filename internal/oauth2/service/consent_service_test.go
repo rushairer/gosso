@@ -47,6 +47,21 @@ func (m *mockConsentRepository) Delete(_ context.Context, _ *sql.Tx, accountID, 
 	return nil
 }
 
+// errorConsentRepo always returns errors for testing error paths.
+type errorConsentRepo struct{}
+
+func (m *errorConsentRepo) Upsert(_ context.Context, _ *sql.Tx, _ *domain.Consent) error {
+	return fmt.Errorf("db unavailable")
+}
+
+func (m *errorConsentRepo) FindByAccountAndClient(_ context.Context, _, _ string) (*domain.Consent, error) {
+	return nil, fmt.Errorf("db unavailable")
+}
+
+func (m *errorConsentRepo) Delete(_ context.Context, _ *sql.Tx, _, _ string) error {
+	return fmt.Errorf("db unavailable")
+}
+
 func setupTestConsentService(t *testing.T) (*ConsentService, sqlmock.Sqlmock, func()) {
 	t.Helper()
 	logger := zap.NewNop()
@@ -200,4 +215,89 @@ func TestGetConsent_CacheMiss_FallbackToDB(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Equal(t, []string{"profile"}, got.Scopes)
+}
+
+func TestGetConsent_CorruptCache(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	repo := newMockConsentRepository()
+	svc := NewConsentService(db, repo, redisClient, zap.NewNop())
+
+	ctx := context.Background()
+
+	// Set corrupt data in Redis cache
+	mr.Set("consent:acct-001:client-001", "{corrupt")
+
+	// DB has valid data
+	repo.store["acct-001:client-001"] = &domain.Consent{
+		AccountID: "acct-001",
+		ClientID:  "client-001",
+		Scopes:    []string{"openid"},
+	}
+
+	got, err := svc.GetConsent(ctx, "acct-001", "client-001")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "acct-001", got.AccountID)
+	assert.Equal(t, []string{"openid"}, got.Scopes)
+}
+
+func TestGetConsent_CacheReadError(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	repo := newMockConsentRepository()
+	svc := NewConsentService(db, repo, redisClient, zap.NewNop())
+
+	ctx := context.Background()
+
+	// DB has valid data
+	repo.store["acct-001:client-001"] = &domain.Consent{
+		AccountID: "acct-001",
+		ClientID:  "client-001",
+		Scopes:    []string{"openid"},
+	}
+
+	// Close Redis to simulate connection error (not ErrKeyNotFound)
+	mr.Close()
+
+	got, err := svc.GetConsent(ctx, "acct-001", "client-001")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "acct-001", got.AccountID)
+}
+
+func TestSaveConsent_DBError(t *testing.T) {
+	svc, mock, cleanup := setupTestConsentService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	mock.ExpectBegin().WillReturnError(fmt.Errorf("db unavailable"))
+
+	consent := &domain.Consent{
+		AccountID: "account-001",
+		ClientID:  "client-001",
+	}
+	err := svc.SaveConsent(ctx, consent)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "save consent to DB")
+}
+
+func TestDeleteConsent_DBError(t *testing.T) {
+	svc, mock, cleanup := setupTestConsentService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	mock.ExpectBegin().WillReturnError(fmt.Errorf("db unavailable"))
+
+	err := svc.DeleteConsent(ctx, "account-001", "client-001")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "delete consent from DB")
 }
