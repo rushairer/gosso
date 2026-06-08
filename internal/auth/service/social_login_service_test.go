@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -79,11 +80,15 @@ func (m *mockSocialAccountService) GetAccountRoles(_ context.Context, _ string) 
 
 // mockSocialFederatedIdentityRepo implements accountRepo.FederatedIdentityRepository.
 type mockSocialFederatedIdentityRepo struct {
-	findByProvider func(ctx context.Context, provider accountDomain.Provider, providerUserID string) (*accountDomain.FederatedIdentity, error)
+	findByProvider          func(ctx context.Context, provider accountDomain.Provider, providerUserID string) (*accountDomain.FederatedIdentity, error)
+	createFederatedIdentity func(ctx context.Context, tx *sql.Tx, identity *accountDomain.FederatedIdentity) error
 }
 
-func (m *mockSocialFederatedIdentityRepo) CreateFederatedIdentity(_ context.Context, _ *sql.Tx, _ *accountDomain.FederatedIdentity) error {
-	panic("not implemented")
+func (m *mockSocialFederatedIdentityRepo) CreateFederatedIdentity(ctx context.Context, tx *sql.Tx, identity *accountDomain.FederatedIdentity) error {
+	if m.createFederatedIdentity != nil {
+		return m.createFederatedIdentity(ctx, tx, identity)
+	}
+	panic("CreateFederatedIdentity not configured")
 }
 func (m *mockSocialFederatedIdentityRepo) FindByProvider(ctx context.Context, provider accountDomain.Provider, providerUserID string) (*accountDomain.FederatedIdentity, error) { //nolint:revive
 	return m.findByProvider(ctx, provider, providerUserID)
@@ -266,6 +271,130 @@ type testMFAChecker struct{}
 func (t *testMFAChecker) CheckMFA(_ context.Context, _ *accountDomain.Account) (*LoginResult, error) {
 	return nil, nil
 }
+
+// ──────────────────────────────────────────────
+// Mock helpers for createNewUser tests
+// ──────────────────────────────────────────────
+
+// mockSocialAccountRepo implements accountRepo.AccountRepository.
+type mockSocialAccountRepo struct {
+	createAccount func(ctx context.Context, tx *sql.Tx, account *accountDomain.Account) error
+}
+
+func (m *mockSocialAccountRepo) CreateAccount(ctx context.Context, tx *sql.Tx, account *accountDomain.Account) error {
+	return m.createAccount(ctx, tx, account)
+}
+func (m *mockSocialAccountRepo) FindByID(_ context.Context, _ string) (*accountDomain.Account, error) {
+	panic("not implemented")
+}
+func (m *mockSocialAccountRepo) FindByUsername(_ context.Context, _ string) (*accountDomain.Account, error) {
+	panic("not implemented")
+}
+func (m *mockSocialAccountRepo) UpdateAccount(_ context.Context, _ *sql.Tx, _ *accountDomain.Account) error {
+	panic("not implemented")
+}
+func (m *mockSocialAccountRepo) SoftDeleteAccount(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+	panic("not implemented")
+}
+func (m *mockSocialAccountRepo) FindAll(_ context.Context, _, _ int, _ string) ([]*accountDomain.Account, int, error) {
+	panic("not implemented")
+}
+func (m *mockSocialAccountRepo) SuspendAccount(_ context.Context, _ *sql.Tx, _ string) error {
+	panic("not implemented")
+}
+func (m *mockSocialAccountRepo) ActivateAccount(_ context.Context, _ *sql.Tx, _ string) error {
+	panic("not implemented")
+}
+
+// mockSocialCredentialRepo implements accountRepo.CredentialRepository.
+type mockSocialCredentialRepo struct {
+	findByTypeAndIdentifier func(ctx context.Context, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error)
+	createCredentials       func(ctx context.Context, tx *sql.Tx, credentials []*accountDomain.Credential) error
+}
+
+func (m *mockSocialCredentialRepo) CreateCredentials(ctx context.Context, tx *sql.Tx, credentials []*accountDomain.Credential) error {
+	return m.createCredentials(ctx, tx, credentials)
+}
+func (m *mockSocialCredentialRepo) FindByAccountAndType(_ context.Context, _ string, _ accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	panic("not implemented")
+}
+func (m *mockSocialCredentialRepo) FindByTypeAndIdentifier(ctx context.Context, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error) {
+	return m.findByTypeAndIdentifier(ctx, credType, identifier)
+}
+func (m *mockSocialCredentialRepo) FindPasswordCredential(_ context.Context, _ string) (*accountDomain.Credential, error) {
+	panic("not implemented")
+}
+func (m *mockSocialCredentialRepo) UpdateCredential(_ context.Context, _ *sql.Tx, _ *accountDomain.Credential) error {
+	panic("not implemented")
+}
+func (m *mockSocialCredentialRepo) SoftDeleteCredentialsByAccount(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+	panic("not implemented")
+}
+func (m *mockSocialCredentialRepo) SoftDeleteCredential(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+	panic("not implemented")
+}
+func (m *mockSocialCredentialRepo) FindByAccountAndTypeForUpdate(_ context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	panic("not implemented")
+}
+func (m *mockSocialCredentialRepo) VerifyFirstUnverifiedTOTP(_ context.Context, _ *sql.Tx, _ string) (bool, error) {
+	panic("not implemented")
+}
+
+// createNewUserTestHarness bundles the service and mocks for createNewUser tests.
+type createNewUserTestHarness struct {
+	svc             *SocialLoginService
+	sqlMock         sqlmock.Sqlmock
+	accountRepo     *mockSocialAccountRepo
+	credentialRepo  *mockSocialCredentialRepo
+	fedIdentityRepo *mockSocialFederatedIdentityRepo
+	sessionCreator  *mockSocialSessionTokenCreator
+	accountSvc      *mockSocialAccountService
+}
+
+func setupCreateNewUserService(t *testing.T) *createNewUserTestHarness {
+	t.Helper()
+
+	db, sm, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	ar := &mockSocialAccountRepo{}
+	cr := &mockSocialCredentialRepo{}
+	fi := &mockSocialFederatedIdentityRepo{}
+	sc := &mockSocialSessionTokenCreator{}
+	as := &mockSocialAccountService{}
+
+	svc := &SocialLoginService{
+		db:                    db,
+		accountSvc:            as,
+		sessionTokenCreator:   sc,
+		accountRepo:           ar,
+		credentialRepo:        cr,
+		federatedIdentityRepo: fi,
+		providers:             map[string]*OAuthProviderConfig{},
+		httpClient:            &http.Client{Timeout: 10 * time.Second},
+		logger:                zap.NewNop(),
+	}
+
+	return &createNewUserTestHarness{
+		svc:             svc,
+		sqlMock:         sm,
+		accountRepo:     ar,
+		credentialRepo:  cr,
+		fedIdentityRepo: fi,
+		sessionCreator:  sc,
+		accountSvc:      as,
+	}
+}
+
+// common test fixtures for loginExistingUser paths
+var (
+	fixtureExistingAccount = &accountDomain.Account{
+		ID:          "existing-acc-456",
+		DisplayName: "Existing User",
+		Status:      accountDomain.AccountStatusActive,
+	}
+)
 
 // ──────────────────────────────────────────────
 // isUniqueViolation
@@ -626,4 +755,419 @@ func TestLoginExistingUser_AccountNotActive(t *testing.T) {
 	_, err := svc.loginExistingUser(context.Background(), "acc-suspended", "127.0.0.1", "agent")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrAccountNotActive)
+}
+func TestCreateNewUser_NewAccountSuccess(t *testing.T) {
+	h := setupCreateNewUserService(t)
+
+	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+		return nil, errors.New("not found")
+	}
+	h.accountRepo.createAccount = func(_ context.Context, _ *sql.Tx, _ *accountDomain.Account) error {
+		return nil
+	}
+	h.credentialRepo.createCredentials = func(_ context.Context, _ *sql.Tx, _ []*accountDomain.Credential) error {
+		return nil
+	}
+	h.fedIdentityRepo.createFederatedIdentity = func(_ context.Context, _ *sql.Tx, _ *accountDomain.FederatedIdentity) error {
+		return nil
+	}
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectCommit()
+	h.sessionCreator.create = func(_ context.Context, _ *accountDomain.Account, _, _ string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error) {
+		return &sessionDomain.Session{ID: "sess-1"}, "access-token-1", &tokenDomain.RefreshToken{Token: "refresh-1"}, nil
+	}
+
+	result, err := h.svc.createNewUser(context.Background(), "google", "google-uid-123", "user@example.com", "Test User", true, "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.NotNil(t, result.Account)
+	assert.Equal(t, "Test User", result.Account.DisplayName)
+	assert.Equal(t, "sess-1", result.Session.ID)
+	assert.Equal(t, "access-token-1", result.AccessToken)
+	assert.Equal(t, "refresh-1", result.RefreshToken)
+}
+
+func TestCreateNewUser_NewAccountNoEmail(t *testing.T) {
+	h := setupCreateNewUserService(t)
+
+	h.accountRepo.createAccount = func(_ context.Context, _ *sql.Tx, _ *accountDomain.Account) error {
+		return nil
+	}
+	h.fedIdentityRepo.createFederatedIdentity = func(_ context.Context, _ *sql.Tx, _ *accountDomain.FederatedIdentity) error {
+		return nil
+	}
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectCommit()
+	h.sessionCreator.create = func(_ context.Context, _ *accountDomain.Account, _, _ string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error) {
+		return &sessionDomain.Session{ID: "sess-2"}, "access-token-2", &tokenDomain.RefreshToken{Token: "refresh-2"}, nil
+	}
+
+	result, err := h.svc.createNewUser(context.Background(), "google", "google-uid-456", "", "", false, "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.NotNil(t, result.Account)
+	assert.Equal(t, "User", result.Account.DisplayName)
+	assert.Equal(t, "sess-2", result.Session.ID)
+}
+
+func TestCreateNewUser_NewAccountEmailVerified(t *testing.T) {
+	h := setupCreateNewUserService(t)
+
+	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+		return nil, errors.New("not found")
+	}
+	h.accountRepo.createAccount = func(_ context.Context, _ *sql.Tx, _ *accountDomain.Account) error {
+		return nil
+	}
+	var capturedCreds []*accountDomain.Credential
+	h.credentialRepo.createCredentials = func(_ context.Context, _ *sql.Tx, creds []*accountDomain.Credential) error {
+		capturedCreds = creds
+		return nil
+	}
+	h.fedIdentityRepo.createFederatedIdentity = func(_ context.Context, _ *sql.Tx, _ *accountDomain.FederatedIdentity) error {
+		return nil
+	}
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectCommit()
+	h.sessionCreator.create = func(_ context.Context, _ *accountDomain.Account, _, _ string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error) {
+		return &sessionDomain.Session{ID: "sess-3"}, "access-token-3", &tokenDomain.RefreshToken{Token: "refresh-3"}, nil
+	}
+
+	result, err := h.svc.createNewUser(context.Background(), "google", "google-uid-789", "new@example.com", "New User", true, "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, capturedCreds, 1)
+	assert.True(t, capturedCreds[0].Verified)
+	assert.True(t, capturedCreds[0].PrimaryCredential)
+	assert.Equal(t, accountDomain.CredentialTypeEmail, capturedCreds[0].Type)
+}
+
+func TestCreateNewUser_ExistingVerifiedEmail_LinkSuccess(t *testing.T) {
+	h := setupCreateNewUserService(t)
+
+	email := "existing@example.com"
+	verifiedCred := &accountDomain.Credential{
+		ID:         "cred-123",
+		AccountID:  "existing-acc-456",
+		Type:       accountDomain.CredentialTypeEmail,
+		Identifier: &email,
+		Verified:   true,
+	}
+	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+		return verifiedCred, nil
+	}
+	h.fedIdentityRepo.createFederatedIdentity = func(_ context.Context, _ *sql.Tx, _ *accountDomain.FederatedIdentity) error {
+		return nil
+	}
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectCommit()
+	h.accountSvc.findByID = func(_ context.Context, _ string) (*accountDomain.Account, error) {
+		return fixtureExistingAccount, nil
+	}
+	h.sessionCreator.create = func(_ context.Context, _ *accountDomain.Account, _, _ string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error) {
+		return &sessionDomain.Session{ID: "sess-4"}, "access-token-4", &tokenDomain.RefreshToken{Token: "refresh-4"}, nil
+	}
+
+	result, err := h.svc.createNewUser(context.Background(), "google", "google-uid-link", "existing@example.com", "Existing", false, "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "existing-acc-456", result.Account.ID)
+	assert.Equal(t, "sess-4", result.Session.ID)
+}
+
+func TestCreateNewUser_ExistingVerifiedEmail_LinkUniqueViolation(t *testing.T) {
+	h := setupCreateNewUserService(t)
+
+	email := "existing@example.com"
+	verifiedCred := &accountDomain.Credential{
+		ID:         "cred-123",
+		AccountID:  "existing-acc-456",
+		Type:       accountDomain.CredentialTypeEmail,
+		Identifier: &email,
+		Verified:   true,
+	}
+	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+		return verifiedCred, nil
+	}
+	h.fedIdentityRepo.createFederatedIdentity = func(_ context.Context, _ *sql.Tx, _ *accountDomain.FederatedIdentity) error {
+		return &pgconn.PgError{Code: "23505"}
+	}
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectRollback()
+	h.accountSvc.findByID = func(_ context.Context, _ string) (*accountDomain.Account, error) {
+		return fixtureExistingAccount, nil
+	}
+	h.sessionCreator.create = func(_ context.Context, _ *accountDomain.Account, _, _ string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error) {
+		return &sessionDomain.Session{ID: "sess-5"}, "access-token-5", &tokenDomain.RefreshToken{Token: "refresh-5"}, nil
+	}
+
+	result, err := h.svc.createNewUser(context.Background(), "google", "google-uid-link-uv", "existing@example.com", "Existing", false, "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "existing-acc-456", result.Account.ID)
+}
+
+func TestCreateNewUser_ExistingVerifiedEmail_LinkError(t *testing.T) {
+	h := setupCreateNewUserService(t)
+
+	email := "existing@example.com"
+	verifiedCred := &accountDomain.Credential{
+		ID:         "cred-123",
+		AccountID:  "existing-acc-456",
+		Type:       accountDomain.CredentialTypeEmail,
+		Identifier: &email,
+		Verified:   true,
+	}
+	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+		return verifiedCred, nil
+	}
+	h.fedIdentityRepo.createFederatedIdentity = func(_ context.Context, _ *sql.Tx, _ *accountDomain.FederatedIdentity) error {
+		return errors.New("database connection lost")
+	}
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectRollback()
+
+	result, err := h.svc.createNewUser(context.Background(), "google", "google-uid-link-err", "existing@example.com", "Existing", false, "127.0.0.1", "test-agent")
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "link federated identity")
+}
+
+func TestCreateNewUser_UnverifiedEmail_CreatesNewAccount(t *testing.T) {
+	h := setupCreateNewUserService(t)
+
+	email := "unverified@example.com"
+	unverifiedCred := &accountDomain.Credential{
+		ID:         "cred-unverified",
+		AccountID:  "other-acc",
+		Type:       accountDomain.CredentialTypeEmail,
+		Identifier: &email,
+		Verified:   false,
+	}
+	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+		return unverifiedCred, nil
+	}
+	h.accountRepo.createAccount = func(_ context.Context, _ *sql.Tx, _ *accountDomain.Account) error {
+		return nil
+	}
+	h.credentialRepo.createCredentials = func(_ context.Context, _ *sql.Tx, _ []*accountDomain.Credential) error {
+		return nil
+	}
+	h.fedIdentityRepo.createFederatedIdentity = func(_ context.Context, _ *sql.Tx, _ *accountDomain.FederatedIdentity) error {
+		return nil
+	}
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectCommit()
+	h.sessionCreator.create = func(_ context.Context, _ *accountDomain.Account, _, _ string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error) {
+		return &sessionDomain.Session{ID: "sess-7"}, "access-token-7", &tokenDomain.RefreshToken{Token: "refresh-7"}, nil
+	}
+
+	result, err := h.svc.createNewUser(context.Background(), "github", "gh-uid", "unverified@example.com", "Unverified", false, "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.NotNil(t, result.Account)
+	assert.Equal(t, "Unverified", result.Account.DisplayName)
+}
+
+func TestCreateNewUser_RaceCondition_RetryLinkSuccess(t *testing.T) {
+	h := setupCreateNewUserService(t)
+
+	email := "race@example.com"
+	verifiedCred := &accountDomain.Credential{
+		ID:         "cred-race",
+		AccountID:  "existing-acc-456",
+		Type:       accountDomain.CredentialTypeEmail,
+		Identifier: &email,
+		Verified:   true,
+	}
+	findCall := 0
+	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+		findCall++
+		if findCall == 1 {
+			return nil, errors.New("not found")
+		}
+		return verifiedCred, nil
+	}
+	h.accountRepo.createAccount = func(_ context.Context, _ *sql.Tx, _ *accountDomain.Account) error {
+		return &pgconn.PgError{Code: "23505"}
+	}
+	// First transaction: Begin → CreateAccount fails → Rollback
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectRollback()
+	// Second transaction (link): Begin → CreateFederatedIdentity succeeds → Commit
+	h.fedIdentityRepo.createFederatedIdentity = func(_ context.Context, _ *sql.Tx, _ *accountDomain.FederatedIdentity) error {
+		return nil
+	}
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectCommit()
+	h.accountSvc.findByID = func(_ context.Context, _ string) (*accountDomain.Account, error) {
+		return fixtureExistingAccount, nil
+	}
+	h.sessionCreator.create = func(_ context.Context, _ *accountDomain.Account, _, _ string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error) {
+		return &sessionDomain.Session{ID: "sess-8"}, "access-token-8", &tokenDomain.RefreshToken{Token: "refresh-8"}, nil
+	}
+
+	result, err := h.svc.createNewUser(context.Background(), "google", "google-uid-race", "race@example.com", "Racer", false, "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "existing-acc-456", result.Account.ID)
+}
+
+func TestCreateNewUser_RaceCondition_RetryLinkUniqueViolation(t *testing.T) {
+	h := setupCreateNewUserService(t)
+
+	email := "race2@example.com"
+	verifiedCred := &accountDomain.Credential{
+		ID:         "cred-race2",
+		AccountID:  "existing-acc-456",
+		Type:       accountDomain.CredentialTypeEmail,
+		Identifier: &email,
+		Verified:   true,
+	}
+	findCall := 0
+	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+		findCall++
+		if findCall == 1 {
+			return nil, errors.New("not found")
+		}
+		return verifiedCred, nil
+	}
+	h.accountRepo.createAccount = func(_ context.Context, _ *sql.Tx, _ *accountDomain.Account) error {
+		return &pgconn.PgError{Code: "23505"}
+	}
+	// First transaction: Begin → CreateAccount fails → Rollback
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectRollback()
+	// Second transaction (link): Begin → CreateFederatedIdentity unique violation → Rollback
+	h.fedIdentityRepo.createFederatedIdentity = func(_ context.Context, _ *sql.Tx, _ *accountDomain.FederatedIdentity) error {
+		return &pgconn.PgError{Code: "23505"}
+	}
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectRollback()
+	h.accountSvc.findByID = func(_ context.Context, _ string) (*accountDomain.Account, error) {
+		return fixtureExistingAccount, nil
+	}
+	h.sessionCreator.create = func(_ context.Context, _ *accountDomain.Account, _, _ string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error) {
+		return &sessionDomain.Session{ID: "sess-9"}, "access-token-9", &tokenDomain.RefreshToken{Token: "refresh-9"}, nil
+	}
+
+	result, err := h.svc.createNewUser(context.Background(), "google", "google-uid-race2", "race2@example.com", "Racer2", false, "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "existing-acc-456", result.Account.ID)
+}
+
+func TestCreateNewUser_RaceCondition_RetryFindFails(t *testing.T) {
+	h := setupCreateNewUserService(t)
+
+	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+		return nil, errors.New("not found")
+	}
+	h.accountRepo.createAccount = func(_ context.Context, _ *sql.Tx, _ *accountDomain.Account) error {
+		return &pgconn.PgError{Code: "23505"}
+	}
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectRollback()
+
+	result, err := h.svc.createNewUser(context.Background(), "google", "google-uid-race3", "race3@example.com", "Racer3", false, "127.0.0.1", "test-agent")
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "create account")
+}
+
+func TestCreateNewUser_RaceCondition_RetryLinkError(t *testing.T) {
+	h := setupCreateNewUserService(t)
+
+	email := "race4@example.com"
+	verifiedCred := &accountDomain.Credential{
+		ID:         "cred-race4",
+		AccountID:  "existing-acc-456",
+		Type:       accountDomain.CredentialTypeEmail,
+		Identifier: &email,
+		Verified:   true,
+	}
+	findCall := 0
+	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+		findCall++
+		if findCall == 1 {
+			return nil, errors.New("not found")
+		}
+		return verifiedCred, nil
+	}
+	h.accountRepo.createAccount = func(_ context.Context, _ *sql.Tx, _ *accountDomain.Account) error {
+		return &pgconn.PgError{Code: "23505"}
+	}
+	// First transaction: Begin → CreateAccount fails → Rollback
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectRollback()
+	// Second transaction (link): Begin → CreateFederatedIdentity non-unique error → Rollback
+	h.fedIdentityRepo.createFederatedIdentity = func(_ context.Context, _ *sql.Tx, _ *accountDomain.FederatedIdentity) error {
+		return errors.New("connection timeout")
+	}
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectRollback()
+
+	result, err := h.svc.createNewUser(context.Background(), "google", "google-uid-race4", "race4@example.com", "Racer4", false, "127.0.0.1", "test-agent")
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "link federated identity after race")
+}
+
+func TestCreateNewUser_CreateAccount_NonUniqueError(t *testing.T) {
+	h := setupCreateNewUserService(t)
+
+	h.accountRepo.createAccount = func(_ context.Context, _ *sql.Tx, _ *accountDomain.Account) error {
+		return errors.New("connection refused")
+	}
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectRollback()
+
+	result, err := h.svc.createNewUser(context.Background(), "google", "google-uid-err", "", "Error User", false, "127.0.0.1", "test-agent")
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "create account")
+}
+
+func TestCreateNewUser_MFARequired(t *testing.T) {
+	h := setupCreateNewUserService(t)
+
+	h.accountRepo.createAccount = func(_ context.Context, _ *sql.Tx, _ *accountDomain.Account) error {
+		return nil
+	}
+	h.fedIdentityRepo.createFederatedIdentity = func(_ context.Context, _ *sql.Tx, _ *accountDomain.FederatedIdentity) error {
+		return nil
+	}
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectCommit()
+	h.svc.mfaChecker = &configurableMFAChecker{
+		result: &LoginResult{RequiresMFA: true, MFATypes: []string{"totp"}},
+	}
+	// Don't set sessionCreator.create — if called, nil func panics = implicit assertion
+
+	result, err := h.svc.createNewUser(context.Background(), "google", "google-uid-mfa", "", "MFA User", false, "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.RequiresMFA)
+	assert.Equal(t, []string{"totp"}, result.MFATypes)
+}
+
+func TestCreateNewUser_SessionTokenCreationFails(t *testing.T) {
+	h := setupCreateNewUserService(t)
+
+	h.accountRepo.createAccount = func(_ context.Context, _ *sql.Tx, _ *accountDomain.Account) error {
+		return nil
+	}
+	h.fedIdentityRepo.createFederatedIdentity = func(_ context.Context, _ *sql.Tx, _ *accountDomain.FederatedIdentity) error {
+		return nil
+	}
+	h.sqlMock.ExpectBegin()
+	h.sqlMock.ExpectCommit()
+	h.sessionCreator.create = func(_ context.Context, _ *accountDomain.Account, _, _ string) (*sessionDomain.Session, string, *tokenDomain.RefreshToken, error) {
+		return nil, "", nil, errors.New("redis connection failed")
+	}
+
+	result, err := h.svc.createNewUser(context.Background(), "google", "google-uid-sess-fail", "", "Fail User", false, "127.0.0.1", "test-agent")
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "redis connection failed")
 }
