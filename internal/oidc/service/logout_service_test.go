@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -9,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
+	sessionService "github.com/rushairer/gosso/internal/session/service"
 	"github.com/rushairer/gosso/internal/testutil"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
@@ -134,4 +137,136 @@ func TestValidateIDTokenHint_WrongAlgorithm(t *testing.T) {
 
 	_, err = svc.ValidateIDTokenHint(tokenString)
 	assert.Error(t, err)
+}
+
+// ──────────────────────────────────────────────
+// setupTestLogoutServiceWithSession creates a LogoutService backed by a real
+// SessionService (miniredis) and a TokenService with nil blacklist.
+// This means RevokeAccountTokens will return ErrBlacklistNotConfigured,
+// which exercises the non-fatal warning path in LogoutByAccountID.
+// ──────────────────────────────────────────────
+func setupTestLogoutServiceWithSession(t *testing.T) (*LogoutService, *tokenService.KeyService, *sessionService.SessionService) {
+	t.Helper()
+	logger := zap.NewNop()
+
+	keySvc, err := tokenService.NewKeyService("", "", logger)
+	require.NoError(t, err)
+
+	redisClient, _ := testutil.SetupTestRedis(t)
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, logger)
+	sessionSvc := sessionService.NewSessionService(redisClient, logger)
+	sessionSvc.SetTokenRevoker(tokenSvc)
+
+	logoutSvc := NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", logger)
+	return logoutSvc, keySvc, sessionSvc
+}
+
+func createTestSession(t *testing.T, sessionSvc *sessionService.SessionService, accountID, sessionID string) {
+	t.Helper()
+	ctx := context.Background()
+	session := &sessionDomain.Session{
+		ID:        sessionID,
+		AccountID: accountID,
+		Username:  "testuser",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	}
+	err := sessionSvc.CreateSession(ctx, session)
+	require.NoError(t, err)
+}
+
+// ──────────────────────────────────────────────
+// LogoutByAccountID tests
+// ──────────────────────────────────────────────
+
+func TestLogoutByAccountID_NilSessionService(t *testing.T) {
+	svc, _ := setupTestLogoutService(t) // sessionSvc is nil
+
+	err := svc.LogoutByAccountID(context.Background(), "account-001")
+	assert.NoError(t, err)
+}
+
+func TestLogoutByAccountID_Success(t *testing.T) {
+	svc, _, sessionSvc := setupTestLogoutServiceWithSession(t)
+	ctx := context.Background()
+
+	createTestSession(t, sessionSvc, "account-001", "session-001")
+
+	// Verify session exists before logout
+	_, err := sessionSvc.ValidateSession(ctx, "session-001")
+	require.NoError(t, err)
+
+	err = svc.LogoutByAccountID(ctx, "account-001")
+	assert.NoError(t, err)
+
+	// Verify session is gone after logout
+	_, err = sessionSvc.ValidateSession(ctx, "session-001")
+	assert.Error(t, err)
+}
+
+func TestLogoutByAccountID_SessionServiceError(t *testing.T) {
+	logger := zap.NewNop()
+	keySvc, err := tokenService.NewKeyService("", "", logger)
+	require.NoError(t, err)
+
+	redisClient, _ := testutil.SetupTestRedis(t)
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, logger)
+
+	// Create session service WITHOUT setting tokenRevoker.
+	// RevokeAllForAccount will return ErrTokenRevokerNotConfigured.
+	sessionSvc := sessionService.NewSessionService(redisClient, logger)
+	logoutSvc := NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", logger)
+
+	err = logoutSvc.LogoutByAccountID(context.Background(), "account-001")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "revoke all sessions for account")
+}
+
+func TestLogoutByAccountID_RevokeAccountTokensNonFatal(t *testing.T) {
+	svc, _, sessionSvc := setupTestLogoutServiceWithSession(t)
+	ctx := context.Background()
+
+	createTestSession(t, sessionSvc, "account-001", "session-001")
+
+	// TokenService blacklist is nil, so RevokeAccountTokens returns
+	// ErrBlacklistNotConfigured. The logout service treats this as non-fatal.
+	err := svc.LogoutByAccountID(ctx, "account-001")
+	assert.NoError(t, err)
+}
+
+// ──────────────────────────────────────────────
+// LogoutBySessionID tests
+// ──────────────────────────────────────────────
+
+func TestLogoutBySessionID_NilSessionService(t *testing.T) {
+	svc, _ := setupTestLogoutService(t) // sessionSvc is nil
+
+	err := svc.LogoutBySessionID(context.Background(), "account-001", "session-001")
+	assert.NoError(t, err)
+}
+
+func TestLogoutBySessionID_Success(t *testing.T) {
+	svc, _, sessionSvc := setupTestLogoutServiceWithSession(t)
+	ctx := context.Background()
+
+	createTestSession(t, sessionSvc, "account-001", "session-001")
+
+	// Verify session exists before logout
+	_, err := sessionSvc.ValidateSession(ctx, "session-001")
+	require.NoError(t, err)
+
+	err = svc.LogoutBySessionID(ctx, "account-001", "session-001")
+	assert.NoError(t, err)
+
+	// Verify session is gone after logout
+	_, err = sessionSvc.ValidateSession(ctx, "session-001")
+	assert.Error(t, err)
+}
+
+func TestLogoutBySessionID_SessionNotFound(t *testing.T) {
+	svc, _, _ := setupTestLogoutServiceWithSession(t)
+
+	err := svc.LogoutBySessionID(context.Background(), "account-001", "nonexistent-session")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "revoke session")
 }
