@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -319,4 +321,168 @@ func TestAuditor_Log_WithoutRequestID(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "bar", meta["foo"])
 	assert.Nil(t, meta["request_id"])
+}
+
+// ──────────────────────────────────────────────
+// Do
+// ──────────────────────────────────────────────
+
+func TestDo_BusinessFuncError(t *testing.T) {
+	auditor := NewAuditor(context.Background(), nil, nil)
+	defer auditor.Close()
+
+	expectedErr := errors.New("business failure")
+	err := auditor.Do(context.Background(), func(_ context.Context, _ *sql.DB) (*domain.AuditRecord, error) {
+		return nil, expectedErr
+	})
+	assert.ErrorIs(t, err, expectedErr)
+}
+
+func TestDo_NilRecord(t *testing.T) {
+	auditor := NewAuditor(context.Background(), nil, nil)
+	defer auditor.Close()
+
+	err := auditor.Do(context.Background(), func(_ context.Context, _ *sql.DB) (*domain.AuditRecord, error) {
+		return nil, nil
+	})
+	assert.NoError(t, err)
+}
+
+func TestDo_WithRecord(t *testing.T) {
+	auditor := NewAuditor(context.Background(), nil, nil)
+	defer auditor.Close()
+
+	record := &domain.AuditRecord{
+		ID:        uuid.New().String(),
+		TxID:      uuid.New().String(),
+		Action:    "test.action",
+		Actor:     "test",
+		Resource:  json.RawMessage(`{}`),
+		CreatedAt: time.Now(),
+	}
+
+	err := auditor.Do(context.Background(), func(_ context.Context, _ *sql.DB) (*domain.AuditRecord, error) {
+		return record, nil
+	})
+	assert.NoError(t, err)
+}
+
+func TestDo_WithRecordAndAccountID(t *testing.T) {
+	auditor := NewAuditor(context.Background(), nil, nil)
+	defer auditor.Close()
+
+	accountID := "acc-123"
+	record := &domain.AuditRecord{
+		ID:        uuid.New().String(),
+		TxID:      uuid.New().String(),
+		AccountID: &accountID,
+		Action:    "test.action",
+		Actor:     "test",
+		Resource:  json.RawMessage(`{}`),
+		CreatedAt: time.Now(),
+	}
+
+	err := auditor.Do(context.Background(), func(_ context.Context, _ *sql.DB) (*domain.AuditRecord, error) {
+		return record, nil
+	})
+	assert.NoError(t, err)
+}
+
+func TestDo_SubmitAfterClose(t *testing.T) {
+	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor.Close()
+
+	record := &domain.AuditRecord{
+		ID:        uuid.New().String(),
+		TxID:      uuid.New().String(),
+		Action:    "test.action",
+		Actor:     "test",
+		Resource:  json.RawMessage(`{}`),
+		CreatedAt: time.Now(),
+	}
+
+	err := auditor.Do(context.Background(), func(_ context.Context, _ *sql.DB) (*domain.AuditRecord, error) {
+		return record, nil
+	})
+	// batchflow.Submit after context cancellation recovers panics internally and returns nil.
+	assert.NoError(t, err)
+}
+
+// ──────────────────────────────────────────────
+// AuditLogSync with real auditor
+// ──────────────────────────────────────────────
+
+func TestAuditLogSync_WithAuditor_Success(t *testing.T) {
+	db, sqlMock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	auditor := NewAuditor(context.Background(), db, nil)
+	defer auditor.Close()
+
+	sqlMock.ExpectExec("INSERT INTO audit_record").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	record := &domain.AuditRecord{
+		ID:        uuid.New().String(),
+		TxID:      uuid.New().String(),
+		Action:    "test.action",
+		Actor:     "test",
+		Resource:  json.RawMessage(`{}`),
+		CreatedAt: time.Now(),
+	}
+
+	assert.NotPanics(t, func() {
+		AuditLogSync(context.Background(), auditor, zap.NewNop(), record)
+	})
+	require.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+func TestAuditLogSync_WithAuditor_DBError(t *testing.T) {
+	db, sqlMock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	auditor := NewAuditor(context.Background(), db, nil)
+	defer auditor.Close()
+
+	sqlMock.ExpectExec("INSERT INTO audit_record").
+		WillReturnError(errors.New("connection refused"))
+
+	record := &domain.AuditRecord{
+		ID:        uuid.New().String(),
+		TxID:      uuid.New().String(),
+		Action:    "test.action",
+		Actor:     "test",
+		Resource:  json.RawMessage(`{}`),
+		CreatedAt: time.Now(),
+	}
+
+	assert.NotPanics(t, func() {
+		AuditLogSync(context.Background(), auditor, zap.NewNop(), record)
+	})
+	require.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+// ──────────────────────────────────────────────
+// Log with AccountID (covers submit AccountID branch)
+// ──────────────────────────────────────────────
+
+func TestAuditor_Log_WithAccountID(t *testing.T) {
+	auditor := NewAuditor(context.Background(), nil, nil)
+	defer auditor.Close()
+
+	accountID := "acc-456"
+	record := &domain.AuditRecord{
+		ID:        uuid.New().String(),
+		TxID:      uuid.New().String(),
+		AccountID: &accountID,
+		Action:    "test.action",
+		Actor:     "test",
+		Resource:  json.RawMessage(`{}`),
+		CreatedAt: time.Now(),
+	}
+
+	err := auditor.Log(context.Background(), record)
+	assert.NoError(t, err)
 }
