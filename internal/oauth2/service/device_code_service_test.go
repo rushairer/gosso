@@ -13,18 +13,31 @@ import (
 	"github.com/rushairer/gosso/internal/testutil"
 )
 
-func setupDeviceCodeService(t *testing.T) *DeviceCodeService {
+// setupDeviceCodeServiceBase creates a DeviceCodeService backed by miniredis
+// WITHOUT checking for cjson support. Use this for tests that only need
+// plain Redis commands (SET/GET) and no cjson-based Lua scripts.
+func setupDeviceCodeServiceBase(t *testing.T) *DeviceCodeService {
 	t.Helper()
 
 	redis, mr := testutil.SetupTestRedis(t)
-	testutil.SkipIfNoCJSON(t, redis)
 	t.Cleanup(mr.Close)
 
 	return NewDeviceCodeService(redis, zap.NewNop(), 10*time.Minute, 5*time.Second)
 }
 
+// setupDeviceCodeServiceCJSON is like setupDeviceCodeServiceBase but skips
+// the test when the Redis instance does not support the Lua cjson module.
+// Required for AuthorizeDeviceCode, DenyDeviceCode, CheckAndUpdatePollRate,
+// and ClaimAuthorizedDeviceCode which use cjson in their Lua scripts.
+func setupDeviceCodeServiceCJSON(t *testing.T) *DeviceCodeService {
+	t.Helper()
+	svc := setupDeviceCodeServiceBase(t)
+	testutil.SkipIfNoCJSON(t, svc.redis)
+	return svc
+}
+
 func TestDeviceCodeService_CreateAndGet(t *testing.T) {
-	svc := setupDeviceCodeService(t)
+	svc := setupDeviceCodeServiceBase(t)
 	ctx := context.Background()
 
 	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid", "profile"})
@@ -47,7 +60,7 @@ func TestDeviceCodeService_CreateAndGet(t *testing.T) {
 }
 
 func TestDeviceCodeService_GetByUserCode(t *testing.T) {
-	svc := setupDeviceCodeService(t)
+	svc := setupDeviceCodeServiceBase(t)
 	ctx := context.Background()
 
 	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
@@ -65,7 +78,7 @@ func TestDeviceCodeService_GetByUserCode(t *testing.T) {
 }
 
 func TestDeviceCodeService_GetDeviceCode_NotFound(t *testing.T) {
-	svc := setupDeviceCodeService(t)
+	svc := setupDeviceCodeServiceBase(t)
 	ctx := context.Background()
 
 	_, err := svc.GetDeviceCode(ctx, "nonexistent")
@@ -73,7 +86,7 @@ func TestDeviceCodeService_GetDeviceCode_NotFound(t *testing.T) {
 }
 
 func TestDeviceCodeService_Authorize(t *testing.T) {
-	svc := setupDeviceCodeService(t)
+	svc := setupDeviceCodeServiceCJSON(t)
 	ctx := context.Background()
 
 	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
@@ -89,7 +102,7 @@ func TestDeviceCodeService_Authorize(t *testing.T) {
 }
 
 func TestDeviceCodeService_Deny(t *testing.T) {
-	svc := setupDeviceCodeService(t)
+	svc := setupDeviceCodeServiceCJSON(t)
 	ctx := context.Background()
 
 	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
@@ -104,7 +117,7 @@ func TestDeviceCodeService_Deny(t *testing.T) {
 }
 
 func TestDeviceCodeService_PollRate(t *testing.T) {
-	svc := setupDeviceCodeService(t)
+	svc := setupDeviceCodeServiceCJSON(t)
 	ctx := context.Background()
 
 	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})

@@ -33,12 +33,14 @@ func (s *stubSMSService) SendVerificationCode(_ context.Context, _, _ string) er
 	return nil
 }
 
-func setupTestVerificationService(t *testing.T) (*VerificationService, *cache.RedisClient, func(), *stubEmailService) {
+// setupTestVerificationServiceBase creates a VerificationService backed by miniredis
+// WITHOUT checking for cjson support. Use this for tests that only need
+// plain Redis commands (SET/GET/EXISTS) — e.g. SendCode and its cooldown logic.
+func setupTestVerificationServiceBase(t *testing.T) (*VerificationService, *cache.RedisClient, func(), *stubEmailService) {
 	t.Helper()
 	logger := zap.NewNop()
 
 	redisClient, mr := testutil.SetupTestRedis(t)
-	testutil.SkipIfNoCJSON(t, redisClient)
 	cleanup := mr.Close
 
 	emailSvc := &stubEmailService{}
@@ -48,8 +50,18 @@ func setupTestVerificationService(t *testing.T) (*VerificationService, *cache.Re
 	return svc, redisClient, cleanup, emailSvc
 }
 
+// setupTestVerificationServiceCJSON is like setupTestVerificationServiceBase but skips
+// the test when the Redis instance does not support the Lua cjson module.
+// Required for VerifyCode and VerifyCodeForAccount which use cjson in their Lua scripts.
+func setupTestVerificationServiceCJSON(t *testing.T) (*VerificationService, *cache.RedisClient, func(), *stubEmailService) {
+	t.Helper()
+	svc, redisClient, cleanup, emailSvc := setupTestVerificationServiceBase(t)
+	testutil.SkipIfNoCJSON(t, redisClient)
+	return svc, redisClient, cleanup, emailSvc
+}
+
 func TestVerifyCode_Success(t *testing.T) {
-	svc, _, cleanup, emailSvc := setupTestVerificationService(t)
+	svc, _, cleanup, emailSvc := setupTestVerificationServiceCJSON(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -67,7 +79,7 @@ func TestVerifyCode_Success(t *testing.T) {
 }
 
 func TestVerifyCode_Wrong(t *testing.T) {
-	svc, _, cleanup, _ := setupTestVerificationService(t)
+	svc, _, cleanup, _ := setupTestVerificationServiceCJSON(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -83,7 +95,7 @@ func TestVerifyCode_Wrong(t *testing.T) {
 }
 
 func TestVerifyCode_Exhausted(t *testing.T) {
-	svc, _, cleanup, _ := setupTestVerificationService(t)
+	svc, _, cleanup, _ := setupTestVerificationServiceCJSON(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -104,7 +116,7 @@ func TestVerifyCode_Exhausted(t *testing.T) {
 }
 
 func TestVerifyCode_Expired(t *testing.T) {
-	svc, redis, cleanup, emailSvc := setupTestVerificationService(t)
+	svc, redis, cleanup, emailSvc := setupTestVerificationServiceCJSON(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -124,7 +136,7 @@ func TestVerifyCode_Expired(t *testing.T) {
 }
 
 func TestSendCode_Cooldown(t *testing.T) {
-	svc, _, cleanup, _ := setupTestVerificationService(t)
+	svc, _, cleanup, _ := setupTestVerificationServiceBase(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -140,7 +152,7 @@ func TestSendCode_Cooldown(t *testing.T) {
 }
 
 func TestVerifyCode_CodeReuse(t *testing.T) {
-	svc, _, cleanup, emailSvc := setupTestVerificationService(t)
+	svc, _, cleanup, emailSvc := setupTestVerificationServiceCJSON(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -200,7 +212,7 @@ func TestVerificationService_SetMaxAttempts(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestSendCode_UnsupportedType(t *testing.T) {
-	svc, _, cleanup, _ := setupTestVerificationService(t)
+	svc, _, cleanup, _ := setupTestVerificationServiceBase(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -214,7 +226,7 @@ func TestSendCode_UnsupportedType(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestVerifyCodeForAccount_Success(t *testing.T) {
-	svc, _, cleanup, emailSvc := setupTestVerificationService(t)
+	svc, _, cleanup, emailSvc := setupTestVerificationServiceCJSON(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -229,7 +241,7 @@ func TestVerifyCodeForAccount_Success(t *testing.T) {
 }
 
 func TestVerifyCodeForAccount_WrongAccount(t *testing.T) {
-	svc, _, cleanup, emailSvc := setupTestVerificationService(t)
+	svc, _, cleanup, emailSvc := setupTestVerificationServiceCJSON(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -249,25 +261,20 @@ func TestVerifyCodeForAccount_WrongAccount(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestValidateCredentialOwnership_Success(t *testing.T) {
-	svc, _, cleanup, _ := setupTestVerificationService(t)
+	_, _, cleanup, _ := setupTestVerificationServiceBase(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// The VerificationService was created with nil credentialRepo,
-	// so we re-create with a mock.
 	mockRepo := &mockCredRepoForVerification{
 		creds: []*accountDomain.Credential{
 			{ID: "c1", AccountID: "acct-own", Type: accountDomain.CredentialTypeEmail, Identifier: strPtr("owner@example.com")},
 		},
 	}
 
-	svc2 := NewVerificationService(nil, nil, nil, mockRepo, nil)
-	err := svc2.ValidateCredentialOwnership(ctx, "acct-own", "email", "owner@example.com")
+	svc := NewVerificationService(nil, nil, nil, mockRepo, nil)
+	err := svc.ValidateCredentialOwnership(ctx, "acct-own", "email", "owner@example.com")
 	assert.NoError(t, err)
-
-	_ = svc // suppress unused
-	_ = cleanup
 }
 
 func TestValidateCredentialOwnership_NotOwned(t *testing.T) {
