@@ -118,3 +118,52 @@ func TestDeviceCodeService_PollRate(t *testing.T) {
 	err = svc.CheckAndUpdatePollRate(ctx, dc.DeviceCode)
 	assert.ErrorIs(t, err, domain.ErrSlowDown)
 }
+
+// ──────────────────────────────────────────────
+// NewDeviceCodeService defaults
+// ──────────────────────────────────────────────
+
+func TestNewDeviceCodeService_Defaults(t *testing.T) {
+	svc := NewDeviceCodeService(nil, nil, 0, 0)
+	assert.NotNil(t, svc)
+	assert.NotNil(t, svc.logger)
+	assert.Equal(t, 10*time.Minute, svc.expiry)
+	assert.Equal(t, 5*time.Second, svc.interval)
+}
+
+func TestNewDeviceCodeService_ExplicitValues(t *testing.T) {
+	svc := NewDeviceCodeService(nil, zap.NewNop(), 2*time.Minute, 10*time.Second)
+	assert.Equal(t, 2*time.Minute, svc.expiry)
+	assert.Equal(t, 10*time.Second, svc.interval)
+}
+
+// ──────────────────────────────────────────────
+// generateUserCode (pure function)
+// ──────────────────────────────────────────────
+
+func TestGenerateUserCode_Length8(t *testing.T) {
+	code, err := generateUserCode(8)
+	require.NoError(t, err)
+	assert.Len(t, code, 8)
+	// All characters must be from the userCodeCharset
+	for _, c := range code {
+		assert.Contains(t, userCodeCharset, string(c))
+	}
+}
+
+func TestGenerateUserCode_Length4(t *testing.T) {
+	code, err := generateUserCode(4)
+	require.NoError(t, err)
+	assert.Len(t, code, 4)
+}
+
+func TestGenerateUserCode_Uniqueness(t *testing.T) {
+	seen := make(map[string]bool, 100)
+	for i := 0; i < 100; i++ {
+		code, err := generateUserCode(8)
+		require.NoError(t, err)
+		seen[code] = true
+	}
+	// With 8 chars from 31-char charset, collisions in 100 draws are astronomically unlikely
+	assert.Len(t, seen, 100)
+}
