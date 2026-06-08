@@ -630,3 +630,435 @@ func TestSuspendAccount_NilSessionRevoker(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "SessionRevoker not configured")
 }
+
+// TestUpdateAccount tests updating account information
+func TestUpdateAccount(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+
+	now := time.Now()
+	username := "updateduser"
+	account := &domain.Account{
+		ID:          "account-001",
+		Username:    &username,
+		DisplayName: "Updated User",
+		Status:      domain.AccountStatusActive,
+		Locale:      "en",
+		Timezone:    "UTC",
+		Metadata:    map[string]any{},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE accounts").
+		WithArgs(
+			account.Username,
+			account.DisplayName,
+			account.AvatarURL,
+			account.Status,
+			account.Locale,
+			account.Timezone,
+			sqlmock.AnyArg(), // metadata JSON
+			sqlmock.AnyArg(), // updated_at
+			account.ID,
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	err = accountService.UpdateAccount(context.Background(), account)
+
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestUpdateAccount_NotFound tests updating a nonexistent account
+func TestUpdateAccount_NotFound(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+
+	now := time.Now()
+	username := "ghost"
+	account := &domain.Account{
+		ID:          "nonexistent",
+		Username:    &username,
+		DisplayName: "Ghost",
+		Status:      domain.AccountStatusActive,
+		Locale:      "en",
+		Timezone:    "UTC",
+		Metadata:    map[string]any{},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE accounts").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectRollback()
+
+	err = accountService.UpdateAccount(context.Background(), account)
+
+	assert.Error(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestVerifyCredential_Email tests verifying an email credential
+func TestVerifyCredential_Email(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+
+	accountID := "account-001"
+	now := time.Now()
+
+	// FindByAccountAndType for email — returns one unverified credential
+	emailRows := sqlmock.NewRows([]string{
+		"id", "account_id", "credential_type", "identifier",
+		"credential_value", "verified", "primary_credential", "metadata",
+		"created_at", "verified_at", "last_used_at", "deleted_at",
+	}).AddRow(
+		"cred-email-001", accountID, domain.CredentialTypeEmail, "user@example.com",
+		"", false, true, []byte("{}"),
+		now, nil, nil, nil,
+	)
+
+	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
+		WithArgs(accountID, domain.CredentialTypeEmail).
+		WillReturnRows(emailRows)
+
+	// UpdateCredential in transaction
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE account_credentials").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	err = accountService.VerifyCredential(context.Background(), accountID)
+
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestVerifyCredential_PhoneFallback tests that VerifyCredential falls back to phone when no email credential exists
+func TestVerifyCredential_PhoneFallback(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+
+	accountID := "account-001"
+	now := time.Now()
+
+	// FindByAccountAndType for email — not found
+	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
+		WithArgs(accountID, domain.CredentialTypeEmail).
+		WillReturnError(repository.ErrCredentialNotFound)
+
+	// FindByAccountAndType for phone — returns one unverified credential
+	phoneRows := sqlmock.NewRows([]string{
+		"id", "account_id", "credential_type", "identifier",
+		"credential_value", "verified", "primary_credential", "metadata",
+		"created_at", "verified_at", "last_used_at", "deleted_at",
+	}).AddRow(
+		"cred-phone-001", accountID, domain.CredentialTypePhone, "+1234567890",
+		"", false, true, []byte("{}"),
+		now, nil, nil, nil,
+	)
+
+	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
+		WithArgs(accountID, domain.CredentialTypePhone).
+		WillReturnRows(phoneRows)
+
+	// UpdateCredential in transaction
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE account_credentials").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	err = accountService.VerifyCredential(context.Background(), accountID)
+
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestVerifyCredential_NoCredentialFound tests VerifyCredential when neither email nor phone exists
+func TestVerifyCredential_NoCredentialFound(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+
+	accountID := "account-no-creds"
+
+	// Email not found
+	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
+		WithArgs(accountID, domain.CredentialTypeEmail).
+		WillReturnError(repository.ErrCredentialNotFound)
+
+	// Phone not found
+	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
+		WithArgs(accountID, domain.CredentialTypePhone).
+		WillReturnError(repository.ErrCredentialNotFound)
+
+	err = accountService.VerifyCredential(context.Background(), accountID)
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, repository.ErrCredentialNotFound)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestBindFederatedIdentity tests binding a third-party identity
+func TestBindFederatedIdentity(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+
+	accountID := "account-001"
+
+	mock.ExpectBegin()
+
+	// FindByProvider — not found (no existing binding)
+	mock.ExpectQuery("SELECT (.+) FROM federated_identities WHERE provider").
+		WithArgs(string(domain.ProviderGoogle), "google-user-123").
+		WillReturnError(repository.ErrFederatedIdentityNotFound)
+
+	// CreateFederatedIdentity
+	mock.ExpectExec("INSERT INTO federated_identities").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	mock.ExpectCommit()
+
+	profile := map[string]interface{}{"name": "Test User", "email": "test@gmail.com"}
+	err = accountService.BindFederatedIdentity(context.Background(), accountID, domain.ProviderGoogle, "google-user-123", profile)
+
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestBindFederatedIdentity_AlreadyBound tests binding when identity already belongs to another account
+func TestBindFederatedIdentity_AlreadyBound(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+
+	accountID := "account-001"
+	now := time.Now()
+
+	mock.ExpectBegin()
+
+	// FindByProvider — found existing binding
+	existingRows := sqlmock.NewRows([]string{
+		"id", "account_id", "provider", "provider_user_id", "profile", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		"fi-001", "other-account", domain.ProviderGoogle, "google-user-123",
+		[]byte("{}"), now, now, nil,
+	)
+
+	mock.ExpectQuery("SELECT (.+) FROM federated_identities WHERE provider").
+		WithArgs(string(domain.ProviderGoogle), "google-user-123").
+		WillReturnRows(existingRows)
+
+	mock.ExpectRollback()
+
+	profile := map[string]interface{}{"name": "Test User"}
+	err = accountService.BindFederatedIdentity(context.Background(), accountID, domain.ProviderGoogle, "google-user-123", profile)
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrFederatedIdentityAlreadyBound)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestUnbindFederatedIdentity tests unbinding a third-party identity
+func TestUnbindFederatedIdentity(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+
+	accountID := "account-001"
+	identityID := "fi-001"
+
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE federated_identities SET deleted_at").
+		WithArgs(sqlmock.AnyArg(), identityID, accountID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	err = accountService.UnbindFederatedIdentity(context.Background(), accountID, identityID)
+
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestUnbindFederatedIdentity_NotFound tests unbinding a nonexistent identity
+func TestUnbindFederatedIdentity_NotFound(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+
+	accountID := "account-001"
+	identityID := "nonexistent"
+
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE federated_identities SET deleted_at").
+		WithArgs(sqlmock.AnyArg(), identityID, accountID).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectRollback()
+
+	err = accountService.UnbindFederatedIdentity(context.Background(), accountID, identityID)
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, repository.ErrFederatedIdentityNotFound)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestBindSessionRevoker tests late-binding session revoker
+func TestBindSessionRevoker(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+
+	err = BindSessionRevoker(accountService, &stubSessionRevoker{})
+	assert.NoError(t, err)
+
+	// Verify it was bound by calling a function that checks for it
+	// SuspendAccount requires session revoker
+	impl := accountService.(*accountServiceImpl)
+	assert.NotNil(t, impl.sessionRevoker)
+}
+
+// TestBindSessionRevoker_InvalidType tests binding with wrong type
+func TestBindSessionRevoker_InvalidType(t *testing.T) {
+	// Create a minimal implementation that satisfies AccountService but is not *accountServiceImpl
+	err := BindSessionRevoker(&fakeAccountService{}, &stubSessionRevoker{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not *accountServiceImpl")
+}
+
+// TestBindOAuth2ClientDeleter tests late-binding OAuth2 client deleter
+func TestBindOAuth2ClientDeleter(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+
+	err = BindOAuth2ClientDeleter(accountService, &stubOAuth2ClientDeleter{})
+	assert.NoError(t, err)
+
+	impl := accountService.(*accountServiceImpl)
+	assert.NotNil(t, impl.oauth2ClientDeleter)
+}
+
+// TestBindOAuth2ClientDeleter_InvalidType tests binding with wrong type
+func TestBindOAuth2ClientDeleter_InvalidType(t *testing.T) {
+	err := BindOAuth2ClientDeleter(&fakeAccountService{}, &stubOAuth2ClientDeleter{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not *accountServiceImpl")
+}
+
+// fakeAccountService is a non-pointer-type AccountService used to test late-bind type assertions.
+type fakeAccountService struct{}
+
+func (f *fakeAccountService) RegisterAccount(_ context.Context, _ *RegisterAccountRequest) (*domain.Account, error) {
+	return nil, nil
+}
+func (f *fakeAccountService) FindAccountByID(_ context.Context, _ string) (*domain.Account, error) {
+	return nil, nil
+}
+func (f *fakeAccountService) FindAccountByUsername(_ context.Context, _ string) (*domain.Account, error) {
+	return nil, nil
+}
+func (f *fakeAccountService) UpdateAccount(_ context.Context, _ *domain.Account) error { return nil }
+func (f *fakeAccountService) SoftDeleteAccount(_ context.Context, _ string) error      { return nil }
+func (f *fakeAccountService) VerifyCredential(_ context.Context, _ string) error       { return nil }
+func (f *fakeAccountService) ChangePassword(_ context.Context, _, _, _ string) error   { return nil }
+func (f *fakeAccountService) BindFederatedIdentity(_ context.Context, _ string, _ domain.Provider, _ string, _ map[string]interface{}) error {
+	return nil
+}
+func (f *fakeAccountService) UnbindFederatedIdentity(_ context.Context, _, _ string) error {
+	return nil
+}
+func (f *fakeAccountService) AssignRole(_ context.Context, _, _ string) error { return nil }
+func (f *fakeAccountService) RemoveRole(_ context.Context, _, _ string) error { return nil }
+func (f *fakeAccountService) ListAccounts(_ context.Context, _, _ int, _ string) ([]*domain.Account, int, error) {
+	return nil, 0, nil
+}
+func (f *fakeAccountService) SuspendAccount(_ context.Context, _ string) error  { return nil }
+func (f *fakeAccountService) ActivateAccount(_ context.Context, _ string) error { return nil }
+func (f *fakeAccountService) GetAccountRoles(_ context.Context, _ string) ([]*domain.Role, error) {
+	return nil, nil
+}
