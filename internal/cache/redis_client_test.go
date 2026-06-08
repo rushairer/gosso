@@ -481,3 +481,106 @@ func TestRedisClient_IncrWithExpiry_Concurrent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "10", v)
 }
+
+// ──────────────────────────────────────────────
+// Error paths via closed client
+// ──────────────────────────────────────────────
+
+// TestRedisClient_ClosedClient_Errors verifies that all methods properly return
+// errors when the underlying Redis connection is closed, covering the error
+// handling branches (if err != nil) in each wrapper method.
+func TestRedisClient_ClosedClient_Errors(t *testing.T) {
+	client, mr := setupTestRedisClient(t)
+	defer mr.Close()
+
+	// Close the underlying Redis client to make all subsequent operations fail
+	// with redis.ErrClosed. This is deterministic and avoids port-reuse races.
+	require.NoError(t, client.GetClient().Close())
+
+	ctx := context.Background()
+
+	assert.Error(t, client.Set(ctx, "k", "v", 0))
+
+	_, err := client.Get(ctx, "k")
+	assert.Error(t, err)
+
+	assert.Error(t, client.Del(ctx, "k"))
+
+	_, err = client.Exists(ctx, "k")
+	assert.Error(t, err)
+
+	assert.Error(t, client.Expire(ctx, "k", time.Second))
+
+	_, err = client.Incr(ctx, "k")
+	assert.Error(t, err)
+
+	_, err = client.Decr(ctx, "k")
+	assert.Error(t, err)
+
+	_, err = client.SetNX(ctx, "k", "v", time.Second)
+	assert.Error(t, err)
+
+	assert.Error(t, client.HSet(ctx, "k", "f", "v"))
+
+	_, err = client.HGet(ctx, "k", "f")
+	assert.Error(t, err)
+
+	_, err = client.HGetAll(ctx, "k")
+	assert.Error(t, err)
+
+	assert.Error(t, client.HDel(ctx, "k", "f"))
+
+	assert.Error(t, client.SAdd(ctx, "k", "v"))
+
+	assert.Error(t, client.SAddWithTTL(ctx, "k", "v", time.Second))
+
+	_, err = client.SMembers(ctx, "k")
+	assert.Error(t, err)
+
+	_, err = client.SIsMember(ctx, "k", "v")
+	assert.Error(t, err)
+
+	assert.Error(t, client.SRem(ctx, "k", "v"))
+
+	_, err = client.TTL(ctx, "k")
+	assert.Error(t, err)
+
+	_, err = client.IncrWithExpiry(ctx, "k", time.Second)
+	assert.Error(t, err)
+
+	_, err = client.CheckAndIncr(ctx, "k", 5, time.Second)
+	assert.Error(t, err)
+
+	_, err = client.SetIfExists(ctx, "k", "v", time.Second)
+	assert.Error(t, err)
+
+	_, err = client.GetDel(ctx, "k")
+	assert.Error(t, err)
+
+	assert.Error(t, client.Ping(ctx))
+}
+
+// ──────────────────────────────────────────────
+// NewRedisClient — nil logger and Ping failure
+// ──────────────────────────────────────────────
+
+func TestNewRedisClient_NilLogger(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	client, err := NewRedisClient("redis://"+mr.Addr(), 10, 5*time.Second, nil)
+	require.NoError(t, err)
+	require.NotNil(t, client)
+	assert.NoError(t, client.Close())
+}
+
+func TestNewRedisClient_PingFailure(t *testing.T) {
+	mr := miniredis.RunT(t)
+	addr := mr.Addr()
+	// Close server before client connects → immediate "connection refused"
+	mr.Close()
+
+	_, err := NewRedisClient("redis://"+addr, 10, 5*time.Second, zap.NewNop())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "ping redis")
+}
