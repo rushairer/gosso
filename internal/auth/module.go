@@ -113,6 +113,12 @@ func InitializeAuthModule(cfg AuthModuleConfig) *AuthModule {
 	}
 
 	emailSvc := notificationService.NewEmailService(cfg.SMTPConfig, cfg.Logger)
+	if cfg.AuthConfig.VerifyCodeTTL > 0 {
+		emailSvc.SetVerifyCodeTTL(cfg.AuthConfig.VerifyCodeTTL)
+	}
+	if cfg.AuthConfig.PasswordResetTokenTTL > 0 {
+		emailSvc.SetPasswordResetTTL(cfg.AuthConfig.PasswordResetTokenTTL)
+	}
 	smsSvc := notificationService.NewStubSMSService(cfg.Logger)
 	verificationSvc := service.NewVerificationService(cfg.Redis, emailSvc, smsSvc, cfg.CredentialRepo, cfg.Logger)
 	if cfg.AuthConfig.VerifyCodeTTL > 0 {

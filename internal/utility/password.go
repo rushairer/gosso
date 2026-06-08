@@ -15,7 +15,7 @@ const MinPasswordLength = 12
 const MaxPasswordLength = 1024
 
 // ValidatePasswordStrength checks that a password meets minimum strength requirements:
-// at least 12 bytes, with at least one uppercase letter, one lowercase letter, and one digit.
+// at least 12 bytes, with at least one uppercase letter, one lowercase letter, one digit, and one special character.
 func ValidatePasswordStrength(password string) error {
 	if len(password) > MaxPasswordLength {
 		return fmt.Errorf("password must not exceed %d bytes", MaxPasswordLength)
@@ -24,7 +24,7 @@ func ValidatePasswordStrength(password string) error {
 		return fmt.Errorf("password must be at least %d bytes", MinPasswordLength)
 	}
 
-	var hasUpper, hasLower, hasDigit bool
+	var hasUpper, hasLower, hasDigit, hasSpecial bool
 	for _, c := range password {
 		switch {
 		case unicode.IsUpper(c):
@@ -33,10 +33,12 @@ func ValidatePasswordStrength(password string) error {
 			hasLower = true
 		case unicode.IsDigit(c):
 			hasDigit = true
+		case unicode.IsPunct(c) || unicode.IsSymbol(c):
+			hasSpecial = true
 		}
 	}
-	if !hasUpper || !hasLower || !hasDigit {
-		return errors.New("password must contain uppercase, lowercase, and digit")
+	if !hasUpper || !hasLower || !hasDigit || !hasSpecial {
+		return errors.New("password must contain uppercase, lowercase, digit, and special character")
 	}
 
 	return nil

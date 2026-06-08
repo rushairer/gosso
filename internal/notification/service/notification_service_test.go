@@ -43,7 +43,10 @@ func TestNewEmailService_NilLogger(t *testing.T) {
 
 func TestVerificationTemplate(t *testing.T) {
 	var body bytes.Buffer
-	err := verificationTmpl.Execute(&body, struct{ Code string }{Code: "123456"})
+	err := verificationTmpl.Execute(&body, struct {
+		Code       string
+		ExpiryText string
+	}{Code: "123456", ExpiryText: "10 minutes"})
 	require.NoError(t, err)
 
 	html := body.String()
@@ -54,7 +57,10 @@ func TestVerificationTemplate(t *testing.T) {
 
 func TestPasswordResetTemplate(t *testing.T) {
 	var body bytes.Buffer
-	err := passwordResetTmpl.Execute(&body, struct{ ResetLink string }{ResetLink: "https://example.com/reset?token=abc"})
+	err := passwordResetTmpl.Execute(&body, struct {
+		ResetLink  string
+		ExpiryText string
+	}{ResetLink: "https://example.com/reset?token=abc", ExpiryText: "30 minutes"})
 	require.NoError(t, err)
 
 	html := body.String()
@@ -65,7 +71,10 @@ func TestPasswordResetTemplate(t *testing.T) {
 
 func TestVerificationTemplate_SpecialChars(t *testing.T) {
 	var body bytes.Buffer
-	err := verificationTmpl.Execute(&body, struct{ Code string }{Code: "ABC<>&"})
+	err := verificationTmpl.Execute(&body, struct {
+		Code       string
+		ExpiryText string
+	}{Code: "ABC<>&", ExpiryText: "10 minutes"})
 	require.NoError(t, err)
 	// template/html auto-escapes
 	assert.Contains(t, body.String(), "ABC")
@@ -73,7 +82,10 @@ func TestVerificationTemplate_SpecialChars(t *testing.T) {
 
 func TestPasswordResetTemplate_SpecialChars(t *testing.T) {
 	var body bytes.Buffer
-	err := passwordResetTmpl.Execute(&body, struct{ ResetLink string }{ResetLink: "https://example.com/r?a=1&b=2"})
+	err := passwordResetTmpl.Execute(&body, struct {
+		ResetLink  string
+		ExpiryText string
+	}{ResetLink: "https://example.com/r?a=1&b=2", ExpiryText: "30 minutes"})
 	require.NoError(t, err)
 	// URL is HTML-escaped by template
 	assert.Contains(t, body.String(), "https://example.com")
@@ -101,7 +113,10 @@ func TestStubSMSService_SendVerificationCode(t *testing.T) {
 
 func TestVerificationTemplate_NoInjection(t *testing.T) {
 	var body bytes.Buffer
-	err := verificationTmpl.Execute(&body, struct{ Code string }{Code: "<script>alert('xss')</script>"})
+	err := verificationTmpl.Execute(&body, struct {
+		Code       string
+		ExpiryText string
+	}{Code: "<script>alert('xss')</script>", ExpiryText: "10 minutes"})
 	require.NoError(t, err)
 	// html/template escapes < > automatically
 	assert.NotContains(t, body.String(), "<script>")
@@ -110,7 +125,10 @@ func TestVerificationTemplate_NoInjection(t *testing.T) {
 func TestPasswordResetTemplate_NoInjection(t *testing.T) {
 	var body bytes.Buffer
 	malicious := "javascript:alert(1)\"><img src=x onerror=alert(1)>"
-	err := passwordResetTmpl.Execute(&body, struct{ ResetLink string }{ResetLink: malicious})
+	err := passwordResetTmpl.Execute(&body, struct {
+		ResetLink  string
+		ExpiryText string
+	}{ResetLink: malicious, ExpiryText: "30 minutes"})
 	require.NoError(t, err)
 	assert.NotContains(t, body.String(), "onerror=")
 }

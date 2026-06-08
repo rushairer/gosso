@@ -195,14 +195,15 @@ func (c *GoUnoConfig) Validate() error {
 	if err != nil || (issuerURL.Scheme != "http" && issuerURL.Scheme != "https") {
 		return fmt.Errorf("auth: issuer must be a valid URL with http or https scheme")
 	}
-	if c.AuthConfig.TOTPEncryptionKey != "" {
-		key, err := hex.DecodeString(c.AuthConfig.TOTPEncryptionKey)
-		if err != nil {
-			return fmt.Errorf("auth: totp_encryption_key must be a valid hex string")
-		}
-		if len(key) != 32 {
-			return fmt.Errorf("auth: totp_encryption_key must decode to exactly 32 bytes (got %d)", len(key))
-		}
+	if c.AuthConfig.TOTPEncryptionKey == "" {
+		return fmt.Errorf("auth: totp_encryption_key is required")
+	}
+	key, err := hex.DecodeString(c.AuthConfig.TOTPEncryptionKey)
+	if err != nil {
+		return fmt.Errorf("auth: totp_encryption_key must be a valid hex string")
+	}
+	if len(key) != 32 {
+		return fmt.Errorf("auth: totp_encryption_key must decode to exactly 32 bytes (got %d)", len(key))
 	}
 	if c.AuthConfig.AccessTokenExpiry <= 0 {
 		return fmt.Errorf("auth: access_token_expiry must be positive")
@@ -270,9 +271,6 @@ func (c *GoUnoConfig) Validate() error {
 		}
 		if origin.Scheme == "http" && origin.Hostname() != "localhost" && origin.Hostname() != "127.0.0.1" {
 			return fmt.Errorf("auth: webauthn_rp_origin with http scheme is only allowed for localhost or 127.0.0.1")
-		}
-		if c.AuthConfig.TOTPEncryptionKey == "" {
-			return fmt.Errorf("auth: totp_encryption_key is required when webauthn_rp_id is set")
 		}
 	}
 	if c.DatabaseConfig.MaxIdleConns > 0 && c.DatabaseConfig.MaxOpenConns > 0 &&

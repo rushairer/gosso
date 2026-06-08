@@ -262,8 +262,8 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		return nil, err
 	}
 
-	// 8. Audit log
-	s.auditLog(ctx, auditDomain.NewRecord(
+	// 4. Audit log
+	auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountRegister,
 		audit.IPFromContext(ctx),
 		stringPtr(account.ID),
@@ -295,7 +295,7 @@ func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.
 		return err
 	}
 
-	s.auditLog(ctx, auditDomain.NewRecord(
+	auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountUpdate,
 		audit.IPFromContext(ctx),
 		stringPtr(account.ID),
@@ -369,7 +369,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	}
 
 	// 6. Audit log (sync — critical security event)
-	s.auditLogSync(ctx, auditDomain.NewRecord(
+	auditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountDelete,
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
@@ -458,7 +458,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	}
 
 	// 8. Audit log (sync — critical security event)
-	s.auditLogSync(ctx, auditDomain.NewRecord(
+	auditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionPasswordChange,
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
@@ -494,7 +494,7 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 		return err
 	}
 
-	s.auditLog(ctx, auditDomain.NewRecord(
+	auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionFederatedIdentityBind,
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
@@ -516,7 +516,7 @@ func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accoun
 		return err
 	}
 
-	s.auditLog(ctx, auditDomain.NewRecord(
+	auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionFederatedIdentityUnbind,
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
@@ -536,7 +536,7 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 		return err
 	}
 
-	s.auditLogSync(ctx, auditDomain.NewRecord(
+	auditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionRoleAssign,
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
@@ -557,7 +557,7 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 		return err
 	}
 
-	s.auditLogSync(ctx, auditDomain.NewRecord(
+	auditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionRoleRemove,
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
@@ -592,7 +592,7 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 			zap.String("account_id", accountID), zap.Error(revokeErr))
 	}
 
-	s.auditLogSync(ctx, auditDomain.NewRecord(
+	auditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountSuspend,
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
@@ -611,7 +611,7 @@ func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID stri
 		return err
 	}
 
-	s.auditLog(ctx, auditDomain.NewRecord(
+	auditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountActivate,
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
@@ -680,22 +680,6 @@ func (s *accountServiceImpl) checkCredentialExists(ctx context.Context, credType
 		}
 	}
 	return nil
-}
-
-func (s *accountServiceImpl) auditLog(ctx context.Context, record *auditDomain.AuditRecord) {
-	if s.auditor != nil {
-		if err := s.auditor.Log(ctx, record); err != nil {
-			s.logger.Warn("Failed to submit audit record", zap.Error(err))
-		}
-	}
-}
-
-func (s *accountServiceImpl) auditLogSync(ctx context.Context, record *auditDomain.AuditRecord) {
-	if s.auditor != nil {
-		if err := s.auditor.LogSync(ctx, record); err != nil {
-			s.logger.Error("Failed to write audit record synchronously", zap.Error(err))
-		}
-	}
 }
 
 func stringPtr(s string) *string {

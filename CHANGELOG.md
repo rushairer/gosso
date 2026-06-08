@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- `TOTPEncryptionKey` is now unconditionally required in config validation — previously could be empty when WebAuthn was not configured, causing runtime TOTP encryption failures (`config/config.go`).
+- Refresh token IP binding now logs a warning when the original token has an IP but the current request does not — improves observability for potential token theft behind misconfigured proxies (`internal/auth/service/auth_session.go`).
 - SMTP TLS policy is now configurable via `smtp.tls_policy` config field (values: `opportunistic`, `mandatory`, `notls`) — production should set `mandatory` to prevent plaintext downgrade (`config/config.go`, `internal/notification/service/email_service.go`).
 - CORS `allowed_origins` is now required in production mode (`debug: false`) — server fails to start if not configured, preventing silent fallback to `localhost:8080` (`cmd/gouno/web_engine.go`).
 - Removed hardcoded database password from `config/test.yaml` — now references `GOUNO_DATABASE_DRIVERS_POSTGRES_DSN` environment variable instead of plaintext `gosso123`.
@@ -30,6 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - SocialCallback responses now include `Cache-Control: no-store` and `Pragma: no-cache` headers to prevent token caching by proxies (`internal/auth/controller/auth_controller.go`).
 
 ### Changed
+- Password validation now requires at least one special character (punctuation or symbol) in addition to uppercase, lowercase, and digit (`internal/utility/password.go`).
+- `BindSessionRevoker` and `BindOAuth2ClientDeleter` now return `error` instead of panicking on type assertion failure — prevents server crash on unexpected input (`internal/account/service/late_bind.go`, `cmd/gouno/web_modules.go`).
+- Email templates now use dynamic expiry text from `EmailService` TTL fields instead of hardcoded "10 minutes" / "30 minutes" — stays in sync with `VerifyCodeTTL` and `PasswordResetTokenTTL` config values (`internal/notification/service/email_service.go`, `internal/auth/module.go`).
+- Audit log helper functions in `account/service` refactored from struct methods to package-level free functions — eliminates code duplication with `auth/service/audit_helper.go` (`internal/account/service/audit_helper.go`, `internal/account/service/account_service.go`).
 - `InitializeAuthModule` now accepts an `AuthModuleConfig` struct instead of 15 positional parameters — improves readability and maintainability (`internal/auth/module.go`, `cmd/gouno/web_modules.go`).
 - `AuthController.RegisterRoutes` now accepts an `AuthRouteConfig` struct instead of 7 positional middleware parameters (`internal/auth/controller/auth_controller.go`, `router/web.go`).
 - `EnforceSessionLimit` now uses an atomic Lua script (`evictOldestSessionsScript`) to read and evict excess sessions in a single Redis EVAL — eliminates TOCTOU window where new sessions could be orphaned (`internal/session/service/session_service.go`).
@@ -55,6 +61,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Security**: Refresh token device binding — `RefreshToken` now stores `IP` and `UserAgent` from the originating request; refresh requests from a different IP are rejected to prevent token theft (`internal/token/domain/token.go`, `internal/token/service/token_service.go`, `internal/oauth2/controller/oauth2_token.go`, `internal/auth/service/auth_session.go`).
 
 ### Fixed
+- Fix `docker-compose.yml` using `GOSSO_ENV` instead of `GOUNO_ENV` — environment variable was silently ignored because Viper prefix is `GOUNO` (`docker-compose.yml`).
+- Fix `development.yaml` Redis `max_active_conns` set to 6000 — reduced to 100 to prevent file descriptor exhaustion in development (`config/development.yaml`).
+- Fix `RegisterAccount` comment numbering — step "8. Audit log" corrected to "4. Audit log" (`internal/account/service/account_service.go`).
 - Fix audit `Log()` losing `request_id` when `record.Meta` JSON is malformed — now constructs a new meta with `request_id` instead of submitting without it (`audit/service/audit.go`).
 - Fix `migrate.go` resource leak — replaced `defer` + `log.Fatal` pattern with `withMigrateResources` helper that guarantees cleanup runs before exit; `parseSteps`/`parseVersion` now return errors instead of calling `log.Fatal` (`cmd/gouno/migrate.go`).
 - Fix `development.yaml` missing required `session_ttl` and `max_sessions` — added defaults of `24h` and `5` respectively (`config/development.yaml`).
