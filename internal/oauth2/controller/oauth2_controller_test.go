@@ -204,12 +204,90 @@ func (m *mockAccountValidatorAlwaysActive) IsAccountActive(_ context.Context, _ 
 	return true
 }
 
+type mockClientAuthMgr struct {
+	authenticateFn func(client *oauth2Domain.OAuth2Client, clientSecret string) error
+}
+
+func (m *mockClientAuthMgr) AuthenticateClient(client *oauth2Domain.OAuth2Client, clientSecret string) error {
+	if m.authenticateFn != nil {
+		return m.authenticateFn(client, clientSecret)
+	}
+	return nil
+}
+
+type mockAuthCodeMgr struct {
+	validateCodeFn func() (*oauth2Domain.AuthorizationCode, error)
+	generateCodeFn func() (*oauth2Domain.AuthorizationCode, error)
+}
+
+func (m *mockAuthCodeMgr) ValidateCode(_ context.Context, _, _, _ string, _ *string) (*oauth2Domain.AuthorizationCode, error) {
+	if m.validateCodeFn != nil {
+		return m.validateCodeFn()
+	}
+	return &oauth2Domain.AuthorizationCode{
+		Code:      "valid-code",
+		ClientID:  "cid-test",
+		AccountID: "account-001",
+		Scopes:    []string{"profile"},
+		AuthTime:  time.Now(),
+	}, nil
+}
+
+func (m *mockAuthCodeMgr) GenerateCode(_ context.Context, _, _, _ string, _ []string, _, _, _ string) (*oauth2Domain.AuthorizationCode, error) {
+	if m.generateCodeFn != nil {
+		return m.generateCodeFn()
+	}
+	return &oauth2Domain.AuthorizationCode{
+		Code:      "new-auth-code",
+		ClientID:  "cid-test",
+		AccountID: "account-001",
+		Scopes:    []string{"openid"},
+	}, nil
+}
+
+type mockConsentMgr struct {
+	getConsentFn  func() (*oauth2Domain.Consent, error)
+	saveConsentFn func() error
+}
+
+func (m *mockConsentMgr) GetConsent(_ context.Context, _, _ string) (*oauth2Domain.Consent, error) {
+	if m.getConsentFn != nil {
+		return m.getConsentFn()
+	}
+	return nil, nil
+}
+
+func (m *mockConsentMgr) SaveConsent(_ context.Context, _ *oauth2Domain.Consent) error {
+	if m.saveConsentFn != nil {
+		return m.saveConsentFn()
+	}
+	return nil
+}
+
+type mockIDTokenMgr struct {
+	generateIDTokenFn func() (string, error)
+}
+
+func (m *mockIDTokenMgr) GenerateIDToken(_ context.Context, _, _ string, _ []string, _ string, _ time.Time) (string, error) {
+	if m.generateIDTokenFn != nil {
+		return m.generateIDTokenFn()
+	}
+	return "mock-id-token", nil
+}
+
+type mockAccountValidatorInactive struct{}
+
+func (m *mockAccountValidatorInactive) IsAccountActive(_ context.Context, _ string) bool {
+	return false
+}
+
 func setupOAuth2Router(clientSvc *mockOAuth2ClientSvcForOAuth2, tokenSvc *mockTokenMgr, deviceCodeMgr *mockDeviceCodeMgr) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 
 	ctrl := &OAuth2Controller{
 		clientSvc:        clientSvc,
+		clientAuth:       &oauth2Service.ClientAuthenticator{},
 		tokenSvc:         tokenSvc,
 		deviceCodeSvc:    deviceCodeMgr,
 		accountValidator: &mockAccountValidatorAlwaysActive{},
@@ -1723,4 +1801,939 @@ func TestSubmitConsent_NotApproved(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, w.Body.String(), "consent_denied")
+}
+
+// ──────────────────────────────────────────────
+// Helper: token router with auth code and id token support
+// ──────────────────────────────────────────────
+
+func setupAuthCodeRouter(
+	clientSvc *mockOAuth2ClientSvcForOAuth2,
+	tokenSvc *mockTokenMgr,
+	authCodeSvc AuthCodeManager,
+	idTokenSvc IDTokenManager,
+	accountValidator AccountValidator,
+) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl := &OAuth2Controller{
+		clientSvc:        clientSvc,
+		clientAuth:       &oauth2Service.ClientAuthenticator{},
+		tokenSvc:         tokenSvc,
+		authCodeSvc:      authCodeSvc,
+		idTokenSvc:       idTokenSvc,
+		accountValidator: accountValidator,
+		issuer:           "https://sso.example.com",
+		logger:           zap.NewNop(),
+	}
+	engine.POST("/oauth2/token", ctrl.Token)
+	return engine
+}
+
+// ──────────────────────────────────────────────
+// Token — authorization_code grant (expanded)
+// ──────────────────────────────────────────────
+
+func TestToken_AuthCode_Success(t *testing.T) {
+	client := newConfidentialTestClient()
+	engine := setupAuthCodeRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockAuthCodeMgr{},
+		nil,
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"auth-code-123","redirect_uri":"https://app.example.com/callback"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "mock-access-token", resp["access_token"])
+	assert.Equal(t, "mock-refresh", resp["refresh_token"])
+	assert.Equal(t, "Bearer", resp["token_type"])
+	assert.Equal(t, float64(900), resp["expires_in"])
+	assert.Nil(t, resp["id_token"], "should not include id_token without openid scope")
+}
+
+func TestToken_AuthCode_SuccessWithOpenID(t *testing.T) {
+	client := newConfidentialTestClient()
+	engine := setupAuthCodeRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockAuthCodeMgr{
+			validateCodeFn: func() (*oauth2Domain.AuthorizationCode, error) {
+				return &oauth2Domain.AuthorizationCode{
+					Code:      "valid-code",
+					ClientID:  "cid-test",
+					AccountID: "account-001",
+					Scopes:    []string{"openid", "profile"},
+					AuthTime:  time.Now(),
+				}, nil
+			},
+		},
+		&mockIDTokenMgr{},
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"auth-code-123","redirect_uri":"https://app.example.com/callback"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "mock-access-token", resp["access_token"])
+	assert.Equal(t, "mock-refresh", resp["refresh_token"])
+	assert.Equal(t, "mock-id-token", resp["id_token"])
+}
+
+func TestToken_AuthCode_GrantNotAllowed(t *testing.T) {
+	client := newConfidentialTestClient()
+	client.GrantTypes = []string{"client_credentials"}
+	engine := setupAuthCodeRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockAuthCodeMgr{},
+		nil,
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"abc"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "unauthorized_client")
+}
+
+func TestToken_AuthCode_InvalidSecret(t *testing.T) {
+	client := newConfidentialTestClient()
+	engine := setupAuthCodeRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockAuthCodeMgr{},
+		nil,
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"wrong-secret","code":"abc"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid client_secret")
+}
+
+func TestToken_AuthCode_PublicClientNoPKCE(t *testing.T) {
+	publicClient := &oauth2Domain.OAuth2Client{
+		ID:             "pub-001",
+		ClientID:       "cid-public",
+		Name:           "Public App",
+		RedirectURIs:   []string{"https://app.example.com/callback"},
+		GrantTypes:     []string{"authorization_code"},
+		Scopes:         []string{"openid"},
+		IsConfidential: false,
+	}
+	engine := setupAuthCodeRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return publicClient, nil },
+		},
+		&mockTokenMgr{},
+		&mockAuthCodeMgr{},
+		nil,
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"authorization_code","client_id":"cid-public","code":"abc","redirect_uri":"https://app.example.com/callback"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "code_verifier required for public clients")
+}
+
+func TestToken_AuthCode_PublicClientWithPKCE(t *testing.T) {
+	publicClient := &oauth2Domain.OAuth2Client{
+		ID:             "pub-001",
+		ClientID:       "cid-public",
+		Name:           "Public App",
+		RedirectURIs:   []string{"https://app.example.com/callback"},
+		GrantTypes:     []string{"authorization_code"},
+		Scopes:         []string{"openid"},
+		IsConfidential: false,
+	}
+	engine := setupAuthCodeRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return publicClient, nil },
+		},
+		&mockTokenMgr{},
+		&mockAuthCodeMgr{},
+		nil,
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"authorization_code","client_id":"cid-public","code":"abc","redirect_uri":"https://app.example.com/callback","code_verifier":"dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestToken_AuthCode_InvalidCode(t *testing.T) {
+	client := newConfidentialTestClient()
+	engine := setupAuthCodeRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockAuthCodeMgr{
+			validateCodeFn: func() (*oauth2Domain.AuthorizationCode, error) {
+				return nil, fmt.Errorf("authorization code not found")
+			},
+		},
+		nil,
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"bad-code","redirect_uri":"https://app.example.com/callback"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid_grant")
+}
+
+func TestToken_AuthCode_AccountInactive(t *testing.T) {
+	client := newConfidentialTestClient()
+	engine := setupAuthCodeRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockAuthCodeMgr{},
+		nil,
+		&mockAccountValidatorInactive{},
+	)
+
+	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"abc","redirect_uri":"https://app.example.com/callback"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "account is not active")
+}
+
+func TestToken_AuthCode_GenerateAccessTokenError(t *testing.T) {
+	client := newConfidentialTestClient()
+	engine := setupAuthCodeRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{
+			generateAccessFn: func() (string, error) {
+				return "", fmt.Errorf("signing key unavailable")
+			},
+		},
+		&mockAuthCodeMgr{},
+		nil,
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"abc","redirect_uri":"https://app.example.com/callback"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "server_error")
+}
+
+func TestToken_AuthCode_GenerateRefreshTokenError(t *testing.T) {
+	client := newConfidentialTestClient()
+	engine := setupAuthCodeRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{
+			generateRefreshFn: func() (*tokenDomain.RefreshToken, error) {
+				return nil, fmt.Errorf("redis unavailable")
+			},
+		},
+		&mockAuthCodeMgr{},
+		nil,
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"abc","redirect_uri":"https://app.example.com/callback"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "server_error")
+}
+
+func TestToken_AuthCode_IDTokenError(t *testing.T) {
+	client := newConfidentialTestClient()
+	engine := setupAuthCodeRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockAuthCodeMgr{
+			validateCodeFn: func() (*oauth2Domain.AuthorizationCode, error) {
+				return &oauth2Domain.AuthorizationCode{
+					Code:      "valid-code",
+					ClientID:  "cid-test",
+					AccountID: "account-001",
+					Scopes:    []string{"openid", "profile"},
+					AuthTime:  time.Now(),
+				}, nil
+			},
+		},
+		&mockIDTokenMgr{
+			generateIDTokenFn: func() (string, error) {
+				return "", fmt.Errorf("signing key error")
+			},
+		},
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"abc","redirect_uri":"https://app.example.com/callback"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "failed to generate id_token")
+}
+
+// ──────────────────────────────────────────────
+// Token — refresh_token grant (expanded)
+// ──────────────────────────────────────────────
+
+func newRefreshTestClient() *oauth2Domain.OAuth2Client {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("test-secret"), bcrypt.MinCost)
+	return &oauth2Domain.OAuth2Client{
+		ID:               "client-uuid-001",
+		AccountID:        "account-001",
+		ClientID:         "cid-test",
+		ClientSecretHash: string(hash),
+		Name:             "Test App",
+		GrantTypes:       []string{"refresh_token"},
+		Scopes:           []string{"openid", "profile"},
+		IsConfidential:   true,
+	}
+}
+
+func setupRefreshTokenRouter(
+	clientSvc *mockOAuth2ClientSvcForOAuth2,
+	tokenSvc *mockTokenMgr,
+	accountValidator AccountValidator,
+) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl := &OAuth2Controller{
+		clientSvc:        clientSvc,
+		clientAuth:       &oauth2Service.ClientAuthenticator{},
+		tokenSvc:         tokenSvc,
+		accountValidator: accountValidator,
+		issuer:           "https://sso.example.com",
+		logger:           zap.NewNop(),
+	}
+	engine.POST("/oauth2/token", ctrl.Token)
+	return engine
+}
+
+func TestToken_RefreshToken_ClientMismatch(t *testing.T) {
+	client := newRefreshTestClient()
+	engine := setupRefreshTokenRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{
+			validateRefreshFn: func() (*tokenDomain.RefreshToken, error) {
+				return &tokenDomain.RefreshToken{
+					Token:     "valid-refresh",
+					ClientID:  "other-client",
+					AccountID: "account-001",
+					Scope:     "openid",
+				}, nil
+			},
+		},
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "client_id mismatch")
+}
+
+func TestToken_RefreshToken_ClientNotFound(t *testing.T) {
+	engine := setupRefreshTokenRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return nil, fmt.Errorf("not found") },
+		},
+		&mockTokenMgr{},
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "client not found")
+}
+
+func TestToken_RefreshToken_GrantNotAllowed(t *testing.T) {
+	client := newRefreshTestClient()
+	client.GrantTypes = []string{"authorization_code"}
+	engine := setupRefreshTokenRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "unauthorized_client")
+}
+
+func TestToken_RefreshToken_ConfidentialMissingSecret(t *testing.T) {
+	client := newRefreshTestClient()
+	engine := setupRefreshTokenRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Contains(t, w.Body.String(), "client_secret required for confidential clients")
+}
+
+func TestToken_RefreshToken_ConfidentialWrongSecret(t *testing.T) {
+	client := newRefreshTestClient()
+	engine := setupRefreshTokenRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"wrong"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid client_secret")
+}
+
+func TestToken_RefreshToken_AccountInactive(t *testing.T) {
+	client := newRefreshTestClient()
+	engine := setupRefreshTokenRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockAccountValidatorInactive{},
+	)
+
+	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "account is not active")
+}
+
+func TestToken_RefreshToken_IPMismatch(t *testing.T) {
+	client := newRefreshTestClient()
+	engine := setupRefreshTokenRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{
+			validateRefreshFn: func() (*tokenDomain.RefreshToken, error) {
+				return &tokenDomain.RefreshToken{
+					Token:     "valid-refresh",
+					ClientID:  "cid-test",
+					AccountID: "account-001",
+					Scope:     "openid",
+					IP:        "10.0.0.1",
+				}, nil
+			},
+		},
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "192.168.1.1:12345"
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "refresh token IP mismatch")
+}
+
+func TestToken_RefreshToken_ScopeExceeds(t *testing.T) {
+	client := newRefreshTestClient()
+	engine := setupRefreshTokenRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{
+			validateRefreshFn: func() (*tokenDomain.RefreshToken, error) {
+				return &tokenDomain.RefreshToken{
+					Token:     "valid-refresh",
+					ClientID:  "cid-test",
+					AccountID: "account-001",
+					Scope:     "openid",
+				}, nil
+			},
+		},
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret","scope":"openid profile email"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid_scope")
+}
+
+func TestToken_RefreshToken_RotateError(t *testing.T) {
+	client := newRefreshTestClient()
+	engine := setupRefreshTokenRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{
+			rotateRefreshFn: func() (*tokenDomain.RefreshToken, error) {
+				return nil, fmt.Errorf("token already consumed")
+			},
+		},
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid_grant")
+}
+
+func TestToken_RefreshToken_GenerateAccessTokenError(t *testing.T) {
+	client := newRefreshTestClient()
+	engine := setupRefreshTokenRouter(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{
+			generateAccessFn: func() (string, error) {
+				return "", fmt.Errorf("signing key unavailable")
+			},
+		},
+		&mockAccountValidatorAlwaysActive{},
+	)
+
+	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "server_error")
+}
+
+// ──────────────────────────────────────────────
+// SubmitConsent (expanded)
+// ──────────────────────────────────────────────
+
+func TestSubmitConsent_Success(t *testing.T) {
+	client := newConfidentialTestClient()
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockAuthCodeMgr{},
+		&mockConsentMgr{},
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+
+	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid+profile&state=abc&approved=true"
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer valid-token")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusFound, w.Code)
+	location := w.Header().Get("Location")
+	assert.Contains(t, location, "code=new-auth-code")
+	assert.Contains(t, location, "state=abc")
+}
+
+func TestSubmitConsent_ClientNotFound(t *testing.T) {
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return nil, fmt.Errorf("not found") },
+		},
+		&mockAuthCodeMgr{},
+		&mockConsentMgr{},
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+
+	body := "client_id=bad&redirect_uri=https://app.example.com/callback&scope=openid&state=abc&approved=true"
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer valid-token")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid_client")
+}
+
+func TestSubmitConsent_InvalidRedirectURI(t *testing.T) {
+	client := newConfidentialTestClient()
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockAuthCodeMgr{},
+		&mockConsentMgr{},
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+
+	body := "client_id=cid-test&redirect_uri=https://evil.com/callback&scope=openid&state=abc&approved=true"
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer valid-token")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid_redirect_uri")
+}
+
+func TestSubmitConsent_InvalidScope(t *testing.T) {
+	client := newConfidentialTestClient()
+	client.Scopes = []string{"openid"}
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockAuthCodeMgr{},
+		&mockConsentMgr{},
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+
+	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=invalid_scope&state=abc&approved=true"
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer valid-token")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid_scope")
+}
+
+func TestSubmitConsent_SaveConsentError(t *testing.T) {
+	client := newConfidentialTestClient()
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockAuthCodeMgr{},
+		&mockConsentMgr{
+			saveConsentFn: func() error { return fmt.Errorf("database error") },
+		},
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+
+	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid&state=abc&approved=true"
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer valid-token")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "server_error")
+}
+
+func TestSubmitConsent_GenerateCodeError(t *testing.T) {
+	client := newConfidentialTestClient()
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockAuthCodeMgr{
+			generateCodeFn: func() (*oauth2Domain.AuthorizationCode, error) {
+				return nil, fmt.Errorf("redis unavailable")
+			},
+		},
+		&mockConsentMgr{},
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+
+	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid&state=abc&approved=true"
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer valid-token")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "server_error")
+}
+
+// ──────────────────────────────────────────────
+// Authorize (expanded)
+// ──────────────────────────────────────────────
+
+func TestAuthorize_Success(t *testing.T) {
+	client := newConfidentialTestClient()
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockAuthCodeMgr{},
+		&mockConsentMgr{
+			getConsentFn: func() (*oauth2Domain.Consent, error) {
+				return &oauth2Domain.Consent{
+					AccountID: "account-001",
+					ClientID:  "cid-test",
+					Scopes:    []string{"openid", "profile"},
+				}, nil
+			},
+		},
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.GET("/oauth2/authorize", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctrl.Authorize(ctx)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/oauth2/authorize?client_id=cid-test&redirect_uri=https://app.example.com/callback&response_type=code&scope=openid+profile&state=my-state", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusFound, w.Code)
+	location := w.Header().Get("Location")
+	assert.Contains(t, location, "code=new-auth-code")
+	assert.Contains(t, location, "state=my-state")
+}
+
+func TestAuthorize_ShowsConsentPage(t *testing.T) {
+	client := newConfidentialTestClient()
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		nil,
+		&mockConsentMgr{},
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.GET("/oauth2/authorize", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctrl.Authorize(ctx)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/oauth2/authorize?client_id=cid-test&redirect_uri=https://app.example.com/callback&response_type=code&scope=openid&state=my-state", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+	assert.Contains(t, w.Body.String(), "Test App")
+}
+
+func TestAuthorize_ConsentPageNoScopeOverlap(t *testing.T) {
+	client := newConfidentialTestClient()
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		nil,
+		&mockConsentMgr{
+			getConsentFn: func() (*oauth2Domain.Consent, error) {
+				return &oauth2Domain.Consent{
+					AccountID: "account-001",
+					ClientID:  "cid-test",
+					Scopes:    []string{"email"},
+				}, nil
+			},
+		},
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.GET("/oauth2/authorize", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctrl.Authorize(ctx)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/oauth2/authorize?client_id=cid-test&redirect_uri=https://app.example.com/callback&response_type=code&scope=openid+profile&state=my-state", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+	assert.Contains(t, w.Body.String(), "Test App")
 }

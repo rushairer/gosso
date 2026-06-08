@@ -19,7 +19,6 @@ import (
 	"github.com/rushairer/gosso/internal/cache"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
-	oidcService "github.com/rushairer/gosso/internal/oidc/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
@@ -47,6 +46,28 @@ type DeviceCodeManager interface {
 	ClaimAuthorizedDeviceCode(ctx context.Context, deviceCode string) (*oauth2Domain.DeviceCode, error)
 }
 
+// AuthCodeManager defines authorization code generation and validation operations.
+type AuthCodeManager interface {
+	ValidateCode(ctx context.Context, code, clientID, redirectURI string, codeVerifier *string) (*oauth2Domain.AuthorizationCode, error)
+	GenerateCode(ctx context.Context, clientID, accountID, redirectURI string, scopes []string, codeChallenge, codeChallengeMethod, nonce string) (*oauth2Domain.AuthorizationCode, error)
+}
+
+// ConsentManager defines user consent persistence and retrieval operations.
+type ConsentManager interface {
+	GetConsent(ctx context.Context, accountID, clientID string) (*oauth2Domain.Consent, error)
+	SaveConsent(ctx context.Context, consent *oauth2Domain.Consent) error
+}
+
+// IDTokenManager defines OIDC ID token generation operations.
+type IDTokenManager interface {
+	GenerateIDToken(ctx context.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time) (string, error)
+}
+
+// ClientAuthManager defines OAuth2 client credential verification operations.
+type ClientAuthManager interface {
+	AuthenticateClient(client *oauth2Domain.OAuth2Client, clientSecret string) error
+}
+
 // AccountValidator checks whether an account exists and is active.
 type AccountValidator interface {
 	IsAccountActive(ctx context.Context, accountID string) bool
@@ -61,12 +82,12 @@ var deviceTemplateFS embed.FS
 // OAuth2Controller handles OAuth2 protocol endpoints.
 type OAuth2Controller struct {
 	clientSvc        oauth2Service.OAuth2ClientService
-	authCodeSvc      *oauth2Service.AuthCodeService
-	consentSvc       *oauth2Service.ConsentService
+	authCodeSvc      AuthCodeManager
+	consentSvc       ConsentManager
 	tokenSvc         TokenManager
-	idTokenSvc       *oidcService.IDTokenService
+	idTokenSvc       IDTokenManager
 	deviceCodeSvc    DeviceCodeManager
-	clientAuth       oauth2Service.ClientAuthenticator
+	clientAuth       ClientAuthManager
 	accountValidator AccountValidator
 	sessionValidator sessionDomain.SessionValidator
 	redis            *cache.RedisClient
@@ -79,10 +100,10 @@ type OAuth2Controller struct {
 // NewOAuth2Controller creates a new OAuth2 controller instance.
 func NewOAuth2Controller(
 	clientSvc oauth2Service.OAuth2ClientService,
-	authCodeSvc *oauth2Service.AuthCodeService,
-	consentSvc *oauth2Service.ConsentService,
+	authCodeSvc AuthCodeManager,
+	consentSvc ConsentManager,
 	tokenSvc TokenManager,
-	idTokenSvc *oidcService.IDTokenService,
+	idTokenSvc IDTokenManager,
 	deviceCodeSvc DeviceCodeManager,
 	accountValidator AccountValidator,
 	sessionValidator sessionDomain.SessionValidator,
@@ -105,7 +126,7 @@ func NewOAuth2Controller(
 		tokenSvc:         tokenSvc,
 		idTokenSvc:       idTokenSvc,
 		deviceCodeSvc:    deviceCodeSvc,
-		clientAuth:       oauth2Service.ClientAuthenticator{},
+		clientAuth:       &oauth2Service.ClientAuthenticator{},
 		accountValidator: accountValidator,
 		sessionValidator: sessionValidator,
 		redis:            redis,
