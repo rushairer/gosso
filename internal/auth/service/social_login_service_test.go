@@ -143,6 +143,11 @@ func newTestSocialLoginService() *SocialLoginService {
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
+		federatedIdentityRepo: &mockSocialFederatedIdentityRepo{
+			findByProvider: func(_ context.Context, _ accountDomain.Provider, _ string) (*accountDomain.FederatedIdentity, error) {
+				return nil, errors.New("not found")
+			},
+		},
 	}
 }
 

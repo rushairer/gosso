@@ -3,18 +3,26 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/go-webauthn/webauthn/protocol"
+	wa "github.com/go-webauthn/webauthn/webauthn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/auth/domain"
+	"github.com/rushairer/gosso/internal/testutil"
 )
 
 // newTestPasskeyServiceWithDB creates a PasskeyService that uses a sqlmock DB.
@@ -32,6 +40,8 @@ type mockWebAuthnRepo struct {
 	creds map[string][]*domain.WebAuthnCredential // key: accountID
 	// findByCredentialIDFn overrides FindByCredentialID when set.
 	findByCredentialIDFn func(ctx context.Context, credentialID string) (*domain.WebAuthnCredential, error)
+	// findByAccountIDErr forces FindByAccountID to return this error when set.
+	findByAccountIDErr error
 }
 
 func (m *mockWebAuthnRepo) CreateCredential(_ context.Context, _ *sql.Tx, _ *domain.WebAuthnCredential) error {
@@ -46,6 +56,9 @@ func (m *mockWebAuthnRepo) FindByCredentialID(_ context.Context, _ string) (*dom
 }
 
 func (m *mockWebAuthnRepo) FindByAccountID(_ context.Context, accountID string) ([]*domain.WebAuthnCredential, error) {
+	if m.findByAccountIDErr != nil {
+		return nil, m.findByAccountIDErr
+	}
 	if creds, ok := m.creds[accountID]; ok {
 		return creds, nil
 	}
@@ -340,4 +353,242 @@ func TestDeleteCredential_Success(t *testing.T) {
 	err = svc.DeleteCredential(context.Background(), "acct-1", "cred-1")
 	assert.NoError(t, err)
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+// ──────────────────────────────────────────────
+// BeginLogin / BeginMFALogin — no credentials / repo error
+// ──────────────────────────────────────────────
+
+func TestBeginLogin_NoCredentials(t *testing.T) {
+	credRepo := &mockWebAuthnRepo{creds: map[string][]*domain.WebAuthnCredential{}}
+	svc := newTestPasskeyService(credRepo)
+
+	_, _, err := svc.BeginLogin(context.Background(), "acct-1")
+	assert.ErrorIs(t, err, ErrPasskeyNotFound)
+}
+
+func TestBeginLogin_RepoError(t *testing.T) {
+	credRepo := &mockWebAuthnRepo{
+		findByAccountIDErr: errors.New("db failure"),
+	}
+	svc := newTestPasskeyService(credRepo)
+
+	_, _, err := svc.BeginLogin(context.Background(), "acct-1")
+	assert.ErrorIs(t, err, ErrPasskeyNotFound)
+}
+
+func TestBeginMFALogin_NoCredentials(t *testing.T) {
+	credRepo := &mockWebAuthnRepo{creds: map[string][]*domain.WebAuthnCredential{}}
+	svc := newTestPasskeyService(credRepo)
+
+	_, _, err := svc.BeginMFALogin(context.Background(), "acct-1")
+	assert.ErrorIs(t, err, ErrPasskeyNotFound)
+}
+
+func TestBeginMFALogin_RepoError(t *testing.T) {
+	credRepo := &mockWebAuthnRepo{
+		findByAccountIDErr: errors.New("db failure"),
+	}
+	svc := newTestPasskeyService(credRepo)
+
+	_, _, err := svc.BeginMFALogin(context.Background(), "acct-1")
+	assert.ErrorIs(t, err, ErrPasskeyNotFound)
+}
+
+// ──────────────────────────────────────────────
+// CompleteRegistration / CompleteLogin / CompleteMFALogin — missing challenge
+// ──────────────────────────────────────────────
+
+func TestCompleteRegistration_MissingChallenge(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+
+	credRepo := &mockWebAuthnRepo{creds: map[string][]*domain.WebAuthnCredential{}}
+	svc := &PasskeyService{
+		credRepo: credRepo,
+		redis:    redisClient,
+		logger:   zap.NewNop(),
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{}"))
+	_, err := svc.CompleteRegistration(context.Background(), "acct-1", "alice", "Alice", req)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal session data")
+}
+
+func TestCompleteLogin_MissingChallenge(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+
+	svc := &PasskeyService{
+		redis:  redisClient,
+		logger: zap.NewNop(),
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{}"))
+	_, _, err := svc.CompleteLogin(context.Background(), "nonexistent-request-id", req)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal session data")
+}
+
+func TestCompleteMFALogin_MissingChallenge(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+
+	svc := &PasskeyService{
+		redis:  redisClient,
+		logger: zap.NewNop(),
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{}"))
+	err := svc.CompleteMFALogin(context.Background(), "nonexistent-request-id", "acct-1", req)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal session data")
+}
+
+// ──────────────────────────────────────────────
+// CompleteLogin / CompleteMFALogin — request body too large
+// ──────────────────────────────────────────────
+
+func storeSessionDataInRedis(t *testing.T, svc *PasskeyService, key string) {
+	t.Helper()
+	sessionData := wa.SessionData{Challenge: "test-challenge"}
+	data, err := json.Marshal(sessionData)
+	require.NoError(t, err)
+	err = svc.redis.Set(context.Background(), key, data, 5*time.Minute)
+	require.NoError(t, err)
+}
+
+func TestCompleteLogin_RequestBodyTooLarge(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+
+	svc := &PasskeyService{
+		redis:  redisClient,
+		logger: zap.NewNop(),
+	}
+
+	requestID := "test-req-id"
+	storeSessionDataInRedis(t, svc, fmt.Sprintf("webauthn:login:%s", requestID))
+
+	largeBody := strings.NewReader(strings.Repeat("A", maxPasskeyRequestBodySize+1))
+	req := httptest.NewRequest(http.MethodPost, "/", largeBody)
+
+	_, _, err := svc.CompleteLogin(context.Background(), requestID, req)
+	assert.ErrorIs(t, err, ErrRequestBodyTooLarge)
+}
+
+func TestCompleteMFALogin_RequestBodyTooLarge(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+
+	svc := &PasskeyService{
+		redis:  redisClient,
+		logger: zap.NewNop(),
+	}
+
+	requestID := "test-req-id"
+	storeSessionDataInRedis(t, svc, fmt.Sprintf("webauthn:mfa:%s", requestID))
+
+	largeBody := strings.NewReader(strings.Repeat("A", maxPasskeyRequestBodySize+1))
+	req := httptest.NewRequest(http.MethodPost, "/", largeBody)
+
+	err := svc.CompleteMFALogin(context.Background(), requestID, "acct-1", req)
+	// Characterization: CompleteMFALogin uses errors.New instead of ErrRequestBodyTooLarge sentinel
+	assert.ErrorContains(t, err, "request body too large")
+}
+
+// ──────────────────────────────────────────────
+// Begin* — happy paths with real webauthn + miniredis
+// ──────────────────────────────────────────────
+
+func newTestPasskeyServiceWithRedis(t *testing.T, credRepo *mockWebAuthnRepo) (*PasskeyService, *miniredis.Miniredis) {
+	t.Helper()
+	redisClient, mr := testutil.SetupTestRedis(t)
+
+	web, err := wa.New(&wa.Config{
+		RPID:          "localhost",
+		RPDisplayName: "Test RP",
+		RPOrigins:     []string{"http://localhost"},
+	})
+	if err != nil {
+		mr.Close()
+		t.Fatalf("failed to create webauthn instance: %v", err)
+	}
+
+	svc := &PasskeyService{
+		web:          web,
+		credRepo:     credRepo,
+		redis:        redisClient,
+		logger:       zap.NewNop(),
+		challengeTTL: 5 * time.Minute,
+	}
+	return svc, mr
+}
+
+func TestBeginRegistration_Success(t *testing.T) {
+	credRepo := &mockWebAuthnRepo{creds: map[string][]*domain.WebAuthnCredential{}}
+	svc, mr := newTestPasskeyServiceWithRedis(t, credRepo)
+	defer mr.Close()
+
+	cc, err := svc.BeginRegistration(context.Background(), "acct-1", "alice", "Alice Smith")
+	require.NoError(t, err)
+	require.NotNil(t, cc)
+	assert.NotNil(t, cc.Response)
+
+	exists, err := svc.redis.Exists(context.Background(), "webauthn:reg:acct-1")
+	require.NoError(t, err)
+	assert.True(t, exists, "challenge should be stored in Redis")
+}
+
+func TestBeginRegistration_WithExistingCreds(t *testing.T) {
+	credRepo := &mockWebAuthnRepo{
+		creds: map[string][]*domain.WebAuthnCredential{
+			"acct-1": {
+				{ID: "existing", AccountID: "acct-1", CredentialID: []byte("cred-id-1"), Name: "Old Passkey"},
+			},
+		},
+	}
+	svc, mr := newTestPasskeyServiceWithRedis(t, credRepo)
+	defer mr.Close()
+
+	cc, err := svc.BeginRegistration(context.Background(), "acct-1", "alice", "Alice Smith")
+	require.NoError(t, err)
+	require.NotNil(t, cc)
+}
+
+func TestBeginLogin_Success(t *testing.T) {
+	credRepo := &mockWebAuthnRepo{
+		creds: map[string][]*domain.WebAuthnCredential{
+			"acct-1": {
+				{ID: "cred-1", AccountID: "acct-1", CredentialID: []byte("cred-id"), PublicKey: []byte("pub-key")},
+			},
+		},
+	}
+	svc, mr := newTestPasskeyServiceWithRedis(t, credRepo)
+	defer mr.Close()
+
+	assertion, requestID, err := svc.BeginLogin(context.Background(), "acct-1")
+	require.NoError(t, err)
+	require.NotNil(t, assertion)
+	assert.NotEmpty(t, requestID)
+
+	exists, err := svc.redis.Exists(context.Background(), fmt.Sprintf("webauthn:login:%s", requestID))
+	require.NoError(t, err)
+	assert.True(t, exists, "challenge should be stored in Redis")
+}
+
+func TestBeginDiscoverableLogin_Success(t *testing.T) {
+	credRepo := &mockWebAuthnRepo{creds: map[string][]*domain.WebAuthnCredential{}}
+	svc, mr := newTestPasskeyServiceWithRedis(t, credRepo)
+	defer mr.Close()
+
+	assertion, requestID, err := svc.BeginDiscoverableLogin(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, assertion)
+	assert.NotEmpty(t, requestID)
+
+	exists, err := svc.redis.Exists(context.Background(), fmt.Sprintf("webauthn:login:%s", requestID))
+	require.NoError(t, err)
+	assert.True(t, exists, "challenge should be stored in Redis")
 }
