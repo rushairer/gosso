@@ -24,6 +24,7 @@ import (
 	"github.com/rushairer/gosso/internal/auth/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
+	"github.com/rushairer/gosso/internal/testutil"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/middleware"
 )
@@ -146,6 +147,7 @@ func (m *mockTokenManager) AccessExpiry() time.Duration {
 type mockCredentialRepoForController struct {
 	findByAccountAndTypeResults map[accountDomain.CredentialType][]*accountDomain.Credential
 	findByAccountAndTypeErr     error
+	findByTypeAndIdentifierFn   func(ctx context.Context, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error)
 	createCredentialsErr        error
 	softDeleteCredentialErr     error
 }
@@ -164,7 +166,10 @@ func (m *mockCredentialRepoForController) FindByAccountAndType(_ context.Context
 	return m.findByAccountAndTypeResults[credType], nil
 }
 
-func (m *mockCredentialRepoForController) FindByTypeAndIdentifier(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+func (m *mockCredentialRepoForController) FindByTypeAndIdentifier(ctx context.Context, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error) {
+	if m.findByTypeAndIdentifierFn != nil {
+		return m.findByTypeAndIdentifierFn(ctx, credType, identifier)
+	}
 	return nil, nil
 }
 
@@ -200,6 +205,32 @@ func newTestMFAService(t *testing.T, credRepo accountRepo.CredentialRepository) 
 	t.Cleanup(func() { _ = db.Close() })
 	svc := service.NewMFAService(credRepo, db, "test-issuer", zap.NewNop())
 	return svc, mock
+}
+
+// ──────────────────────────────────────────────
+// Mock email senders for verification/password-reset tests
+// ──────────────────────────────────────────────
+
+type mockEmailSender struct {
+	sendFn func(ctx context.Context, to, code string) error
+}
+
+func (m *mockEmailSender) SendVerificationCode(ctx context.Context, to, code string) error {
+	if m.sendFn != nil {
+		return m.sendFn(ctx, to, code)
+	}
+	return nil
+}
+
+type mockPasswordResetEmailSender struct {
+	sendFn func(ctx context.Context, to, resetLink string) error
+}
+
+func (m *mockPasswordResetEmailSender) SendPasswordResetLink(ctx context.Context, to, resetLink string) error {
+	if m.sendFn != nil {
+		return m.sendFn(ctx, to, resetLink)
+	}
+	return nil
 }
 
 // ──────────────────────────────────────────────
@@ -242,6 +273,52 @@ func newTestSession() *sessionDomain.Session {
 		CreatedAt:    time.Now(),
 		LastActiveAt: time.Now(),
 	}
+}
+
+// setupAuthControllerWithVerificationSvc creates a controller with a real VerificationService backed by miniredis.
+func setupAuthControllerWithVerificationSvc(t *testing.T, claims *tokenDomain.AccessTokenClaims, credRepo accountRepo.CredentialRepository, emailSender service.EmailSender) *gin.Engine {
+	t.Helper()
+	redisClient, _ := testutil.SetupTestRedis(t)
+
+	verificationSvc := service.NewVerificationService(redisClient, emailSender, nil, credRepo, zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	if claims != nil {
+		engine.Use(func(ctx *gin.Context) {
+			ctx.Set(middleware.ContextKeyClaims, claims)
+			ctx.Next()
+		})
+	}
+
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{accessExpiry: 15 * time.Minute}
+
+	ctrl := NewAuthController(authSvc, tokenMgr, nil, verificationSvc, nil, false, zap.NewNop())
+	api := engine.Group("/api")
+	ctrl.RegisterRoutes(api, AuthRouteConfig{})
+
+	return engine
+}
+
+// setupAuthControllerWithPasswordResetSvc creates a controller with a real PasswordResetService backed by miniredis.
+func setupAuthControllerWithPasswordResetSvc(t *testing.T, credRepo accountRepo.CredentialRepository, emailSender service.PasswordResetEmailSender, accountSvc accountService.AccountService) *gin.Engine {
+	t.Helper()
+	redisClient, _ := testutil.SetupTestRedis(t)
+
+	passwordResetSvc := service.NewPasswordResetService(redisClient, credRepo, emailSender, nil, accountSvc, nil, "https://app.example.com/reset", zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{accessExpiry: 15 * time.Minute}
+
+	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, passwordResetSvc, false, zap.NewNop())
+	api := engine.Group("/api")
+	ctrl.RegisterRoutes(api, AuthRouteConfig{})
+
+	return engine
 }
 
 // ──────────────────────────────────────────────
@@ -1502,4 +1579,239 @@ func TestSocialCallback_Success(t *testing.T) {
 			assert.Equal(t, -1, c.MaxAge)
 		}
 	}
+}
+
+// ──────────────────────────────────────────────
+// SendVerification additional tests
+// ──────────────────────────────────────────────
+
+func TestSendVerification_InvalidPhone(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	body := `{"type":"phone","identifier":"not-a-phone"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/verify/send", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid phone format")
+}
+
+func TestSendVerification_CredentialNotOwned(t *testing.T) {
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+		SessionID: "session-001",
+	}
+
+	// Credential repo returns email credentials for account-001, but none match "user@example.com"
+	otherEmail := "other@example.com"
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
+			accountDomain.CredentialTypeEmail: {
+				{ID: "cred-001", AccountID: "account-001", Type: accountDomain.CredentialTypeEmail, Identifier: &otherEmail},
+			},
+		},
+	}
+
+	emailSender := &mockEmailSender{}
+	engine := setupAuthControllerWithVerificationSvc(t, claims, credRepo, emailSender)
+
+	body := `{"type":"email","identifier":"user@example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/verify/send", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid request")
+}
+
+func TestSendVerification_Success(t *testing.T) {
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+		SessionID: "session-001",
+	}
+
+	userEmail := "user@example.com"
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
+			accountDomain.CredentialTypeEmail: {
+				{ID: "cred-001", AccountID: "account-001", Type: accountDomain.CredentialTypeEmail, Identifier: &userEmail},
+			},
+		},
+	}
+
+	emailSent := false
+	emailSender := &mockEmailSender{
+		sendFn: func(_ context.Context, to, _ string) error {
+			assert.Equal(t, userEmail, to)
+			emailSent = true
+			return nil
+		},
+	}
+
+	engine := setupAuthControllerWithVerificationSvc(t, claims, credRepo, emailSender)
+
+	body := `{"type":"email","identifier":"user@example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/verify/send", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, emailSent, "email sender should have been called")
+}
+
+// ──────────────────────────────────────────────
+// ConfirmVerification additional tests
+// ──────────────────────────────────────────────
+
+func TestConfirmVerification_NoClaims(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	body := `{"type":"email","identifier":"user@example.com","code":"123456"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/verify/confirm", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestConfirmVerification_CodeVerifyFails(t *testing.T) {
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+		SessionID: "session-001",
+	}
+
+	credRepo := &mockCredentialRepoForController{}
+	emailSender := &mockEmailSender{}
+	engine := setupAuthControllerWithVerificationSvc(t, claims, credRepo, emailSender)
+
+	// miniredis does not support cjson Lua scripts, so VerifyCode will fail
+	body := `{"type":"email","identifier":"user@example.com","code":"123456"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/verify/confirm", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid verification code")
+}
+
+// ──────────────────────────────────────────────
+// ResetPassword additional tests
+// ──────────────────────────────────────────────
+
+func TestResetPassword_ShortPassword(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	// Password "short" is 5 chars, below the binding tag min=8
+	body := `{"token":"some-token","new_password":"short"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/password/reset", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid request body")
+}
+
+func TestResetPassword_InvalidToken(t *testing.T) {
+	credRepo := &mockCredentialRepoForController{}
+	emailSender := &mockPasswordResetEmailSender{}
+	accountSvc := &mockAccountServiceForSocial{}
+	engine := setupAuthControllerWithPasswordResetSvc(t, credRepo, emailSender, accountSvc)
+
+	// Password meets ValidatePasswordStrength (12+ chars, upper+lower+digit+special),
+	// but the cjson Lua script fails on miniredis so VerifyAndReset returns error.
+	body := `{"token":"fake-invalid-token-abc123","new_password":"ValidP@ssw0rd!"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/password/reset", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid or expired reset token")
+}
+
+// ──────────────────────────────────────────────
+// ForgotPassword additional tests
+// ──────────────────────────────────────────────
+
+func TestForgotPassword_NonexistentEmail(t *testing.T) {
+	credRepo := &mockCredentialRepoForController{
+		findByTypeAndIdentifierFn: func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+			return nil, fmt.Errorf("credential not found")
+		},
+	}
+	emailSender := &mockPasswordResetEmailSender{}
+	accountSvc := &mockAccountServiceForSocial{}
+	engine := setupAuthControllerWithPasswordResetSvc(t, credRepo, emailSender, accountSvc)
+
+	body := `{"email":"nonexistent@example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/password/forgot", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	// Always 200 to prevent email enumeration
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestForgotPassword_Success(t *testing.T) {
+	accountID := "account-001"
+	userEmail := "user@example.com"
+
+	credRepo := &mockCredentialRepoForController{
+		findByTypeAndIdentifierFn: func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+			cred := &accountDomain.Credential{
+				ID:         "cred-001",
+				AccountID:  accountID,
+				Type:       accountDomain.CredentialTypeEmail,
+				Identifier: &userEmail,
+			}
+			return cred, nil
+		},
+	}
+
+	activeAccount := accountDomain.NewAccount("Test User")
+	activeAccount.ID = accountID
+
+	accountSvc := &mockAccountServiceForSocial{
+		findAccountByIDFn: func(_ context.Context, id string) (*accountDomain.Account, error) {
+			if id == accountID {
+				return activeAccount, nil
+			}
+			return nil, fmt.Errorf("not found")
+		},
+	}
+
+	resetEmailSent := false
+	emailSender := &mockPasswordResetEmailSender{
+		sendFn: func(_ context.Context, to, resetLink string) error {
+			assert.Equal(t, userEmail, to)
+			assert.Contains(t, resetLink, "https://app.example.com/reset?token=")
+			resetEmailSent = true
+			return nil
+		},
+	}
+
+	engine := setupAuthControllerWithPasswordResetSvc(t, credRepo, emailSender, accountSvc)
+
+	body := `{"email":"user@example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/password/forgot", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, resetEmailSent, "password reset email sender should have been called")
 }
