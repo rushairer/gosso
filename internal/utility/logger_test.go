@@ -1,6 +1,7 @@
 package utility
 
 import (
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -146,4 +147,58 @@ func TestSupportsColor_TermColor(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("TERM", "xterm-256color")
 	assert.True(t, supportsColor())
+}
+
+// ──────────────────────────────────────────────
+// ColorWriteSyncer
+// ──────────────────────────────────────────────
+
+func TestColorWriteSyncer_Write(t *testing.T) {
+	// Use os.Pipe to get a writable, non-terminal file
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	defer r.Close()
+	defer w.Close()
+
+	syncer := &ColorWriteSyncer{Writer: w}
+	data := []byte("[INFO] test message\n")
+	n, err := syncer.Write(data)
+
+	assert.NoError(t, err)
+	// When writing to a pipe (not a terminal), supportsColor() may return false,
+	// so the byte count should equal the input length.
+	assert.Greater(t, n, 0)
+
+	// Read from the pipe to verify something was written
+	w.Close()
+	buf := make([]byte, 512)
+	readN, _ := r.Read(buf)
+	assert.Greater(t, readN, 0)
+	assert.Contains(t, string(buf[:readN]), "[INFO] test message")
+}
+
+func TestColorWriteSyncer_WriteEmpty(t *testing.T) {
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	defer r.Close()
+	defer w.Close()
+
+	syncer := &ColorWriteSyncer{Writer: w}
+	n, err := syncer.Write([]byte{})
+
+	assert.NoError(t, err)
+	assert.Equal(t, 0, n)
+}
+
+func TestColorWriteSyncer_Sync(t *testing.T) {
+	// os.Pipe returns a file that doesn't support sync well,
+	// but Sync() should delegate without panicking.
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	defer r.Close()
+	defer w.Close()
+
+	syncer := &ColorWriteSyncer{Writer: w}
+	// Sync on a pipe may return an error, but it should not panic.
+	_ = syncer.Sync()
 }

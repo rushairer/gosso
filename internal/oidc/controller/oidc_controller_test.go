@@ -809,3 +809,40 @@ func TestDiscovery_EndSessionEndpoint(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, "https://sso.example.com/oidc/logout", resp["end_session_endpoint"])
 }
+
+// ──────────────────────────────────────────────
+// JWKS Tests
+// ──────────────────────────────────────────────
+
+func TestJWKS_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+
+	keySvc := setupTestKeyService(t)
+	jwksSvc := oidcService.NewJWKSService(keySvc)
+	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
+
+	ctrl := NewOIDCController(discoverySvc, jwksSvc, nil, nil, nil, nil, nil, "https://sso.example.com", zap.NewNop())
+	engine.GET("/.well-known/jwks.json", ctrl.JWKS)
+
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/jwks.json", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+
+	keys, ok := resp["keys"].([]any)
+	require.True(t, ok, "keys should be an array")
+	require.Len(t, keys, 1)
+
+	key := keys[0].(map[string]any)
+	assert.Equal(t, "RSA", key["kty"])
+	assert.Equal(t, "RS256", key["alg"])
+	assert.Equal(t, "sig", key["use"])
+	assert.NotEmpty(t, key["kid"])
+	assert.NotEmpty(t, key["n"])
+	assert.NotEmpty(t, key["e"])
+}
