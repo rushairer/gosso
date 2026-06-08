@@ -207,3 +207,99 @@ func TestBlacklistService_GetRevokeInfo_NotRevoked(t *testing.T) {
 	_, err := service.GetRevokeInfo(ctx, "nonexistent-jti")
 	assert.ErrorIs(t, err, ErrTokenNotRevoked)
 }
+
+// ──────────────────────────────────────────────
+// Error-path tests (Redis failures and corrupt data)
+// ──────────────────────────────────────────────
+
+func TestBlacklistService_RevokeToken_ClosedRedis(t *testing.T) {
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
+
+	require.NoError(t, service.redis.GetClient().Close())
+
+	err := service.RevokeToken(context.Background(), "any-jti", "test", time.Now().Add(1*time.Hour))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "revoke token")
+}
+
+func TestBlacklistService_IsTokenRevoked_ClosedRedis(t *testing.T) {
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
+
+	require.NoError(t, service.redis.GetClient().Close())
+
+	_, err := service.IsTokenRevoked(context.Background(), "any-jti")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "check token blacklist")
+}
+
+func TestBlacklistService_GetRevokeInfo_ClosedRedis(t *testing.T) {
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
+
+	require.NoError(t, service.redis.GetClient().Close())
+
+	_, err := service.GetRevokeInfo(context.Background(), "any-jti")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "get token blacklist")
+}
+
+func TestBlacklistService_GetRevokeInfo_CorruptData(t *testing.T) {
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	key := service.buildBlacklistKey("corrupt-jti")
+	require.NoError(t, service.redis.Set(ctx, key, "not-json", 10*time.Second))
+
+	_, err := service.GetRevokeInfo(ctx, "corrupt-jti")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal token blacklist")
+}
+
+func TestBlacklistService_removeFromBlacklist_ClosedRedis(t *testing.T) {
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
+
+	require.NoError(t, service.redis.GetClient().Close())
+
+	err := service.removeFromBlacklist(context.Background(), "any-jti")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "remove token from blacklist")
+}
+
+func TestBlacklistService_SetAccountRevokedAfter_ClosedRedis(t *testing.T) {
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
+
+	require.NoError(t, service.redis.GetClient().Close())
+
+	err := service.SetAccountRevokedAfter(context.Background(), "any-account", time.Now(), 1*time.Hour)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "set account revoked after")
+}
+
+func TestBlacklistService_GetAccountRevokedAfter_ClosedRedis(t *testing.T) {
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
+
+	require.NoError(t, service.redis.GetClient().Close())
+
+	_, err := service.GetAccountRevokedAfter(context.Background(), "any-account")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "get account revoked after")
+}
+
+func TestBlacklistService_GetAccountRevokedAfter_CorruptData(t *testing.T) {
+	service, cleanup, _ := setupTestBlacklistService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	key := service.buildAccountRevokedAfterKey("corrupt-account")
+	require.NoError(t, service.redis.Set(ctx, key, "not-a-number", 10*time.Second))
+
+	_, err := service.GetAccountRevokedAfter(ctx, "corrupt-account")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "parse account revoked after")
+}
