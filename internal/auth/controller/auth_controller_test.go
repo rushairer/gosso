@@ -14,6 +14,7 @@ import (
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -150,6 +151,8 @@ type mockCredentialRepoForController struct {
 	findByTypeAndIdentifierFn   func(ctx context.Context, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error)
 	createCredentialsErr        error
 	softDeleteCredentialErr     error
+	verifyFirstUnverifiedTOTPOK    bool
+	verifyFirstUnverifiedTOTPError error
 }
 
 func (m *mockCredentialRepoForController) CreateCredentials(_ context.Context, _ *sql.Tx, _ []*accountDomain.Credential) error {
@@ -194,7 +197,7 @@ func (m *mockCredentialRepoForController) FindByAccountAndTypeForUpdate(_ contex
 }
 
 func (m *mockCredentialRepoForController) VerifyFirstUnverifiedTOTP(_ context.Context, _ *sql.Tx, _ string) (bool, error) {
-	return false, nil
+	return m.verifyFirstUnverifiedTOTPOK, m.verifyFirstUnverifiedTOTPError
 }
 
 // newTestMFAService creates an MFAService backed by sqlmock for controller-level tests.
@@ -728,6 +731,173 @@ func TestMFAActivate_NoClaims(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestMFAActivate_FindByAccountAndTypeError(t *testing.T) {
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeErr: fmt.Errorf("database error"),
+	}
+	mfaSvc, _ := newTestMFAService(t, credRepo)
+
+	authSvc := &mockAuthOrchestrator{mfaSvc: mfaSvc}
+	tokenMgr := &mockTokenManager{}
+
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+	}
+	env := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+
+	body := `{"code":"123456"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/activate", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	env.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMFAActivate_InvalidCode(t *testing.T) {
+	key, err := totp.Generate(totp.GenerateOpts{Issuer: "test-issuer", AccountName: "account-001"})
+	require.NoError(t, err)
+
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
+			accountDomain.CredentialTypeTOTP: {
+				{ID: "totp-1", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: key.Secret(), Verified: true},
+			},
+		},
+	}
+	mfaSvc, _ := newTestMFAService(t, credRepo)
+
+	authSvc := &mockAuthOrchestrator{mfaSvc: mfaSvc}
+	tokenMgr := &mockTokenManager{}
+
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+	}
+	env := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+
+	body := `{"code":"000000"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/activate", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	env.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMFAActivate_NoPendingEnrollment(t *testing.T) {
+	key, err := totp.Generate(totp.GenerateOpts{Issuer: "test-issuer", AccountName: "account-001"})
+	require.NoError(t, err)
+	secret := key.Secret()
+	code, err := totp.GenerateCode(secret, time.Now())
+	require.NoError(t, err)
+
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
+			accountDomain.CredentialTypeTOTP: {
+				{ID: "totp-1", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: secret, Verified: true},
+			},
+		},
+		verifyFirstUnverifiedTOTPOK: false,
+	}
+	mfaSvc, mock := newTestMFAService(t, credRepo)
+
+	authSvc := &mockAuthOrchestrator{mfaSvc: mfaSvc}
+	tokenMgr := &mockTokenManager{}
+
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+	}
+	env := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
+	reqBody := fmt.Sprintf(`{"code":"%s"}`, code)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/activate", bytes.NewBufferString(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	env.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestMFAActivate_Success(t *testing.T) {
+	key, err := totp.Generate(totp.GenerateOpts{Issuer: "test-issuer", AccountName: "account-001"})
+	require.NoError(t, err)
+	secret := key.Secret()
+	code, err := totp.GenerateCode(secret, time.Now())
+	require.NoError(t, err)
+
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
+			accountDomain.CredentialTypeTOTP: {
+				{ID: "totp-1", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: secret, Verified: true},
+			},
+		},
+		verifyFirstUnverifiedTOTPOK: true,
+	}
+	mfaSvc, mock := newTestMFAService(t, credRepo)
+
+	authSvc := &mockAuthOrchestrator{mfaSvc: mfaSvc}
+	tokenMgr := &mockTokenManager{}
+
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+	}
+	env := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
+	reqBody := fmt.Sprintf(`{"code":"%s"}`, code)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/activate", bytes.NewBufferString(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	env.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestMFAActivate_VerifyFirstError(t *testing.T) {
+	key, err := totp.Generate(totp.GenerateOpts{Issuer: "test-issuer", AccountName: "account-001"})
+	require.NoError(t, err)
+	secret := key.Secret()
+	code, err := totp.GenerateCode(secret, time.Now())
+	require.NoError(t, err)
+
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
+			accountDomain.CredentialTypeTOTP: {
+				{ID: "totp-1", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: secret, Verified: true},
+			},
+		},
+		verifyFirstUnverifiedTOTPError: fmt.Errorf("transaction failed"),
+	}
+	mfaSvc, mock := newTestMFAService(t, credRepo)
+
+	authSvc := &mockAuthOrchestrator{mfaSvc: mfaSvc}
+	tokenMgr := &mockTokenManager{}
+
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+	}
+	env := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+
+	reqBody := fmt.Sprintf(`{"code":"%s"}`, code)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/activate", bytes.NewBufferString(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	env.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestMFADisable_NoClaims(t *testing.T) {

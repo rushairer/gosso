@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,12 +11,15 @@ import (
 	"testing"
 	"time"
 
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+ authDomain "github.com/rushairer/gosso/internal/auth/domain"
+	"github.com/rushairer/gosso/internal/auth/repository"
 	"github.com/rushairer/gosso/internal/auth/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
@@ -93,6 +97,54 @@ func (m *mockAccountLookupForPasskey) FindAccountByID(_ context.Context, _ strin
 }
 
 // ──────────────────────────────────────────────
+// mockWebAuthnCredRepo
+// ──────────────────────────────────────────────
+
+type mockWebAuthnCredRepo struct {
+	findByAccountIDResults  []*authDomain.WebAuthnCredential
+	findByAccountIDErr      error
+	findByCredentialIDResult *authDomain.WebAuthnCredential
+	findByCredentialIDErr    error
+	softDeleteCredentialErr  error
+}
+
+func (m *mockWebAuthnCredRepo) CreateCredential(_ context.Context, _ *sql.Tx, _ *authDomain.WebAuthnCredential) error {
+	return nil
+}
+
+func (m *mockWebAuthnCredRepo) FindByCredentialID(_ context.Context, credentialID string) (*authDomain.WebAuthnCredential, error) {
+	if m.findByCredentialIDErr != nil {
+		return nil, m.findByCredentialIDErr
+	}
+	return m.findByCredentialIDResult, nil
+}
+
+func (m *mockWebAuthnCredRepo) FindByAccountID(_ context.Context, accountID string) ([]*authDomain.WebAuthnCredential, error) {
+	if m.findByAccountIDErr != nil {
+		return nil, m.findByAccountIDErr
+	}
+	return m.findByAccountIDResults, nil
+}
+
+func (m *mockWebAuthnCredRepo) UpdateCredential(_ context.Context, _ *sql.Tx, _ *authDomain.WebAuthnCredential) error {
+	return nil
+}
+
+func (m *mockWebAuthnCredRepo) SoftDeleteCredential(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+	return m.softDeleteCredentialErr
+}
+
+func (m *mockWebAuthnCredRepo) SoftDeleteByAccountID(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+	return nil
+}
+
+// newTestPasskeyServiceWithDB creates a PasskeyService with mocked webauthn repo and sqlmock DB.
+func newTestPasskeyServiceWithDB(t *testing.T, credRepo repository.WebAuthnCredentialRepository, db *sql.DB) *service.PasskeyService {
+	t.Helper()
+	return service.NewPasskeyService(nil, credRepo, nil, db, nil, zap.NewNop())
+}
+
+// ──────────────────────────────────────────────
 // RegisterBegin
 // ──────────────────────────────────────────────
 
@@ -158,6 +210,203 @@ func TestPasskey_RegisterComplete_NoAuth(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+// ──────────────────────────────────────────────
+// ListCredentials — success and error paths
+// ──────────────────────────────────────────────
+
+func TestPasskey_ListCredentials_Success(t *testing.T) {
+	now := time.Now()
+	credRepo := &mockWebAuthnCredRepo{
+		findByAccountIDResults: []*authDomain.WebAuthnCredential{
+			{ID: "cred-001", AccountID: "account-001", Name: "My Laptop", CreatedAt: now, AttestationType: "none"},
+			{ID: "cred-002", AccountID: "account-001", Name: "My Phone", CreatedAt: now, AttestationType: "packed"},
+		},
+	}
+	passkeySvc := newTestPasskeyServiceWithDB(t, credRepo, nil)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl := &PasskeyController{passkeySvc: passkeySvc, logger: zap.NewNop()}
+
+	api := engine.Group("/api/auth")
+	api.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctx.Next()
+	})
+	api.GET("/passkeys", ctrl.ListCredentials)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/passkeys", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].([]any)
+	assert.Len(t, data, 2)
+	assert.Equal(t, "My Laptop", data[0].(map[string]any)["name"])
+}
+
+func TestPasskey_ListCredentials_ServiceError(t *testing.T) {
+	credRepo := &mockWebAuthnCredRepo{
+		findByAccountIDErr: fmt.Errorf("database connection lost"),
+	}
+	passkeySvc := newTestPasskeyServiceWithDB(t, credRepo, nil)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl := &PasskeyController{passkeySvc: passkeySvc, logger: zap.NewNop()}
+
+	api := engine.Group("/api/auth")
+	api.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctx.Next()
+	})
+	api.GET("/passkeys", ctrl.ListCredentials)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/passkeys", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// ──────────────────────────────────────────────
+// DeleteCredential — success, not found, ownership, empty ID
+// ──────────────────────────────────────────────
+
+// NOTE: The controller has a defensive empty-ID check ("credential id required"),
+// but Gin's /:id parameter never delivers an empty segment — the router returns
+// 404 before the handler runs. This code path is unreachable via normal routing.
+
+func TestPasskey_DeleteCredential_NotFound(t *testing.T) {
+	credRepo := &mockWebAuthnCredRepo{
+		findByCredentialIDErr: fmt.Errorf("not found"),
+	}
+	sqlDB, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	passkeySvc := newTestPasskeyServiceWithDB(t, credRepo, sqlDB)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl := &PasskeyController{passkeySvc: passkeySvc, logger: zap.NewNop()}
+
+	api := engine.Group("/api/auth")
+	api.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctx.Next()
+	})
+	api.DELETE("/passkeys/:id", ctrl.DeleteCredential)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/passkeys/cred-999", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestPasskey_DeleteCredential_OwnershipMismatch(t *testing.T) {
+	credRepo := &mockWebAuthnCredRepo{
+		findByCredentialIDResult: &authDomain.WebAuthnCredential{
+			ID: "cred-001", AccountID: "other-account",
+		},
+	}
+	sqlDB, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	passkeySvc := newTestPasskeyServiceWithDB(t, credRepo, sqlDB)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl := &PasskeyController{passkeySvc: passkeySvc, logger: zap.NewNop()}
+
+	api := engine.Group("/api/auth")
+	api.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctx.Next()
+	})
+	api.DELETE("/passkeys/:id", ctrl.DeleteCredential)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/passkeys/cred-001", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestPasskey_DeleteCredential_Success(t *testing.T) {
+	credRepo := &mockWebAuthnCredRepo{
+		findByCredentialIDResult: &authDomain.WebAuthnCredential{
+			ID: "cred-001", AccountID: "account-001", Name: "My Laptop",
+		},
+	}
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	passkeySvc := newTestPasskeyServiceWithDB(t, credRepo, sqlDB)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl := &PasskeyController{passkeySvc: passkeySvc, logger: zap.NewNop()}
+
+	api := engine.Group("/api/auth")
+	api.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctx.Next()
+	})
+	api.DELETE("/passkeys/:id", ctrl.DeleteCredential)
+
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/passkeys/cred-001", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPasskey_DeleteCredential_TxError(t *testing.T) {
+	credRepo := &mockWebAuthnCredRepo{
+		findByCredentialIDResult: &authDomain.WebAuthnCredential{
+			ID: "cred-001", AccountID: "account-001", Name: "My Laptop",
+		},
+		softDeleteCredentialErr: fmt.Errorf("delete failed"),
+	}
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	passkeySvc := newTestPasskeyServiceWithDB(t, credRepo, sqlDB)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	ctrl := &PasskeyController{passkeySvc: passkeySvc, logger: zap.NewNop()}
+
+	api := engine.Group("/api/auth")
+	api.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctx.Next()
+	})
+	api.DELETE("/passkeys/:id", ctrl.DeleteCredential)
+
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/passkeys/cred-001", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // ──────────────────────────────────────────────
