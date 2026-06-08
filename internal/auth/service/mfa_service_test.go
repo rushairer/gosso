@@ -11,9 +11,9 @@ import (
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // mockCredentialRepo implements accountRepo.CredentialRepository for testing

@@ -204,17 +204,6 @@ func (m *mockAccountValidatorAlwaysActive) IsAccountActive(_ context.Context, _ 
 	return true
 }
 
-type mockClientAuthMgr struct {
-	authenticateFn func(client *oauth2Domain.OAuth2Client, clientSecret string) error
-}
-
-func (m *mockClientAuthMgr) AuthenticateClient(client *oauth2Domain.OAuth2Client, clientSecret string) error {
-	if m.authenticateFn != nil {
-		return m.authenticateFn(client, clientSecret)
-	}
-	return nil
-}
-
 type mockAuthCodeMgr struct {
 	validateCodeFn func() (*oauth2Domain.AuthorizationCode, error)
 	generateCodeFn func() (*oauth2Domain.AuthorizationCode, error)

@@ -45,13 +45,6 @@ func setupTestPasswordResetServiceBase(t *testing.T) (*PasswordResetService, *ca
 	return svc, redisClient, mr, emailSvc
 }
 
-func setupTestPasswordResetServiceCJSON(t *testing.T) (*PasswordResetService, *cache.RedisClient, *miniredis.Miniredis, *stubPasswordResetEmailSender) {
-	t.Helper()
-	svc, redisClient, mr, emailSvc := setupTestPasswordResetServiceBase(t)
-	testutil.SkipIfNoCJSON(t, redisClient)
-	return svc, redisClient, mr, emailSvc
-}
-
 func setupTestMiniredis(t *testing.T) (*cache.RedisClient, *miniredis.Miniredis) {
 	t.Helper()
 	logger := zap.NewNop()
