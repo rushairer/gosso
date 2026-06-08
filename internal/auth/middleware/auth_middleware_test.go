@@ -7,13 +7,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
+	"github.com/rushairer/gosso/internal/testutil"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	tokenService "github.com/rushairer/gosso/internal/token/service"
 	gm "github.com/rushairer/gosso/middleware"
 )
 
@@ -27,6 +31,27 @@ func init() {
 
 func setupGin() *gin.Engine {
 	return gin.New()
+}
+
+// setupRealTokenService creates a real TokenService backed by in-memory RSA keys
+// and miniredis. Needed for JWTAuthMiddleware tests which require a concrete *TokenService.
+func setupRealTokenService(t *testing.T) (*tokenService.TokenService, func()) {
+	t.Helper()
+	logger := zap.NewNop()
+	redisClient, mr := testutil.SetupTestRedis(t)
+	keySvc, err := tokenService.NewKeyService("", "", logger)
+	require.NoError(t, err)
+	blacklist := tokenService.NewBlacklistService(redisClient, logger)
+	svc := tokenService.NewTokenService(
+		keySvc,
+		"http://localhost:8080",
+		15*time.Minute,
+		7*24*time.Hour,
+		redisClient,
+		blacklist,
+		logger,
+	)
+	return svc, mr.Close
 }
 
 func TestExtractBearerToken_FromHeader(t *testing.T) {
@@ -330,6 +355,174 @@ func TestValidateBearerToken_NilSessionValidator(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer validtoken")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
+}
+
+// ──────────────────────────────────────────────
+// JWTAuthMiddleware (end-to-end with real TokenService)
+// ──────────────────────────────────────────────
+
+func TestJWTAuthMiddleware_Success(t *testing.T) {
+	tokenSvc, cleanup := setupRealTokenService(t)
+	defer cleanup()
+
+	tokenString, err := tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
+		AccountID: "acct-001",
+		SessionID: "sess-001",
+	})
+	require.NoError(t, err)
+
+	engine := setupGin()
+	engine.GET("/protected", JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
+		session: &sessionDomain.Session{ID: "sess-001"},
+	}), func(ctx *gin.Context) {
+		accountID, _ := ctx.Get(gm.ContextKeyAccountID)
+		claims, _ := ctx.Get(gm.ContextKeyClaims)
+		ctx.JSON(http.StatusOK, gin.H{
+			"account_id": accountID,
+			"has_claims": claims != nil,
+		})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenString)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "acct-001", resp["account_id"])
+	assert.Equal(t, true, resp["has_claims"])
+}
+
+func TestJWTAuthMiddleware_MissingToken(t *testing.T) {
+	tokenSvc, cleanup := setupRealTokenService(t)
+	defer cleanup()
+
+	engine := setupGin()
+	engine.GET("/protected", JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
+		session: &sessionDomain.Session{},
+	}), func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestJWTAuthMiddleware_InvalidToken(t *testing.T) {
+	tokenSvc, cleanup := setupRealTokenService(t)
+	defer cleanup()
+
+	engine := setupGin()
+	engine.GET("/protected", JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
+		session: &sessionDomain.Session{},
+	}), func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer garbage.jwt.token")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestJWTAuthMiddleware_ScopedToken_Returns403(t *testing.T) {
+	tokenSvc, cleanup := setupRealTokenService(t)
+	defer cleanup()
+
+	tokenString, err := tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
+		AccountID: "acct-001",
+		SessionID: "sess-001",
+		Scope:     "mfa:verify",
+	})
+	require.NoError(t, err)
+
+	engine := setupGin()
+	engine.GET("/protected", JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
+		session: &sessionDomain.Session{ID: "sess-001"},
+	}), func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenString)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestJWTAuthMiddleware_ExpiredSession_Returns401(t *testing.T) {
+	tokenSvc, cleanup := setupRealTokenService(t)
+	defer cleanup()
+
+	tokenString, err := tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
+		AccountID: "acct-001",
+		SessionID: "sess-expired",
+	})
+	require.NoError(t, err)
+
+	engine := setupGin()
+	engine.GET("/protected", JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
+		err: fmt.Errorf("session not found"),
+	}), func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenString)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestJWTAuthMiddleware_NilSessionValidator_Panics(t *testing.T) {
+	tokenSvc, cleanup := setupRealTokenService(t)
+	defer cleanup()
+
+	assert.Panics(t, func() {
+		JWTAuthMiddleware(tokenSvc, nil)
+	})
+}
+
+func TestJWTAuthMiddleware_BlacklistedToken_Returns401(t *testing.T) {
+	tokenSvc, cleanup := setupRealTokenService(t)
+	defer cleanup()
+
+	tokenString, err := tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
+		AccountID: "acct-001",
+		SessionID: "sess-001",
+	})
+	require.NoError(t, err)
+
+	// Revoke the token before sending it
+	ctx := context.Background()
+	claims, err := tokenSvc.ValidateAccessTokenWithContext(ctx, tokenString)
+	require.NoError(t, err)
+	err = tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time)
+	require.NoError(t, err)
+
+	engine := setupGin()
+	engine.GET("/protected", JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
+		session: &sessionDomain.Session{ID: "sess-001"},
+	}), func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenString)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 // ──────────────────────────────────────────────
