@@ -395,6 +395,27 @@ func TestBeginMFALogin_RepoError(t *testing.T) {
 	assert.ErrorIs(t, err, ErrPasskeyNotFound)
 }
 
+func TestBeginMFALogin_Success(t *testing.T) {
+	credRepo := &mockWebAuthnRepo{
+		creds: map[string][]*domain.WebAuthnCredential{
+			"acct-1": {
+				{ID: "mfa-cred", AccountID: "acct-1", CredentialID: []byte("mfa-cred-id"), PublicKey: []byte("mfa-pub-key")},
+			},
+		},
+	}
+	svc, mr := newTestPasskeyServiceWithRedis(t, credRepo)
+	defer mr.Close()
+
+	assertion, requestID, err := svc.BeginMFALogin(context.Background(), "acct-1")
+	require.NoError(t, err)
+	require.NotNil(t, assertion)
+	assert.NotEmpty(t, requestID)
+
+	exists, err := svc.redis.Exists(context.Background(), fmt.Sprintf("webauthn:mfa:%s", requestID))
+	require.NoError(t, err)
+	assert.True(t, exists, "MFA challenge should be stored in Redis")
+}
+
 // ──────────────────────────────────────────────
 // CompleteRegistration / CompleteLogin / CompleteMFALogin — missing challenge
 // ──────────────────────────────────────────────
