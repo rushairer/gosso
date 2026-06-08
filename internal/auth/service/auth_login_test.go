@@ -12,6 +12,7 @@ import (
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
@@ -826,4 +827,199 @@ func TestListSessions_Delegation(t *testing.T) {
 	sessions, err := fixture.svc.ListSessions(context.Background(), "account-999")
 	require.NoError(t, err)
 	assert.Empty(t, sessions)
+}
+
+// ──────────────────────────────────────────────
+// verifyMFACode paths (via VerifyMFALogin)
+// ──────────────────────────────────────────────
+
+func TestVerifyMFALogin_PasskeySuccess(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	jti := uuid.New().String()
+	mfaToken, err := fixture.tokenSvc.GenerateShortLivedToken(&tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		},
+		AccountID: "account-001",
+		Scope:     ScopeMFA,
+	})
+	require.NoError(t, err)
+
+	// Pre-set the passkey verified flag in Redis (normally set by CompleteMFALogin).
+	err = fixture.redis.Set(context.Background(), fmt.Sprintf("webauthn:mfa_verified:%s", jti), "1", 5*time.Minute)
+	require.NoError(t, err)
+
+	result, err := fixture.svc.VerifyMFALogin(context.Background(), mfaToken, "", "passkey", "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.False(t, result.RequiresMFA)
+	assert.NotEmpty(t, result.AccessToken)
+	assert.NotEmpty(t, result.RefreshToken)
+	assert.Equal(t, "account-001", result.Account.ID)
+}
+
+func TestVerifyMFALogin_PasskeyServiceNil(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	mfaToken, err := fixture.tokenSvc.GenerateShortLivedToken(&tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		},
+		AccountID: "account-001",
+		Scope:     ScopeMFA,
+	})
+	require.NoError(t, err)
+
+	// Nil out the passkey service to trigger ErrPasskeyNotAvailable.
+	fixture.svc.passkeySvc = nil
+
+	result, err := fixture.svc.VerifyMFALogin(context.Background(), mfaToken, "", "passkey", "127.0.0.1", "test-agent")
+	assert.ErrorIs(t, err, ErrPasskeyNotAvailable)
+	assert.Nil(t, result)
+}
+
+func TestVerifyMFALogin_TOTPVerifyError(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	mfaToken, err := fixture.tokenSvc.GenerateShortLivedToken(&tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		},
+		AccountID: "account-001",
+		Scope:     ScopeMFA,
+	})
+	require.NoError(t, err)
+
+	// Make FindByAccountAndType return an error so VerifyTOTP fails.
+	fixture.credRepo.findByAccountAndTypeErr = errors.New("db connection lost")
+
+	result, err := fixture.svc.VerifyMFALogin(context.Background(), mfaToken, "123456", "totp", "127.0.0.1", "test-agent")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "totp verification error")
+	assert.Nil(t, result)
+}
+
+func TestVerifyMFALogin_TOTPInvalid_BackupCodeInvalid(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	// Seed TOTP credential with an invalid secret — totp.Validate returns false.
+	fixture.credRepo.credMap["account-001:totp"] = []*accountDomain.Credential{
+		{ID: "totp-001", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: "INVALIDBASE32SECRET!!", Verified: true},
+	}
+	// No backup codes in the map → VerifyBackupCode returns (false, nil).
+
+	mfaToken, err := fixture.tokenSvc.GenerateShortLivedToken(&tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		},
+		AccountID: "account-001",
+		Scope:     ScopeMFA,
+	})
+	require.NoError(t, err)
+
+	// VerifyBackupCode opens a transaction (Begin + Commit).
+	fixture.sqlMock.ExpectBegin()
+	fixture.sqlMock.ExpectCommit()
+
+	result, err := fixture.svc.VerifyMFALogin(context.Background(), mfaToken, "000000", "totp", "127.0.0.1", "test-agent")
+	assert.ErrorIs(t, err, ErrInvalidMFACode)
+	assert.Nil(t, result)
+	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
+}
+
+func TestVerifyMFALogin_TOTPInvalid_BackupCodeSuccess(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	// Seed TOTP credential with an invalid secret — TOTP will not match.
+	fixture.credRepo.credMap["account-001:totp"] = []*accountDomain.Credential{
+		{ID: "totp-001", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: "INVALIDBASE32SECRET!!", Verified: true},
+	}
+
+	// Seed a valid backup code.
+	knownCode := "abcdef0123456789"
+	hash, err := bcrypt.GenerateFromPassword([]byte(knownCode), bcrypt.DefaultCost)
+	require.NoError(t, err)
+	fixture.credRepo.credMap["account-001:backup_code"] = []*accountDomain.Credential{
+		{ID: "bc-001", AccountID: "account-001", Type: accountDomain.CredentialTypeBackupCode, Value: string(hash), Verified: true},
+	}
+
+	mfaToken, err := fixture.tokenSvc.GenerateShortLivedToken(&tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		},
+		AccountID: "account-001",
+		Scope:     ScopeMFA,
+	})
+	require.NoError(t, err)
+
+	// VerifyBackupCode transaction: Begin + Commit (backup code matched, deleted).
+	fixture.sqlMock.ExpectBegin()
+	fixture.sqlMock.ExpectCommit()
+
+	result, err := fixture.svc.VerifyMFALogin(context.Background(), mfaToken, knownCode, "totp", "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.False(t, result.RequiresMFA)
+	assert.NotEmpty(t, result.AccessToken)
+	assert.NotEmpty(t, result.RefreshToken)
+	assert.Equal(t, "account-001", result.Account.ID)
+	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
+}
+
+func TestVerifyMFALogin_TOTPInvalid_BackupCodeError(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	// Seed TOTP credential with an invalid secret — VerifyTOTP returns (false, nil).
+	fixture.credRepo.credMap["account-001:totp"] = []*accountDomain.Credential{
+		{ID: "totp-001", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: "INVALIDBASE32SECRET!!", Verified: true},
+	}
+
+	// Inject a DB error only in the backup-code transaction path.
+	fixture.credRepo.findByAccountAndTypeForUpdateErr = errors.New("lock timeout")
+
+	mfaToken, err := fixture.tokenSvc.GenerateShortLivedToken(&tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		},
+		AccountID: "account-001",
+		Scope:     ScopeMFA,
+	})
+	require.NoError(t, err)
+
+	// VerifyBackupCode transaction starts but rolls back due to the error.
+	fixture.sqlMock.ExpectBegin()
+	fixture.sqlMock.ExpectRollback()
+
+	result, err := fixture.svc.VerifyMFALogin(context.Background(), mfaToken, "000000", "totp", "127.0.0.1", "test-agent")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "backup code verification error")
+	assert.Nil(t, result)
+	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
 }

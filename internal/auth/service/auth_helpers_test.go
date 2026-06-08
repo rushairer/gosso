@@ -153,6 +153,9 @@ type authTestCredentialRepo struct {
 	*mockCredentialRepo
 	passwordCreds  map[string]*accountDomain.Credential // key: accountID
 	typeAndIDCreds map[string]*accountDomain.Credential // key: "type:identifier"
+	// findByAccountAndTypeForUpdateErr, if set, causes FindByAccountAndTypeForUpdate
+	// to return this error without consulting the embedded mock.
+	findByAccountAndTypeForUpdateErr error
 }
 
 func (m *authTestCredentialRepo) FindPasswordCredential(_ context.Context, accountID string) (*accountDomain.Credential, error) {
@@ -170,6 +173,16 @@ func (m *authTestCredentialRepo) FindByTypeAndIdentifier(_ context.Context, cred
 		}
 	}
 	return nil, fmt.Errorf("credential not found for %s:%s", credType, identifier)
+}
+
+// FindByAccountAndTypeForUpdate shadows the embedded mock so that tests can
+// inject errors specifically in the backup-code transaction path while
+// leaving FindByAccountAndType (used by VerifyTOTP) unaffected.
+func (m *authTestCredentialRepo) FindByAccountAndTypeForUpdate(ctx context.Context, tx *sql.Tx, accountID string, credType accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	if m.findByAccountAndTypeForUpdateErr != nil {
+		return nil, m.findByAccountAndTypeForUpdateErr
+	}
+	return m.mockCredentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, credType)
 }
 
 // ──────────────────────────────────────────────
@@ -239,8 +252,8 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 	}
 	roleRepo := &testRoleRepository{roles: make(map[string][]*accountDomain.Role)}
 
-	// MFA service (with nil db — DB-dependent methods won't be tested here)
-	mfaSvc := NewMFAService(credRepo, nil, "http://localhost:8080", logger)
+	// MFA service — wired to sqlmock so VerifyBackupCode can open transactions.
+	mfaSvc := NewMFAService(credRepo, sqlDB, "http://localhost:8080", logger)
 
 	// Passkey service
 	passkeySvc := NewPasskeyService(nil, nil, nil, nil, nil, logger)
