@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"sync"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -15,8 +14,7 @@ import (
 const defaultPostgresDSN = "postgres://postgres:postgres@localhost:5432/gosso?sslmode=disable"
 
 type ConfigManager struct {
-	configMutex sync.RWMutex
-	config      *GoUnoConfig
+	config *GoUnoConfig
 }
 
 // NewConfigManager creates a configuration manager.
@@ -69,14 +67,10 @@ func NewConfigManager(
 }
 
 func (cm *ConfigManager) SetConfig(config *GoUnoConfig) {
-	cm.configMutex.Lock()
-	defer cm.configMutex.Unlock()
 	cm.config = config
 }
 
 func (cm *ConfigManager) Config() GoUnoConfig {
-	cm.configMutex.RLock()
-	defer cm.configMutex.RUnlock()
 	if cm.config == nil {
 		return GoUnoConfig{}
 	}

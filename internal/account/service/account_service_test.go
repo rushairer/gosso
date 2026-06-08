@@ -172,7 +172,7 @@ func TestRegisterAccount_DuplicateEmail(t *testing.T) {
 	// Verify result: should return error
 	assert.Error(t, err)
 	assert.Nil(t, account)
-	assert.Contains(t, err.Error(), "email already registered")
+	assert.ErrorIs(t, err, ErrEmailAlreadyRegistered)
 
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

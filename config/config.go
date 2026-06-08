@@ -93,11 +93,12 @@ type TaskPipelineConfig struct {
 }
 
 type SMTPConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	Username string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
-	From     string `mapstructure:"from"`
+	Host      string `mapstructure:"host"`
+	Port      int    `mapstructure:"port"`
+	Username  string `mapstructure:"username"`
+	Password  string `mapstructure:"password"`
+	From      string `mapstructure:"from"`
+	TLSPolicy string `mapstructure:"tls_policy"`
 }
 
 type LogConfig struct {
@@ -241,6 +242,12 @@ func (c *GoUnoConfig) Validate() error {
 		}
 		if c.SMTPConfig.From == "" {
 			return fmt.Errorf("smtp: from address is required when host is configured")
+		}
+		switch c.SMTPConfig.TLSPolicy {
+		case "", "opportunistic", "mandatory", "notls":
+			// valid (empty defaults to opportunistic)
+		default:
+			return fmt.Errorf("smtp: tls_policy must be one of: opportunistic, mandatory, notls (got %q)", c.SMTPConfig.TLSPolicy)
 		}
 		if c.AuthConfig.PasswordResetBaseURL == "" {
 			return fmt.Errorf("auth: password_reset_base_url is required when SMTP is configured")

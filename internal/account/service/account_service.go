@@ -257,7 +257,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return nil, errors.New("username already taken")
+			return nil, ErrUsernameAlreadyTaken
 		}
 		return nil, err
 	}
@@ -316,10 +316,10 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 
 	// 2. Fail-fast: ensure dependencies are configured before starting the transaction
 	if s.sessionRevoker == nil {
-		return fmt.Errorf("SessionRevoker not configured; cannot revoke sessions on account deletion")
+		return fmt.Errorf("%w: cannot revoke sessions on account deletion", ErrSessionRevokerNotBound)
 	}
 	if s.oauth2ClientDeleter == nil {
-		return fmt.Errorf("OAuth2ClientDeleter not configured; cannot cascade-delete OAuth2 clients")
+		return fmt.Errorf("%w: cannot cascade-delete OAuth2 clients", ErrOAuth2ClientDeleterNotBound)
 	}
 
 	// 3. Check if already deleted (idempotent)
@@ -398,7 +398,7 @@ func (s *accountServiceImpl) VerifyCredential(ctx context.Context, accountID str
 			}
 		}
 		if len(credentials) == 0 {
-			return errors.New("credential not found")
+			return repository.ErrCredentialNotFound
 		}
 	}
 
@@ -416,7 +416,7 @@ func (s *accountServiceImpl) VerifyCredential(ctx context.Context, accountID str
 func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error {
 	// 1. Fail-fast: ensure session revoker is configured before modifying data
 	if s.sessionRevoker == nil {
-		return fmt.Errorf("SessionRevoker not configured; cannot revoke sessions on password change")
+		return fmt.Errorf("%w: cannot revoke sessions on password change", ErrSessionRevokerNotBound)
 	}
 
 	// 2. Find password credential
@@ -427,7 +427,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 
 	// 3. Verify old password
 	if !passwordCred.VerifyPassword(oldPassword) {
-		return errors.New("incorrect old password")
+		return ErrIncorrectOldPassword
 	}
 
 	// 4. Validate new password strength
@@ -486,7 +486,7 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 		// Check inside transaction to prevent TOCTOU race condition
 		existing, err := s.federatedIdentityRepo.FindByProvider(ctx, provider, providerUserID)
 		if err == nil && existing != nil {
-			return errors.New("federated identity already bound")
+			return ErrFederatedIdentityAlreadyBound
 		}
 		return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
 	})
@@ -576,7 +576,7 @@ func (s *accountServiceImpl) ListAccounts(ctx context.Context, page, pageSize in
 func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID string) error {
 	// Fail-fast: ensure session revoker is configured before modifying data
 	if s.sessionRevoker == nil {
-		return fmt.Errorf("SessionRevoker not configured; cannot revoke sessions on account suspension")
+		return fmt.Errorf("%w: cannot revoke sessions on account suspension", ErrSessionRevokerNotBound)
 	}
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
@@ -674,9 +674,9 @@ func (s *accountServiceImpl) checkCredentialExists(ctx context.Context, credType
 	if cred != nil {
 		switch credType {
 		case domain.CredentialTypeEmail:
-			return errors.New("email already registered")
+			return ErrEmailAlreadyRegistered
 		case domain.CredentialTypePhone:
-			return errors.New("phone already registered")
+			return ErrPhoneAlreadyRegistered
 		}
 	}
 	return nil

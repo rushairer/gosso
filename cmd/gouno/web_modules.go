@@ -65,10 +65,23 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 
 	providers := buildOAuthProviders(cfg)
 
-	authMod := auth.InitializeAuthModule(
-		db, redis, logger, cfg.AuthConfig, cfg.SMTPConfig, accountMod.Service, providers, keySvc, cfg.AuthConfig.PasswordResetBaseURL, auditor, tokenSvc,
-		accountMod.CredentialRepo, accountMod.AccountRepo, accountMod.RoleRepo, accountMod.FederatedIdentityRepo,
-	)
+	authMod := auth.InitializeAuthModule(auth.AuthModuleConfig{
+		DB:                    db,
+		Redis:                 redis,
+		Logger:                logger,
+		AuthConfig:            cfg.AuthConfig,
+		SMTPConfig:            cfg.SMTPConfig,
+		AccountSvc:            accountMod.Service,
+		Providers:             providers,
+		KeySvc:                keySvc,
+		BaseURL:               cfg.AuthConfig.PasswordResetBaseURL,
+		Auditor:               auditor,
+		TokenSvc:              tokenSvc,
+		CredentialRepo:        accountMod.CredentialRepo,
+		AccountRepo:           accountMod.AccountRepo,
+		RoleRepo:              accountMod.RoleRepo,
+		FederatedIdentityRepo: accountMod.FederatedIdentityRepo,
+	})
 
 	// Wire session revoker into account service (for account deletion -> session revocation)
 	accountService.BindSessionRevoker(accountMod.Service, authMod.SessionService)

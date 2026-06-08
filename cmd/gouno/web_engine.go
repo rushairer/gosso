@@ -3,6 +3,7 @@ package gouno
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -22,7 +23,10 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		logger.Fatal("Invalid trusted proxies configuration", zap.Error(err))
 	}
 
-	corsConfig := buildCORSConfig(cfg)
+	corsConfig, err := buildCORSConfig(cfg, logger)
+	if err != nil {
+		logger.Fatal("Invalid CORS configuration", zap.Error(err))
+	}
 
 	engine.Use(
 		middleware.RecoveryMiddleware(logger),
@@ -65,8 +69,9 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 	return engine
 }
 
-// buildCORSConfig builds CORS configuration from config
-func buildCORSConfig(cfg config.GoUnoConfig) cors.Config {
+// buildCORSConfig builds CORS configuration from config.
+// Returns an error in production mode when allowed_origins is empty.
+func buildCORSConfig(cfg config.GoUnoConfig, logger *zap.Logger) (cors.Config, error) {
 	corsConfig := cors.Config{
 		AllowAllOrigins:  false,
 		AllowCredentials: cfg.CORSConfig.AllowCredentials,
@@ -74,8 +79,10 @@ func buildCORSConfig(cfg config.GoUnoConfig) cors.Config {
 	}
 	if len(cfg.CORSConfig.AllowedOrigins) > 0 {
 		corsConfig.AllowOrigins = cfg.CORSConfig.AllowedOrigins
+	} else if !cfg.WebServerConfig.Debug {
+		return cors.Config{}, fmt.Errorf("cors: allowed_origins is required in production mode")
 	} else {
-		// Development fallback — production should configure allowed_origins explicitly
+		logger.Warn("CORS allowed_origins not configured, falling back to localhost — do not use this in production")
 		corsConfig.AllowOrigins = []string{"http://localhost:8080"}
 	}
 	if len(cfg.CORSConfig.AllowedMethods) > 0 {
@@ -88,5 +95,5 @@ func buildCORSConfig(cfg config.GoUnoConfig) cors.Config {
 	} else {
 		corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token"}
 	}
-	return corsConfig
+	return corsConfig, nil
 }

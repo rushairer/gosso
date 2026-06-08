@@ -53,7 +53,7 @@ func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) *EmailService {
 
 	opts := []mail.Option{
 		mail.WithPort(cfg.Port),
-		mail.WithTLSPolicy(mail.TLSOpportunistic),
+		mail.WithTLSPolicy(smtpTLSPolicy(cfg.TLSPolicy)),
 		mail.WithTimeout(30 * time.Second),
 	}
 	if cfg.Username != "" {
@@ -128,4 +128,15 @@ func (s *EmailService) send(ctx context.Context, to, subject, htmlBody string) e
 // maskEmail masks PII in email addresses
 func maskEmail(email string) string {
 	return utility.MaskEmail(email)
+}
+
+func smtpTLSPolicy(policy string) mail.TLSPolicy {
+	switch policy {
+	case "mandatory":
+		return mail.TLSMandatory
+	case "notls":
+		return mail.NoTLS
+	default:
+		return mail.TLSOpportunistic
+	}
 }

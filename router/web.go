@@ -76,7 +76,15 @@ func RegisterWebRouter(deps RouterDeps) {
 	{
 		// Auth routes (audit middleware injects IP/UserAgent)
 		api.Use(authMiddleware.AuditMetadataMiddleware())
-		deps.AuthCtrl.RegisterRoutes(api, jwtAuth, loginLimit, mfaLimit, passwordLimit, refreshLimit, verifyLimit, socialLimit)
+		deps.AuthCtrl.RegisterRoutes(api, authController.AuthRouteConfig{
+			JWTAuth:       jwtAuth,
+			LoginLimit:    loginLimit,
+			MFALimit:      mfaLimit,
+			PasswordLimit: passwordLimit,
+			RefreshLimit:  refreshLimit,
+			VerifyLimit:   verifyLimit,
+			SocialLimit:   socialLimit,
+		})
 
 		// Client management routes (require JWT authentication + rate limiting)
 		clientLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "client", middleware.IPKeyFunc, deps.RateLimits.API, time.Minute, true, deps.Logger)

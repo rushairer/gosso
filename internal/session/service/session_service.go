@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,6 +39,50 @@ var revokeAccountSessionsScript = redis.NewScript(`
 local members = redis.call('SMEMBERS', KEYS[1])
 redis.call('DEL', KEYS[1])
 return members
+`)
+
+// evictOldestSessionsScript atomically reads all sessions from the account
+// index, identifies the oldest ones that exceed the max limit, deletes their
+// keys, and removes them from the index — all in a single EVAL call.
+// This eliminates the TOCTOU window in EnforceSessionLimit.
+//
+// KEYS[1] = account_sessions:{accountID}
+// ARGV[1] = maxSessions (number of sessions to keep)
+// Returns: array of evicted session ID strings (may be empty)
+var evictOldestSessionsScript = redis.NewScript(`
+local indexKey = KEYS[1]
+local maxSessions = tonumber(ARGV[1])
+local cjson = require('cjson')
+
+local sessionIDs = redis.call('SMEMBERS', indexKey)
+if #sessionIDs <= maxSessions then
+    return {}
+end
+
+-- Read all session data to get last_active_at timestamps
+local sessions = {}
+for i = 1, #sessionIDs do
+    local data = redis.call('GET', 'session:' .. sessionIDs[i])
+    if data then
+        local ok, obj = pcall(cjson.decode, data)
+        if ok and obj.last_active_at then
+            table.insert(sessions, {id = sessionIDs[i], ts = obj.last_active_at})
+        end
+    end
+end
+
+-- Sort by last_active_at (ascending = oldest first)
+table.sort(sessions, function(a, b) return a.ts < b.ts end)
+
+-- Evict the oldest sessions exceeding the limit
+local toRemove = #sessions - maxSessions
+local evicted = {}
+for i = 1, toRemove do
+    redis.call('DEL', 'session:' .. sessions[i].id)
+    redis.call('SREM', indexKey, sessions[i].id)
+    table.insert(evicted, sessions[i].id)
+end
+return evicted
 `)
 
 // TokenRevoker revokes all tokens for a given session.
@@ -481,62 +524,44 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 	return nil
 }
 
-// EnforceSessionLimit checks and enforces the maximum concurrent session limit.
-// When the limit is exceeded, the oldest sessions are revoked.
-// Session key deletions are batched into a single Redis DEL call for efficiency.
+// EnforceSessionLimit ensures that the account does not exceed the maximum
+// number of concurrent sessions. Uses an atomic Lua script to eliminate the
+// TOCTOU window between reading the session list and deleting excess sessions.
 func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID string) error {
 	if s.maxSessions <= 0 {
 		return nil
 	}
 
-	sessions, err := s.ListSessionsByAccount(ctx, accountID)
-	if err != nil {
-		return fmt.Errorf("list sessions: %w", err)
+	if s.tokenRevoker == nil {
+		return ErrTokenRevokerNotConfigured
 	}
 
-	if len(sessions) <= s.maxSessions {
+	indexKey := s.buildAccountSessionsKey(accountID)
+	rdb := s.redis.GetClient()
+
+	raw, err := evictOldestSessionsScript.Run(ctx, rdb, []string{indexKey}, s.maxSessions).Result()
+	if err != nil && err != redis.Nil {
+		return fmt.Errorf("evict oldest sessions: %w", err)
+	}
+
+	evictedIDs, _ := raw.([]interface{})
+	if len(evictedIDs) == 0 {
 		return nil
 	}
 
-	// Sort by LastActiveAt and revoke the oldest
-	sort.Slice(sessions, func(i, j int) bool {
-		return sessions[i].LastActiveAt.Before(sessions[j].LastActiveAt)
-	})
-
-	toRemove := len(sessions) - s.maxSessions
-	keys := make([]string, 0, toRemove)
-
-	for i := 0; i < toRemove; i++ {
-		sid := sessions[i].ID
-		s.logger.Info("Revoking old session due to limit",
+	// Revoke tokens for evicted sessions (requires external calls, cannot be done in Lua)
+	for _, id := range evictedIDs {
+		sid, _ := id.(string)
+		if sid == "" {
+			continue
+		}
+		s.logger.Info("Evicted oldest session due to limit",
 			zap.String("session_id", sid),
 			zap.String("account_id", accountID))
 
-		if s.tokenRevoker != nil {
-			if err := s.tokenRevoker.RevokeAllForSession(ctx, sid); err != nil {
-				s.logger.Warn("Failed to revoke tokens for session during limit enforcement",
-					zap.String("session_id", sid), zap.Error(err))
-			}
-		} else {
-			return ErrTokenRevokerNotConfigured
-		}
-		keys = append(keys, s.buildSessionKey(sid))
-	}
-
-	// Batch delete all excess session keys in a single Redis call
-	if len(keys) > 0 {
-		if err := s.redis.Del(ctx, keys...); err != nil {
-			s.logger.Error("Failed to batch delete sessions", zap.String("account_id", accountID), zap.Error(err))
-			return fmt.Errorf("batch delete sessions: %w", err)
-		}
-	}
-
-	// Remove excess sessions from the account index
-	indexKey := s.buildAccountSessionsKey(accountID)
-	for i := 0; i < toRemove; i++ {
-		if err := s.redis.SRem(ctx, indexKey, sessions[i].ID); err != nil {
-			s.logger.Warn("Failed to remove session from account index",
-				zap.String("session_id", sessions[i].ID), zap.Error(err))
+		if err := s.tokenRevoker.RevokeAllForSession(ctx, sid); err != nil {
+			s.logger.Warn("Failed to revoke tokens for evicted session",
+				zap.String("session_id", sid), zap.Error(err))
 		}
 	}
 

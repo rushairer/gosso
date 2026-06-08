@@ -38,6 +38,7 @@ smtp:
     username: ""
     password: ""
     from: "noreply@gosso.com"
+    tls_policy: "notls"
 log:
     level: 0 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
 auth:

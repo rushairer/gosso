@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- SMTP TLS policy is now configurable via `smtp.tls_policy` config field (values: `opportunistic`, `mandatory`, `notls`) — production should set `mandatory` to prevent plaintext downgrade (`config/config.go`, `internal/notification/service/email_service.go`).
+- CORS `allowed_origins` is now required in production mode (`debug: false`) — server fails to start if not configured, preventing silent fallback to `localhost:8080` (`cmd/gouno/web_engine.go`).
 - Removed hardcoded database password from `config/test.yaml` — now references `GOUNO_DATABASE_DRIVERS_POSTGRES_DSN` environment variable instead of plaintext `gosso123`.
 - Removed hardcoded password placeholder from `config/redis.conf` — password is now set via `--requirepass` at startup through `docker-compose.yml`.
 - `ForgotPassword` log now masks email address using `utility.MaskEmail` instead of logging raw PII (`internal/auth/controller/auth_controller.go`).
@@ -28,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - SocialCallback responses now include `Cache-Control: no-store` and `Pragma: no-cache` headers to prevent token caching by proxies (`internal/auth/controller/auth_controller.go`).
 
 ### Changed
+- `InitializeAuthModule` now accepts an `AuthModuleConfig` struct instead of 15 positional parameters — improves readability and maintainability (`internal/auth/module.go`, `cmd/gouno/web_modules.go`).
+- `AuthController.RegisterRoutes` now accepts an `AuthRouteConfig` struct instead of 7 positional middleware parameters (`internal/auth/controller/auth_controller.go`, `router/web.go`).
+- `EnforceSessionLimit` now uses an atomic Lua script (`evictOldestSessionsScript`) to read and evict excess sessions in a single Redis EVAL — eliminates TOCTOU window where new sessions could be orphaned (`internal/session/service/session_service.go`).
+- `ConfigManager` mutex removed — was unnecessary since config is only read/written during single-goroutine startup initialization (`config/config_manager.go`).
+- `AccountService` inline `errors.New(...)` for business rule violations replaced with package-level sentinel errors (`internal/account/service/errors.go`, `internal/account/service/account_service.go`).
 - `SetMFAChecker` now panics on nil — consistent with `WithSessionRevoker` and `WithOAuth2ClientDeleter` fail-fast pattern; removed redundant nil check in `HandleCallback` (`internal/auth/service/social_login_service.go`).
 - `late_bind.go` type assertions now use comma-ok pattern with explicit panic messages — prevents confusing nil pointer dereference on type mismatch (`internal/account/service/late_bind.go`).
 - Makefile binary name changed from `gouno` to `gosso` — consistent with Dockerfile and CI build (`Makefile`).
