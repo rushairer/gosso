@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,12 +11,15 @@ import (
 	"testing"
 	"time"
 
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	"github.com/rushairer/gosso/internal/auth/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
@@ -35,6 +39,7 @@ type mockAuthOrchestrator struct {
 	validateSessionFn func() (*sessionDomain.Session, error)
 	listSessionsFn    func() ([]*sessionDomain.Session, error)
 	revokeSessionFn   func() error
+	mfaSvc            *service.MFAService
 }
 
 func (m *mockAuthOrchestrator) LoginByUsernamePassword(_ context.Context, _ *service.LoginRequest) (*service.LoginResult, error) {
@@ -90,7 +95,7 @@ func (m *mockAuthOrchestrator) ConfirmVerificationCredential(_ context.Context, 
 	return fmt.Errorf("not implemented")
 }
 
-func (m *mockAuthOrchestrator) MFAService() *service.MFAService         { return nil }
+func (m *mockAuthOrchestrator) MFAService() *service.MFAService { return m.mfaSvc }
 func (m *mockAuthOrchestrator) PasskeyService() *service.PasskeyService { return nil }
 
 type mockTokenManager struct {
@@ -133,6 +138,68 @@ func (m *mockTokenManager) AccessExpiry() time.Duration {
 	return 15 * time.Minute
 }
 
+// ──────────────────────────────────────────────
+// Mock credential repository for MFA tests
+// ──────────────────────────────────────────────
+
+type mockCredentialRepoForController struct {
+	findByAccountAndTypeResults map[accountDomain.CredentialType][]*accountDomain.Credential
+	findByAccountAndTypeErr     error
+	createCredentialsErr        error
+	softDeleteCredentialErr     error
+}
+
+func (m *mockCredentialRepoForController) CreateCredentials(_ context.Context, _ *sql.Tx, _ []*accountDomain.Credential) error {
+	return m.createCredentialsErr
+}
+
+func (m *mockCredentialRepoForController) FindByAccountAndType(_ context.Context, _ string, credType accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	if m.findByAccountAndTypeErr != nil {
+		return nil, m.findByAccountAndTypeErr
+	}
+	if m.findByAccountAndTypeResults == nil {
+		return nil, nil
+	}
+	return m.findByAccountAndTypeResults[credType], nil
+}
+
+func (m *mockCredentialRepoForController) FindByTypeAndIdentifier(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+	return nil, nil
+}
+
+func (m *mockCredentialRepoForController) FindPasswordCredential(_ context.Context, _ string) (*accountDomain.Credential, error) {
+	return nil, nil
+}
+
+func (m *mockCredentialRepoForController) UpdateCredential(_ context.Context, _ *sql.Tx, _ *accountDomain.Credential) error {
+	return nil
+}
+
+func (m *mockCredentialRepoForController) SoftDeleteCredentialsByAccount(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+	return nil
+}
+
+func (m *mockCredentialRepoForController) SoftDeleteCredential(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+	return m.softDeleteCredentialErr
+}
+
+func (m *mockCredentialRepoForController) FindByAccountAndTypeForUpdate(_ context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	return nil, nil
+}
+
+func (m *mockCredentialRepoForController) VerifyFirstUnverifiedTOTP(_ context.Context, _ *sql.Tx, _ string) (bool, error) {
+	return false, nil
+}
+
+// newTestMFAService creates an MFAService backed by sqlmock for controller-level tests.
+func newTestMFAService(t *testing.T, credRepo accountRepo.CredentialRepository) (*service.MFAService, sqlmock.Sqlmock) {
+	t.Helper()
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	svc := service.NewMFAService(credRepo, db, "test-issuer", zap.NewNop())
+	return svc, mock
+}
 // ──────────────────────────────────────────────
 // Test helpers
 // ──────────────────────────────────────────────
@@ -855,4 +922,194 @@ func TestRevokeSession_EmptyID(t *testing.T) {
 	if w.Code == http.StatusBadRequest {
 		assert.Contains(t, w.Body.String(), "session id required")
 	}
+}
+
+// ──────────────────────────────────────────────
+// setupAuthControllerWithMFA helper
+// ──────────────────────────────────────────────
+
+func setupAuthControllerWithMFA(claims *tokenDomain.AccessTokenClaims, mfaSvc *service.MFAService) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyClaims, claims)
+		ctx.Next()
+	})
+
+	authSvc := &mockAuthOrchestrator{mfaSvc: mfaSvc}
+	tokenMgr := &mockTokenManager{accessExpiry: 15 * time.Minute}
+
+	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, false, zap.NewNop())
+	api := engine.Group("/api")
+	ctrl.RegisterRoutes(api, AuthRouteConfig{})
+
+	return engine
+}
+
+// ──────────────────────────────────────────────
+// MFA controller tests with real MFAService (sqlmock-backed)
+// ──────────────────────────────────────────────
+
+func TestMFAEnroll_Success(t *testing.T) {
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
+			accountDomain.CredentialTypeTOTP: nil,
+		},
+	}
+	mfaSvc, mock := newTestMFAService(t, credRepo)
+
+	// EnrollTOTP: deleteUnverifiedTOTP (Begin/Commit empty tx) + main (Begin/CreateCredentials/Commit)
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
+	claims := &tokenDomain.AccessTokenClaims{AccountID: "account-001", SessionID: "session-001"}
+	engine := setupAuthControllerWithMFA(claims, mfaSvc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/enroll", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.NotEmpty(t, data["secret"])
+	assert.NotEmpty(t, data["otpauth_url"])
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestMFAEnroll_ServiceError(t *testing.T) {
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
+			accountDomain.CredentialTypeTOTP: nil,
+		},
+		createCredentialsErr: fmt.Errorf("db error"),
+	}
+	mfaSvc, mock := newTestMFAService(t, credRepo)
+
+	// deleteUnverifiedTOTP: Begin/Commit (empty tx)
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+	// main tx: Begin/CreateCredentials fails/Rollback
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+
+	claims := &tokenDomain.AccessTokenClaims{AccountID: "account-001", SessionID: "session-001"}
+	engine := setupAuthControllerWithMFA(claims, mfaSvc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/enroll", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestMFADisable_Success(t *testing.T) {
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
+			accountDomain.CredentialTypeTOTP: {
+				{ID: "cred-totp-001", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Verified: true},
+			},
+		},
+	}
+	mfaSvc, mock := newTestMFAService(t, credRepo)
+
+	// DisableTOTP: Begin/Commit (single tx)
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
+	claims := &tokenDomain.AccessTokenClaims{AccountID: "account-001", SessionID: "session-001"}
+	engine := setupAuthControllerWithMFA(claims, mfaSvc)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/mfa", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestMFADisable_ServiceError(t *testing.T) {
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
+			accountDomain.CredentialTypeTOTP: {
+				{ID: "cred-totp-001", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Verified: true},
+			},
+		},
+		softDeleteCredentialErr: fmt.Errorf("delete failed"),
+	}
+	mfaSvc, mock := newTestMFAService(t, credRepo)
+
+	// DisableTOTP: Begin/SoftDelete fails/Rollback
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+
+	claims := &tokenDomain.AccessTokenClaims{AccountID: "account-001", SessionID: "session-001"}
+	engine := setupAuthControllerWithMFA(claims, mfaSvc)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/mfa", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestMFAGenerateBackupCodes_Success(t *testing.T) {
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
+			accountDomain.CredentialTypeBackupCode: nil,
+		},
+	}
+	mfaSvc, mock := newTestMFAService(t, credRepo)
+
+	// GenerateBackupCodes: Begin/Commit (single tx)
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
+	claims := &tokenDomain.AccessTokenClaims{AccountID: "account-001", SessionID: "session-001"}
+	engine := setupAuthControllerWithMFA(claims, mfaSvc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/backup-codes", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	codes := data["backup_codes"].([]any)
+	assert.Len(t, codes, 10)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestMFAGenerateBackupCodes_ServiceError(t *testing.T) {
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
+			accountDomain.CredentialTypeBackupCode: nil,
+		},
+		createCredentialsErr: fmt.Errorf("db error"),
+	}
+	mfaSvc, mock := newTestMFAService(t, credRepo)
+
+	// GenerateBackupCodes: Begin/CreateCredentials fails/Rollback
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+
+	claims := &tokenDomain.AccessTokenClaims{AccountID: "account-001", SessionID: "session-001"}
+	engine := setupAuthControllerWithMFA(claims, mfaSvc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/backup-codes", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }

@@ -394,6 +394,69 @@ func TestPasskey_LoginComplete_Success(t *testing.T) {
 	assert.Equal(t, "access-123", resp["access_token"])
 }
 
+// ──────────────────────────────────────────────
+// NewPasskeyController
+// ──────────────────────────────────────────────
+
+func TestNewPasskeyController(t *testing.T) {
+	authSvc := &mockAuthOrchForPasskey{}
+	tokenMgr := &mockTokenMgrForPasskey{}
+	ctrl := NewPasskeyController(nil, authSvc, tokenMgr, zap.NewNop())
+
+	assert.NotNil(t, ctrl)
+	assert.Nil(t, ctrl.passkeySvc)
+	assert.NotNil(t, ctrl.logger)
+}
+
+// ──────────────────────────────────────────────
+// RegisterRoutes — verify all routes are registered
+// ──────────────────────────────────────────────
+
+func TestPasskeyRegisterRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+
+	ctrl := NewPasskeyController(nil, &mockAuthOrchForPasskey{}, &mockTokenMgrForPasskey{}, zap.NewNop())
+
+	jwtAuth := func(ctx *gin.Context) { ctx.Next() }
+	rateLimit := func(ctx *gin.Context) { ctx.Next() }
+
+	api := engine.Group("/api/auth")
+	ctrl.RegisterRoutes(api, jwtAuth, rateLimit)
+
+	// Each entry sends a request and expects a specific status.
+	// We use input that fails early (bad auth, missing fields, nil passkeySvc)
+	// so the handler never needs a real PasskeyService.
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+		want   int
+	}{
+		{"register/begin JWT missing", http.MethodPost, "/api/auth/passkey/register/begin", "", http.StatusUnauthorized},
+		{"register/complete JWT missing", http.MethodPost, "/api/auth/passkey/register/complete", "", http.StatusUnauthorized},
+		{"passkeys list JWT missing", http.MethodGet, "/api/auth/passkeys", "", http.StatusUnauthorized},
+		{"passkeys delete JWT missing", http.MethodDelete, "/api/auth/passkeys/some-id", "", http.StatusUnauthorized},
+		{"mfa/begin nil passkeySvc", http.MethodPost, "/api/auth/passkey/mfa/begin", `{"mfa_token":"tok"}`, http.StatusServiceUnavailable},
+		{"mfa/complete bad token", http.MethodPost, "/api/auth/passkey/mfa/complete", `{"mfa_token":"tok","request_id":"rid"}`, http.StatusUnauthorized},
+		{"login/begin bad uuid", http.MethodPost, "/api/auth/passkey/login/begin", `{"account_id":"bad"}`, http.StatusBadRequest},
+		{"login/complete missing field", http.MethodPost, "/api/auth/passkey/login/complete", "{}", http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, bytes.NewBufferString(tt.body))
+			if tt.body != "" {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			w := httptest.NewRecorder()
+			engine.ServeHTTP(w, req)
+			assert.Equal(t, tt.want, w.Code)
+		})
+	}
+}
+
 func gouno_test_helper(result *service.LoginResult) gin.H {
 	return gin.H{
 		"access_token":  result.AccessToken,
