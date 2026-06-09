@@ -460,9 +460,10 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 	for i, cmd := range cmds {
 		data, err := cmd.Result()
 		if err != nil {
-			// Pipeline results can be unreliable (e.g. miniredis returns
-			// redis.Nil for a valid key when a sibling key is missing).
-			// Retry with a direct GET to confirm whether the key exists.
+			// Retry with a direct GET. This handles miniredis (used in tests)
+			// which returns redis.Nil for valid keys when a sibling key is
+			// missing in a pipeline. Production Redis does not exhibit this
+			// behavior, so this retry is a no-op in production.
 			data, err = s.redis.Get(ctx, entries[i].key)
 			if err != nil {
 				staleIDs = append(staleIDs, entries[i].rawID)

@@ -304,22 +304,8 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 	// This prevents duplicate accounts when a user registers via email/password first
 	// and later uses social login with the same email.
 	if email != "" {
-		existingCred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, accountDomain.CredentialTypeEmail, email)
-		if err == nil && existingCred != nil && existingCred.IsVerified() {
-			// Link federated identity to existing account (only if email is verified,
-			// preventing account takeover via an unverified email from a social provider).
-			identity := accountDomain.NewFederatedIdentity(existingCred.AccountID, accountDomain.Provider(provider), providerUserID, nil)
-			linkErr := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-				return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
-			})
-			if linkErr != nil {
-				if isUniqueViolation(linkErr) {
-					// Another concurrent request already linked this identity; proceed with login
-					return s.loginExistingUser(ctx, existingCred.AccountID, ip, userAgent)
-				}
-				return nil, fmt.Errorf("link federated identity: %w", linkErr)
-			}
-			return s.loginExistingUser(ctx, existingCred.AccountID, ip, userAgent)
+		if result, err := s.linkByEmailIfVerified(ctx, provider, providerUserID, email, ip, userAgent); result != nil || err != nil {
+			return result, err
 		}
 	}
 
@@ -354,22 +340,12 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 	})
 	if err != nil {
 		// Handle race condition: concurrent social logins with the same email.
-		// The pre-check above passed, but another request created the account between the check and the transaction.
-		// The DB unique constraint on (credential_type, identifier) caught it — fall back to linking.
+		// The pre-check above passed, but another request created the account
+		// between the check and the transaction. The DB unique constraint on
+		// (credential_type, identifier) caught it — fall back to linking.
 		if email != "" && isUniqueViolation(err) {
-			existingCred, findErr := s.credentialRepo.FindByTypeAndIdentifier(ctx, accountDomain.CredentialTypeEmail, email)
-			if findErr == nil && existingCred != nil && existingCred.IsVerified() {
-				identity := accountDomain.NewFederatedIdentity(existingCred.AccountID, accountDomain.Provider(provider), providerUserID, nil)
-				linkErr := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-					return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
-				})
-				if linkErr != nil {
-					if isUniqueViolation(linkErr) {
-						return s.loginExistingUser(ctx, existingCred.AccountID, ip, userAgent)
-					}
-					return nil, fmt.Errorf("link federated identity after race: %w", linkErr)
-				}
-				return s.loginExistingUser(ctx, existingCred.AccountID, ip, userAgent)
+			if result, linkErr := s.linkByEmailIfVerified(ctx, provider, providerUserID, email, ip, userAgent); result != nil || linkErr != nil {
+				return result, linkErr
 			}
 		}
 		return nil, err
@@ -405,8 +381,33 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 	}, nil
 }
 
-// isUniqueViolation checks if an error is a database unique constraint violation.
-// Handles PostgreSQL (code 23505) and SQLite (UNIQUE constraint failed).
+// linkByEmailIfVerified attempts to link a federated identity to an existing account
+// that has a verified email credential matching the given email. Returns (nil, nil)
+// if no verified email credential exists, allowing the caller to fall through to
+// account creation. Handles concurrent linking via unique constraint deduplication.
+func (s *SocialLoginService) linkByEmailIfVerified(ctx context.Context, provider, providerUserID, email, ip, userAgent string) (*LoginResult, error) {
+	existingCred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, accountDomain.CredentialTypeEmail, email)
+	if err != nil || existingCred == nil || !existingCred.IsVerified() {
+		return nil, nil // No verified email found — caller should create a new account
+	}
+
+	// Link federated identity to existing account (only if email is verified,
+	// preventing account takeover via an unverified email from a social provider).
+	identity := accountDomain.NewFederatedIdentity(existingCred.AccountID, accountDomain.Provider(provider), providerUserID, nil)
+	linkErr := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
+	})
+	if linkErr != nil {
+		if isUniqueViolation(linkErr) {
+			// Another concurrent request already linked this identity; proceed with login
+			return s.loginExistingUser(ctx, existingCred.AccountID, ip, userAgent)
+		}
+		return nil, fmt.Errorf("link federated identity: %w", linkErr)
+	}
+	return s.loginExistingUser(ctx, existingCred.AccountID, ip, userAgent)
+}
+
+// isUniqueViolation checks if an error is a PostgreSQL unique constraint violation (code 23505).
 func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false
@@ -415,5 +416,5 @@ func isUniqueViolation(err error) bool {
 	if errors.As(err, &pgErr) {
 		return pgErr.Code == "23505"
 	}
-	return strings.Contains(err.Error(), "UNIQUE constraint failed")
+	return false
 }

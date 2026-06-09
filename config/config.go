@@ -206,6 +206,10 @@ func (c *GoUnoConfig) Validate() error {
 	if c.DatabaseConfig.GetDefaultDriver().DSN == "" {
 		return fmt.Errorf("database: default driver DSN is empty")
 	}
+	// Reject the built-in development DSN to prevent accidentally running with
+	// default credentials. This is a compile-time constant comparison (not a
+	// pattern match), so it only catches the exact default string — any real
+	// DSN configured via env vars or YAML will differ.
 	if c.DatabaseConfig.GetDefaultDriver().DSN == defaultPostgresDSN {
 		return fmt.Errorf("database: default driver DSN must be explicitly configured (the development default is not allowed)")
 	}

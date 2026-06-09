@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- `BindFederatedIdentity` race condition: concurrent requests that bypass the pre-check now receive a clean `ErrFederatedIdentityAlreadyBound` error instead of a raw database error. Idempotent binding (same account, same identity) returns success (`internal/account/service/account_service.go`).
+- `RegisterAccount` unique constraint errors now correctly distinguish between email, phone, and username conflicts instead of always returning `ErrUsernameAlreadyTaken` (`internal/account/service/account_service.go`).
+- `password_reset_service.go` no longer blocks the HTTP handler with `time.Sleep(100ms)` on Redis delete failure — retries immediately and falls back to TTL-based expiry (`internal/auth/service/password_reset_service.go`).
 - `SoftDeleteRolesByAccountID` referenced non-existent `updated_at` column on `account_roles` table — removed from SQL query (`internal/account/repository/role_repository_impl.go`).
 - `SoftDeleteByAccountID` for WebAuthn referenced non-existent `updated_at` column on `webauthn_credentials` table — removed from SQL query (`internal/auth/repository/webauthn_repository_impl.go`).
 - Added missing `totp_encryption_key` to `config/development.yaml` and `config/test.yaml` — previously server would fail config validation on startup unless the key was supplied via environment variable (`config/development.yaml`, `config/test.yaml`).
@@ -39,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CSP `style-src 'unsafe-inline'` replaced with per-request nonce — prevents style-based XSS injection. Templates now receive `CSPNonce` for inline `<style>` and `<script>` tags (`middleware/middleware.go`, `internal/oauth2/controller/template/consent.html`, `internal/oauth2/controller/template/device.html`).
 
 ### Changed
+- `createNewUser` in `SocialLoginService` refactored: extracted `linkByEmailIfVerified` helper to reduce nesting depth and deduplicate the email-based account linking logic (`internal/auth/service/social_login_service.go`).
+- `isUniqueViolation` no longer handles SQLite unique constraint errors — project uses PostgreSQL exclusively (`internal/auth/service/social_login_service.go`).
+- `ListSessionsByAccount` pipeline fallback comment clarified to explain miniredis compatibility requirement (`internal/session/service/session_service.go`).
+- `Validate()` DSN rejection now includes a comment explaining the rationale and mechanism of the compile-time constant comparison (`config/config.go`).
 - Password validation now requires at least one special character (punctuation or symbol) in addition to uppercase, lowercase, and digit (`internal/utility/password.go`).
 - `BindSessionRevoker` and `BindOAuth2ClientDeleter` now return `error` instead of panicking on type assertion failure — prevents server crash on unexpected input (`internal/account/service/late_bind.go`, `cmd/gouno/web_modules.go`).
 - Email templates now use dynamic expiry text from `EmailService` TTL fields instead of hardcoded "10 minutes" / "30 minutes" — stays in sync with `VerifyCodeTTL` and `PasswordResetTokenTTL` config values (`internal/notification/service/email_service.go`, `internal/auth/module.go`).

@@ -34,7 +34,6 @@ const (
 	PasswordResetCooldownTTL       = 60 * time.Second
 	PasswordResetMaxAttempts       = 5
 	PasswordResetRevokeTimeout     = 30 * time.Second
-	PasswordResetRetryDelay        = 100 * time.Millisecond
 	PasswordResetSyncRevokeTimeout = 5 * time.Second
 )
 
@@ -271,11 +270,11 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	// If the process crashes between token deletion and DB update, the worst case
 	// is that the user must request a new reset link — a safe failure mode.
 	if err := s.redis.Del(ctx, tokenKey); err != nil {
-		time.Sleep(PasswordResetRetryDelay)
+		// Retry once immediately without blocking the HTTP handler.
+		// If the retry also fails, the token will expire naturally via TTL.
 		if retryErr := s.redis.Del(ctx, tokenKey); retryErr != nil {
-			s.logger.Error("Failed to delete reset token from Redis after retry, aborting password reset",
+			s.logger.Warn("Failed to delete reset token from Redis after retry, token will expire via TTL",
 				zap.Error(retryErr), zap.String("token_hash", tokenHash))
-			return fmt.Errorf("delete reset token: %w", retryErr)
 		}
 	}
 

@@ -255,9 +255,10 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		return s.credentialRepo.CreateCredentials(ctx, tx, credentials)
 	})
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return nil, ErrUsernameAlreadyTaken
+		// Unique constraint violation: differentiate between username, email, and phone conflicts.
+		// The unique constraint can come from accounts.username or account_credentials (credential_type, identifier).
+		if isUniqueViolation(err) {
+			return nil, s.classifyRegistrationConflict(ctx, req)
 		}
 		return nil, err
 	}
@@ -483,7 +484,12 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 	}
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		// Check inside transaction to prevent TOCTOU race condition
+		// Check inside transaction to reduce TOCTOU window.
+		// FindByProvider uses the main DB connection (not tx), so two concurrent
+		// requests may both pass this check. The DB unique constraint on
+		// (provider, provider_user_id) is the authoritative guard — if the insert
+		// fails with a unique violation, we look up the existing identity and
+		// return ErrFederatedIdentityAlreadyBound instead of a raw DB error.
 		existing, err := s.federatedIdentityRepo.FindByProvider(ctx, provider, providerUserID)
 		if err == nil && existing != nil {
 			return ErrFederatedIdentityAlreadyBound
@@ -491,6 +497,19 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 		return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
 	})
 	if err != nil {
+		// Handle race condition: two concurrent requests both passed the
+		// FindByProvider check. The unique constraint caught the duplicate —
+		// look up the existing identity and return a clean business error.
+		if isUniqueViolation(err) {
+			existing, findErr := s.federatedIdentityRepo.FindByProvider(ctx, provider, providerUserID)
+			if findErr == nil && existing != nil {
+				if existing.AccountID == accountID {
+					// Already bound to this account — idempotent success
+					return nil
+				}
+				return ErrFederatedIdentityAlreadyBound
+			}
+		}
 		return err
 	}
 
@@ -684,4 +703,38 @@ func (s *accountServiceImpl) checkCredentialExists(ctx context.Context, credType
 
 func stringPtr(s string) *string {
 	return &s
+}
+
+// isUniqueViolation checks if an error is a PostgreSQL unique constraint violation (code 23505).
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505"
+	}
+	return false
+}
+
+// classifyRegistrationConflict determines the specific conflict cause when a
+// registration unique constraint violation occurs. It checks credential
+// existence to return a precise business error.
+func (s *accountServiceImpl) classifyRegistrationConflict(ctx context.Context, req *RegisterAccountRequest) error {
+	// Check email credential first (most common conflict)
+	if req.Email != "" {
+		cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, domain.CredentialTypeEmail, req.Email)
+		if err == nil && cred != nil {
+			return ErrEmailAlreadyRegistered
+		}
+	}
+	// Check phone credential
+	if req.Phone != "" {
+		cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, domain.CredentialTypePhone, req.Phone)
+		if err == nil && cred != nil {
+			return ErrPhoneAlreadyRegistered
+		}
+	}
+	// If neither credential conflicts, it must be a username conflict
+	return ErrUsernameAlreadyTaken
 }

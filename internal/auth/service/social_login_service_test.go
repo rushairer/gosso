@@ -414,11 +414,6 @@ func TestIsUniqueViolation_PgErrorOtherCode(t *testing.T) {
 	assert.False(t, isUniqueViolation(pgErr))
 }
 
-func TestIsUniqueViolation_SQLiteError(t *testing.T) {
-	err := errors.New("UNIQUE constraint failed: users.email")
-	assert.True(t, isUniqueViolation(err))
-}
-
 func TestIsUniqueViolation_RegularError(t *testing.T) {
 	err := errors.New("something else")
 	assert.False(t, isUniqueViolation(err))
@@ -1110,7 +1105,7 @@ func TestCreateNewUser_RaceCondition_RetryLinkError(t *testing.T) {
 	result, err := h.svc.createNewUser(context.Background(), "google", "google-uid-race4", "race4@example.com", "Racer4", false, "127.0.0.1", "test-agent")
 	require.Error(t, err)
 	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "link federated identity after race")
+	assert.Contains(t, err.Error(), "link federated identity")
 }
 
 func TestCreateNewUser_CreateAccount_NonUniqueError(t *testing.T) {
