@@ -213,13 +213,12 @@ func TestLogoutByAccountID_SessionServiceError(t *testing.T) {
 	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, logger)
 
 	// Create session service WITHOUT setting tokenRevoker.
-	// RevokeAllForAccount will return ErrTokenRevokerNotConfigured.
+	// RevokeAllForAccount now gracefully skips token revocation and logs a warning.
 	sessionSvc := sessionService.NewSessionService(redisClient, logger)
 	logoutSvc := NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", logger)
 
 	err = logoutSvc.LogoutByAccountID(context.Background(), "account-001")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "revoke all sessions for account")
+	assert.NoError(t, err)
 }
 
 func TestLogoutByAccountID_RevokeAccountTokensNonFatal(t *testing.T) {

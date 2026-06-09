@@ -138,6 +138,7 @@ func (e *TestEnv) TruncateAll(ctx context.Context) error {
 		"account_credentials",
 		"accounts",
 		"oauth2_clients",
+		"oauth2_consents",
 		"webauthn_credentials",
 		"audit_record",
 		"audit_entry",

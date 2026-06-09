@@ -30,6 +30,7 @@ WORKDIR /app
 COPY --from=builder /build/bin/gosso /app/gosso
 COPY --from=builder /build/config /app/config
 COPY --from=builder /build/db/migrations /app/db/migrations
+COPY --from=builder /build/script/entrypoint.sh /app/entrypoint.sh
 
 RUN chown -R gosso:gosso /app
 
@@ -40,5 +41,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/readiness || exit 1
 
-ENTRYPOINT ["/app/gosso"]
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["web", "-e", "production"]

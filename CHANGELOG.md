@@ -8,12 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
-- `BindFederatedIdentity` race condition: concurrent requests that bypass the pre-check now receive a clean `ErrFederatedIdentityAlreadyBound` error instead of a raw database error. Idempotent binding (same account, same identity) returns success (`internal/account/service/account_service.go`).
-- `RegisterAccount` unique constraint errors now correctly distinguish between email, phone, and username conflicts instead of always returning `ErrUsernameAlreadyTaken` (`internal/account/service/account_service.go`).
-- `password_reset_service.go` no longer blocks the HTTP handler with `time.Sleep(100ms)` on Redis delete failure — retries immediately and falls back to TTL-based expiry (`internal/auth/service/password_reset_service.go`).
-- `SoftDeleteRolesByAccountID` referenced non-existent `updated_at` column on `account_roles` table — removed from SQL query (`internal/account/repository/role_repository_impl.go`).
-- `SoftDeleteByAccountID` for WebAuthn referenced non-existent `updated_at` column on `webauthn_credentials` table — removed from SQL query (`internal/auth/repository/webauthn_repository_impl.go`).
-- Added missing `totp_encryption_key` to `config/development.yaml` and `config/test.yaml` — previously server would fail config validation on startup unless the key was supplied via environment variable (`config/development.yaml`, `config/test.yaml`).
+- Integration tests now exit with code 1 (instead of 0) when test infrastructure is unavailable — prevents CI from silently passing when Docker services fail to start (`internal/auth/service/auth_integration_test.go`, `internal/session/service/session_integration_test.go`).
+- `TruncateAll` in test utilities now includes `oauth2_consents` table — prevents test data pollution between integration test runs (`internal/testutil/testutil.go`).
+- `SessionService.RevokeAllForAccount` no longer aborts with `ErrTokenRevokerNotConfigured` after deleting the session index — token revocation is now skipped with a warning log when the revoker is not configured, ensuring session keys are always cleaned up (`internal/session/service/session_service.go`).
+- `WebAuthnCredentialRepository.UpdateCredential` now checks `RowsAffected` — returns `ErrWebAuthnCredentialNotFound` when the credential does not exist or was soft-deleted (`internal/auth/repository/webauthn_repository_impl.go`).
+- `WebAuthnCredentialRepository.FindByAccountID` now wraps `rows.Err()` with context for consistent error reporting (`internal/auth/repository/webauthn_repository_impl.go`).
+- `RegisterAccount` now initializes `Metadata` to an empty map when `req.Metadata` is nil — prevents nil-map panics and JSON serialization of `null` (`internal/account/service/account_service.go`).
+- `SocialLoginService.SetAuditor` now panics on nil input — consistent with `SetMFAChecker` and prevents silent audit logging failures at startup (`internal/auth/service/social_login_service.go`).
+- `Audit.LogSync` now uses the same request-ID enrichment logic as `Audit.Log` — includes warning logs on metadata parse failures and consistent fallback behavior (`internal/audit/service/audit.go`).
+- Deduplicated `isUniqueViolation` helper into shared `dbutil.IsUniqueViolation` (`internal/db/pgutil.go`).
+- Production `.env.production.example` now uses `GOUNO_DATABASE_DRIVERS_POSTGRES_DSN` matching `production.yaml` — previously used `GOUNO_DB_DSN` which caused empty DSN at runtime (`.env.production.example`).
+- Added missing `GOUNO_SMTP_TLS_POLICY` and OAuth provider variable placeholders to `.env.production.example`.
+- PostgreSQL production config now uses `log_destination = 'stderr'` instead of `logging_collector` — proper Docker log collection (`config/postgresql.conf`).
+- Development `docker-compose.development.yml` now includes `GOUNO_DATABASE_DRIVERS_POSTGRES_DSN` and `GOUNO_REDIS_DSN` environment variables, plus `env_file` directive — previously failed on direct `docker-compose up` without `make` (`docker-compose.development.yml`).
+- Production Docker image now runs `gosso migrate up` automatically via entrypoint script before starting the application — prevents schema drift when deploying updates (`Dockerfile`, `script/entrypoint.sh`).
 
 ### Security
 - `TOTPEncryptionKey` is now unconditionally required in config validation — previously could be empty when WebAuthn was not configured, causing runtime TOTP encryption failures (`config/config.go`).

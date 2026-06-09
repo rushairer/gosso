@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/account/domain"
@@ -195,7 +194,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		Status:      domain.AccountStatusActive,
 		Locale:      req.Locale,
 		Timezone:    req.Timezone,
-		Metadata:    req.Metadata,
+		Metadata:    nonNilMap(req.Metadata),
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -257,7 +256,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	if err != nil {
 		// Unique constraint violation: differentiate between username, email, and phone conflicts.
 		// The unique constraint can come from accounts.username or account_credentials (credential_type, identifier).
-		if isUniqueViolation(err) {
+		if dbutil.IsUniqueViolation(err) {
 			return nil, s.classifyRegistrationConflict(ctx, req)
 		}
 		return nil, err
@@ -500,7 +499,7 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 		// Handle race condition: two concurrent requests both passed the
 		// FindByProvider check. The unique constraint caught the duplicate —
 		// look up the existing identity and return a clean business error.
-		if isUniqueViolation(err) {
+		if dbutil.IsUniqueViolation(err) {
 			existing, findErr := s.federatedIdentityRepo.FindByProvider(ctx, provider, providerUserID)
 			if findErr == nil && existing != nil {
 				if existing.AccountID == accountID {
@@ -705,16 +704,13 @@ func stringPtr(s string) *string {
 	return &s
 }
 
-// isUniqueViolation checks if an error is a PostgreSQL unique constraint violation (code 23505).
-func isUniqueViolation(err error) bool {
-	if err == nil {
-		return false
+// nonNilMap returns m if non-nil, otherwise an empty map.
+// Prevents nil-map panics and ensures JSON serialization produces {} instead of null.
+func nonNilMap(m map[string]any) map[string]any {
+	if m == nil {
+		return make(map[string]any)
 	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		return pgErr.Code == "23505"
-	}
-	return false
+	return m
 }
 
 // classifyRegistrationConflict determines the specific conflict cause when a

@@ -147,7 +147,10 @@ func (r *webAuthnCredentialRepositoryImpl) FindByAccountID(ctx context.Context, 
 		credentials = append(credentials, cred)
 	}
 
-	return credentials, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate webauthn credentials: %w", err)
+	}
+	return credentials, nil
 }
 
 func (r *webAuthnCredentialRepositoryImpl) UpdateCredential(ctx context.Context, tx *sql.Tx, cred *domain.WebAuthnCredential) error {
@@ -162,7 +165,7 @@ func (r *webAuthnCredentialRepositoryImpl) UpdateCredential(ctx context.Context,
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
-	_, err = tx.ExecContext(ctx, query,
+	result, err := tx.ExecContext(ctx, query,
 		cred.ID,
 		cred.SignCount,
 		transportsJSON,
@@ -171,6 +174,14 @@ func (r *webAuthnCredentialRepositoryImpl) UpdateCredential(ctx context.Context,
 	)
 	if err != nil {
 		return fmt.Errorf("update webauthn credential: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("%w: %s", ErrWebAuthnCredentialNotFound, cred.ID)
 	}
 
 	return nil

@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
@@ -94,6 +93,9 @@ func (s *SocialLoginService) SetMFAChecker(checker MFAChecker) {
 // SetAuditor sets the audit service dependency (setter injection to avoid circular constructor deps).
 // Must be called during initialization; not safe for concurrent use.
 func (s *SocialLoginService) SetAuditor(auditor *auditService.Auditor) {
+	if auditor == nil {
+		panic("SetAuditor: auditor must not be nil")
+	}
 	s.auditor = auditor
 }
 
@@ -343,7 +345,7 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 		// The pre-check above passed, but another request created the account
 		// between the check and the transaction. The DB unique constraint on
 		// (credential_type, identifier) caught it — fall back to linking.
-		if email != "" && isUniqueViolation(err) {
+		if email != "" && dbutil.IsUniqueViolation(err) {
 			if result, linkErr := s.linkByEmailIfVerified(ctx, provider, providerUserID, email, ip, userAgent); result != nil || linkErr != nil {
 				return result, linkErr
 			}
@@ -398,23 +400,11 @@ func (s *SocialLoginService) linkByEmailIfVerified(ctx context.Context, provider
 		return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
 	})
 	if linkErr != nil {
-		if isUniqueViolation(linkErr) {
+		if dbutil.IsUniqueViolation(linkErr) {
 			// Another concurrent request already linked this identity; proceed with login
 			return s.loginExistingUser(ctx, existingCred.AccountID, ip, userAgent)
 		}
 		return nil, fmt.Errorf("link federated identity: %w", linkErr)
 	}
 	return s.loginExistingUser(ctx, existingCred.AccountID, ip, userAgent)
-}
-
-// isUniqueViolation checks if an error is a PostgreSQL unique constraint violation (code 23505).
-func isUniqueViolation(err error) bool {
-	if err == nil {
-		return false
-	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		return pgErr.Code == "23505"
-	}
-	return false
 }

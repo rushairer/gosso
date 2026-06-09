@@ -245,9 +245,11 @@ func TestGenerateAuthState_Unique(t *testing.T) {
 func TestSocialLoginService_SetAuditor(t *testing.T) {
 	svc := newTestSocialLoginService()
 	assert.Nil(t, svc.auditor)
-	// SetAuditor accepts nil (no-op for audit-disabled mode)
-	svc.SetAuditor(nil)
-	assert.Nil(t, svc.auditor)
+
+	// SetAuditor panics on nil (consistent with SetMFAChecker)
+	assert.PanicsWithValue(t, "SetAuditor: auditor must not be nil", func() {
+		svc.SetAuditor(nil)
+	})
 }
 
 // ──────────────────────────────────────────────
@@ -395,29 +397,6 @@ var (
 		Status:      accountDomain.AccountStatusActive,
 	}
 )
-
-// ──────────────────────────────────────────────
-// isUniqueViolation
-// ──────────────────────────────────────────────
-
-func TestIsUniqueViolation_Nil(t *testing.T) {
-	assert.False(t, isUniqueViolation(nil))
-}
-
-func TestIsUniqueViolation_PgError(t *testing.T) {
-	pgErr := &pgconn.PgError{Code: "23505"}
-	assert.True(t, isUniqueViolation(pgErr))
-}
-
-func TestIsUniqueViolation_PgErrorOtherCode(t *testing.T) {
-	pgErr := &pgconn.PgError{Code: "23503"}
-	assert.False(t, isUniqueViolation(pgErr))
-}
-
-func TestIsUniqueViolation_RegularError(t *testing.T) {
-	err := errors.New("something else")
-	assert.False(t, isUniqueViolation(err))
-}
 
 // ──────────────────────────────────────────────
 // exchangeCode

@@ -9,6 +9,10 @@ services:
       - ENV=development
       - DB=postgres
       - DEBUG=true
+      - GOUNO_DATABASE_DRIVERS_POSTGRES_DSN=host=postgres user=${POSTGRES_USER:-gosso} password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set} dbname=${POSTGRES_DB:-gosso_dev} port=5432 sslmode=disable TimeZone=Asia/Shanghai
+      - GOUNO_REDIS_DSN=redis://redis:6379/0
+    env_file:
+      - .env.development
     volumes:
       - .:/app
       - go-mod-cache:/go/pkg/mod

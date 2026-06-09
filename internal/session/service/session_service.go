@@ -390,7 +390,8 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 			}
 		}
 	} else {
-		return ErrTokenRevokerNotConfigured
+		s.logger.Warn("Token revoker not configured, skipping token revocation for account sessions",
+			zap.String("account_id", accountID), zap.Int("count", len(sessionIDs)))
 	}
 
 	// Delete individual session keys.

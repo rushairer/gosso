@@ -133,6 +133,33 @@ func (a *Auditor) Do(
 	return nil
 }
 
+// enrichMeta injects request_id into the record's Meta JSON. It handles
+// unmarshal/marshal failures consistently with logging and fallback behavior.
+func (a *Auditor) enrichMeta(record *domain.AuditRecord, requestID string) {
+	var meta map[string]any
+	if record.Meta != nil {
+		if err := json.Unmarshal(record.Meta, &meta); err != nil {
+			a.logger.Warn("Failed to unmarshal audit meta, replacing with request_id only",
+				zap.Error(err), zap.String("request_id", requestID))
+			meta = map[string]any{"request_id": requestID, "parse_error": err.Error()}
+			marshaled, _ := json.Marshal(meta)
+			record.Meta = marshaled
+			return
+		}
+	}
+	if meta == nil {
+		meta = make(map[string]any)
+	}
+	meta["request_id"] = requestID
+	marshaled, err := json.Marshal(meta)
+	if err != nil {
+		a.logger.Warn("Failed to marshal enriched audit meta, preserving original",
+			zap.Error(err), zap.String("request_id", requestID))
+		return
+	}
+	record.Meta = marshaled
+}
+
 // Log submits an audit record for async batch write. Safe for nil receiver (no-op).
 // It enriches the record's Meta with the request ID from context when available.
 func (a *Auditor) Log(ctx context.Context, record *domain.AuditRecord) error {
@@ -140,30 +167,8 @@ func (a *Auditor) Log(ctx context.Context, record *domain.AuditRecord) error {
 		return nil
 	}
 
-	// Inject request_id into meta
 	if requestID := audit.RequestIDFromContext(ctx); requestID != "" {
-		var meta map[string]any
-		if record.Meta != nil {
-			if err := json.Unmarshal(record.Meta, &meta); err != nil {
-				a.logger.Warn("Failed to unmarshal audit meta, replacing with request_id only",
-					zap.Error(err), zap.String("request_id", requestID))
-				meta = map[string]any{"request_id": requestID, "parse_error": err.Error()}
-				marshaled, _ := json.Marshal(meta)
-				record.Meta = marshaled
-				return a.submit(ctx, record)
-			}
-		}
-		if meta == nil {
-			meta = make(map[string]any)
-		}
-		meta["request_id"] = requestID
-		marshaled, err := json.Marshal(meta)
-		if err != nil {
-			a.logger.Warn("Failed to marshal enriched audit meta, preserving original",
-				zap.Error(err), zap.String("request_id", requestID))
-			return a.submit(ctx, record)
-		}
-		record.Meta = marshaled
+		a.enrichMeta(record, requestID)
 	}
 
 	return a.submit(ctx, record)
@@ -198,21 +203,8 @@ func (a *Auditor) LogSync(ctx context.Context, record *domain.AuditRecord) error
 		return nil
 	}
 
-	// Inject request_id into meta (same logic as Log)
 	if requestID := audit.RequestIDFromContext(ctx); requestID != "" {
-		var meta map[string]any
-		if record.Meta != nil {
-			if err := json.Unmarshal(record.Meta, &meta); err != nil {
-				meta = map[string]any{"request_id": requestID, "parse_error": err.Error()}
-			}
-		}
-		if meta == nil {
-			meta = make(map[string]any)
-		}
-		meta["request_id"] = requestID
-		if marshaled, err := json.Marshal(meta); err == nil {
-			record.Meta = marshaled
-		}
+		a.enrichMeta(record, requestID)
 	}
 
 	query := `INSERT INTO audit_record (id, tx_id, account_id, action, actor, resource, "old", "new", meta, dd, created_at)

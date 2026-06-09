@@ -440,8 +440,15 @@ func TestSessionService_RevokeAllForAccount_NoTokenRevoker(t *testing.T) {
 	require.NoError(t, svc.CreateSession(ctx, session))
 	defer func() { _ = svc.DeleteSession(ctx, session.ID) }()
 
+	// Without a token revoker, RevokeAllForAccount should still succeed
+	// and clean up session keys (token revocation is skipped with a warning).
 	err := svc.RevokeAllForAccount(ctx, accountID)
-	assert.ErrorIs(t, err, ErrTokenRevokerNotConfigured)
+	assert.NoError(t, err)
+
+	// Verify sessions were cleaned up
+	sessions, err := svc.ListSessionsByAccount(ctx, accountID)
+	require.NoError(t, err)
+	assert.Len(t, sessions, 0)
 }
 
 // ──────────────────────────────────────────────

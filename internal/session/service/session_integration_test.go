@@ -4,6 +4,7 @@ package service_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -25,7 +26,8 @@ func TestMain(m *testing.M) {
 	var err error
 	env, err = testutil.SetupTestEnv(ctx)
 	if err != nil {
-		os.Exit(0)
+		fmt.Fprintf(os.Stderr, "Test infrastructure unavailable: %v\n", err)
+		os.Exit(1)
 	}
 	defer env.Cleanup()
 	os.Exit(m.Run())
