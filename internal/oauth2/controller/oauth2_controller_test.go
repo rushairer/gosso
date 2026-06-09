@@ -343,9 +343,9 @@ func TestSplitScope_ExtraSpaces(t *testing.T) {
 func TestToken_MissingGrantType(t *testing.T) {
 	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
-	body := `{"code":"abc"}`
+	body := "code=abc"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -462,9 +462,9 @@ func TestIntersectScopes_FullMatch(t *testing.T) {
 func TestToken_UnsupportedGrantType(t *testing.T) {
 	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
-	body := `{"grant_type":"password"}`
+	body := "grant_type=password"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -476,7 +476,7 @@ func TestToken_InvalidJSON(t *testing.T) {
 	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString("not json"))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -497,9 +497,9 @@ func TestToken_ClientCredentials_Success(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{"grant_type":"client_credentials","client_id":"cid-test","client_secret":"test-secret","scope":"openid profile"}`
+	body := "grant_type=client_credentials&client_id=cid-test&client_secret=test-secret&scope=openid profile"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -515,9 +515,9 @@ func TestToken_ClientCredentials_Success(t *testing.T) {
 func TestToken_ClientCredentials_MissingCredentials(t *testing.T) {
 	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
-	body := `{"grant_type":"client_credentials"}`
+	body := "grant_type=client_credentials"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -534,9 +534,9 @@ func TestToken_ClientCredentials_ClientNotFound(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{"grant_type":"client_credentials","client_id":"bad","client_secret":"secret"}`
+	body := "grant_type=client_credentials&client_id=bad&client_secret=secret"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -554,9 +554,9 @@ func TestToken_ClientCredentials_PublicClientRejected(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{"grant_type":"client_credentials","client_id":"cid-test","client_secret":"test-secret"}`
+	body := "grant_type=client_credentials&client_id=cid-test&client_secret=test-secret"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -574,9 +574,9 @@ func TestToken_ClientCredentials_WrongSecret(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{"grant_type":"client_credentials","client_id":"cid-test","client_secret":"wrong-secret"}`
+	body := "grant_type=client_credentials&client_id=cid-test&client_secret=wrong-secret"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -595,9 +595,9 @@ func TestToken_ClientCredentials_GrantNotAllowed(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{"grant_type":"client_credentials","client_id":"cid-test","client_secret":"test-secret"}`
+	body := "grant_type=client_credentials&client_id=cid-test&client_secret=test-secret"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -628,9 +628,9 @@ func TestToken_RefreshToken_Success(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test"}`
+	body := "grant_type=refresh_token&refresh_token=valid-refresh&client_id=cid-test"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -653,9 +653,9 @@ func TestToken_RefreshToken_Invalid(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{"grant_type":"refresh_token","refresh_token":"bad-token"}`
+	body := "grant_type=refresh_token&refresh_token=bad-token"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -676,9 +676,9 @@ func TestToken_AuthCode_ClientNotFound(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{"grant_type":"authorization_code","client_id":"bad","code":"abc"}`
+	body := "grant_type=authorization_code&client_id=bad&code=abc"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -695,9 +695,9 @@ func TestToken_AuthCode_ConfidentialMissingSecret(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{"grant_type":"authorization_code","client_id":"cid-test","code":"abc"}`
+	body := "grant_type=authorization_code&client_id=cid-test&code=abc"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1134,9 +1134,9 @@ func TestToken_DeviceCode_AuthorizationPending(t *testing.T) {
 		},
 	)
 
-	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","client_secret":"test-secret","device_code":"dc-123"}`
+	body := "grant_type=urn:ietf:params:oauth:grant-type:device_code&client_id=cid-test&client_secret=test-secret&device_code=dc-123"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1165,9 +1165,9 @@ func TestToken_DeviceCode_AccessDenied(t *testing.T) {
 		},
 	)
 
-	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","client_secret":"test-secret","device_code":"dc-123"}`
+	body := "grant_type=urn:ietf:params:oauth:grant-type:device_code&client_id=cid-test&client_secret=test-secret&device_code=dc-123"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1196,9 +1196,9 @@ func TestToken_DeviceCode_ExpiredToken(t *testing.T) {
 		},
 	)
 
-	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","client_secret":"test-secret","device_code":"dc-123"}`
+	body := "grant_type=urn:ietf:params:oauth:grant-type:device_code&client_id=cid-test&client_secret=test-secret&device_code=dc-123"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1228,9 +1228,9 @@ func TestToken_DeviceCode_SlowDown(t *testing.T) {
 		},
 	)
 
-	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","client_secret":"test-secret","device_code":"dc-123"}`
+	body := "grant_type=urn:ietf:params:oauth:grant-type:device_code&client_id=cid-test&client_secret=test-secret&device_code=dc-123"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1272,9 +1272,9 @@ func TestToken_DeviceCode_Success(t *testing.T) {
 		},
 	)
 
-	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test","client_secret":"test-secret","device_code":"dc-123"}`
+	body := "grant_type=urn:ietf:params:oauth:grant-type:device_code&client_id=cid-test&client_secret=test-secret&device_code=dc-123"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1291,9 +1291,9 @@ func TestToken_DeviceCode_Success(t *testing.T) {
 func TestToken_DeviceCode_MissingDeviceCode(t *testing.T) {
 	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
-	body := `{"grant_type":"urn:ietf:params:oauth:grant-type:device_code","client_id":"cid-test"}`
+	body := "grant_type=urn:ietf:params:oauth:grant-type:device_code&client_id=cid-test"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1835,9 +1835,9 @@ func TestToken_AuthCode_Success(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"auth-code-123","redirect_uri":"https://app.example.com/callback"}`
+	body := "grant_type=authorization_code&client_id=cid-test&client_secret=test-secret&code=auth-code-123&redirect_uri=https://app.example.com/callback"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1874,9 +1874,9 @@ func TestToken_AuthCode_SuccessWithOpenID(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"auth-code-123","redirect_uri":"https://app.example.com/callback"}`
+	body := "grant_type=authorization_code&client_id=cid-test&client_secret=test-secret&code=auth-code-123&redirect_uri=https://app.example.com/callback"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1902,9 +1902,9 @@ func TestToken_AuthCode_GrantNotAllowed(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"abc"}`
+	body := "grant_type=authorization_code&client_id=cid-test&client_secret=test-secret&code=abc"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1924,9 +1924,9 @@ func TestToken_AuthCode_InvalidSecret(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"wrong-secret","code":"abc"}`
+	body := "grant_type=authorization_code&client_id=cid-test&client_secret=wrong-secret&code=abc"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1954,9 +1954,9 @@ func TestToken_AuthCode_PublicClientNoPKCE(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"authorization_code","client_id":"cid-public","code":"abc","redirect_uri":"https://app.example.com/callback"}`
+	body := "grant_type=authorization_code&client_id=cid-public&code=abc&redirect_uri=https://app.example.com/callback"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1984,9 +1984,9 @@ func TestToken_AuthCode_PublicClientWithPKCE(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"authorization_code","client_id":"cid-public","code":"abc","redirect_uri":"https://app.example.com/callback","code_verifier":"dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"}`
+	body := "grant_type=authorization_code&client_id=cid-public&code=abc&redirect_uri=https://app.example.com/callback&code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2009,9 +2009,9 @@ func TestToken_AuthCode_InvalidCode(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"bad-code","redirect_uri":"https://app.example.com/callback"}`
+	body := "grant_type=authorization_code&client_id=cid-test&client_secret=test-secret&code=bad-code&redirect_uri=https://app.example.com/callback"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2031,9 +2031,9 @@ func TestToken_AuthCode_AccountInactive(t *testing.T) {
 		&mockAccountValidatorInactive{},
 	)
 
-	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"abc","redirect_uri":"https://app.example.com/callback"}`
+	body := "grant_type=authorization_code&client_id=cid-test&client_secret=test-secret&code=abc&redirect_uri=https://app.example.com/callback"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2057,9 +2057,9 @@ func TestToken_AuthCode_GenerateAccessTokenError(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"abc","redirect_uri":"https://app.example.com/callback"}`
+	body := "grant_type=authorization_code&client_id=cid-test&client_secret=test-secret&code=abc&redirect_uri=https://app.example.com/callback"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2083,9 +2083,9 @@ func TestToken_AuthCode_GenerateRefreshTokenError(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"abc","redirect_uri":"https://app.example.com/callback"}`
+	body := "grant_type=authorization_code&client_id=cid-test&client_secret=test-secret&code=abc&redirect_uri=https://app.example.com/callback"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2119,9 +2119,9 @@ func TestToken_AuthCode_IDTokenError(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"authorization_code","client_id":"cid-test","client_secret":"test-secret","code":"abc","redirect_uri":"https://app.example.com/callback"}`
+	body := "grant_type=authorization_code&client_id=cid-test&client_secret=test-secret&code=abc&redirect_uri=https://app.example.com/callback"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2185,9 +2185,9 @@ func TestToken_RefreshToken_ClientMismatch(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret"}`
+	body := "grant_type=refresh_token&refresh_token=valid-refresh&client_id=cid-test&client_secret=test-secret"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2204,9 +2204,9 @@ func TestToken_RefreshToken_ClientNotFound(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret"}`
+	body := "grant_type=refresh_token&refresh_token=valid-refresh&client_id=cid-test&client_secret=test-secret"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2225,9 +2225,9 @@ func TestToken_RefreshToken_GrantNotAllowed(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret"}`
+	body := "grant_type=refresh_token&refresh_token=valid-refresh&client_id=cid-test&client_secret=test-secret"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2245,9 +2245,9 @@ func TestToken_RefreshToken_ConfidentialMissingSecret(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test"}`
+	body := "grant_type=refresh_token&refresh_token=valid-refresh&client_id=cid-test"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2265,9 +2265,9 @@ func TestToken_RefreshToken_ConfidentialWrongSecret(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"wrong"}`
+	body := "grant_type=refresh_token&refresh_token=valid-refresh&client_id=cid-test&client_secret=wrong"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2285,9 +2285,9 @@ func TestToken_RefreshToken_AccountInactive(t *testing.T) {
 		&mockAccountValidatorInactive{},
 	)
 
-	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret"}`
+	body := "grant_type=refresh_token&refresh_token=valid-refresh&client_id=cid-test&client_secret=test-secret"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2315,9 +2315,9 @@ func TestToken_RefreshToken_IPMismatch(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret"}`
+	body := "grant_type=refresh_token&refresh_token=valid-refresh&client_id=cid-test&client_secret=test-secret"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.RemoteAddr = "192.168.1.1:12345"
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -2345,9 +2345,9 @@ func TestToken_RefreshToken_ScopeExceeds(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret","scope":"openid profile email"}`
+	body := "grant_type=refresh_token&refresh_token=valid-refresh&client_id=cid-test&client_secret=test-secret&scope=openid profile email"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2369,9 +2369,9 @@ func TestToken_RefreshToken_RotateError(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret"}`
+	body := "grant_type=refresh_token&refresh_token=valid-refresh&client_id=cid-test&client_secret=test-secret"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2393,9 +2393,9 @@ func TestToken_RefreshToken_GenerateAccessTokenError(t *testing.T) {
 		&mockAccountValidatorAlwaysActive{},
 	)
 
-	body := `{"grant_type":"refresh_token","refresh_token":"valid-refresh","client_id":"cid-test","client_secret":"test-secret"}`
+	body := "grant_type=refresh_token&refresh_token=valid-refresh&client_id=cid-test&client_secret=test-secret"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 

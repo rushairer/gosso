@@ -32,6 +32,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Production config `max_body_size` aligned with development default (10MB) to prevent environment-specific upload failures (`config/production.yaml`).
 
 ### Security
+- Login rate limiting now fails closed when Redis is unavailable — previously failed open, allowing unlimited brute-force attempts during Redis outages (`internal/auth/service/auth_login.go`).
+- `TOTPEncryptionKey` now rejects the default development value at config validation — prevents accidental production use of a publicly known encryption key (`config/config.go`, `config/config_manager.go`).
+- OAuth2 token endpoint now requires `Content-Type: application/x-www-form-urlencoded` per RFC 6749 — rejects JSON content type to prevent WAF bypass attacks (`internal/oauth2/controller/oauth2_token.go`).
+
+### Changed
+- Audit batch pipeline parameters (`buffer_size`, `flush_size`, `flush_interval`) are now configurable via `task_pipeline` config — previously hardcoded at different values than the YAML defaults (`internal/audit/service/audit.go`, `cmd/gouno/web.go`).
+
+### Fixed
+- `DatabaseConfig.MaxOpenConns` validation now rejects negative values (`config/config.go`).
+
 - `TOTPEncryptionKey` is now unconditionally required in config validation — previously could be empty when WebAuthn was not configured, causing runtime TOTP encryption failures (`config/config.go`).
 - Refresh token IP binding now logs a warning when the original token has an IP but the current request does not — improves observability for potential token theft behind misconfigured proxies (`internal/auth/service/auth_session.go`).
 - SMTP TLS policy is now configurable via `smtp.tls_policy` config field (values: `opportunistic`, `mandatory`, `notls`) — production should set `mandatory` to prevent plaintext downgrade (`config/config.go`, `internal/notification/service/email_service.go`).

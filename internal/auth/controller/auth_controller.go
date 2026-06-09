@@ -212,6 +212,11 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		UserAgent: ctx.Request.UserAgent(),
 	})
 	if err != nil {
+		if errors.Is(err, authService.ErrServiceUnavailable) {
+			c.logger.Error("Login rate limit check failed", zap.Error(err))
+			ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "service temporarily unavailable"))
+			return
+		}
 		c.logger.Warn("Login failed", zap.Error(err))
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid credentials"))
 		return

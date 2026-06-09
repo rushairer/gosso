@@ -9,6 +9,7 @@ import (
 	"github.com/rushairer/batchflow"
 	"go.uber.org/zap"
 
+	"github.com/rushairer/gosso/config"
 	"github.com/rushairer/gosso/internal/audit"
 	"github.com/rushairer/gosso/internal/audit/domain"
 	"github.com/rushairer/gosso/internal/utility"
@@ -42,14 +43,32 @@ type Auditor struct {
 
 // NewAuditor creates an Auditor backed by the given database. Call [Auditor.Wait]
 // before process exit to flush pending records.
-func NewAuditor(_ context.Context, db *sql.DB, logger *zap.Logger) *Auditor {
+// If pipelineCfg is non-nil, its BufferSize/FlushSize/FlushInterval values override
+// the built-in defaults (zero-valued fields keep the default).
+func NewAuditor(_ context.Context, db *sql.DB, pipelineCfg *config.TaskPipelineConfig, logger *zap.Logger) *Auditor {
 	logger = utility.EnsureLogger(logger)
 	auditorCtx, cancel := context.WithCancel(context.Background())
 	auditor := Auditor{db: db, cancel: cancel, logger: logger, drainGracePeriod: auditDrainGracePeriod}
+
+	bufferSize := uint32(auditBufferSize)
+	flushSize := uint32(auditFlushSize)
+	flushInterval := auditFlushInterval
+	if pipelineCfg != nil {
+		if pipelineCfg.BufferSize > 0 {
+			bufferSize = pipelineCfg.BufferSize
+		}
+		if pipelineCfg.FlushSize > 0 {
+			flushSize = pipelineCfg.FlushSize
+		}
+		if pipelineCfg.FlushInterval > 0 {
+			flushInterval = pipelineCfg.FlushInterval
+		}
+	}
+
 	auditor.batchflow = batchflow.NewPostgreSQLBatchFlow(auditorCtx, db, batchflow.PipelineConfig{
-		BufferSize:    auditBufferSize,
-		FlushSize:     auditFlushSize,
-		FlushInterval: auditFlushInterval,
+		BufferSize:    bufferSize,
+		FlushSize:     flushSize,
+		FlushInterval: flushInterval,
 		Timeout:       auditTimeout,
 		Retry: batchflow.RetryConfig{
 			Enabled:     true,

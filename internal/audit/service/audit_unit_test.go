@@ -25,7 +25,7 @@ import (
 func TestNewAuditor_NilLogger(t *testing.T) {
 	// NewAuditor accepts nil DB and nil logger (for testing).
 	// It should not panic and should return a valid auditor.
-	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor := NewAuditor(context.Background(), nil, nil, nil)
 	require.NotNil(t, auditor)
 	assert.NotNil(t, auditor.logger)
 	assert.NotNil(t, auditor.cancel)
@@ -35,7 +35,7 @@ func TestNewAuditor_NilLogger(t *testing.T) {
 
 func TestNewAuditor_WithLogger(t *testing.T) {
 	logger := zap.NewNop()
-	auditor := NewAuditor(context.Background(), nil, logger)
+	auditor := NewAuditor(context.Background(), nil, nil, logger)
 	require.NotNil(t, auditor)
 	assert.Equal(t, logger, auditor.logger)
 	auditor.Close()
@@ -45,7 +45,7 @@ func TestNewAuditor_WithLogger(t *testing.T) {
 // Close
 // ──────────────────────────────────────────────
 func TestAuditor_Close(t *testing.T) {
-	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor := NewAuditor(context.Background(), nil, nil, nil)
 	// Close should not panic
 	assert.NotPanics(t, func() { auditor.Close() })
 }
@@ -54,7 +54,7 @@ func TestAuditor_Close(t *testing.T) {
 // Wait and SetDrainGracePeriod
 // ──────────────────────────────────────────────
 func TestAuditor_Wait_ShortDrain(t *testing.T) {
-	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor := NewAuditor(context.Background(), nil, nil, nil)
 	auditor.SetDrainGracePeriod(1 * time.Millisecond)
 
 	start := time.Now()
@@ -66,7 +66,7 @@ func TestAuditor_Wait_ShortDrain(t *testing.T) {
 }
 
 func TestAuditor_SetDrainGracePeriod(t *testing.T) {
-	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor := NewAuditor(context.Background(), nil, nil, nil)
 	defer auditor.Close()
 
 	auditor.SetDrainGracePeriod(100 * time.Millisecond)
@@ -77,7 +77,7 @@ func TestAuditor_SetDrainGracePeriod(t *testing.T) {
 // ErrorChan
 // ──────────────────────────────────────────────
 func TestAuditor_ErrorChan(t *testing.T) {
-	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor := NewAuditor(context.Background(), nil, nil, nil)
 	defer auditor.Close()
 
 	ch := auditor.ErrorChan()
@@ -151,7 +151,7 @@ func TestAuditLogSync_NilAuditor(t *testing.T) {
 // AuditLog with real auditor (nil DB, tests error path)
 // ──────────────────────────────────────────────
 func TestAuditLog_WithAuditor_SubmitError(t *testing.T) {
-	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor := NewAuditor(context.Background(), nil, nil, nil)
 	auditor.Close() // Close immediately so Submit will fail
 
 	record := &domain.AuditRecord{
@@ -173,7 +173,7 @@ func TestAuditLog_WithAuditor_SubmitError(t *testing.T) {
 // Log with request ID enrichment
 // ──────────────────────────────────────────────
 func TestAuditor_Log_WithRequestID(t *testing.T) {
-	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor := NewAuditor(context.Background(), nil, nil, nil)
 	defer auditor.Close()
 
 	ctx := audit.SetMetadata(context.Background(), "127.0.0.1", "test-agent", "req-123")
@@ -204,7 +204,7 @@ func TestAuditor_LogSync_WithRequestID(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	auditor := NewAuditor(context.Background(), db, nil)
+	auditor := NewAuditor(context.Background(), db, nil, nil)
 	defer auditor.Close()
 
 	ctx := audit.SetMetadata(context.Background(), "127.0.0.1", "test-agent", "req-456")
@@ -236,7 +236,7 @@ func TestAuditor_LogSync_WithRequestID(t *testing.T) {
 // Log with malformed meta (triggers fallback)
 // ──────────────────────────────────────────────
 func TestAuditor_Log_MalformedMeta(t *testing.T) {
-	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor := NewAuditor(context.Background(), nil, nil, nil)
 	defer auditor.Close()
 
 	ctx := audit.SetMetadata(context.Background(), "127.0.0.1", "test-agent", "req-789")
@@ -266,7 +266,7 @@ func TestAuditor_LogSync_MalformedMeta(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	auditor := NewAuditor(context.Background(), db, nil)
+	auditor := NewAuditor(context.Background(), db, nil, nil)
 	defer auditor.Close()
 
 	ctx := audit.SetMetadata(context.Background(), "127.0.0.1", "test-agent", "req-999")
@@ -299,7 +299,7 @@ func TestAuditor_LogSync_MalformedMeta(t *testing.T) {
 // Log without request ID (no enrichment)
 // ──────────────────────────────────────────────
 func TestAuditor_Log_WithoutRequestID(t *testing.T) {
-	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor := NewAuditor(context.Background(), nil, nil, nil)
 	defer auditor.Close()
 
 	originalMeta := json.RawMessage(`{"foo": "bar"}`)
@@ -328,7 +328,7 @@ func TestAuditor_Log_WithoutRequestID(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestDo_BusinessFuncError(t *testing.T) {
-	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor := NewAuditor(context.Background(), nil, nil, nil)
 	defer auditor.Close()
 
 	expectedErr := errors.New("business failure")
@@ -339,7 +339,7 @@ func TestDo_BusinessFuncError(t *testing.T) {
 }
 
 func TestDo_NilRecord(t *testing.T) {
-	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor := NewAuditor(context.Background(), nil, nil, nil)
 	defer auditor.Close()
 
 	err := auditor.Do(context.Background(), func(_ context.Context, _ *sql.DB) (*domain.AuditRecord, error) {
@@ -349,7 +349,7 @@ func TestDo_NilRecord(t *testing.T) {
 }
 
 func TestDo_WithRecord(t *testing.T) {
-	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor := NewAuditor(context.Background(), nil, nil, nil)
 	defer auditor.Close()
 
 	record := &domain.AuditRecord{
@@ -368,7 +368,7 @@ func TestDo_WithRecord(t *testing.T) {
 }
 
 func TestDo_WithRecordAndAccountID(t *testing.T) {
-	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor := NewAuditor(context.Background(), nil, nil, nil)
 	defer auditor.Close()
 
 	accountID := "acc-123"
@@ -389,7 +389,7 @@ func TestDo_WithRecordAndAccountID(t *testing.T) {
 }
 
 func TestDo_SubmitAfterClose(t *testing.T) {
-	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor := NewAuditor(context.Background(), nil, nil, nil)
 	auditor.Close()
 
 	record := &domain.AuditRecord{
@@ -417,7 +417,7 @@ func TestAuditLogSync_WithAuditor_Success(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	auditor := NewAuditor(context.Background(), db, nil)
+	auditor := NewAuditor(context.Background(), db, nil, nil)
 	defer auditor.Close()
 
 	sqlMock.ExpectExec("INSERT INTO audit_record").
@@ -443,7 +443,7 @@ func TestAuditLogSync_WithAuditor_DBError(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	auditor := NewAuditor(context.Background(), db, nil)
+	auditor := NewAuditor(context.Background(), db, nil, nil)
 	defer auditor.Close()
 
 	sqlMock.ExpectExec("INSERT INTO audit_record").
@@ -469,7 +469,7 @@ func TestAuditLogSync_WithAuditor_DBError(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestAuditor_Log_WithAccountID(t *testing.T) {
-	auditor := NewAuditor(context.Background(), nil, nil)
+	auditor := NewAuditor(context.Background(), nil, nil, nil)
 	defer auditor.Close()
 
 	accountID := "acc-456"

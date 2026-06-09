@@ -53,13 +53,15 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	}()
 
 	// 0. Check rate limit for login failures (keyed on IP + normalized username).
-	// Fail-open: if Redis is unavailable, login proceeds to avoid total lockout.
+	// Fail-closed: if Redis is unavailable, deny login to prevent brute-force attacks.
 	normalizedUsername := strings.ToLower(req.Username)
 	attemptsKey := fmt.Sprintf("login_attempts/%s/%s", req.IP, normalizedUsername)
 	count, incrErr := s.redis.CheckAndIncr(ctx, attemptsKey, s.loginMaxAttempts, s.loginRateLimitWindow)
 	if incrErr != nil {
-		s.logger.Warn("Failed to check login rate limit, proceeding anyway", zap.Error(incrErr))
-	} else if count >= int64(s.loginMaxAttempts) {
+		s.logger.Error("Failed to check login rate limit, denying login", zap.Error(incrErr))
+		return nil, ErrServiceUnavailable
+	}
+	if count >= int64(s.loginMaxAttempts) {
 		return nil, ErrAccountLocked
 	}
 
@@ -482,14 +484,14 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 }
 
 // checkIPRateLimit checks and increments the per-IP login rate limit.
-// Returns ErrAccountLocked if the limit is exceeded. Logs a warning but
-// proceeds if Redis is unavailable (fail-open for rate limiting).
+// Returns ErrAccountLocked if the limit is exceeded. Returns ErrServiceUnavailable
+// if Redis is unavailable (fail-closed for rate limiting).
 func (s *AuthService) checkIPRateLimit(ctx context.Context, ip string) error {
 	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", ip)
 	ipCount, ipIncrErr := s.redis.CheckAndIncr(ctx, ipAttemptsKey, s.loginMaxAttemptsPerIP, s.loginRateLimitWindow)
 	if ipIncrErr != nil {
-		s.logger.Warn("Failed to check IP login rate limit, proceeding anyway", zap.Error(ipIncrErr))
-		return nil
+		s.logger.Error("Failed to check IP login rate limit, denying login", zap.Error(ipIncrErr))
+		return ErrServiceUnavailable
 	}
 	if ipCount >= int64(s.loginMaxAttemptsPerIP) {
 		return ErrAccountLocked

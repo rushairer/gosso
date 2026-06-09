@@ -13,6 +13,10 @@ import (
 // Validate() rejects this value to prevent production from accidentally using dev credentials.
 const defaultPostgresDSN = "postgres://postgres:postgres@localhost:5432/gosso?sslmode=disable"
 
+// defaultTOTPEncryptionKey is the default development TOTP encryption key.
+// Validate() rejects this value to prevent production from using a publicly known key.
+const defaultTOTPEncryptionKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
 // ConfigManager loads, validates, and exposes the application configuration.
 type ConfigManager struct {
 	config *GoUnoConfig

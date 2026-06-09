@@ -54,7 +54,7 @@ func validConfig() GoUnoConfig {
 			AuthorizationCodeExpiry: 5 * time.Minute,
 			DeviceCodeExpiry:        10 * time.Minute,
 			DeviceCodeInterval:      5 * time.Second,
-			TOTPEncryptionKey:       "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", // 32 bytes, fake
+			TOTPEncryptionKey:       "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899", // 32 bytes, fake, differs from dev default
 		},
 	}
 }
@@ -117,6 +117,13 @@ func TestValidate_Errors(t *testing.T) {
 				c.DatabaseConfig.ConnMaxIdleTimeSec = -1
 			},
 			wantErr: "database: conn_max_idle_time_sec must not be negative",
+		},
+		{
+			name: "negative max_open_conns",
+			mutate: func(c *GoUnoConfig) {
+				c.DatabaseConfig.MaxOpenConns = -1
+			},
+			wantErr: "database: max_open_conns must not be negative",
 		},
 		{
 			name: "max_idle_conns exceeds max_open_conns",
@@ -194,6 +201,13 @@ func TestValidate_Errors(t *testing.T) {
 				c.AuthConfig.TOTPEncryptionKey = "abcd" // 2 bytes, need 32
 			},
 			wantErr: "auth: totp_encryption_key must decode to exactly 32 bytes",
+		},
+		{
+			name: "default totp key rejected",
+			mutate: func(c *GoUnoConfig) {
+				c.AuthConfig.TOTPEncryptionKey = defaultTOTPEncryptionKey
+			},
+			wantErr: "totp_encryption_key must be explicitly configured",
 		},
 
 		// ── Auth — token expiries ───────────────

@@ -235,6 +235,9 @@ func (c *GoUnoConfig) Validate() error {
 	if len(key) != 32 {
 		return fmt.Errorf("auth: totp_encryption_key must decode to exactly 32 bytes (got %d)", len(key))
 	}
+	if c.AuthConfig.TOTPEncryptionKey == defaultTOTPEncryptionKey {
+		return fmt.Errorf("auth: totp_encryption_key must be explicitly configured (the development default is not allowed)")
+	}
 	if c.AuthConfig.AccessTokenExpiry <= 0 {
 		return fmt.Errorf("auth: access_token_expiry must be positive")
 	}
@@ -302,6 +305,9 @@ func (c *GoUnoConfig) Validate() error {
 		if origin.Scheme == "http" && origin.Hostname() != "localhost" && origin.Hostname() != "127.0.0.1" {
 			return fmt.Errorf("auth: webauthn_rp_origin with http scheme is only allowed for localhost or 127.0.0.1")
 		}
+	}
+	if c.DatabaseConfig.MaxOpenConns < 0 {
+		return fmt.Errorf("database: max_open_conns must not be negative (got %d)", c.DatabaseConfig.MaxOpenConns)
 	}
 	if c.DatabaseConfig.MaxIdleConns > 0 && c.DatabaseConfig.MaxOpenConns > 0 &&
 		c.DatabaseConfig.MaxIdleConns > c.DatabaseConfig.MaxOpenConns {

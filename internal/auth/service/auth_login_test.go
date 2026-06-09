@@ -193,6 +193,24 @@ func TestLoginByUsernamePassword_RateLimited(t *testing.T) {
 	assert.ErrorIs(t, err, ErrAccountLocked)
 }
 
+func TestLoginByUsernamePassword_RedisDown_Denied(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	// Simulate Redis being unavailable by closing miniredis
+	fixture.mr.Close()
+
+	_, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+		Username:  "testuser",
+		Password:  "password123",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	})
+	assert.ErrorIs(t, err, ErrServiceUnavailable)
+}
+
 func TestLoginByUsernamePassword_MFARequired(t *testing.T) {
 	fixture := setupTestAuthService(t)
 	defer fixture.mr.Close()

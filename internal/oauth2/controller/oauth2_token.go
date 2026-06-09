@@ -29,6 +29,17 @@ type TokenRequest struct {
 
 // Token POST /oauth2/token
 func (c *OAuth2Controller) Token(ctx *gin.Context) {
+	// RFC 6749 §4.1.3 / §4.3.2: token endpoint MUST accept application/x-www-form-urlencoded.
+	// Reject JSON content type to prevent WAF bypass attacks.
+	if contentType := ctx.GetHeader("Content-Type"); contentType != "" &&
+		!strings.HasPrefix(contentType, "application/x-www-form-urlencoded") {
+		ctx.JSON(http.StatusUnsupportedMediaType, gin.H{
+			"error":             "invalid_request",
+			"error_description": "Content-Type must be application/x-www-form-urlencoded",
+		})
+		return
+	}
+
 	var req TokenRequest
 	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})

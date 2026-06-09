@@ -4,9 +4,10 @@ import "errors"
 
 var (
 	// Authentication errors
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrAccountNotActive   = errors.New("account is not active")
-	ErrAccountLocked      = errors.New("account locked, try again later")
+	ErrInvalidCredentials  = errors.New("invalid credentials")
+	ErrAccountNotActive    = errors.New("account is not active")
+	ErrAccountLocked       = errors.New("account locked, try again later")
+	ErrServiceUnavailable  = errors.New("service temporarily unavailable")
 
 	// MFA errors
 	ErrInvalidMFAToken      = errors.New("invalid or expired MFA token")
