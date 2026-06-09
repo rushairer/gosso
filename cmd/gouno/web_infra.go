@@ -37,7 +37,7 @@ func initDatabase(cfg config.GoUnoConfig, logger *zap.Logger) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	logger.Sugar().Info("database connected")
+	logger.Info("database connected")
 	return db, nil
 }
 
@@ -53,7 +53,7 @@ func initRedis(cfg config.GoUnoConfig, logger *zap.Logger) (*cache.RedisClient, 
 		return nil, fmt.Errorf("failed to connect to redis: %w", err)
 	}
 
-	logger.Sugar().Info("redis connected")
+	logger.Info("redis connected")
 	return redis, nil
 }
 

@@ -53,14 +53,14 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	}
 
 	loggerLevel := zap.NewAtomicLevelAt(zapcore.Level(globalConfig.LogConfig.Level))
-	logger := utility.NewLogger(loggerLevel)
+	logger := utility.NewLogger(loggerLevel, globalConfig.LogConfig.Format)
 
 	if err := globalConfig.Validate(); err != nil {
 		logger.Error("invalid configuration", zap.Error(err))
 		os.Exit(1)
 	}
 
-	logger.Sugar().Info("starting web server...")
+	logger.Info("starting web server")
 
 	db, err := initDatabase(globalConfig, logger)
 	if err != nil {
@@ -96,8 +96,8 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		Handler:           engine,
 	}
 
-	logger.Sugar().Infof("web server listening on %s", httpServer.Addr)
-	logger.Sugar().Info("press Ctrl+C to exit")
+	logger.Info("web server listening", zap.String("addr", httpServer.Addr))
+	logger.Info("press Ctrl+C to exit")
 
 	go func() {
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -109,7 +109,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	<-ctx.Done()
 
 	stop()
-	logger.Sugar().Info("shutting down gracefully, waiting up to 30s for active requests to finish")
+	logger.Info("shutting down gracefully, waiting up to 30s for active requests to finish")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -123,5 +123,5 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	// Drain in-flight audit batches before exiting
 	auditAuditor.Wait()
 
-	logger.Sugar().Info("server exiting")
+	logger.Info("server exiting")
 }

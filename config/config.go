@@ -121,6 +121,8 @@ type SMTPConfig struct {
 type LogConfig struct {
 	// Log level: -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
 	Level int `mapstructure:"level"`
+	// Log format: "console" (default) or "json" (for containerized/production environments)
+	Format string `mapstructure:"format"`
 }
 
 // AuthConfig holds authentication and authorization settings including token

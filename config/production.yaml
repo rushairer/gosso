@@ -4,7 +4,7 @@
 web_server:
     address: 0.0.0.0
     port: 8080
-    max_body_size: 1048576
+    max_body_size: 10485760  # 10MB (matches development default)
     idle_timeout: 60s
     read_timeout: 5s
     read_header_timeout: 2s
@@ -42,6 +42,7 @@ smtp:
     tls_policy: "${GOUNO_SMTP_TLS_POLICY}"
 log:
     level: 0 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
+    format: json
 auth:
     issuer: "${GOUNO_AUTH_ISSUER}"
     session_ttl: 24h
@@ -58,6 +59,9 @@ auth:
         - email
     private_key_path: "/app/keys/private.pem"
     password_reset_base_url: "${GOUNO_PASSWORD_RESET_BASE_URL}"
+    # REQUIRED: 64-char hex string (32 bytes) for encrypting TOTP secrets at rest.
+    # Set via environment variable GOUNO_AUTH_TOTP_ENCRYPTION_KEY.
+    # totp_encryption_key: "${GOUNO_AUTH_TOTP_ENCRYPTION_KEY}"
 cors:
     allowed_origins:
         - "${GOUNO_CORS_ORIGIN}"

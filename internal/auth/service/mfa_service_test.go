@@ -860,7 +860,7 @@ func TestVerifyTOTP_WithEncryptionKey(t *testing.T) {
 }
 
 func TestVerifyTOTP_DecryptionFailure(t *testing.T) {
-	// Store a garbage encrypted value; decrypt should fail and the credential is skipped.
+	// Store a garbage encrypted value; decrypt should fail and all credentials fail → returns error.
 	credRepo := &mockCredentialRepo{
 		credMap: map[string][]*accountDomain.Credential{
 			"account-001:totp": {
@@ -872,8 +872,9 @@ func TestVerifyTOTP_DecryptionFailure(t *testing.T) {
 	require.NoError(t, svc.SetTOTPEncryptionKey(testEncryptionKeyHex))
 
 	valid, err := svc.VerifyTOTP(context.Background(), "account-001", "123456")
-	require.NoError(t, err)
-	assert.False(t, valid, "decrypt failure should skip credential and return false")
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "all TOTP credentials failed to decrypt")
+	assert.False(t, valid, "decrypt failure should return false with error")
 }
 
 // ──────────────────────────────────────────────

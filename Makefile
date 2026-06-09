@@ -70,7 +70,7 @@ docker-dev-logs:
 	@eval $$(go run script/parse-config.go development) && docker-compose -f docker-compose.development.yml logs -f
 
 docker-dev:
-	docker exec -it gosso-gosso-1 sh
+	docker compose exec gosso sh
 
 docker-test-up:
 	@echo "🧪 启动测试环境..."
@@ -178,4 +178,4 @@ example-redis:
 
 example-metadata:
 	@echo "========== Running Metadata Example =========="
-	@go run ./examples/metadata
+	@go run ./examples/metadata || echo "⚠️  Metadata example directory not found"

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/mail"
@@ -268,7 +269,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		audit.IPFromContext(ctx),
 		stringPtr(account.ID),
 		utility.MustMarshalJSON(map[string]any{"account_id": account.ID}),
-		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		auditMetaFromContext(ctx),
 	))
 
 	return account, nil
@@ -300,7 +301,7 @@ func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.
 		audit.IPFromContext(ctx),
 		stringPtr(account.ID),
 		utility.MustMarshalJSON(map[string]any{"account_id": account.ID}),
-		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		auditMetaFromContext(ctx),
 	))
 
 	return nil
@@ -374,7 +375,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
-		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		auditMetaFromContext(ctx),
 	))
 
 	return nil
@@ -463,7 +464,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
-		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		auditMetaFromContext(ctx),
 	))
 
 	return nil
@@ -517,7 +518,7 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "provider": string(provider), "provider_user_id": providerUserID}),
-		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		auditMetaFromContext(ctx),
 	))
 
 	return nil
@@ -539,7 +540,7 @@ func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accoun
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "identity_id": identityID}),
-		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		auditMetaFromContext(ctx),
 	))
 
 	return nil
@@ -559,7 +560,7 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
-		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		auditMetaFromContext(ctx),
 	))
 	return nil
 }
@@ -580,7 +581,7 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
-		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		auditMetaFromContext(ctx),
 	))
 	return nil
 }
@@ -615,7 +616,7 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
-		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		auditMetaFromContext(ctx),
 	))
 	return nil
 }
@@ -634,7 +635,7 @@ func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID stri
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
-		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		auditMetaFromContext(ctx),
 	))
 	return nil
 }
@@ -702,6 +703,14 @@ func (s *accountServiceImpl) checkCredentialExists(ctx context.Context, credType
 
 func stringPtr(s string) *string {
 	return &s
+}
+
+// auditMetaFromContext extracts IP and user-agent from context for audit logging.
+func auditMetaFromContext(ctx context.Context) json.RawMessage {
+	return utility.MustMarshalJSON(map[string]any{
+		"ip":         audit.IPFromContext(ctx),
+		"user_agent": audit.UserAgentFromContext(ctx),
+	})
 }
 
 // nonNilMap returns m if non-nil, otherwise an empty map.

@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"log"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -49,7 +49,7 @@ func NewConfigManager(
 		for flagName, viperKey := range flagBindings {
 			if f := cmd.Flags().Lookup(flagName); f != nil {
 				if err := v.BindPFlag(viperKey, f); err != nil {
-					log.Printf("Warning: failed to bind flag '%s': %v", flagName, err)
+					fmt.Fprintf(os.Stderr, "Warning: failed to bind flag '%s': %v\n", flagName, err)
 				}
 			}
 		}
@@ -117,6 +117,11 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("auth.device_code_interval", "5s")
 	v.SetDefault("auth.id_token_expiry", "15m")
 
+	// Redis configuration
+	v.SetDefault("redis.max_active_conns", 10)
+	v.SetDefault("redis.pool_timeout_seconds", 5)
+
 	// Log configuration
 	v.SetDefault("log.level", 0)
+	v.SetDefault("log.format", "console")
 }

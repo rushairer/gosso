@@ -1,7 +1,8 @@
 package deploy
 
 import (
-	"log"
+	"fmt"
+	"os"
 
 	"github.com/spf13/viper"
 )
@@ -116,7 +117,7 @@ func GetEnvironment(env string) (*Environment, bool) {
 // InitDeployConfig initializes the deployment configuration
 func InitDeployConfig(deployPath string) error {
 	if err := LoadEnvironmentConfig(deployPath); err != nil {
-		log.Printf("Warning: failed to load environment config: %v", err)
+		fmt.Fprintf(os.Stderr, "Warning: failed to load environment config: %v\n", err)
 		return err
 	}
 	return nil

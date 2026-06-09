@@ -17,8 +17,15 @@ func EnsureLogger(logger *zap.Logger) *zap.Logger {
 	return logger
 }
 
-// NewLogger initializes the global logger
-func NewLogger(level zap.AtomicLevel) *zap.Logger {
+// NewLogger initializes the global logger.
+// format is an optional parameter: "console" (default) or "json".
+func NewLogger(level zap.AtomicLevel, format ...string) *zap.Logger {
+
+	// Determine log format
+	logFormat := "console"
+	if len(format) > 0 && format[0] != "" {
+		logFormat = format[0]
+	}
 
 	// Create custom encoder configuration
 	encoderConfig := zapcore.EncoderConfig{
@@ -35,16 +42,25 @@ func NewLogger(level zap.AtomicLevel) *zap.Logger {
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
 
-	// Create color output writer
+	var encoder zapcore.Encoder
 	var writeSyncer zapcore.WriteSyncer
-	if supportsColor() {
-		writeSyncer = &ColorWriteSyncer{Writer: os.Stdout}
-	} else {
+
+	if logFormat == "json" {
+		// JSON encoder for production/containerized environments
+		encoder = zapcore.NewJSONEncoder(encoderConfig)
 		writeSyncer = zapcore.AddSync(os.Stdout)
+	} else {
+		// Console encoder with optional color output
+		encoder = zapcore.NewConsoleEncoder(encoderConfig)
+		if supportsColor() {
+			writeSyncer = &ColorWriteSyncer{Writer: os.Stdout}
+		} else {
+			writeSyncer = zapcore.AddSync(os.Stdout)
+		}
 	}
 
 	core := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(encoderConfig),
+		encoder,
 		writeSyncer,
 		level,
 	)

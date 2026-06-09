@@ -64,12 +64,8 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	}
 
 	// Check overall IP-level rate limit to prevent username enumeration
-	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", req.IP)
-	ipCount, ipIncrErr := s.redis.CheckAndIncr(ctx, ipAttemptsKey, s.loginMaxAttemptsPerIP, s.loginRateLimitWindow)
-	if ipIncrErr != nil {
-		s.logger.Warn("Failed to check IP login rate limit, proceeding anyway", zap.Error(ipIncrErr))
-	} else if ipCount >= int64(s.loginMaxAttemptsPerIP) {
-		return nil, ErrAccountLocked
+	if err := s.checkIPRateLimit(ctx, req.IP); err != nil {
+		return nil, err
 	}
 
 	// 1. Find account
@@ -175,7 +171,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 		return nil, err
 	}
 
-	// 3. Find account
+	// 4. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, err)
@@ -225,12 +221,8 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	}()
 
 	// 0. Check IP-level rate limit
-	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", ip)
-	ipCount, ipIncrErr := s.redis.CheckAndIncr(ctx, ipAttemptsKey, s.loginMaxAttemptsPerIP, s.loginRateLimitWindow)
-	if ipIncrErr != nil {
-		s.logger.Warn("Failed to check IP login rate limit, proceeding anyway", zap.Error(ipIncrErr))
-	} else if ipCount >= int64(s.loginMaxAttemptsPerIP) {
-		return nil, ErrAccountLocked
+	if err := s.checkIPRateLimit(ctx, ip); err != nil {
+		return nil, err
 	}
 
 	// 1. Validate MFA token
@@ -308,12 +300,8 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 	}()
 
 	// 0. Check IP-level rate limit
-	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", ip)
-	ipCount, ipIncrErr := s.redis.CheckAndIncr(ctx, ipAttemptsKey, s.loginMaxAttemptsPerIP, s.loginRateLimitWindow)
-	if ipIncrErr != nil {
-		s.logger.Warn("Failed to check IP login rate limit, proceeding anyway", zap.Error(ipIncrErr))
-	} else if ipCount >= int64(s.loginMaxAttemptsPerIP) {
-		return nil, ErrAccountLocked
+	if err := s.checkIPRateLimit(ctx, ip); err != nil {
+		return nil, err
 	}
 
 	// 1. Find account
@@ -491,6 +479,22 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 	default:
 		return fmt.Errorf("unsupported mfa type: %s", mfaType)
 	}
+}
+
+// checkIPRateLimit checks and increments the per-IP login rate limit.
+// Returns ErrAccountLocked if the limit is exceeded. Logs a warning but
+// proceeds if Redis is unavailable (fail-open for rate limiting).
+func (s *AuthService) checkIPRateLimit(ctx context.Context, ip string) error {
+	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", ip)
+	ipCount, ipIncrErr := s.redis.CheckAndIncr(ctx, ipAttemptsKey, s.loginMaxAttemptsPerIP, s.loginRateLimitWindow)
+	if ipIncrErr != nil {
+		s.logger.Warn("Failed to check IP login rate limit, proceeding anyway", zap.Error(ipIncrErr))
+		return nil
+	}
+	if ipCount >= int64(s.loginMaxAttemptsPerIP) {
+		return ErrAccountLocked
+	}
+	return nil
 }
 
 // clearLoginRateLimits removes per-user rate limit counters after successful login.

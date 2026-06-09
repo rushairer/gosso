@@ -213,13 +213,9 @@ func (c *PasskeyController) LoginComplete(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-		"access_token":  loginResult.AccessToken,
-		"refresh_token": loginResult.RefreshToken,
-		"token_type":    "Bearer",
-		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
-		"session_id":    loginResult.Session.ID,
-	}))
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
+		loginResult.AccessToken, loginResult.RefreshToken, loginResult.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),
+	)))
 }
 
 // MFABeginRequest is the passkey MFA begin request body.
@@ -305,13 +301,9 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-		"access_token":  result.AccessToken,
-		"refresh_token": result.RefreshToken,
-		"token_type":    "Bearer",
-		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
-		"session_id":    result.Session.ID,
-	}))
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
+		result.AccessToken, result.RefreshToken, result.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),
+	)))
 }
 
 // ListCredentials GET /api/auth/passkeys

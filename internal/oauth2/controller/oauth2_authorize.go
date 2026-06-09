@@ -77,8 +77,12 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 			Nonce:               nonce,
 		})
 		if err := c.redis.Set(ctx, consentStateKeyPrefix+consentID, string(stateData), consentStateTTL); err != nil {
-			c.logger.Warn("Failed to store consent state, falling back to form-only", zap.Error(err))
-			consentID = ""
+			c.logger.Error("Failed to store consent state in Redis", zap.Error(err))
+			ctx.JSON(http.StatusServiceUnavailable, gin.H{
+				"error":             "server_error",
+				"error_description": "unable to process consent, please try again",
+			})
+			return
 		}
 	}
 

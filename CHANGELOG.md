@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- JSON log format support via `log.format` config field — set to `"json"` for containerized/production environments, defaults to `"console"` (`internal/utility/logger.go`, `config/config.go`).
+
 ### Fixed
 - Integration tests now exit with code 1 (instead of 0) when test infrastructure is unavailable — prevents CI from silently passing when Docker services fail to start (`internal/auth/service/auth_integration_test.go`, `internal/session/service/session_integration_test.go`).
 - `TruncateAll` in test utilities now includes `oauth2_consents` table — prevents test data pollution between integration test runs (`internal/testutil/testutil.go`).
@@ -22,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - PostgreSQL production config now uses `log_destination = 'stderr'` instead of `logging_collector` — proper Docker log collection (`config/postgresql.conf`).
 - Development `docker-compose.development.yml` now includes `GOUNO_DATABASE_DRIVERS_POSTGRES_DSN` and `GOUNO_REDIS_DSN` environment variables, plus `env_file` directive — previously failed on direct `docker-compose up` without `make` (`docker-compose.development.yml`).
 - Production Docker image now runs `gosso migrate up` automatically via entrypoint script before starting the application — prevents schema drift when deploying updates (`Dockerfile`, `script/entrypoint.sh`).
+- Comment numbering error in `MFALogin` flow — step "3" was used twice, second occurrence corrected to "4" (`internal/auth/service/auth_login.go`).
+- Makefile `example-metadata` target now has error fallback for missing directory (`Makefile`).
+- Makefile `docker-dev` target no longer uses hardcoded container name — uses `docker compose exec` instead (`Makefile`).
+- Dockerfile builder image version aligned with `go.mod` (`Dockerfile`).
+- Production config `max_body_size` aligned with development default (10MB) to prevent environment-specific upload failures (`config/production.yaml`).
 
 ### Security
 - `TOTPEncryptionKey` is now unconditionally required in config validation — previously could be empty when WebAuthn was not configured, causing runtime TOTP encryption failures (`config/config.go`).
@@ -42,6 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `authenticateRequest` no longer leaks internal error messages to OAuth2 clients — returns fixed `"unauthorized"` or `"forbidden"` descriptions (`internal/oauth2/controller/oauth2_controller.go`).
 - Blacklist TTL now includes a 5-minute buffer to account for clock skew between Redis and JWT validation (`internal/token/service/blacklist_service.go`).
 - `isPlausibleJWT` now validates that the JWT header segment is valid base64url encoding — prevents trivial CSRF bypass with garbage Bearer tokens (`middleware/csrf.go`).
+- TOTP decryption failures now return an error when all credentials fail to decrypt — previously silently returned `false`, masking `totp_encryption_key` configuration issues (`internal/auth/service/mfa_service.go`).
+- PKCE server-side consent state storage now returns HTTP 503 when Redis is unavailable — previously silently degraded to client-trusted values, weakening PKCE tamper protection (`internal/oauth2/controller/oauth2_authorize.go`).
+- Production config now documents the required `totp_encryption_key` field with environment variable guidance (`config/production.yaml`).
 - Session expiration now cascades token revocation — expired sessions trigger `RevokeAllForSession` before deletion (`internal/session/service/session_service.go`).
 - Sessions now have an absolute maximum lifetime (default 7 days) in addition to idle timeout — prevents indefinite session extension via activity refresh (`internal/session/service/session_service.go`).
 - Refresh token validation now includes explicit `ExpiresAt` check as defense-in-depth beyond Redis TTL (`internal/token/service/token_service.go`).
@@ -50,7 +61,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CSP `style-src 'unsafe-inline'` replaced with per-request nonce — prevents style-based XSS injection. Templates now receive `CSPNonce` for inline `<style>` and `<script>` tags (`middleware/middleware.go`, `internal/oauth2/controller/template/consent.html`, `internal/oauth2/controller/template/device.html`).
 
 ### Changed
-- `createNewUser` in `SocialLoginService` refactored: extracted `linkByEmailIfVerified` helper to reduce nesting depth and deduplicate the email-based account linking logic (`internal/auth/service/social_login_service.go`).
+- Go version updated to 1.26 (`go.mod`, `Dockerfile`).
+- Production config now defaults to JSON log format (`config/production.yaml`).
+- All `logger.Sugar()` calls in startup/shutdown code replaced with structured `zap` logging (`cmd/gouno/web.go`, `cmd/gouno/web_infra.go`).
+- Stdlib `log.Printf` replaced with `fmt.Fprintf(os.Stderr, ...)` in pre-logger initialization paths (`config/config_manager.go`, `deploy/config.go`).
+- Extracted `auditMetaFromContext` helper — deduplicates audit log metadata construction across 10 call sites (`internal/account/service/account_service.go`).
+- Extracted `tokenResponse` helper — deduplicates OAuth2 token response construction across 6 call sites (`internal/auth/controller/auth_controller.go`, `internal/auth/controller/passkey_controller.go`).
+- Extracted `checkIPRateLimit` helper — deduplicates per-IP login rate limit check across 3 call sites (`internal/auth/service/auth_login.go`).
+- Extracted `readLimitedBody` helper — deduplicates request body buffering with size limit in passkey service (`internal/auth/service/passkey_service.go`).
+- Standardized request type naming: `LoginRequestBody` → `LoginRequest`, `ForgotPasswordRequestBody` → `ForgotPasswordRequest`, `ResetPasswordRequestBody` → `ResetPasswordRequest` (`internal/auth/controller/auth_controller.go`).
+- Redis config defaults added to `setConfigDefaults()` (`config/config_manager.go`).
 - `isUniqueViolation` no longer handles SQLite unique constraint errors — project uses PostgreSQL exclusively (`internal/auth/service/social_login_service.go`).
 - `ListSessionsByAccount` pipeline fallback comment clarified to explain miniredis compatibility requirement (`internal/session/service/session_service.go`).
 - `Validate()` DSN rejection now includes a comment explaining the rationale and mechanism of the compile-time constant comparison (`config/config.go`).

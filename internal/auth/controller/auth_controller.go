@@ -61,6 +61,17 @@ func getClaimsFromContext(ctx *gin.Context) (*tokenDomain.AccessTokenClaims, boo
 	return tc, true
 }
 
+// tokenResponse constructs the standard OAuth2 token response body.
+func tokenResponse(accessToken, refreshToken, sessionID string, expiresIn int) gin.H {
+	return gin.H{
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
+		"token_type":    "Bearer",
+		"expires_in":    expiresIn,
+		"session_id":    sessionID,
+	}
+}
+
 // NewAuthController creates a new instance of AuthController
 func NewAuthController(
 	authSvc authServiceDeps,
@@ -180,15 +191,15 @@ func mfaMgmtHandlers(mfaLimit gin.HandlerFunc) []gin.HandlerFunc {
 	return []gin.HandlerFunc{mfaLimit}
 }
 
-// LoginRequestBody login request body
-type LoginRequestBody struct {
+// LoginRequest login request body
+type LoginRequest struct {
 	Username string `json:"username" binding:"required,max=255"`
 	Password string `json:"password" binding:"required,max=128"`
 }
 
 // Login POST /api/auth/login
 func (c *AuthController) Login(ctx *gin.Context) {
-	var req LoginRequestBody
+	var req LoginRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
 		return
@@ -222,13 +233,9 @@ func (c *AuthController) Login(ctx *gin.Context) {
 	ctx.Header("Cache-Control", "no-store")
 	ctx.Header("Pragma", "no-cache")
 
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-		"access_token":  result.AccessToken,
-		"refresh_token": result.RefreshToken,
-		"token_type":    "Bearer",
-		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
-		"session_id":    result.Session.ID,
-	}))
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
+		result.AccessToken, result.RefreshToken, result.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),
+	)))
 }
 
 // RefreshTokenRequest refresh token request body
@@ -255,13 +262,9 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 	ctx.Header("Cache-Control", "no-store")
 	ctx.Header("Pragma", "no-cache")
 
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-		"access_token":  result.AccessToken,
-		"refresh_token": result.RefreshToken,
-		"token_type":    "Bearer",
-		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
-		"session_id":    result.SessionID,
-	}))
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
+		result.AccessToken, result.RefreshToken, result.SessionID, int(c.tokenMgr.AccessExpiry().Seconds()),
+	)))
 }
 
 // Logout POST /api/auth/logout
@@ -386,13 +389,9 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 	ctx.Header("Cache-Control", "no-store")
 	ctx.Header("Pragma", "no-cache")
 
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-		"access_token":  result.AccessToken,
-		"refresh_token": result.RefreshToken,
-		"token_type":    "Bearer",
-		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
-		"session_id":    result.Session.ID,
-	}))
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
+		result.AccessToken, result.RefreshToken, result.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),
+	)))
 }
 
 // MFAEnroll POST /api/auth/mfa/enroll
@@ -564,13 +563,9 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-		"access_token":  result.AccessToken,
-		"refresh_token": result.RefreshToken,
-		"token_type":    "Bearer",
-		"expires_in":    int(c.tokenMgr.AccessExpiry().Seconds()),
-		"session_id":    result.Session.ID,
-	}))
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
+		result.AccessToken, result.RefreshToken, result.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),
+	)))
 }
 
 // SendVerificationRequest send verification code request body
@@ -670,14 +665,14 @@ func (c *AuthController) ConfirmVerification(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("credential verified"))
 }
 
-// ForgotPasswordRequestBody forgot password request body
-type ForgotPasswordRequestBody struct {
+// ForgotPasswordRequest forgot password request body
+type ForgotPasswordRequest struct {
 	Email string `json:"email" binding:"required,email"`
 }
 
 // ForgotPassword POST /api/auth/password/forgot
 func (c *AuthController) ForgotPassword(ctx *gin.Context) {
-	var req ForgotPasswordRequestBody
+	var req ForgotPasswordRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
 		return
@@ -691,15 +686,15 @@ func (c *AuthController) ForgotPassword(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("if the email exists, a reset link has been sent"))
 }
 
-// ResetPasswordRequestBody reset password request body
-type ResetPasswordRequestBody struct {
+// ResetPasswordRequest reset password request body
+type ResetPasswordRequest struct {
 	Token       string `json:"token" binding:"required"`
 	NewPassword string `json:"new_password" binding:"required,min=8,max=128"`
 }
 
 // ResetPassword POST /api/auth/password/reset
 func (c *AuthController) ResetPassword(ctx *gin.Context) {
-	var req ResetPasswordRequestBody
+	var req ResetPasswordRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
 		return

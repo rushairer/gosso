@@ -211,13 +211,17 @@ func (s *MFAService) VerifyTOTP(ctx context.Context, accountID, code string) (bo
 		return false, fmt.Errorf("find totp credential: %w", err)
 	}
 
+	var decryptFailures int
+	var totalVerified int
 	for _, c := range creds {
 		if !c.IsDeleted() && c.Verified {
+			totalVerified++
 			secret := c.Value
 			if s.totpEncryptionKey != nil {
 				dec, err := decryptSecret(c.Value, s.totpEncryptionKey)
 				if err != nil {
-					s.logger.Warn("Failed to decrypt TOTP secret, skipping", zap.String("cred_id", c.ID), zap.Error(err))
+					s.logger.Error("Failed to decrypt TOTP secret", zap.String("cred_id", c.ID), zap.Error(err))
+					decryptFailures++
 					continue
 				}
 				secret = dec
@@ -226,6 +230,11 @@ func (s *MFAService) VerifyTOTP(ctx context.Context, accountID, code string) (bo
 				return true, nil
 			}
 		}
+	}
+
+	// If all verified credentials failed to decrypt, this is a configuration problem
+	if totalVerified > 0 && decryptFailures == totalVerified {
+		return false, fmt.Errorf("all TOTP credentials failed to decrypt — check totp_encryption_key configuration")
 	}
 
 	return false, nil

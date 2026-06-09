@@ -240,12 +240,9 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 	}
 
 	// Buffer the body so it can be read twice (once for parsing, once by FinishLogin)
-	bodyBytes, err := io.ReadAll(io.LimitReader(request.Body, maxPasskeyRequestBodySize+1))
+	bodyBytes, err := readLimitedBody(request.Body, maxPasskeyRequestBodySize)
 	if err != nil {
-		return "", nil, fmt.Errorf("read request body: %w", err)
-	}
-	if int64(len(bodyBytes)) > maxPasskeyRequestBodySize {
-		return "", nil, ErrRequestBodyTooLarge
+		return "", nil, err
 	}
 	request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
@@ -334,12 +331,9 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, requestID string,
 	}
 
 	// Buffer the body so it can be read twice (once for parsing, once by FinishLogin)
-	bodyBytes, err := io.ReadAll(io.LimitReader(request.Body, maxPasskeyRequestBodySize+1))
+	bodyBytes, err := readLimitedBody(request.Body, maxPasskeyRequestBodySize)
 	if err != nil {
-		return fmt.Errorf("read request body: %w", err)
-	}
-	if int64(len(bodyBytes)) > maxPasskeyRequestBodySize {
-		return ErrRequestBodyTooLarge
+		return err
 	}
 	request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
@@ -483,4 +477,17 @@ func (s *PasskeyService) ResolveAccountForRegistration(ctx context.Context, acco
 		displayName = account.DisplayName
 	}
 	return username, displayName, nil
+}
+
+// readLimitedBody reads the request body with a size limit and replaces it
+// with a new reader so it can be read again.
+func readLimitedBody(body io.ReadCloser, maxSize int64) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(body, maxSize+1))
+	if err != nil {
+		return nil, fmt.Errorf("read request body: %w", err)
+	}
+	if int64(len(data)) > maxSize {
+		return nil, ErrRequestBodyTooLarge
+	}
+	return data, nil
 }
