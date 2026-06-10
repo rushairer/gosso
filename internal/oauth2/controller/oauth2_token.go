@@ -135,7 +135,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 	for _, s := range authCode.Scopes {
 		if s == "openid" {
 			var idErr error
-			idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, authCode.AccountID, authCode.ClientID, authCode.Scopes, authCode.Nonce, authCode.AuthTime)
+			idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, authCode.AccountID, authCode.ClientID, authCode.Scopes, authCode.Nonce, authCode.AuthTime, accessToken)
 			if idErr != nil {
 				c.logger.Error("Failed to generate ID token", zap.Error(idErr))
 				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "error_description": "failed to generate id_token"})
@@ -229,9 +229,13 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		return
 	}
 
+	accessTokenScope := newRefreshToken.Scope
+	if req.Scope != "" {
+		accessTokenScope = req.Scope
+	}
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		AccountID: newRefreshToken.AccountID,
-		Scope:     newRefreshToken.Scope,
+		Scope:     accessTokenScope,
 		ClientID:  newRefreshToken.ClientID,
 		SessionID: newRefreshToken.SessionID,
 	})
@@ -245,7 +249,7 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		"refresh_token": newRefreshToken.Token,
 		"token_type":    "Bearer",
 		"expires_in":    int(c.tokenSvc.AccessExpiry().Seconds()),
-		"scope":         newRefreshToken.Scope,
+		"scope":         accessTokenScope,
 	})
 }
 

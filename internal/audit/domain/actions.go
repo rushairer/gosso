@@ -16,6 +16,7 @@ const (
 	ActionAccountActivate = "account.activate"
 	ActionPasswordChange  = "account.password.change"
 	ActionPasswordReset   = "account.password.reset"
+	ActionCredentialVerify = "account.credential.verify"
 
 	// Federated identity actions
 	ActionFederatedIdentityBind   = "account.federated_identity.bind"

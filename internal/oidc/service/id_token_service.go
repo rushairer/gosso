@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -29,6 +31,7 @@ type IDTokenClaims struct {
 	Locale            string `json:"locale,omitempty"`
 	Nonce             string `json:"nonce,omitempty"`
 	AuthTime          *int64 `json:"auth_time,omitempty"`
+	ATHash            string `json:"at_hash,omitempty"`
 }
 
 // IDTokenService OIDC ID Token service
@@ -67,7 +70,7 @@ func NewIDTokenService(
 }
 
 // GenerateIDToken generates an OIDC ID Token
-func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time) (string, error) {
+func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time, accessToken string) (string, error) {
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
 		return "", fmt.Errorf("find account: %w", err)
@@ -100,6 +103,12 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 		case "phone":
 			s.addPhoneClaims(ctx, accountID, claims)
 		}
+	}
+
+	// Compute at_hash: SHA-256 half-hash of access token per OIDC Core §2.3.1
+	if accessToken != "" {
+		hash := sha256.Sum256([]byte(accessToken))
+		claims.ATHash = base64.RawURLEncoding.EncodeToString(hash[:len(hash)/2])
 	}
 
 	// Sign the ID Token using TokenService's RSA private key

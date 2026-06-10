@@ -10,6 +10,7 @@ var (
 	ErrEmailAlreadyRegistered        = errors.New("email already registered")
 	ErrPhoneAlreadyRegistered        = errors.New("phone already registered")
 	ErrAccountNotActive              = errors.New("account is not active")
+	ErrRoleNotFound                  = errors.New("role not found")
 )
 
 // Dependency configuration errors for late-bound dependencies.

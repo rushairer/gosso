@@ -45,10 +45,14 @@ func (r *Role) IsDeleted() bool {
 }
 
 // SoftDelete soft-deletes the role.
-func (r *Role) SoftDelete() {
+func (r *Role) SoftDelete() error {
+	if r.IsDeleted() {
+		return errors.New("role is already deleted")
+	}
 	now := time.Now()
 	r.DeletedAt = &now
 	r.UpdatedAt = now
+	return nil
 }
 
 // AddPermission adds a permission to the role.

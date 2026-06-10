@@ -30,9 +30,19 @@ func TestNewFederatedIdentity_NilProfile(t *testing.T) {
 func TestFederatedIdentity_IsDeleted_SoftDelete(t *testing.T) {
 	fi, _ := NewFederatedIdentity("acc-3", ProviderWeChat, "wx-789", nil)
 	assert.False(t, fi.IsDeleted())
-	fi.SoftDelete()
+	err := fi.SoftDelete()
+	assert.NoError(t, err)
 	assert.True(t, fi.IsDeleted())
 	assert.NotNil(t, fi.DeletedAt)
+}
+
+func TestFederatedIdentity_SoftDelete_DoubleDelete(t *testing.T) {
+	fi, _ := NewFederatedIdentity("acc-3", ProviderWeChat, "wx-789", nil)
+	err := fi.SoftDelete()
+	assert.NoError(t, err)
+	err = fi.SoftDelete()
+	assert.Error(t, err)
+	assert.Equal(t, "federated identity is already deleted", err.Error())
 }
 
 func TestFederatedIdentity_UpdateProfile(t *testing.T) {

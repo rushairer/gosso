@@ -60,7 +60,7 @@ type ConsentManager interface {
 
 // IDTokenManager defines OIDC ID token generation operations.
 type IDTokenManager interface {
-	GenerateIDToken(ctx context.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time) (string, error)
+	GenerateIDToken(ctx context.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time, accessToken string) (string, error)
 }
 
 // ClientAuthManager defines OAuth2 client credential verification operations.
@@ -160,7 +160,7 @@ func (c *OAuth2Controller) authenticateRequest(ctx *gin.Context) (string, bool) 
 // introspectLimit and deviceCodeLimit are optional rate limit middleware for CPU-intensive endpoints.
 func (c *OAuth2Controller) RegisterRoutes(rg *gin.RouterGroup, authMiddleware, introspectLimit, deviceCodeLimit gin.HandlerFunc) {
 	rg.GET("/authorize", authMiddleware, c.Authorize)
-	rg.POST("/authorize", c.SubmitConsent)
+	rg.POST("/authorize", authMiddleware, c.SubmitConsent)
 	rg.POST("/token", c.Token)
 	rg.POST("/revoke", authMiddleware, c.Revoke)
 

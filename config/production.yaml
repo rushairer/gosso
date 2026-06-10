@@ -27,7 +27,7 @@ database:
             log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
 redis:
     dsn: "${GOUNO_REDIS_DSN}"
-    max_active_conns: 6000
+    max_active_conns: 100
     pool_timeout_seconds: 60
 task_pipeline:
     flush_size: 32

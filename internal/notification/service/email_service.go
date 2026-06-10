@@ -154,7 +154,11 @@ func (s *EmailService) send(ctx context.Context, to, subject, htmlBody string) e
 	if err != nil && isTransientError(err) {
 		s.logger.Warn("Retrying email send after transient error",
 			zap.String("to", maskEmail(to)), zap.Error(err))
-		time.Sleep(time.Second)
+		select {
+		case <-time.After(time.Second):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 		err = s.client.DialAndSendWithContext(ctx, msg)
 	}
 	if err != nil {
@@ -184,11 +188,16 @@ func smtpTLSPolicy(policy string) mail.TLSPolicy {
 	}
 }
 
-// isTransientError reports whether the error is likely transient (timeout, connection reset).
+// isTransientError reports whether the error is likely transient (timeout, connection reset, broken pipe).
 func isTransientError(err error) bool {
 	var netErr net.Error
 	if errors.As(err, &netErr) {
-		return netErr.Timeout()
+		return true // covers timeout and other network errors
+	}
+	// Check for connection reset, broken pipe
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return true
 	}
 	return false
 }

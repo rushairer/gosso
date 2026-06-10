@@ -12,9 +12,9 @@ import (
 // Revoke POST /oauth2/revoke
 func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 	var req struct {
-		Token string `json:"token" binding:"required"`
+		Token string `json:"token" form:"token" binding:"required"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
+	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
 		return
 	}
@@ -79,7 +79,8 @@ func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	} else if !client.IsConfidential {
-		c.logger.Debug("Introspect called by public client", zap.String("client_id", clientID))
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "public clients are not allowed to introspect"})
+		return
 	}
 
 	result, err := c.tokenSvc.IntrospectToken(ctx, req.Token)

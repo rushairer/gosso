@@ -137,6 +137,10 @@ func (c *AdminController) DeleteAccount(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.SoftDeleteAccount(ctx, accountID); err != nil {
+		if errors.Is(err, accountService.ErrAccountNotActive) {
+			ctx.JSON(http.StatusConflict, gouno.NewErrorResponse(http.StatusConflict, "account is not active"))
+			return
+		}
 		c.logger.Error("Failed to delete account", zap.Error(err), zap.String("account_id", accountID))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
 		return
@@ -242,6 +246,14 @@ func (c *AdminController) AddRole(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.AssignRole(ctx, accountID, req.RoleID); err != nil {
+		if errors.Is(err, accountService.ErrAccountNotActive) {
+			ctx.JSON(http.StatusConflict, gouno.NewErrorResponse(http.StatusConflict, "account is not active"))
+			return
+		}
+		if errors.Is(err, accountService.ErrRoleNotFound) {
+			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "role not found"))
+			return
+		}
 		c.logger.Error("Failed to assign role", zap.Error(err), zap.String("account_id", accountID))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to assign role"))
 		return
@@ -262,6 +274,14 @@ func (c *AdminController) RemoveRole(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.RemoveRole(ctx, accountID, roleID); err != nil {
+		if errors.Is(err, accountService.ErrAccountNotActive) {
+			ctx.JSON(http.StatusConflict, gouno.NewErrorResponse(http.StatusConflict, "account is not active"))
+			return
+		}
+		if errors.Is(err, accountService.ErrRoleNotFound) {
+			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "role not found"))
+			return
+		}
 		c.logger.Error("Failed to remove role", zap.Error(err), zap.String("account_id", accountID))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to remove role"))
 		return

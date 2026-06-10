@@ -40,7 +40,6 @@
             {{end}}
         </div>
         <form method="POST" action="/oauth2/device">
-            <input type="hidden" name="device_code" value="{{.DeviceCode}}">
             <input type="hidden" name="user_code" value="{{.UserCode}}">
             <input type="hidden" name="csrf_token" id="csrf_token" value="{{.CSRFToken}}">
             <div class="actions">

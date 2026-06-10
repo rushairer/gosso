@@ -268,7 +268,7 @@ type mockIDTokenMgr struct {
 	generateIDTokenFn func() (string, error)
 }
 
-func (m *mockIDTokenMgr) GenerateIDToken(_ context.Context, _, _ string, _ []string, _ string, _ time.Time) (string, error) {
+func (m *mockIDTokenMgr) GenerateIDToken(_ context.Context, _, _ string, _ []string, _ string, _ time.Time, _ string) (string, error) {
 	if m.generateIDTokenFn != nil {
 		return m.generateIDTokenFn()
 	}
@@ -1676,8 +1676,9 @@ func TestDeviceUserSubmit_MissingDeviceCode(t *testing.T) {
 	engine := gin.New()
 	engine.POST("/oauth2/device", ctrl.DeviceUserSubmit)
 
-	req := httptest.NewRequest(http.MethodPost, "/oauth2/device", strings.NewReader("user_code=XXXX"))
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/device", strings.NewReader("user_code=XXXX&csrf_token=test-csrf"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: "test-csrf"})
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1705,9 +1706,10 @@ func TestDeviceUserSubmit_Approved(t *testing.T) {
 	engine.POST("/oauth2/device", ctrl.DeviceUserSubmit)
 
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/device",
-		strings.NewReader("device_code=dc-123&approved=true"))
+		strings.NewReader("device_code=dc-123&approved=true&csrf_token=test-csrf"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Bearer valid-token")
+	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: "test-csrf"})
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1735,9 +1737,10 @@ func TestDeviceUserSubmit_Denied(t *testing.T) {
 	engine.POST("/oauth2/device", ctrl.DeviceUserSubmit)
 
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/device",
-		strings.NewReader("device_code=dc-123&approved=false"))
+		strings.NewReader("device_code=dc-123&approved=false&csrf_token=test-csrf"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Bearer valid-token")
+	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: "test-csrf"})
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 

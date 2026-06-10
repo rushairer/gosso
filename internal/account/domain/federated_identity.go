@@ -58,10 +58,14 @@ func (fi *FederatedIdentity) IsDeleted() bool {
 }
 
 // SoftDelete soft-deletes the federated identity.
-func (fi *FederatedIdentity) SoftDelete() {
+func (fi *FederatedIdentity) SoftDelete() error {
+	if fi.IsDeleted() {
+		return errors.New("federated identity is already deleted")
+	}
 	now := time.Now()
 	fi.DeletedAt = &now
 	fi.UpdatedAt = now
+	return nil
 }
 
 // UpdateProfile updates the profile data.

@@ -271,6 +271,16 @@ func TestAssignRole(t *testing.T) {
 		WithArgs("account-001").
 		WillReturnRows(accountRows)
 
+	// Mock role FindByID — role exists and is not deleted
+	roleRows := sqlmock.NewRows([]string{
+		"id", "name", "description", "permissions", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		"role-001", "admin", "Administrator", []byte(`["*"]`), []byte("{}"), now, now, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM roles WHERE id").
+		WithArgs("role-001").
+		WillReturnRows(roleRows)
+
 	mock.ExpectBegin()
 	mock.ExpectExec("INSERT INTO account_roles").
 		WithArgs("account-001", "role-001").
@@ -586,7 +596,7 @@ func TestSoftDeleteAccount(t *testing.T) {
 
 	// Set mock expectations
 
-	// Expect FindByID for idempotency check (account not deleted)
+	// Expect FindByID for idempotency check (account not deleted) — now inside transaction
 	now := time.Now()
 	accountRows := sqlmock.NewRows([]string{
 		"id", "username", "display_name", "avatar_url", "status",
@@ -595,11 +605,12 @@ func TestSoftDeleteAccount(t *testing.T) {
 		accountID, "testuser", "Test User", nil, domain.AccountStatusActive,
 		"en", "UTC", []byte("{}"), now, now, nil,
 	)
+
+	mock.ExpectBegin()
+
 	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
-
-	mock.ExpectBegin()
 
 	// Expect soft deleting credentials
 	mock.ExpectExec("UPDATE account_credentials SET deleted_at").
@@ -615,6 +626,8 @@ func TestSoftDeleteAccount(t *testing.T) {
 	mock.ExpectExec("UPDATE account_roles SET deleted_at").
 		WithArgs(sqlmock.AnyArg(), accountID).
 		WillReturnResult(sqlmock.NewResult(0, 3))
+
+	// Expect soft deleting OAuth2 clients (handled by stubOAuth2ClientDeleter, no SQL expectation)
 
 	// Expect soft deleting account
 	mock.ExpectExec("UPDATE accounts SET deleted_at").

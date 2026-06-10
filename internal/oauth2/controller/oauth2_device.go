@@ -137,7 +137,6 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 
 	c.renderDeviceTemplate(ctx, gin.H{
 		"UserCode":   dc.UserCode,
-		"DeviceCode": dc.DeviceCode,
 		"ClientName": client.Name,
 		"Scopes":     dc.Scopes,
 		"CSRFToken":  csrfTokenFromCookie(ctx),
@@ -147,9 +146,9 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 
 // DeviceUserSubmitRequest is the device authorization form submission.
 type DeviceUserSubmitRequest struct {
-	DeviceCode string `form:"device_code" binding:"required"`
+	DeviceCode string `form:"device_code"`
 	UserCode   string `form:"user_code"`
-	Approved   string `form:"approved"`
+	Approved   string `form:"approved" binding:"required"`
 }
 
 // DeviceUserSubmit POST /oauth2/device
@@ -158,6 +157,24 @@ func (c *OAuth2Controller) DeviceUserSubmit(ctx *gin.Context) {
 	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
 		return
+	}
+
+	// Validate CSRF token (double-submit cookie pattern)
+	cookieToken := csrfTokenFromCookie(ctx)
+	formToken := ctx.PostForm("csrf_token")
+	if cookieToken == "" || formToken == "" || cookieToken != formToken {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "invalid_csrf", "error_description": "CSRF token mismatch"})
+		return
+	}
+
+	// Look up device code by user_code if device_code is not provided
+	if req.DeviceCode == "" && req.UserCode != "" {
+		dc, err := c.deviceCodeSvc.GetDeviceCodeByUserCode(ctx, req.UserCode)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid or expired user code"})
+			return
+		}
+		req.DeviceCode = dc.DeviceCode
 	}
 
 	accountIDStr, ok := c.authenticateRequest(ctx)
@@ -276,7 +293,7 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		for _, s := range dc.Scopes {
 			if s == "openid" {
 				var idErr error
-				idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", dc.AuthorizedAt)
+				idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", dc.AuthorizedAt, accessToken)
 				if idErr != nil {
 					c.logger.Error("Failed to generate ID token for device code", zap.Error(idErr))
 					ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})

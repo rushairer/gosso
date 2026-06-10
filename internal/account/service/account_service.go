@@ -198,24 +198,18 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	// 3. Create account + credentials in transaction
 	now := time.Now()
 
-	var username *string
+	account, err := domain.NewAccount(req.DisplayName)
+	if err != nil {
+		return nil, fmt.Errorf("create account: %w", err)
+	}
 	if req.Username != "" {
-		username = &req.Username
+		account.Username = &req.Username
 	}
+	account.Locale = req.Locale
+	account.Timezone = req.Timezone
+	account.Metadata = nonNilMap(req.Metadata)
 
-	account := &domain.Account{
-		ID:          uuid.New().String(),
-		Username:    username,
-		DisplayName: req.DisplayName,
-		Status:      domain.AccountStatusActive,
-		Locale:      req.Locale,
-		Timezone:    req.Timezone,
-		Metadata:    nonNilMap(req.Metadata),
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
-
-	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		if err := s.accountRepo.CreateAccount(ctx, tx, account); err != nil {
 			return err
 		}
@@ -338,20 +332,20 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		return fmt.Errorf("%w: cannot cascade-delete OAuth2 clients", ErrOAuth2ClientDeleterNotBound)
 	}
 
-	// 3. Check if already deleted (idempotent)
-	account, err := s.accountRepo.FindByID(ctx, accountID)
-	if err != nil {
-		return fmt.Errorf("find account: %w", err)
-	}
-	if account.DeletedAt != nil {
-		return nil
-	}
-
-	// 4. Soft-delete in transaction
+	// 3. Soft-delete in transaction (includes idempotency check to prevent concurrent deletion)
 	now := time.Now()
 	txStart := time.Now()
 
-	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// Re-check inside transaction to prevent concurrent deletion
+		account, err := s.accountRepo.FindByID(ctx, accountID)
+		if err != nil {
+			return fmt.Errorf("find account: %w", err)
+		}
+		if account.DeletedAt != nil {
+			return nil // idempotent
+		}
+
 		if err := s.credentialRepo.SoftDeleteCredentialsByAccount(ctx, tx, accountID, now); err != nil {
 			return err
 		}
@@ -423,9 +417,22 @@ func (s *accountServiceImpl) VerifyCredential(ctx context.Context, accountID str
 	// 2. Mark as verified
 	credential.Verify()
 
-	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		return s.credentialRepo.UpdateCredential(ctx, tx, credential)
 	})
+	if err != nil {
+		return err
+	}
+
+	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+		auditDomain.ActionCredentialVerify,
+		audit.IPFromContext(ctx),
+		stringPtr(accountID),
+		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "credential_type": credential.Type}),
+		auditMetaFromContext(ctx),
+	))
+
+	return nil
 }
 
 // ChangePassword changes the account password.
@@ -577,7 +584,17 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
 		return err
 	}
-	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+
+	// Verify role exists before assignment
+	role, err := s.roleRepo.FindByID(ctx, roleID)
+	if err != nil {
+		return err
+	}
+	if role == nil || role.IsDeleted() {
+		return ErrRoleNotFound
+	}
+
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		return s.roleRepo.AssignRoleToAccount(ctx, tx, accountID, roleID)
 	})
 	if err != nil {
@@ -662,7 +679,7 @@ func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID stri
 		return err
 	}
 
-	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountActivate,
 		audit.IPFromContext(ctx),
 		stringPtr(accountID),

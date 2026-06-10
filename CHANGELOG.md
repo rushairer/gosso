@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - OAuth2 token endpoint Content-Type check now uses `mime.ParseMediaType` for precise validation (`internal/oauth2/controller/oauth2_token.go`).
 - Login rate limiting now fails closed when Redis is unavailable (`internal/auth/service/auth_login.go`).
 - `TOTPEncryptionKey` now rejects the default development value at config validation (`config/config.go`, `config/config_manager.go`).
+- SubmitConsent (POST `/authorize`) now uses the same session authMiddleware as GET `/authorize` — previously relied on bearer token only, causing 401 for session-authenticated users (`internal/oauth2/controller/oauth2_controller.go`).
+- Device authorization page now validates CSRF token on form submission (`internal/oauth2/controller/oauth2_device.go`).
+- Introspect endpoint now rejects public clients per RFC 7662 — previously allowed unauthenticated public client access (`internal/oauth2/controller/oauth2_revoke.go`).
+- Refresh token scope narrowing is now enforced on the generated access token — previously validated but not applied (`internal/oauth2/controller/oauth2_token.go`).
+- Device code secret no longer embedded in HTML form — resolved server-side via user_code (`internal/oauth2/controller/oauth2_device.go`).
+- Passkey controller responses now include `Cache-Control: no-store` headers to prevent token caching (`internal/auth/controller/passkey_controller.go`).
+- Logout now revokes session before tokens — prevents stale sessions on partial failure (`internal/oidc/service/logout_service.go`).
 
 ### Added
 - JSON log format support via `log.format` config field (`internal/utility/logger.go`, `config/config.go`).
@@ -26,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Config validation now enforces positive server timeouts and `MaxOpenConns > 0` (`config/config.go`).
 - Email service outbound rate limiting (10 emails/sec) and single-retry for transient SMTP errors (`internal/notification/service/email_service.go`).
 - `setNoCacheHeaders`, `buildLoginResult`, `renderDeviceTemplate`, `requireActiveAccount` helper functions to reduce code duplication.
+- ID Token now includes `at_hash` claim per OIDC Core §2.3.1 when access token is issued alongside (`internal/oidc/service/id_token_service.go`).
+- `VerifyCredential` now emits synchronous audit log on success (`internal/account/service/account_service.go`).
+- `AssignRole` now verifies role exists and is not deleted before assignment (`internal/account/service/account_service.go`).
+- `Role.SoftDelete` and `FederatedIdentity.SoftDelete` now return error on double-delete for consistency with `Account` and `Credential` (`internal/account/domain/`).
+- Admin error mapping: `AddRole`, `RemoveRole`, `DeleteAccount` now return 409 for inactive accounts and 404 for missing roles (`internal/admin/controller/admin_controller.go`).
 
 ### Fixed
 - Integration tests now exit with code 1 (instead of 0) when test infrastructure is unavailable — prevents CI from silently passing when Docker services fail to start (`internal/auth/service/auth_integration_test.go`, `internal/session/service/session_integration_test.go`).
@@ -58,7 +70,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Audit `Wait()` documents time-based heuristic limitation and recommends upgrading batchflow (`internal/audit/service/audit.go`).
 - Audit batch pipeline parameters (`buffer_size`, `flush_size`, `flush_interval`) are now configurable via `task_pipeline` config (`internal/audit/service/audit.go`, `cmd/gouno/web.go`).
 - Go version updated to 1.26 (`go.mod`, `Dockerfile`).
-- Go version updated to 1.26 (`go.mod`, `Dockerfile`).
+- `GenerateIDToken` now accepts `accessToken` parameter for `at_hash` computation (`internal/oidc/service/id_token_service.go`).
+- Revoke endpoint now accepts `application/x-www-form-urlencoded` per RFC 7009 (`internal/oauth2/controller/oauth2_revoke.go`).
+- `ActivateAccount` now uses synchronous audit logging for security-critical state change (`internal/account/service/account_service.go`).
+- `SoftDeleteAccount` idempotency check moved inside transaction to prevent concurrent deletion races (`internal/account/service/account_service.go`).
+- `RegisterAccount` now uses `domain.NewAccount()` constructor for consistent validation (`internal/account/service/account_service.go`).
+- Nginx no longer sets `Content-Security-Policy` header — delegated to Go middleware with nonce-based CSP (`config/nginx.conf`).
+- Production Redis `max_active_conns` reduced from 6000 to 100 to match Redis `maxclients` (`config/production.yaml`).
+- Email retry sleep now respects context cancellation for cleaner shutdown (`internal/notification/service/email_service.go`).
+- `isTransientError` expanded to cover all `net.Error` and `net.OpError` types (`internal/notification/service/email_service.go`).
 - Production config now defaults to JSON log format (`config/production.yaml`).
 - All `logger.Sugar()` calls in startup/shutdown code replaced with structured `zap` logging (`cmd/gouno/web.go`, `cmd/gouno/web_infra.go`).
 - Stdlib `log.Printf` replaced with `fmt.Fprintf(os.Stderr, ...)` in pre-logger initialization paths (`config/config_manager.go`, `deploy/config.go`).

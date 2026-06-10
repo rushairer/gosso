@@ -101,13 +101,15 @@ func (s *LogoutService) LogoutBySessionID(ctx context.Context, accountID, sessio
 		return nil
 	}
 
+	// Revoke session FIRST so that even if token revocation fails,
+	// the session is already invalidated.
+	if err := s.sessionSvc.RevokeSession(ctx, accountID, sessionID); err != nil {
+		return fmt.Errorf("revoke session: %w", err)
+	}
+
 	if err := s.tokenSvc.RevokeAllForSession(ctx, sessionID); err != nil {
 		s.logger.Warn("Failed to revoke tokens for session during logout",
 			zap.String("session_id", sessionID), zap.Error(err))
-	}
-
-	if err := s.sessionSvc.RevokeSession(ctx, accountID, sessionID); err != nil {
-		return fmt.Errorf("revoke session: %w", err)
 	}
 
 	s.logger.Info("Session logout successful",

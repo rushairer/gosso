@@ -183,7 +183,7 @@ func TestGenerateIDToken_OpenID(t *testing.T) {
 
 	ctx := context.Background()
 
-	tokenString, err := svc.GenerateIDToken(ctx, "account-001", "client-001", []string{"openid"}, "test-nonce", time.Now())
+	tokenString, err := svc.GenerateIDToken(ctx, "account-001", "client-001", []string{"openid"}, "test-nonce", time.Now(), "")
 	require.NoError(t, err)
 	assert.NotEmpty(t, tokenString)
 
@@ -212,7 +212,7 @@ func TestGenerateIDToken_ProfileScope(t *testing.T) {
 
 	ctx := context.Background()
 
-	tokenString, err := svc.GenerateIDToken(ctx, "account-001", "client-001", []string{"openid", "profile"}, "", time.Now())
+	tokenString, err := svc.GenerateIDToken(ctx, "account-001", "client-001", []string{"openid", "profile"}, "", time.Now(), "")
 	require.NoError(t, err)
 
 	parser := jwt.NewParser()
@@ -234,7 +234,7 @@ func TestGenerateIDToken_EmailScope(t *testing.T) {
 
 	ctx := context.Background()
 
-	tokenString, err := svc.GenerateIDToken(ctx, "account-001", "client-001", []string{"openid", "email"}, "", time.Now())
+	tokenString, err := svc.GenerateIDToken(ctx, "account-001", "client-001", []string{"openid", "email"}, "", time.Now(), "")
 	require.NoError(t, err)
 
 	parser := jwt.NewParser()
@@ -254,7 +254,7 @@ func TestGenerateIDToken_PhoneScope(t *testing.T) {
 
 	ctx := context.Background()
 
-	tokenString, err := svc.GenerateIDToken(ctx, "account-001", "client-001", []string{"openid", "phone"}, "", time.Now())
+	tokenString, err := svc.GenerateIDToken(ctx, "account-001", "client-001", []string{"openid", "phone"}, "", time.Now(), "")
 	require.NoError(t, err)
 
 	parser := jwt.NewParser()
@@ -274,7 +274,7 @@ func TestGenerateIDToken_RS256(t *testing.T) {
 
 	ctx := context.Background()
 
-	tokenString, err := svc.GenerateIDToken(ctx, "account-001", "client-001", []string{"openid"}, "", time.Now())
+	tokenString, err := svc.GenerateIDToken(ctx, "account-001", "client-001", []string{"openid"}, "", time.Now(), "")
 	require.NoError(t, err)
 
 	parser := jwt.NewParser()

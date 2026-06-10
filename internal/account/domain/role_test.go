@@ -80,9 +80,19 @@ func TestHasPermission_EmptyRole(t *testing.T) {
 func TestRole_SoftDelete(t *testing.T) {
 	r, _ := NewRole("admin", nil)
 	assert.False(t, r.IsDeleted())
-	r.SoftDelete()
+	err := r.SoftDelete()
+	assert.NoError(t, err)
 	assert.True(t, r.IsDeleted())
 	assert.NotNil(t, r.DeletedAt)
+}
+
+func TestRole_SoftDelete_DoubleDelete(t *testing.T) {
+	r, _ := NewRole("admin", nil)
+	err := r.SoftDelete()
+	assert.NoError(t, err)
+	err = r.SoftDelete()
+	assert.Error(t, err)
+	assert.Equal(t, "role is already deleted", err.Error())
 }
 
 func TestNewRole_Initialization(t *testing.T) {
