@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Consent repository now uses soft-delete with partial unique index — consent revocation is auditable and recoverable (`internal/oauth2/repository/consent_repository_impl.go`, `db/migrations/0014`).
 - `config.Validate()` now checks that `private_key_path` file exists when configured (`config/config.go`).
 - Entrypoint script now properly distinguishes migration "no change" from actual failures — previously all non-zero exit codes were treated as "no change" (`script/entrypoint.sh`).
+- OAuth2 and OIDC routes now apply `AuditMetadataMiddleware` — refresh tokens issued through OAuth2 flows now store client IP for IP binding, and audit logs for OAuth2/OIDC flows include IP/UserAgent metadata (`router/web.go`).
+- OAuth2 `/authorize` endpoint now verifies the account is active before generating authorization codes — previously suspended accounts could still authorize clients (`internal/oauth2/controller/oauth2_authorize.go`).
+- Reverted `SoftDeleteCredentialsByAccount` and `SoftDeleteCredential` (webauthn) SQL changes that referenced non-existent `updated_at` columns — these would have caused runtime errors on account/passkey deletion (`internal/account/repository/credential_repository_impl.go`, `internal/auth/repository/webauthn_repository_impl.go`).
 
 ### Added
 - JSON log format support via `log.format` config field (`internal/utility/logger.go`, `config/config.go`).

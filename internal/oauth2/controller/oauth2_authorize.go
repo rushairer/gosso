@@ -74,6 +74,12 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
+	// Verify the account is still active — suspended accounts must not generate authorization codes.
+	if !c.accountValidator.IsAccountActive(ctx, accountIDStr) {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "access_denied", "error_description": "account is not active"})
+		return
+	}
+
 	// Store PKCE + nonce parameters server-side to prevent tampering in the consent form.
 	// Redis is required for consent state storage; reject if unavailable to prevent PKCE bypass.
 	consentID := uuid.New().String()
