@@ -17,15 +17,15 @@ import (
 )
 
 // setupEngine configures the Gin engine: middleware + routes
-func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger, m *appModules, db *sql.DB, redis *cache.RedisClient) *gin.Engine {
+func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger, m *appModules, db *sql.DB, redis *cache.RedisClient) (*gin.Engine, error) {
 	engine := gin.New()
 	if err := engine.SetTrustedProxies(cfg.WebServerConfig.TrustedProxies); err != nil {
-		logger.Fatal("Invalid trusted proxies configuration", zap.Error(err))
+		return nil, fmt.Errorf("invalid trusted proxies configuration: %w", err)
 	}
 
 	corsConfig, err := buildCORSConfig(cfg, logger)
 	if err != nil {
-		logger.Fatal("Invalid CORS configuration", zap.Error(err))
+		return nil, fmt.Errorf("invalid CORS configuration: %w", err)
 	}
 
 	engine.Use(
@@ -66,7 +66,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		Logger:           logger,
 	})
 
-	return engine
+	return engine, nil
 }
 
 // buildCORSConfig builds CORS configuration from config.

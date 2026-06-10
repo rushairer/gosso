@@ -85,7 +85,11 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	engine := setupEngine(ctx, globalConfig, logger, modules, db, redis)
+	engine, err := setupEngine(ctx, globalConfig, logger, modules, db, redis)
+	if err != nil {
+		logger.Error("engine setup failed", zap.Error(err))
+		os.Exit(1)
+	}
 
 	httpServer := &http.Server{
 		Addr:              fmt.Sprintf("%s:%s", globalConfig.WebServerConfig.Address, globalConfig.WebServerConfig.Port),

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,7 +29,14 @@ type FederatedIdentity struct {
 }
 
 // NewFederatedIdentity creates a new federated identity.
-func NewFederatedIdentity(accountID string, provider Provider, providerUserID string, profile map[string]interface{}) *FederatedIdentity {
+// Returns an error if accountID or providerUserID is empty.
+func NewFederatedIdentity(accountID string, provider Provider, providerUserID string, profile map[string]interface{}) (*FederatedIdentity, error) {
+	if accountID == "" {
+		return nil, errors.New("account ID is required")
+	}
+	if providerUserID == "" {
+		return nil, errors.New("provider user ID is required")
+	}
 	if profile == nil {
 		profile = make(map[string]interface{})
 	}
@@ -41,7 +49,7 @@ func NewFederatedIdentity(accountID string, provider Provider, providerUserID st
 		Profile:        profile,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
-	}
+	}, nil
 }
 
 // IsDeleted reports whether the federated identity has been soft-deleted.

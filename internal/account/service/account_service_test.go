@@ -259,6 +259,18 @@ func TestAssignRole(t *testing.T) {
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 
+	now := time.Now()
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		"account-001", "testuser", "Test User", nil, domain.AccountStatusActive,
+		"en", "UTC", []byte("{}"), now, now, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs("account-001").
+		WillReturnRows(accountRows)
+
 	mock.ExpectBegin()
 	mock.ExpectExec("INSERT INTO account_roles").
 		WithArgs("account-001", "role-001").
@@ -284,6 +296,18 @@ func TestRemoveRole(t *testing.T) {
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 
+	now := time.Now()
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		"account-001", "testuser", "Test User", nil, domain.AccountStatusActive,
+		"en", "UTC", []byte("{}"), now, now, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs("account-001").
+		WillReturnRows(accountRows)
+
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE account_roles SET deleted_at").
 		WithArgs(sqlmock.AnyArg(), "account-001", "role-001").
@@ -308,6 +332,18 @@ func TestRemoveRole_NotFound(t *testing.T) {
 	roleRepo := repository.NewRoleRepository(db)
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+
+	now := time.Now()
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		"account-001", "testuser", "Test User", nil, domain.AccountStatusActive,
+		"en", "UTC", []byte("{}"), now, now, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs("account-001").
+		WillReturnRows(accountRows)
 
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE account_roles SET deleted_at").
@@ -494,6 +530,19 @@ func TestChangePassword(t *testing.T) {
 	// Generate a real argon2id hash for the old password
 	oldHash, err := domain.HashPassword(oldPassword)
 	require.NoError(t, err)
+
+	// Mock FindByID for requireActiveAccount
+	now := time.Now()
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		accountID, "testuser", "Test User", nil, domain.AccountStatusActive,
+		"en", "UTC", []byte("{}"), now, now, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs(accountID).
+		WillReturnRows(accountRows)
 
 	rows := sqlmock.NewRows([]string{
 		"id", "account_id", "credential_type", "identifier", "credential_value",
@@ -856,6 +905,19 @@ func TestBindFederatedIdentity(t *testing.T) {
 
 	accountID := "account-001"
 
+	// Mock FindByID for requireActiveAccount
+	now := time.Now()
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		accountID, "testuser", "Test User", nil, domain.AccountStatusActive,
+		"en", "UTC", []byte("{}"), now, now, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs(accountID).
+		WillReturnRows(accountRows)
+
 	mock.ExpectBegin()
 
 	// FindByProvider — not found (no existing binding)
@@ -891,6 +953,18 @@ func TestBindFederatedIdentity_AlreadyBound(t *testing.T) {
 
 	accountID := "account-001"
 	now := time.Now()
+
+	// Mock FindByID for requireActiveAccount
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		accountID, "testuser", "Test User", nil, domain.AccountStatusActive,
+		"en", "UTC", []byte("{}"), now, now, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs(accountID).
+		WillReturnRows(accountRows)
 
 	mock.ExpectBegin()
 
@@ -932,6 +1006,19 @@ func TestUnbindFederatedIdentity(t *testing.T) {
 	accountID := "account-001"
 	identityID := "fi-001"
 
+	// Mock FindByID for requireActiveAccount
+	now := time.Now()
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		accountID, "testuser", "Test User", nil, domain.AccountStatusActive,
+		"en", "UTC", []byte("{}"), now, now, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs(accountID).
+		WillReturnRows(accountRows)
+
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE federated_identities SET deleted_at").
 		WithArgs(sqlmock.AnyArg(), identityID, accountID).
@@ -959,6 +1046,19 @@ func TestUnbindFederatedIdentity_NotFound(t *testing.T) {
 
 	accountID := "account-001"
 	identityID := "nonexistent"
+
+	// Mock FindByID for requireActiveAccount
+	now := time.Now()
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		accountID, "testuser", "Test User", nil, domain.AccountStatusActive,
+		"en", "UTC", []byte("{}"), now, now, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs(accountID).
+		WillReturnRows(accountRows)
 
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE federated_identities SET deleted_at").

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,7 +20,14 @@ type Role struct {
 }
 
 // NewRole creates a new role.
-func NewRole(name string, description *string) *Role {
+// Returns an error if name is empty or exceeds 255 characters.
+func NewRole(name string, description *string) (*Role, error) {
+	if name == "" {
+		return nil, errors.New("role name is required")
+	}
+	if len(name) > 255 {
+		return nil, errors.New("role name must not exceed 255 characters")
+	}
 	return &Role{
 		ID:          uuid.New().String(),
 		Name:        name,
@@ -28,7 +36,7 @@ func NewRole(name string, description *string) *Role {
 		Metadata:    make(map[string]interface{}),
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
-	}
+	}, nil
 }
 
 // IsDeleted reports whether the role has been soft-deleted.

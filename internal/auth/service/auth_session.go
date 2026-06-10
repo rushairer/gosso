@@ -23,8 +23,9 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	if oldRT.IP != "" {
 		currentIP := audit.IPFromContext(ctx)
 		if currentIP == "" {
-			s.logger.Warn("Refresh token has IP binding but current request has no IP; skipping check",
+			s.logger.Warn("Refresh token has IP binding but current request has no IP; rejecting",
 				zap.String("account_id", oldRT.AccountID))
+			return nil, ErrInvalidRefreshToken
 		} else if oldRT.IP != currentIP {
 			s.logger.Warn("Refresh token IP mismatch",
 				zap.String("original_ip", oldRT.IP),

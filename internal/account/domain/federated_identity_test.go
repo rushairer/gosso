@@ -11,7 +11,7 @@ func TestNewFederatedIdentity_WithProfile(t *testing.T) {
 		"name":  "Test User",
 		"email": "test@example.com",
 	}
-	fi := NewFederatedIdentity("acc-1", ProviderGoogle, "google-123", profile)
+	fi, _ := NewFederatedIdentity("acc-1", ProviderGoogle, "google-123", profile)
 	assert.NotEmpty(t, fi.ID)
 	assert.Equal(t, "acc-1", fi.AccountID)
 	assert.Equal(t, ProviderGoogle, fi.Provider)
@@ -22,13 +22,13 @@ func TestNewFederatedIdentity_WithProfile(t *testing.T) {
 }
 
 func TestNewFederatedIdentity_NilProfile(t *testing.T) {
-	fi := NewFederatedIdentity("acc-2", ProviderGitHub, "gh-456", nil)
+	fi, _ := NewFederatedIdentity("acc-2", ProviderGitHub, "gh-456", nil)
 	assert.NotNil(t, fi.Profile)
 	assert.Empty(t, fi.Profile)
 }
 
 func TestFederatedIdentity_IsDeleted_SoftDelete(t *testing.T) {
-	fi := NewFederatedIdentity("acc-3", ProviderWeChat, "wx-789", nil)
+	fi, _ := NewFederatedIdentity("acc-3", ProviderWeChat, "wx-789", nil)
 	assert.False(t, fi.IsDeleted())
 	fi.SoftDelete()
 	assert.True(t, fi.IsDeleted())
@@ -36,7 +36,7 @@ func TestFederatedIdentity_IsDeleted_SoftDelete(t *testing.T) {
 }
 
 func TestFederatedIdentity_UpdateProfile(t *testing.T) {
-	fi := NewFederatedIdentity("acc-4", ProviderGoogle, "g-101", nil)
+	fi, _ := NewFederatedIdentity("acc-4", ProviderGoogle, "g-101", nil)
 	oldUpdatedAt := fi.UpdatedAt
 	newProfile := map[string]interface{}{"name": "Updated"}
 	fi.UpdateProfile(newProfile)

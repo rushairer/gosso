@@ -16,6 +16,11 @@ func validConfig() GoUnoConfig {
 		WebServerConfig: WebServerConfig{
 			Port:        "8080",
 			MaxBodySize: 10 * 1024 * 1024,
+			ReadTimeout:       10 * time.Second,
+			WriteTimeout:      10 * time.Second,
+			ReadHeaderTimeout: 5 * time.Second,
+			IdleTimeout:       120 * time.Second,
+			RequestTimeout:    30 * time.Second,
 			RateLimits: RateLimitsConfig{
 				Login:      5,
 				Token:      10,
@@ -119,11 +124,18 @@ func TestValidate_Errors(t *testing.T) {
 			wantErr: "database: conn_max_idle_time_sec must not be negative",
 		},
 		{
+			name: "zero max_open_conns",
+			mutate: func(c *GoUnoConfig) {
+				c.DatabaseConfig.MaxOpenConns = 0
+			},
+			wantErr: "database: max_open_conns must be positive",
+		},
+		{
 			name: "negative max_open_conns",
 			mutate: func(c *GoUnoConfig) {
 				c.DatabaseConfig.MaxOpenConns = -1
 			},
-			wantErr: "database: max_open_conns must not be negative",
+			wantErr: "database: max_open_conns must be positive",
 		},
 		{
 			name: "max_idle_conns exceeds max_open_conns",

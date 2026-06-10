@@ -105,6 +105,11 @@ func (a *Auditor) Close() {
 //
 // The drain grace period must exceed batchflow's internal drain timeout (hardcoded
 // at 2s). It is configurable via SetDrainGracePeriod for testing or custom deployments.
+//
+// NOTE: This uses a time-based heuristic because batchflow v1.0.2 does not expose
+// a Done() channel. If the DB is very slow during shutdown, batches may still be
+// lost if they exceed the drain timeout. Consider upgrading batchflow to expose
+// PipelineImpl.Done() for deterministic shutdown.
 func (a *Auditor) Wait() {
 	if a.cancel != nil {
 		a.cancel()

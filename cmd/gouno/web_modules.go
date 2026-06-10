@@ -65,7 +65,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 
 	providers := buildOAuthProviders(cfg)
 
-	authMod := auth.InitializeAuthModule(auth.AuthModuleConfig{
+	authMod, err := auth.InitializeAuthModule(auth.AuthModuleConfig{
 		DB:                    db,
 		Redis:                 redis,
 		Logger:                logger,
@@ -82,6 +82,9 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		RoleRepo:              accountMod.RoleRepo,
 		FederatedIdentityRepo: accountMod.FederatedIdentityRepo,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize auth module: %w", err)
+	}
 
 	// Wire session revoker into account service (for account deletion -> session revocation)
 	if err := accountService.BindSessionRevoker(accountMod.Service, authMod.SessionService); err != nil {

@@ -290,7 +290,7 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 
 // seedTestAccount adds a test account with a password credential to the fixture.
 func (f *authServiceFixture) seedTestAccount(accountID, username, password string) {
-	acct := accountDomain.NewAccount(username)
+	acct, _ := accountDomain.NewAccount(username)
 	acct.ID = accountID
 	uname := username
 	acct.Username = &uname

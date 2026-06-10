@@ -98,7 +98,7 @@ func TestCredential_MarkUsed(t *testing.T) {
 func TestCredential_SoftDelete(t *testing.T) {
 	cred := &Credential{}
 	assert.False(t, cred.IsDeleted())
-	cred.SoftDelete()
+	_ = cred.SoftDelete()
 	assert.True(t, cred.IsDeleted())
 }
 

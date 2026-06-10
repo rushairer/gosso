@@ -2,6 +2,7 @@ package auth
 
 import (
 	"database/sql"
+	"fmt"
 
 	wa "github.com/go-webauthn/webauthn/webauthn"
 	"go.uber.org/zap"
@@ -48,8 +49,9 @@ type AuthModuleConfig struct {
 	FederatedIdentityRepo accountRepo.FederatedIdentityRepository
 }
 
-// InitializeAuthModule initializes the authentication module
-func InitializeAuthModule(cfg AuthModuleConfig) *AuthModule {
+// InitializeAuthModule initializes the authentication module.
+// Returns an error if the TOTP encryption key cannot be set.
+func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 	sessionSvc := sessionService.NewSessionService(cfg.Redis, cfg.Logger)
 	sessionSvc.SetTokenRevoker(cfg.TokenSvc)
 	if cfg.AuthConfig.SessionTTL > 0 {
@@ -81,7 +83,7 @@ func InitializeAuthModule(cfg AuthModuleConfig) *AuthModule {
 	mfaSvc := service.NewMFAService(cfg.CredentialRepo, cfg.DB, cfg.AuthConfig.Issuer, cfg.Logger, passkeySvc)
 	if cfg.AuthConfig.TOTPEncryptionKey != "" {
 		if err := mfaSvc.SetTOTPEncryptionKey(cfg.AuthConfig.TOTPEncryptionKey); err != nil {
-			cfg.Logger.Error("Failed to set TOTP encryption key", zap.Error(err))
+			return nil, fmt.Errorf("failed to set TOTP encryption key: %w", err)
 		}
 	}
 	if cfg.AuthConfig.BackupCodeCount > 0 {
@@ -153,5 +155,5 @@ func InitializeAuthModule(cfg AuthModuleConfig) *AuthModule {
 		CredentialRepo:       cfg.CredentialRepo,
 		PasskeyService:       passkeySvc,
 		SessionService:       sessionSvc,
-	}
+	}, nil
 }

@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,7 +34,14 @@ type Account struct {
 }
 
 // NewAccount creates a new account.
-func NewAccount(displayName string) *Account {
+// Returns an error if displayName is empty or exceeds 255 characters.
+func NewAccount(displayName string) (*Account, error) {
+	if strings.TrimSpace(displayName) == "" {
+		return nil, errors.New("display name is required")
+	}
+	if len(displayName) > 255 {
+		return nil, errors.New("display name must not exceed 255 characters")
+	}
 	return &Account{
 		ID:          uuid.New().String(),
 		DisplayName: displayName,
@@ -43,7 +51,7 @@ func NewAccount(displayName string) *Account {
 		Metadata:    make(map[string]interface{}),
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
-	}
+	}, nil
 }
 
 // IsDeleted reports whether the account has been soft-deleted.
@@ -58,7 +66,7 @@ func (a *Account) IsActive() bool {
 
 // IsSuspended reports whether the account has been suspended.
 func (a *Account) IsSuspended() bool {
-	return a.Status == AccountStatusSuspended
+	return a.Status == AccountStatusSuspended && !a.IsDeleted()
 }
 
 // SoftDelete soft-deletes the account. Returns an error if already deleted.

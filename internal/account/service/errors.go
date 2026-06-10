@@ -9,6 +9,7 @@ var (
 	ErrFederatedIdentityAlreadyBound = errors.New("federated identity already bound")
 	ErrEmailAlreadyRegistered        = errors.New("email already registered")
 	ErrPhoneAlreadyRegistered        = errors.New("phone already registered")
+	ErrAccountNotActive              = errors.New("account is not active")
 )
 
 // Dependency configuration errors for late-bound dependencies.

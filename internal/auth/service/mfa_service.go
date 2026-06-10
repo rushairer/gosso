@@ -164,11 +164,6 @@ func (s *MFAService) EnrollTOTP(ctx context.Context, accountID string) (*TOTPEnr
 		return nil, fmt.Errorf("generate totp key: %w", err)
 	}
 
-	// Delete existing unverified TOTP credentials
-	if err := s.deleteUnverifiedTOTP(ctx, accountID); err != nil {
-		s.logger.Warn("Failed to delete unverified TOTP credentials during enrollment", zap.Error(err), zap.String("account_id", accountID))
-	}
-
 	// Encrypt secret for storage (if encryption key is configured)
 	storedSecret := key.Secret()
 	if s.totpEncryptionKey != nil {
@@ -179,7 +174,7 @@ func (s *MFAService) EnrollTOTP(ctx context.Context, accountID string) (*TOTPEnr
 		storedSecret = enc
 	}
 
-	// Save as unverified credential
+	// Delete existing unverified TOTP credentials and save the new one atomically.
 	cred := &accountDomain.Credential{
 		ID:         uuid.New().String(),
 		AccountID:  accountID,
@@ -192,6 +187,15 @@ func (s *MFAService) EnrollTOTP(ctx context.Context, accountID string) (*TOTPEnr
 	}
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// Delete unverified TOTP credentials in the same transaction to prevent race conditions
+		existingCreds, findErr := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
+		if findErr == nil {
+			for _, c := range existingCreds {
+				if !c.Verified && !c.IsDeleted() {
+					_ = s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now())
+				}
+			}
+		}
 		return s.credentialRepo.CreateCredentials(ctx, tx, []*accountDomain.Credential{cred})
 	})
 	if err != nil {

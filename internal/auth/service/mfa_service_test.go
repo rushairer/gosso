@@ -280,10 +280,7 @@ func TestEnrollTOTP_Success(t *testing.T) {
 	}
 	svc := newTestMFAServiceWithDB(t, credRepo, sqlDB)
 
-	// deleteUnverifiedTOTP always opens a tx (even when creds is empty)
-	sqlMock.ExpectBegin()
-	sqlMock.ExpectCommit()
-	// main enroll tx
+	// Single transaction wrapping both delete + create
 	sqlMock.ExpectBegin()
 	sqlMock.ExpectCommit()
 
@@ -313,10 +310,7 @@ func TestEnrollTOTP_CleansUpExistingUnverified(t *testing.T) {
 	}
 	svc := newTestMFAServiceWithDB(t, credRepo, sqlDB)
 
-	// deleteUnverifiedTOTP tx
-	sqlMock.ExpectBegin()
-	sqlMock.ExpectCommit()
-	// main enroll tx
+	// Single transaction wrapping both delete + create
 	sqlMock.ExpectBegin()
 	sqlMock.ExpectCommit()
 
@@ -778,10 +772,7 @@ func TestEnrollTOTP_WithEncryptionKey(t *testing.T) {
 	err = svc.SetTOTPEncryptionKey(testEncryptionKeyHex)
 	require.NoError(t, err)
 
-	// deleteUnverifiedTOTP tx
-	sqlMock.ExpectBegin()
-	sqlMock.ExpectCommit()
-	// main enroll tx
+	// Single transaction wrapping both delete + create
 	sqlMock.ExpectBegin()
 	sqlMock.ExpectCommit()
 
@@ -805,10 +796,7 @@ func TestEnrollTOTP_CreateCredentialsError(t *testing.T) {
 	}
 	svc := newTestMFAServiceWithDB(t, credRepo, sqlDB)
 
-	// deleteUnverifiedTOTP tx
-	sqlMock.ExpectBegin()
-	sqlMock.ExpectCommit()
-	// main enroll tx — begins but CreateCredentials fails
+	// Single transaction — begins but CreateCredentials fails, so rollback
 	sqlMock.ExpectBegin()
 	sqlMock.ExpectRollback()
 

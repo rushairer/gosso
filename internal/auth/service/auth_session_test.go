@@ -75,7 +75,7 @@ func TestCreateSessionAndTokens_Success(t *testing.T) {
 	defer fixture.mr.Close()
 	defer fixture.sqlDB.Close()
 
-	acct := accountDomain.NewAccount("socialuser")
+	acct, _ := accountDomain.NewAccount("socialuser")
 	acct.ID = "account-social"
 
 	session, accessToken, refreshToken, err := fixture.svc.CreateSessionAndTokens(

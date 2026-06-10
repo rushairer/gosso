@@ -57,6 +57,12 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
+	// State parameter is required for public clients (RFC 6749 Section 10.12)
+	if !client.IsConfidential && state == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "state parameter is required for public clients"})
+		return
+	}
+
 	// PKCE is mandatory for public clients (RFC 7636 Section 4.1)
 	if !client.IsConfidential && codeChallenge == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "code_challenge is required for public clients"})
@@ -69,21 +75,34 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 	}
 
 	// Store PKCE + nonce parameters server-side to prevent tampering in the consent form.
+	// Redis is required for consent state storage; reject if unavailable to prevent PKCE bypass.
 	consentID := uuid.New().String()
-	if c.redis != nil {
-		stateData, _ := json.Marshal(consentState{
-			CodeChallenge:       codeChallenge,
-			CodeChallengeMethod: codeChallengeMethod,
-			Nonce:               nonce,
+	if c.redis == nil {
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{
+			"error":             "server_error",
+			"error_description": "consent state storage unavailable",
 		})
-		if err := c.redis.Set(ctx, consentStateKeyPrefix+consentID, string(stateData), consentStateTTL); err != nil {
-			c.logger.Error("Failed to store consent state in Redis", zap.Error(err))
-			ctx.JSON(http.StatusServiceUnavailable, gin.H{
-				"error":             "server_error",
-				"error_description": "unable to process consent, please try again",
-			})
-			return
-		}
+		return
+	}
+	stateData, err := json.Marshal(consentState{
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod,
+		Nonce:               nonce,
+	})
+	if err != nil {
+		c.logger.Error("Failed to marshal consent state", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "server_error",
+		})
+		return
+	}
+	if err := c.redis.Set(ctx, consentStateKeyPrefix+consentID, string(stateData), consentStateTTL); err != nil {
+		c.logger.Error("Failed to store consent state in Redis", zap.Error(err))
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{
+			"error":             "server_error",
+			"error_description": "unable to process consent, please try again",
+		})
+		return
 	}
 
 	existingConsent, consentErr := c.consentSvc.GetConsent(ctx, accountIDStr, clientID)
@@ -180,27 +199,34 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	}
 
 	// Validate PKCE parameters against server-stored consent state to prevent tampering.
-	if c.redis != nil && req.ConsentID != "" {
-		stateKey := consentStateKeyPrefix + req.ConsentID
-		stateData, err := c.redis.Get(ctx, stateKey)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid or expired consent session"})
-			return
-		}
-		// Delete immediately to prevent replay
-		_ = c.redis.Del(ctx, stateKey)
+	// Consent ID is mandatory because Authorize always stores state in Redis.
+	if req.ConsentID == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "missing consent session"})
+		return
+	}
+	if c.redis == nil {
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{"error": "server_error", "error_description": "consent state storage unavailable"})
+		return
+	}
+	stateKey := consentStateKeyPrefix + req.ConsentID
+	stateData, err := c.redis.Get(ctx, stateKey)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid or expired consent session"})
+		return
+	}
+	// Delete immediately to prevent replay
+	_ = c.redis.Del(ctx, stateKey)
 
-		var stored consentState
-		if err := json.Unmarshal([]byte(stateData), &stored); err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid consent session data"})
-			return
-		}
-		if req.CodeChallenge != stored.CodeChallenge ||
-			req.CodeChallengeMethod != stored.CodeChallengeMethod ||
-			req.Nonce != stored.Nonce {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "PKCE parameters mismatch"})
-			return
-		}
+	var stored consentState
+	if err := json.Unmarshal([]byte(stateData), &stored); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid consent session data"})
+		return
+	}
+	if req.CodeChallenge != stored.CodeChallenge ||
+		req.CodeChallengeMethod != stored.CodeChallengeMethod ||
+		req.Nonce != stored.Nonce {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "PKCE parameters mismatch"})
+		return
 	}
 
 	// Validate client exists

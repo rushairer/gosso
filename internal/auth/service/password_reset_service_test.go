@@ -401,7 +401,7 @@ func TestRequestReset_Success(t *testing.T) {
 		}, nil
 	}
 	acctSvc.findByIDFn = func(_ context.Context, _ string) (*accountDomain.Account, error) {
-		return accountDomain.NewAccount("Test User"), nil
+		return accountDomain.NewAccount("Test User")
 	}
 
 	err := svc.RequestReset(ctx, email)
@@ -460,7 +460,7 @@ func TestRequestReset_AccountInactive(t *testing.T) {
 		}, nil
 	}
 	acctSvc.findByIDFn = func(_ context.Context, _ string) (*accountDomain.Account, error) {
-		acct := accountDomain.NewAccount("Inactive User")
+		acct, _ := accountDomain.NewAccount("Inactive User")
 		_ = acct.Suspend()
 		return acct, nil
 	}
@@ -486,7 +486,7 @@ func TestRequestReset_EmailSendFailure(t *testing.T) {
 		}, nil
 	}
 	acctSvc.findByIDFn = func(_ context.Context, _ string) (*accountDomain.Account, error) {
-		return accountDomain.NewAccount("Test User"), nil
+		return accountDomain.NewAccount("Test User")
 	}
 	emailSvc.sendErr = fmt.Errorf("SMTP connection refused")
 

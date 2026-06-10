@@ -1207,9 +1207,7 @@ func TestMFAEnroll_Success(t *testing.T) {
 	}
 	mfaSvc, mock := newTestMFAService(t, credRepo)
 
-	// EnrollTOTP: deleteUnverifiedTOTP (Begin/Commit empty tx) + main (Begin/CreateCredentials/Commit)
-	mock.ExpectBegin()
-	mock.ExpectCommit()
+	// EnrollTOTP uses a single transaction for delete + create
 	mock.ExpectBegin()
 	mock.ExpectCommit()
 
@@ -1240,10 +1238,7 @@ func TestMFAEnroll_ServiceError(t *testing.T) {
 	}
 	mfaSvc, mock := newTestMFAService(t, credRepo)
 
-	// deleteUnverifiedTOTP: Begin/Commit (empty tx)
-	mock.ExpectBegin()
-	mock.ExpectCommit()
-	// main tx: Begin/CreateCredentials fails/Rollback
+	// EnrollTOTP uses a single transaction; CreateCredentials fails -> Rollback
 	mock.ExpectBegin()
 	mock.ExpectRollback()
 
@@ -1686,11 +1681,11 @@ func TestSocialCallback_Success(t *testing.T) {
 	accountID := "social-account-001"
 	fedIdentityRepo := &mockFederatedIdentityRepoForSocial{
 		findByProviderFn: func(_ context.Context, _ accountDomain.Provider, _ string) (*accountDomain.FederatedIdentity, error) {
-			return accountDomain.NewFederatedIdentity(accountID, accountDomain.Provider("google"), "12345", nil), nil
+			return accountDomain.NewFederatedIdentity(accountID, accountDomain.Provider("google"), "12345", nil)
 		},
 	}
 
-	activeAccount := accountDomain.NewAccount("Test User")
+	activeAccount, _ := accountDomain.NewAccount("Test User")
 	activeAccount.ID = accountID
 
 	accountSvc := &mockAccountServiceForSocial{
@@ -1952,7 +1947,7 @@ func TestForgotPassword_Success(t *testing.T) {
 		},
 	}
 
-	activeAccount := accountDomain.NewAccount("Test User")
+	activeAccount, _ := accountDomain.NewAccount("Test User")
 	activeAccount.ID = accountID
 
 	accountSvc := &mockAccountServiceForSocial{

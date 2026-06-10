@@ -306,8 +306,8 @@ func (c *GoUnoConfig) Validate() error {
 			return fmt.Errorf("auth: webauthn_rp_origin with http scheme is only allowed for localhost or 127.0.0.1")
 		}
 	}
-	if c.DatabaseConfig.MaxOpenConns < 0 {
-		return fmt.Errorf("database: max_open_conns must not be negative (got %d)", c.DatabaseConfig.MaxOpenConns)
+	if c.DatabaseConfig.MaxOpenConns <= 0 {
+		return fmt.Errorf("database: max_open_conns must be positive (got %d)", c.DatabaseConfig.MaxOpenConns)
 	}
 	if c.DatabaseConfig.MaxIdleConns > 0 && c.DatabaseConfig.MaxOpenConns > 0 &&
 		c.DatabaseConfig.MaxIdleConns > c.DatabaseConfig.MaxOpenConns {
@@ -325,6 +325,30 @@ func (c *GoUnoConfig) Validate() error {
 	}
 	if c.RedisConfig.PoolTimeoutSeconds <= 0 {
 		return fmt.Errorf("redis: pool_timeout_seconds must be positive (got %d)", c.RedisConfig.PoolTimeoutSeconds)
+	}
+	// Server timeouts must be positive
+	if c.WebServerConfig.ReadTimeout <= 0 {
+		return fmt.Errorf("web_server: read_timeout must be positive")
+	}
+	if c.WebServerConfig.WriteTimeout <= 0 {
+		return fmt.Errorf("web_server: write_timeout must be positive")
+	}
+	if c.WebServerConfig.ReadHeaderTimeout <= 0 {
+		return fmt.Errorf("web_server: read_header_timeout must be positive")
+	}
+	if c.WebServerConfig.IdleTimeout <= 0 {
+		return fmt.Errorf("web_server: idle_timeout must be positive")
+	}
+	if c.WebServerConfig.RequestTimeout <= 0 {
+		return fmt.Errorf("web_server: request_timeout must be positive")
+	}
+	// CORS: AllowCredentials + wildcard origin is a security misconfiguration
+	if c.CORSConfig.AllowCredentials {
+		for _, origin := range c.CORSConfig.AllowedOrigins {
+			if origin == "*" {
+				return fmt.Errorf("cors: allow_credentials cannot be used with wildcard origin '*'")
+			}
+		}
 	}
 	return nil
 }

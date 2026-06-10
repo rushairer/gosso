@@ -14,6 +14,7 @@ import (
 	"github.com/rushairer/gosso/internal/audit"
 	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
+	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
 
@@ -38,6 +39,17 @@ func safeAuditReason(err error) string {
 		return "account_not_found"
 	default:
 		return "internal_error"
+	}
+}
+
+// buildLoginResult constructs a successful LoginResult from a session, access token, and refresh token.
+func buildLoginResult(account *accountDomain.Account, session *sessionDomain.Session, accessToken string, refreshToken *tokenDomain.RefreshToken) *LoginResult {
+	return &LoginResult{
+		Account:      account,
+		Session:      session,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken.Token,
+		RequiresMFA:  false,
 	}
 }
 
@@ -126,13 +138,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		map[string]any{"ip": req.IP, "user_agent": req.UserAgent},
 	)
 
-	return &LoginResult{
-		Account:      account,
-		Session:      session,
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken.Token,
-		RequiresMFA:  false,
-	}, nil
+	return buildLoginResult(account, session, accessToken, refreshToken), nil
 }
 
 // VerifyMFALogin completes login after MFA verification
@@ -176,7 +182,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	// 4. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, err)
+		return nil, fmt.Errorf("%w", ErrAccountNotFound)
 	}
 	if !account.IsActive() {
 		return nil, ErrInvalidCredentials
@@ -199,13 +205,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 		map[string]any{"ip": ip, "user_agent": userAgent},
 	)
 
-	return &LoginResult{
-		Account:      account,
-		Session:      session,
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken.Token,
-		RequiresMFA:  false,
-	}, nil
+	return buildLoginResult(account, session, accessToken, refreshToken), nil
 }
 
 // CompletePasskeyMFALogin completes MFA login directly after passkey verification,
@@ -258,7 +258,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	// 3. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, err)
+		return nil, fmt.Errorf("%w", ErrAccountNotFound)
 	}
 	if !account.IsActive() {
 		return nil, ErrInvalidCredentials
@@ -281,13 +281,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 		map[string]any{"ip": ip, "user_agent": userAgent},
 	)
 
-	return &LoginResult{
-		Account:      account,
-		Session:      session,
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken.Token,
-		RequiresMFA:  false,
-	}, nil
+	return buildLoginResult(account, session, accessToken, refreshToken), nil
 }
 
 // LoginByPasskey login directly after passkey verification (skipping password check)
@@ -342,13 +336,7 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 	// 6. Clear rate-limit counters on successful passkey login
 	s.clearLoginRateLimits(ctx, ip, account.Username)
 
-	return &LoginResult{
-		Account:      account,
-		Session:      session,
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken.Token,
-		RequiresMFA:  false,
-	}, nil
+	return buildLoginResult(account, session, accessToken, refreshToken), nil
 }
 
 // Logout deletes session and revokes tokens

@@ -7,8 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- CSRF skipPaths now uses path-boundary match (`/path` + `/path/`) instead of prefix match — prevents `/begin` from matching `/beginners` (`middleware/csrf.go`).
+- OAuth2 authorization endpoint now requires Redis for PKCE consent state storage — returns 503 when unavailable instead of silently bypassing PKCE validation (`internal/oauth2/controller/oauth2_authorize.go`).
+- Refresh token IP binding check is now fail-closed — rejects refresh when token has IP binding but current request IP is unavailable, instead of silently skipping the check (`internal/auth/service/auth_session.go`).
+- OAuth2 authorization now requires `state` parameter for public clients per RFC 6749 §10.12 (`internal/oauth2/controller/oauth2_authorize.go`).
+- Auth service error messages no longer leak internal database details (`internal/auth/service/auth_login.go`).
+- `InitializeAuthModule` now returns error on TOTP encryption key failure instead of logging and continuing (`internal/auth/module.go`).
+- CORS validation now rejects `AllowCredentials: true` with wildcard origin `*` (`config/config.go`).
+- OAuth2 token endpoint Content-Type check now uses `mime.ParseMediaType` for precise validation (`internal/oauth2/controller/oauth2_token.go`).
+- Login rate limiting now fails closed when Redis is unavailable (`internal/auth/service/auth_login.go`).
+- `TOTPEncryptionKey` now rejects the default development value at config validation (`config/config.go`, `config/config_manager.go`).
+
 ### Added
-- JSON log format support via `log.format` config field — set to `"json"` for containerized/production environments, defaults to `"console"` (`internal/utility/logger.go`, `config/config.go`).
+- JSON log format support via `log.format` config field (`internal/utility/logger.go`, `config/config.go`).
+- Domain model validation: `NewAccount`, `NewFederatedIdentity`, `NewRole` now validate inputs and return errors; `Credential.SoftDelete` returns error for already-deleted credentials.
+- Account service methods now verify account is active before `BindFederatedIdentity`, `UnbindFederatedIdentity`, `AssignRole`, `RemoveRole`, `ChangePassword` (`internal/account/service/account_service.go`).
+- Config validation now enforces positive server timeouts and `MaxOpenConns > 0` (`config/config.go`).
+- Email service outbound rate limiting (10 emails/sec) and single-retry for transient SMTP errors (`internal/notification/service/email_service.go`).
+- `setNoCacheHeaders`, `buildLoginResult`, `renderDeviceTemplate`, `requireActiveAccount` helper functions to reduce code duplication.
 
 ### Fixed
 - Integration tests now exit with code 1 (instead of 0) when test infrastructure is unavailable — prevents CI from silently passing when Docker services fail to start (`internal/auth/service/auth_integration_test.go`, `internal/session/service/session_integration_test.go`).
@@ -31,46 +48,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Dockerfile builder image version aligned with `go.mod` (`Dockerfile`).
 - Production config `max_body_size` aligned with development default (10MB) to prevent environment-specific upload failures (`config/production.yaml`).
 
-### Security
-- Login rate limiting now fails closed when Redis is unavailable — previously failed open, allowing unlimited brute-force attempts during Redis outages (`internal/auth/service/auth_login.go`).
-- `TOTPEncryptionKey` now rejects the default development value at config validation — prevents accidental production use of a publicly known encryption key (`config/config.go`, `config/config_manager.go`).
-- OAuth2 token endpoint now requires `Content-Type: application/x-www-form-urlencoded` per RFC 6749 — rejects JSON content type to prevent WAF bypass attacks (`internal/oauth2/controller/oauth2_token.go`).
-
 ### Changed
-- Audit batch pipeline parameters (`buffer_size`, `flush_size`, `flush_interval`) are now configurable via `task_pipeline` config — previously hardcoded at different values than the YAML defaults (`internal/audit/service/audit.go`, `cmd/gouno/web.go`).
-
-### Fixed
-- `DatabaseConfig.MaxOpenConns` validation now rejects negative values (`config/config.go`).
-
-- `TOTPEncryptionKey` is now unconditionally required in config validation — previously could be empty when WebAuthn was not configured, causing runtime TOTP encryption failures (`config/config.go`).
-- Refresh token IP binding now logs a warning when the original token has an IP but the current request does not — improves observability for potential token theft behind misconfigured proxies (`internal/auth/service/auth_session.go`).
-- SMTP TLS policy is now configurable via `smtp.tls_policy` config field (values: `opportunistic`, `mandatory`, `notls`) — production should set `mandatory` to prevent plaintext downgrade (`config/config.go`, `internal/notification/service/email_service.go`).
-- CORS `allowed_origins` is now required in production mode (`debug: false`) — server fails to start if not configured, preventing silent fallback to `localhost:8080` (`cmd/gouno/web_engine.go`).
-- Removed hardcoded database password from `config/test.yaml` — now references `GOUNO_DATABASE_DRIVERS_POSTGRES_DSN` environment variable instead of plaintext `gosso123`.
-- Removed hardcoded password placeholder from `config/redis.conf` — password is now set via `--requirepass` at startup through `docker-compose.yml`.
-- `ForgotPassword` log now masks email address using `utility.MaskEmail` instead of logging raw PII (`internal/auth/controller/auth_controller.go`).
-- `docker-compose.test.yml` PostgreSQL password now requires `POSTGRES_PASSWORD` environment variable — no longer falls back to hardcoded `gosso123`.
-- `development.yaml` OAuth provider section now includes comments warning that `client_id` and `client_secret` must be set via environment variables.
-- Access log query parameters now sanitize sensitive values (`token`, `code`, `code_verifier`, `client_secret`, `password`, etc.) — replaces raw query string logging with `[REDACTED]` placeholders (`middleware/zaplogger.go`).
-- `Validate()` now rejects the default development database DSN in production — prevents accidental use of `postgres:postgres` credentials (`config/config.go`, `config/config_manager.go`).
-- OAuth2 CSRF cookie name mismatch fix — `csrfTokenFromCookie` now reads `__Host-csrf_token` first with fallback to `csrf_token` (`internal/oauth2/controller/oauth2_controller.go`).
-- Passkey login (`LoginByPasskey`, `CompletePasskeyMFALogin`) now enforces IP-level rate limiting (`internal/auth/service/auth_login.go`).
-- PKCE parameters (`code_challenge`, `code_challenge_method`, `nonce`) are now stored server-side in Redis during GET /authorize and validated on POST /authorize to prevent form field tampering (`internal/oauth2/controller/oauth2_authorize.go`).
-- Token revocation (`RevokeAccessToken`, `RevokeAccountTokens`) now returns `ErrBlacklistNotConfigured` error instead of silently succeeding when blacklist service is nil (`internal/token/service/token_service.go`).
-- `authenticateRequest` no longer leaks internal error messages to OAuth2 clients — returns fixed `"unauthorized"` or `"forbidden"` descriptions (`internal/oauth2/controller/oauth2_controller.go`).
-- Blacklist TTL now includes a 5-minute buffer to account for clock skew between Redis and JWT validation (`internal/token/service/blacklist_service.go`).
-- `isPlausibleJWT` now validates that the JWT header segment is valid base64url encoding — prevents trivial CSRF bypass with garbage Bearer tokens (`middleware/csrf.go`).
-- TOTP decryption failures now return an error when all credentials fail to decrypt — previously silently returned `false`, masking `totp_encryption_key` configuration issues (`internal/auth/service/mfa_service.go`).
-- PKCE server-side consent state storage now returns HTTP 503 when Redis is unavailable — previously silently degraded to client-trusted values, weakening PKCE tamper protection (`internal/oauth2/controller/oauth2_authorize.go`).
-- Production config now documents the required `totp_encryption_key` field with environment variable guidance (`config/production.yaml`).
-- Session expiration now cascades token revocation — expired sessions trigger `RevokeAllForSession` before deletion (`internal/session/service/session_service.go`).
-- Sessions now have an absolute maximum lifetime (default 7 days) in addition to idle timeout — prevents indefinite session extension via activity refresh (`internal/session/service/session_service.go`).
-- Refresh token validation now includes explicit `ExpiresAt` check as defense-in-depth beyond Redis TTL (`internal/token/service/token_service.go`).
-- SocialCallback responses now include `Cache-Control: no-store` and `Pragma: no-cache` headers to prevent token caching by proxies (`internal/auth/controller/auth_controller.go`).
-- `Login`, `Refresh`, and `MFAVerify` responses now consistently include `Cache-Control: no-store` and `Pragma: no-cache` headers — previously only `SocialCallback` set these headers, allowing potential caching of token responses by browsers or proxies (`internal/auth/controller/auth_controller.go`).
-- CSP `style-src 'unsafe-inline'` replaced with per-request nonce — prevents style-based XSS injection. Templates now receive `CSPNonce` for inline `<style>` and `<script>` tags (`middleware/middleware.go`, `internal/oauth2/controller/template/consent.html`, `internal/oauth2/controller/template/device.html`).
-
-### Changed
+- `InitializeAuthModule` now returns `(*AuthModule, error)` — callers must handle initialization errors (`internal/auth/module.go`, `cmd/gouno/web_modules.go`).
+- `setupEngine` now returns `(*gin.Engine, error)` instead of calling `logger.Fatal` (`cmd/gouno/web_engine.go`, `cmd/gouno/web.go`).
+- Domain constructors (`NewAccount`, `NewRole`, `NewFederatedIdentity`) return `(*T, error)` with input validation.
+- `Account.IsSuspended()` now also checks `!IsDeleted()` for consistency with `IsActive()`.
+- TOTP enrollment now uses a single transaction for delete-unverified + create — prevents race condition (`internal/auth/service/mfa_service.go`).
+- Removed unused `AuditEntry` struct from audit domain (`internal/audit/domain/audit.go`).
+- Audit `Wait()` documents time-based heuristic limitation and recommends upgrading batchflow (`internal/audit/service/audit.go`).
+- Audit batch pipeline parameters (`buffer_size`, `flush_size`, `flush_interval`) are now configurable via `task_pipeline` config (`internal/audit/service/audit.go`, `cmd/gouno/web.go`).
+- Go version updated to 1.26 (`go.mod`, `Dockerfile`).
 - Go version updated to 1.26 (`go.mod`, `Dockerfile`).
 - Production config now defaults to JSON log format (`config/production.yaml`).
 - All `logger.Sugar()` calls in startup/shutdown code replaced with structured `zap` logging (`cmd/gouno/web.go`, `cmd/gouno/web_infra.go`).

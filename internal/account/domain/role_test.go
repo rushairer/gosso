@@ -78,7 +78,7 @@ func TestHasPermission_EmptyRole(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestRole_SoftDelete(t *testing.T) {
-	r := NewRole("admin", nil)
+	r, _ := NewRole("admin", nil)
 	assert.False(t, r.IsDeleted())
 	r.SoftDelete()
 	assert.True(t, r.IsDeleted())
@@ -87,7 +87,7 @@ func TestRole_SoftDelete(t *testing.T) {
 
 func TestNewRole_Initialization(t *testing.T) {
 	desc := "Administrator role"
-	r := NewRole("admin", &desc)
+	r, _ := NewRole("admin", &desc)
 	assert.NotEmpty(t, r.ID)
 	assert.Equal(t, "admin", r.Name)
 	assert.Equal(t, &desc, r.Description)

@@ -56,10 +56,11 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 			}
 		}
 
-		// Skip specified paths (prefix match)
+		// Skip specified paths (prefix match with path boundary).
+		// Uses "/"+ suffix to avoid "/begin" matching "/beginners".
 		path := ctx.Request.URL.Path
 		for _, sp := range skipPaths {
-			if strings.HasPrefix(path, sp) {
+			if path == sp || strings.HasPrefix(path, sp+"/") {
 				setCSRFCookie(ctx, cookieName, secure)
 				ctx.Next()
 				return

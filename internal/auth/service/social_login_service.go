@@ -315,9 +315,12 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 		name = "User"
 	}
 
-	account := accountDomain.NewAccount(name)
+	account, err := accountDomain.NewAccount(name)
+	if err != nil {
+		return nil, fmt.Errorf("create account: %w", err)
+	}
 
-	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		if err := s.accountRepo.CreateAccount(ctx, tx, account); err != nil {
 			return fmt.Errorf("create account: %w", err)
 		}
@@ -333,7 +336,10 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 			}
 		}
 
-		identity := accountDomain.NewFederatedIdentity(account.ID, accountDomain.Provider(provider), providerUserID, nil)
+		identity, err := accountDomain.NewFederatedIdentity(account.ID, accountDomain.Provider(provider), providerUserID, nil)
+		if err != nil {
+			return fmt.Errorf("create federated identity: %w", err)
+		}
 		if err := s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity); err != nil {
 			return fmt.Errorf("create federated identity: %w", err)
 		}
@@ -395,7 +401,10 @@ func (s *SocialLoginService) linkByEmailIfVerified(ctx context.Context, provider
 
 	// Link federated identity to existing account (only if email is verified,
 	// preventing account takeover via an unverified email from a social provider).
-	identity := accountDomain.NewFederatedIdentity(existingCred.AccountID, accountDomain.Provider(provider), providerUserID, nil)
+	identity, err := accountDomain.NewFederatedIdentity(existingCred.AccountID, accountDomain.Provider(provider), providerUserID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create federated identity: %w", err)
+	}
 	linkErr := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
 	})

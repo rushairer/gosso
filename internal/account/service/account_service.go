@@ -161,6 +161,21 @@ func (s *accountServiceImpl) setOAuth2ClientDeleter(deleter OAuth2ClientDeleter)
 	s.oauth2ClientDeleter = deleter
 }
 
+// requireActiveAccount looks up an account by ID and returns it only if it exists and is active.
+func (s *accountServiceImpl) requireActiveAccount(ctx context.Context, accountID string) (*domain.Account, error) {
+	account, err := s.accountRepo.FindByID(ctx, accountID)
+	if err != nil {
+		if errors.Is(err, repository.ErrAccountNotFound) {
+			return nil, ErrAccountNotActive
+		}
+		return nil, err
+	}
+	if !account.IsActive() {
+		return nil, ErrAccountNotActive
+	}
+	return account, nil
+}
+
 // RegisterAccount registers a new account.
 func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterAccountRequest) (*domain.Account, error) {
 	// 1. Validate request
@@ -415,6 +430,11 @@ func (s *accountServiceImpl) VerifyCredential(ctx context.Context, accountID str
 
 // ChangePassword changes the account password.
 func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error {
+	// 0. Ensure account is active
+	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
+		return err
+	}
+
 	// 1. Fail-fast: ensure session revoker is configured before modifying data
 	if s.sessionRevoker == nil {
 		return fmt.Errorf("%w: cannot revoke sessions on password change", ErrSessionRevokerNotBound)
@@ -472,6 +492,9 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 
 // BindFederatedIdentity binds a third-party identity.
 func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountID string, provider domain.Provider, providerUserID string, profile map[string]interface{}) error {
+	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
+		return err
+	}
 	now := time.Now()
 	identity := &domain.FederatedIdentity{
 		ID:             uuid.New().String(),
@@ -526,6 +549,9 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 
 // UnbindFederatedIdentity unbinds a third-party identity.
 func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accountID, identityID string) error {
+	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
+		return err
+	}
 	now := time.Now()
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
@@ -548,6 +574,9 @@ func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accoun
 
 // AssignRole assigns a role to the account.
 func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID string) error {
+	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
+		return err
+	}
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		return s.roleRepo.AssignRoleToAccount(ctx, tx, accountID, roleID)
 	})
@@ -567,6 +596,9 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 
 // RemoveRole removes a role from the account.
 func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID string) error {
+	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
+		return err
+	}
 	now := time.Now()
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {

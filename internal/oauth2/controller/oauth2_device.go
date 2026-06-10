@@ -18,6 +18,20 @@ import (
 	"github.com/rushairer/gosso/middleware"
 )
 
+// renderDeviceTemplate executes the device template with the given data and writes the result to ctx.
+// Returns true if the template was rendered successfully, false if an error occurred (in which case
+// an HTTP 500 response is sent and the caller should return).
+func (c *OAuth2Controller) renderDeviceTemplate(ctx *gin.Context, data gin.H) bool {
+	var buf bytes.Buffer
+	if err := c.deviceTmpl.Execute(&buf, data); err != nil {
+		c.logger.Error("Failed to render device template", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return false
+	}
+	ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
+	return true
+}
+
 // DeviceCodeRequestRequest is the device code initiation request body.
 type DeviceCodeRequestRequest struct {
 	ClientID     string `form:"client_id" binding:"required"`
@@ -89,47 +103,29 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 	userCode := ctx.Query("user_code")
 
 	if userCode == "" {
-		var buf bytes.Buffer
-		if err := c.deviceTmpl.Execute(&buf, gin.H{
+		c.renderDeviceTemplate(ctx, gin.H{
 			"UserCode": "",
 			"CSPNonce": middleware.GetCSPNonce(ctx),
-		}); err != nil {
-			c.logger.Error("Failed to render device template", zap.Error(err))
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-			return
-		}
-		ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
+		})
 		return
 	}
 
 	dc, err := c.deviceCodeSvc.GetDeviceCodeByUserCode(ctx, userCode)
 	if err != nil {
-		var buf bytes.Buffer
-		if err := c.deviceTmpl.Execute(&buf, gin.H{
+		c.renderDeviceTemplate(ctx, gin.H{
 			"UserCode": "",
 			"Error":    "Invalid or expired code. Please try again.",
 			"CSPNonce": middleware.GetCSPNonce(ctx),
-		}); err != nil {
-			c.logger.Error("Failed to render device template", zap.Error(err))
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-			return
-		}
-		ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
+		})
 		return
 	}
 
 	if dc.IsExpired() || dc.Status != oauth2Domain.DeviceCodeStatusPending {
-		var buf bytes.Buffer
-		if err := c.deviceTmpl.Execute(&buf, gin.H{
+		c.renderDeviceTemplate(ctx, gin.H{
 			"UserCode": "",
 			"Error":    "This code has expired or is no longer valid.",
 			"CSPNonce": middleware.GetCSPNonce(ctx),
-		}); err != nil {
-			c.logger.Error("Failed to render device template", zap.Error(err))
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-			return
-		}
-		ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
+		})
 		return
 	}
 
@@ -139,20 +135,14 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 		return
 	}
 
-	var buf bytes.Buffer
-	if err := c.deviceTmpl.Execute(&buf, gin.H{
+	c.renderDeviceTemplate(ctx, gin.H{
 		"UserCode":   dc.UserCode,
 		"DeviceCode": dc.DeviceCode,
 		"ClientName": client.Name,
 		"Scopes":     dc.Scopes,
 		"CSRFToken":  csrfTokenFromCookie(ctx),
 		"CSPNonce":   middleware.GetCSPNonce(ctx),
-	}); err != nil {
-		c.logger.Error("Failed to render device template", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-		return
-	}
-	ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
+	})
 }
 
 // DeviceUserSubmitRequest is the device authorization form submission.

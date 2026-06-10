@@ -3,8 +3,10 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
+	"net"
 	"time"
 
 	"github.com/wneessen/go-mail"
@@ -47,6 +49,7 @@ type EmailService struct {
 	logger           *zap.Logger
 	verifyCodeTTL    time.Duration
 	passwordResetTTL time.Duration
+	sendLimiter      <-chan time.Time // rate limiter for outgoing emails
 }
 
 // NewEmailService creates a new email service instance.
@@ -78,6 +81,7 @@ func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) *EmailService {
 		logger:           logger,
 		verifyCodeTTL:    10 * time.Minute,
 		passwordResetTTL: 30 * time.Minute,
+		sendLimiter:      time.Tick(100 * time.Millisecond), // 10 emails/sec
 	}
 }
 
@@ -128,6 +132,13 @@ func (s *EmailService) send(ctx context.Context, to, subject, htmlBody string) e
 		return fmt.Errorf("send email: mail client not initialized")
 	}
 
+	// Rate limit outgoing emails
+	select {
+	case <-s.sendLimiter:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
 	msg := mail.NewMsg()
 	if err := msg.From(s.from); err != nil {
 		return fmt.Errorf("set from address: %w", err)
@@ -138,7 +149,15 @@ func (s *EmailService) send(ctx context.Context, to, subject, htmlBody string) e
 	msg.Subject(subject)
 	msg.SetBodyString(mail.TypeTextHTML, htmlBody)
 
-	if err := s.client.DialAndSendWithContext(ctx, msg); err != nil {
+	// Send with one retry for transient errors
+	err := s.client.DialAndSendWithContext(ctx, msg)
+	if err != nil && isTransientError(err) {
+		s.logger.Warn("Retrying email send after transient error",
+			zap.String("to", maskEmail(to)), zap.Error(err))
+		time.Sleep(time.Second)
+		err = s.client.DialAndSendWithContext(ctx, msg)
+	}
+	if err != nil {
 		s.logger.Error("Failed to send email",
 			zap.String("to", maskEmail(to)),
 			zap.Error(err))
@@ -163,6 +182,15 @@ func smtpTLSPolicy(policy string) mail.TLSPolicy {
 	default:
 		return mail.TLSOpportunistic
 	}
+}
+
+// isTransientError reports whether the error is likely transient (timeout, connection reset).
+func isTransientError(err error) bool {
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return netErr.Timeout()
+	}
+	return false
 }
 
 // formatDuration returns a human-readable duration string (e.g. "10 minutes", "1 hour").

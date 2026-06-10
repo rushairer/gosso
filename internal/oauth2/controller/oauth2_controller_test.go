@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,8 +22,18 @@ import (
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 
+	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/middleware"
 )
+
+// setupTestRedis creates a miniredis-backed Redis client for testing.
+func setupTestRedis(t *testing.T) *cache.RedisClient {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	client, err := cache.NewRedisClient("redis://"+mr.Addr(), 10, 5*time.Second, zap.NewNop())
+	require.NoError(t, err)
+	return client
+}
 
 // ──────────────────────────────────────────────
 // Mocks
@@ -1499,7 +1510,7 @@ func TestAuthorize_PKCERequiredForPublicClient(t *testing.T) {
 		ctrl.Authorize(ctx)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/oauth2/authorize?client_id=cid-public&redirect_uri=https://app.example.com/callback&response_type=code&scope=openid", nil)
+	req := httptest.NewRequest(http.MethodGet, "/oauth2/authorize?client_id=cid-public&redirect_uri=https://app.example.com/callback&response_type=code&scope=openid&state=test-state", nil)
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1739,13 +1750,14 @@ func TestDeviceUserSubmit_Denied(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestSubmitConsent_MissingFields(t *testing.T) {
+	redisClient := setupTestRedis(t)
 	ctrl, err := NewOAuth2Controller(
 		&mockOAuth2ClientSvcForOAuth2{},
 		nil, nil,
 		&mockTokenMgr{},
 		nil, nil,
 		&mockAccountValidatorAlwaysActive{},
-		nil, nil,
+		nil, redisClient,
 		"https://sso.example.com",
 		zap.NewNop(),
 	)
@@ -1753,9 +1765,12 @@ func TestSubmitConsent_MissingFields(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+	engine.POST("/oauth2/authorize", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctrl.SubmitConsent(ctx)
+	})
 
-	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader("state=test"))
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader("state=test&consent_id=test-consent"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -1765,13 +1780,14 @@ func TestSubmitConsent_MissingFields(t *testing.T) {
 }
 
 func TestSubmitConsent_NotApproved(t *testing.T) {
+	redisClient := setupTestRedis(t)
 	ctrl, err := NewOAuth2Controller(
 		&mockOAuth2ClientSvcForOAuth2{},
 		nil, nil,
 		&mockTokenMgr{},
 		nil, nil,
 		&mockAccountValidatorAlwaysActive{},
-		nil, nil,
+		nil, redisClient,
 		"https://sso.example.com",
 		zap.NewNop(),
 	)
@@ -1779,9 +1795,12 @@ func TestSubmitConsent_NotApproved(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+	engine.POST("/oauth2/authorize", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctrl.SubmitConsent(ctx)
+	})
 
-	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid&state=abc"
+	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid&state=abc&consent_id=test-consent"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Bearer valid-token")
@@ -2408,6 +2427,7 @@ func TestToken_RefreshToken_GenerateAccessTokenError(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestSubmitConsent_Success(t *testing.T) {
+	redisClient := setupTestRedis(t)
 	client := newConfidentialTestClient()
 	ctrl, err := NewOAuth2Controller(
 		&mockOAuth2ClientSvcForOAuth2{
@@ -2418,17 +2438,29 @@ func TestSubmitConsent_Success(t *testing.T) {
 		&mockTokenMgr{},
 		nil, nil,
 		&mockAccountValidatorAlwaysActive{},
-		nil, nil,
+		nil, redisClient,
 		"https://sso.example.com",
 		zap.NewNop(),
 	)
 	require.NoError(t, err)
 
+	// Store consent state in Redis so the PKCE validation passes
+	consentID := "test-consent"
+	stateData, _ := json.Marshal(map[string]string{
+		"code_challenge":        "",
+		"code_challenge_method": "",
+		"nonce":                 "",
+	})
+	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
+
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+	engine.POST("/oauth2/authorize", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctrl.SubmitConsent(ctx)
+	})
 
-	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid+profile&state=abc&approved=true"
+	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid+profile&state=abc&approved=true&consent_id=" + consentID
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Bearer valid-token")
@@ -2442,6 +2474,7 @@ func TestSubmitConsent_Success(t *testing.T) {
 }
 
 func TestSubmitConsent_ClientNotFound(t *testing.T) {
+	redisClient := setupTestRedis(t)
 	ctrl, err := NewOAuth2Controller(
 		&mockOAuth2ClientSvcForOAuth2{
 			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return nil, fmt.Errorf("not found") },
@@ -2451,17 +2484,29 @@ func TestSubmitConsent_ClientNotFound(t *testing.T) {
 		&mockTokenMgr{},
 		nil, nil,
 		&mockAccountValidatorAlwaysActive{},
-		nil, nil,
+		nil, redisClient,
 		"https://sso.example.com",
 		zap.NewNop(),
 	)
 	require.NoError(t, err)
 
+	// Store consent state in Redis so the PKCE validation passes
+	consentID := "test-consent"
+	stateData, _ := json.Marshal(map[string]string{
+		"code_challenge":        "",
+		"code_challenge_method": "",
+		"nonce":                 "",
+	})
+	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
+
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+	engine.POST("/oauth2/authorize", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctrl.SubmitConsent(ctx)
+	})
 
-	body := "client_id=bad&redirect_uri=https://app.example.com/callback&scope=openid&state=abc&approved=true"
+	body := "client_id=bad&redirect_uri=https://app.example.com/callback&scope=openid&state=abc&approved=true&consent_id=" + consentID
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Bearer valid-token")
@@ -2473,6 +2518,7 @@ func TestSubmitConsent_ClientNotFound(t *testing.T) {
 }
 
 func TestSubmitConsent_InvalidRedirectURI(t *testing.T) {
+	redisClient := setupTestRedis(t)
 	client := newConfidentialTestClient()
 	ctrl, err := NewOAuth2Controller(
 		&mockOAuth2ClientSvcForOAuth2{
@@ -2483,17 +2529,29 @@ func TestSubmitConsent_InvalidRedirectURI(t *testing.T) {
 		&mockTokenMgr{},
 		nil, nil,
 		&mockAccountValidatorAlwaysActive{},
-		nil, nil,
+		nil, redisClient,
 		"https://sso.example.com",
 		zap.NewNop(),
 	)
 	require.NoError(t, err)
 
+	// Store consent state in Redis so the PKCE validation passes
+	consentID := "test-consent"
+	stateData, _ := json.Marshal(map[string]string{
+		"code_challenge":        "",
+		"code_challenge_method": "",
+		"nonce":                 "",
+	})
+	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
+
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+	engine.POST("/oauth2/authorize", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctrl.SubmitConsent(ctx)
+	})
 
-	body := "client_id=cid-test&redirect_uri=https://evil.com/callback&scope=openid&state=abc&approved=true"
+	body := "client_id=cid-test&redirect_uri=https://evil.com/callback&scope=openid&state=abc&approved=true&consent_id=" + consentID
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Bearer valid-token")
@@ -2505,6 +2563,7 @@ func TestSubmitConsent_InvalidRedirectURI(t *testing.T) {
 }
 
 func TestSubmitConsent_InvalidScope(t *testing.T) {
+	redisClient := setupTestRedis(t)
 	client := newConfidentialTestClient()
 	client.Scopes = []string{"openid"}
 	ctrl, err := NewOAuth2Controller(
@@ -2516,17 +2575,29 @@ func TestSubmitConsent_InvalidScope(t *testing.T) {
 		&mockTokenMgr{},
 		nil, nil,
 		&mockAccountValidatorAlwaysActive{},
-		nil, nil,
+		nil, redisClient,
 		"https://sso.example.com",
 		zap.NewNop(),
 	)
 	require.NoError(t, err)
 
+	// Store consent state in Redis so the PKCE validation passes
+	consentID := "test-consent"
+	stateData, _ := json.Marshal(map[string]string{
+		"code_challenge":        "",
+		"code_challenge_method": "",
+		"nonce":                 "",
+	})
+	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
+
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+	engine.POST("/oauth2/authorize", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctrl.SubmitConsent(ctx)
+	})
 
-	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=invalid_scope&state=abc&approved=true"
+	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=invalid_scope&state=abc&approved=true&consent_id=" + consentID
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Bearer valid-token")
@@ -2538,6 +2609,7 @@ func TestSubmitConsent_InvalidScope(t *testing.T) {
 }
 
 func TestSubmitConsent_SaveConsentError(t *testing.T) {
+	redisClient := setupTestRedis(t)
 	client := newConfidentialTestClient()
 	ctrl, err := NewOAuth2Controller(
 		&mockOAuth2ClientSvcForOAuth2{
@@ -2550,17 +2622,29 @@ func TestSubmitConsent_SaveConsentError(t *testing.T) {
 		&mockTokenMgr{},
 		nil, nil,
 		&mockAccountValidatorAlwaysActive{},
-		nil, nil,
+		nil, redisClient,
 		"https://sso.example.com",
 		zap.NewNop(),
 	)
 	require.NoError(t, err)
 
+	// Store consent state in Redis so the PKCE validation passes
+	consentID := "test-consent"
+	stateData, _ := json.Marshal(map[string]string{
+		"code_challenge":        "",
+		"code_challenge_method": "",
+		"nonce":                 "",
+	})
+	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
+
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+	engine.POST("/oauth2/authorize", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctrl.SubmitConsent(ctx)
+	})
 
-	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid&state=abc&approved=true"
+	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid&state=abc&approved=true&consent_id=" + consentID
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Bearer valid-token")
@@ -2572,6 +2656,7 @@ func TestSubmitConsent_SaveConsentError(t *testing.T) {
 }
 
 func TestSubmitConsent_GenerateCodeError(t *testing.T) {
+	redisClient := setupTestRedis(t)
 	client := newConfidentialTestClient()
 	ctrl, err := NewOAuth2Controller(
 		&mockOAuth2ClientSvcForOAuth2{
@@ -2586,17 +2671,29 @@ func TestSubmitConsent_GenerateCodeError(t *testing.T) {
 		&mockTokenMgr{},
 		nil, nil,
 		&mockAccountValidatorAlwaysActive{},
-		nil, nil,
+		nil, redisClient,
 		"https://sso.example.com",
 		zap.NewNop(),
 	)
 	require.NoError(t, err)
 
+	// Store consent state in Redis so the PKCE validation passes
+	consentID := "test-consent-id"
+	stateData, _ := json.Marshal(map[string]string{
+		"code_challenge":        "",
+		"code_challenge_method": "",
+		"nonce":                 "",
+	})
+	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
+
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	engine.POST("/oauth2/authorize", ctrl.SubmitConsent)
+	engine.POST("/oauth2/authorize", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctrl.SubmitConsent(ctx)
+	})
 
-	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid&state=abc&approved=true"
+	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid&state=abc&approved=true&consent_id=" + consentID
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Bearer valid-token")
@@ -2612,6 +2709,7 @@ func TestSubmitConsent_GenerateCodeError(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestAuthorize_Success(t *testing.T) {
+	redisClient := setupTestRedis(t)
 	client := newConfidentialTestClient()
 	ctrl, err := NewOAuth2Controller(
 		&mockOAuth2ClientSvcForOAuth2{
@@ -2630,7 +2728,7 @@ func TestAuthorize_Success(t *testing.T) {
 		&mockTokenMgr{},
 		nil, nil,
 		&mockAccountValidatorAlwaysActive{},
-		nil, nil,
+		nil, redisClient,
 		"https://sso.example.com",
 		zap.NewNop(),
 	)
@@ -2654,6 +2752,7 @@ func TestAuthorize_Success(t *testing.T) {
 }
 
 func TestAuthorize_ShowsConsentPage(t *testing.T) {
+	redisClient := setupTestRedis(t)
 	client := newConfidentialTestClient()
 	ctrl, err := NewOAuth2Controller(
 		&mockOAuth2ClientSvcForOAuth2{
@@ -2664,7 +2763,7 @@ func TestAuthorize_ShowsConsentPage(t *testing.T) {
 		&mockTokenMgr{},
 		nil, nil,
 		&mockAccountValidatorAlwaysActive{},
-		nil, nil,
+		nil, redisClient,
 		"https://sso.example.com",
 		zap.NewNop(),
 	)
@@ -2687,6 +2786,7 @@ func TestAuthorize_ShowsConsentPage(t *testing.T) {
 }
 
 func TestAuthorize_ConsentPageNoScopeOverlap(t *testing.T) {
+	redisClient := setupTestRedis(t)
 	client := newConfidentialTestClient()
 	ctrl, err := NewOAuth2Controller(
 		&mockOAuth2ClientSvcForOAuth2{
@@ -2705,7 +2805,7 @@ func TestAuthorize_ConsentPageNoScopeOverlap(t *testing.T) {
 		&mockTokenMgr{},
 		nil, nil,
 		&mockAccountValidatorAlwaysActive{},
-		nil, nil,
+		nil, redisClient,
 		"https://sso.example.com",
 		zap.NewNop(),
 	)

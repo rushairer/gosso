@@ -129,10 +129,14 @@ func (c *Credential) MarkUsed() {
 	c.LastUsedAt = &now
 }
 
-// SoftDelete soft-deletes the credential.
-func (c *Credential) SoftDelete() {
+// SoftDelete soft-deletes the credential. Returns an error if already deleted.
+func (c *Credential) SoftDelete() error {
+	if c.IsDeleted() {
+		return errors.New("credential is already deleted")
+	}
 	now := time.Now()
 	c.DeletedAt = &now
+	return nil
 }
 
 // VerifyPassword verifies the plaintext password against the stored Argon2id hash.
