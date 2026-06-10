@@ -34,6 +34,7 @@ func setupTestTokenService(t *testing.T) (*TokenService, func()) {
 		7*24*time.Hour,
 		redisClient,
 		blacklist,
+		nil,
 		logger,
 	)
 

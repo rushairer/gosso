@@ -12,6 +12,13 @@ type scannable interface {
 	Scan(dest ...any) error
 }
 
+// rowsIterable is satisfied by *sql.Rows for scanning multiple result rows.
+type rowsIterable interface {
+	Next() bool
+	Scan(dest ...any) error
+	Err() error
+}
+
 // scanOAuth2Client scans a single oauth2_clients row (14 columns) into an OAuth2Client.
 func scanOAuth2Client(s scannable) (*domain.OAuth2Client, error) {
 	client := &domain.OAuth2Client{}
@@ -36,7 +43,7 @@ func scanOAuth2Client(s scannable) (*domain.OAuth2Client, error) {
 }
 
 // scanOAuth2Clients iterates all rows and returns a slice of OAuth2Client.
-func scanOAuth2Clients(rows interface{ Next() bool; Scan(dest ...any) error; Err() error }) ([]*domain.OAuth2Client, error) {
+func scanOAuth2Clients(rows rowsIterable) ([]*domain.OAuth2Client, error) {
 	var clients []*domain.OAuth2Client
 	for rows.Next() {
 		client, err := scanOAuth2Client(rows)
@@ -76,7 +83,7 @@ func scanConsent(s scannable) (*domain.Consent, error) {
 }
 
 // scanConsents iterates all rows and returns a slice of Consent.
-func scanConsents(rows interface{ Next() bool; Scan(dest ...any) error; Err() error }) ([]*domain.Consent, error) {
+func scanConsents(rows rowsIterable) ([]*domain.Consent, error) {
 	var consents []*domain.Consent
 	for rows.Next() {
 		consent, err := scanConsent(rows)

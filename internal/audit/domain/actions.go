@@ -34,4 +34,9 @@ const (
 	ActionPasskeyRegister = "auth.passkey.register"
 	ActionPasskeyLogin    = "auth.passkey.login"
 	ActionPasskeyDelete   = "auth.passkey.delete"
+
+	// Token lifecycle audit actions
+	ActionTokenRefresh = "auth.token.refresh"
+	ActionTokenRotate  = "auth.token.rotate"
+	ActionTokenRevoke  = "auth.token.revoke"
 )

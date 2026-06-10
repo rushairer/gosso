@@ -6,6 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"github.com/rushairer/gosso/internal/controllerutil"
+	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	"github.com/rushairer/gosso/middleware"
 )
 
@@ -76,7 +78,8 @@ func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 		return
 	}
 	if err := c.clientAuth.AuthenticateClient(client, clientSecret); err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
+		controllerutil.HandleClientAuthError(ctx, err,
+			oauth2Service.ErrClientSecretRequired, "client secret is required", "invalid client credentials")
 		return
 	} else if !client.IsConfidential {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "public clients are not allowed to introspect"})

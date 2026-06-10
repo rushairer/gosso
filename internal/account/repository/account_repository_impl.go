@@ -21,6 +21,9 @@ func NewAccountRepository(db *sql.DB) AccountRepository {
 	return &accountRepositoryImpl{db: db}
 }
 
+// MaxPageSize is the upper bound for pagination page size.
+const MaxPageSize = 100
+
 // validStatuses is a whitelist of allowed status values for FindAll filtering.
 var validStatuses = map[string]bool{
 	string(domain.AccountStatusActive):    true,
@@ -168,7 +171,7 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 	if page < 1 {
 		page = 1
 	}
-	if pageSize < 1 || pageSize > 100 {
+	if pageSize < 1 || pageSize > MaxPageSize {
 		pageSize = 20
 	}
 	offset := (page - 1) * pageSize

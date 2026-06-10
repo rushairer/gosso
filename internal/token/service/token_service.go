@@ -14,6 +14,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/audit"
+	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
+	auditService "github.com/rushairer/gosso/internal/audit/service"
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
@@ -34,6 +36,7 @@ type TokenService struct {
 	refreshExpiry time.Duration
 	redis         *cache.RedisClient
 	blacklist     *BlacklistService
+	auditor       *auditService.Auditor
 	logger        *zap.Logger
 }
 
@@ -45,6 +48,7 @@ func NewTokenService(
 	refreshExpiry time.Duration,
 	redis *cache.RedisClient,
 	blacklist *BlacklistService,
+	auditor *auditService.Auditor,
 	logger *zap.Logger,
 ) *TokenService {
 	logger = utility.EnsureLogger(logger)
@@ -61,6 +65,7 @@ func NewTokenService(
 		refreshExpiry: refreshExpiry,
 		redis:         redis,
 		blacklist:     blacklist,
+		auditor:       auditor,
 		logger:        logger,
 	}
 }
@@ -331,6 +336,21 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 		return nil, fmt.Errorf("rotate refresh token: %w", err)
 	}
 
+	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+		auditDomain.ActionTokenRotate,
+		audit.IPFromContext(ctx),
+		stringPtr(newRT.AccountID),
+		utility.MustMarshalJSON(map[string]any{
+			"session_id": newRT.SessionID,
+			"old_token":  oldHash,
+			"new_token":  newHash,
+		}),
+		utility.MustMarshalJSON(map[string]any{
+			"ip":         audit.IPFromContext(ctx),
+			"user_agent": audit.UserAgentFromContext(ctx),
+		}),
+	))
+
 	return newRT, nil
 }
 
@@ -353,6 +373,20 @@ func (s *TokenService) RevokeRefreshToken(ctx context.Context, token string) err
 				s.logger.Warn("Failed to remove token hash from session index during revocation", zap.Error(err), zap.String("session_id", rt.SessionID))
 			}
 		}
+
+		auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+			auditDomain.ActionTokenRevoke,
+			audit.IPFromContext(ctx),
+			nil,
+			utility.MustMarshalJSON(map[string]any{
+				"token_hash": domain.HashToken(token),
+				"session_id": rt.SessionID,
+			}),
+			utility.MustMarshalJSON(map[string]any{
+				"ip":         audit.IPFromContext(ctx),
+				"user_agent": audit.UserAgentFromContext(ctx),
+			}),
+		))
 	}
 
 	return nil
@@ -388,6 +422,21 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 
 	s.logger.Info("Revoked all refresh tokens for session",
 		zap.String("session_id", sessionID), zap.Int("count", len(hashes)))
+
+	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+		auditDomain.ActionTokenRevoke,
+		audit.IPFromContext(ctx),
+		nil,
+		utility.MustMarshalJSON(map[string]any{
+			"session_id": sessionID,
+			"reason":     "revoke_all_for_session",
+		}),
+		utility.MustMarshalJSON(map[string]any{
+			"ip":         audit.IPFromContext(ctx),
+			"user_agent": audit.UserAgentFromContext(ctx),
+		}),
+	))
+
 	return nil
 }
 
@@ -415,7 +464,25 @@ func (s *TokenService) RevokeAccountTokens(ctx context.Context, accountID string
 		ttl = MinAccountRevocationTTL
 	}
 
-	return s.blacklist.SetAccountRevokedAfter(ctx, accountID, time.Now(), ttl)
+	err := s.blacklist.SetAccountRevokedAfter(ctx, accountID, time.Now(), ttl)
+	if err != nil {
+		return err
+	}
+
+	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+		auditDomain.ActionTokenRevoke,
+		audit.IPFromContext(ctx),
+		stringPtr(accountID),
+		utility.MustMarshalJSON(map[string]any{
+			"reason": "revoke_all_for_account",
+		}),
+		utility.MustMarshalJSON(map[string]any{
+			"ip":         audit.IPFromContext(ctx),
+			"user_agent": audit.UserAgentFromContext(ctx),
+		}),
+	))
+
+	return nil
 }
 
 func (s *TokenService) buildRefreshTokenKey(token string) string {
@@ -469,4 +536,8 @@ func (s *TokenService) IntrospectToken(ctx context.Context, tokenString string) 
 // KeyService returns the key service (used for ID token signing, etc.)
 func (s *TokenService) KeyService() *KeyService {
 	return s.keySvc
+}
+
+func stringPtr(s string) *string {
+	return &s
 }

@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/testutil"
@@ -436,7 +437,7 @@ func TestRequestReset_EmailNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	credRepo.findByTypeAndIdentifierFn = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
-		return nil, fmt.Errorf("credential not found")
+		return nil, accountRepo.ErrCredentialNotFound
 	}
 
 	err := svc.RequestReset(ctx, "nobody@example.com")

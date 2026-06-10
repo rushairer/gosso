@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"crypto/subtle"
-	"errors"
 	"net/http"
 	"net/mail"
 	"time"
@@ -25,6 +24,11 @@ import (
 // loginErrorMap maps login service errors to HTTP responses.
 var loginErrorMap = map[error]controllerutil.ErrorMapping{
 	authService.ErrServiceUnavailable: {Status: http.StatusServiceUnavailable, Message: "service temporarily unavailable"},
+}
+
+// revokeSessionErrorMap maps session revocation errors to HTTP responses.
+var revokeSessionErrorMap = map[error]controllerutil.ErrorMapping{
+	sessionService.ErrSessionAccessDenied: {Status: http.StatusForbidden, Message: "session not found or access denied"},
 }
 
 // authServiceDeps defines the auth service methods used by AuthController.
@@ -351,12 +355,8 @@ func (c *AuthController) RevokeSession(ctx *gin.Context) {
 	}
 
 	if err := c.authSvc.RevokeSession(ctx, tc.AccountID, sessionID); err != nil {
-		if errors.Is(err, sessionService.ErrSessionAccessDenied) {
-			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "session not found or access denied"))
-		} else {
-			c.logger.Error("Failed to revoke session", zap.Error(err))
-			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
-		}
+		controllerutil.HandleServiceError(ctx, c.logger, err, revokeSessionErrorMap,
+			http.StatusInternalServerError, "Failed to revoke session")
 		return
 	}
 

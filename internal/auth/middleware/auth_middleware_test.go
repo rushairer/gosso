@@ -49,6 +49,7 @@ func setupRealTokenService(t *testing.T) (*tokenService.TokenService, func()) {
 		7*24*time.Hour,
 		redisClient,
 		blacklist,
+		nil,
 		logger,
 	)
 	return svc, mr.Close

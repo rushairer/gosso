@@ -60,6 +60,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		cfg.AuthConfig.RefreshTokenExpiry,
 		redis,
 		blacklistSvc,
+		auditor,
 		logger,
 	)
 

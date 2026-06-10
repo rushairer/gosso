@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Repository scan logic extracted into `scanXxx` helpers per ADR-002: `scanAccount`, `scanRole`, `scanCredential`, `scanFederatedIdentity`, `scanOAuth2Client`, `scanConsent`, `scanWebAuthnCredential` — eliminates duplicated `Scan` + `json.Unmarshal` blocks across 7 repository implementations.
 - Controller error handling extracted into shared `controllerutil.HandleServiceError` and `controllerutil.HandleClientAuthError` — eliminates duplicated `if errors.Is` chains in admin, auth, passkey, OIDC, and OAuth2 controllers.
 - OIDC `UserInfo` now uses `errors.Is()` instead of `==` for error comparison (`internal/oidc/controller/oidc_controller.go`).
+- `Admin.GetAccountRoles`, `Auth.RevokeSession`, `OAuth2.Introspect` now use `HandleServiceError`/`HandleClientAuthError` instead of inline error handling.
+- `OAuth2.Client.GetClient` and `UpdateClient` now delegate ownership check to service layer via `FindClientForAccount` instead of controller-level comparison.
+- OAuth2 scan helpers now use named `rowsIterable` interface instead of anonymous inline interfaces.
+- Test mocks now use actual sentinel errors instead of `fmt.Errorf("...")` for more faithful test behavior.
+- `MaxPageSize` extracted as a shared constant (`accountRepository.MaxPageSize`).
 - Added `wrapcheck`, `errorlint`, `dupl`, `exhaustive` linters to golangci-lint config for automated architecture invariant enforcement (`.golangci.yml`).
 - Added `architecture-check` CI job and per-module coverage report to GitHub Actions (`.github/workflows/ci.yml`).
 - PR template now includes Architecture Invariants checklist and Review Scope dimensions (`.github/PULL_REQUEST_TEMPLATE.md`).
@@ -23,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Architecture invariant checker script (`script/check-architecture.sh`) — checks E1/E3/C1/L1/L2/R3 rules.
 - `controllerutil` package with shared error handling helpers (`internal/controllerutil/error_handler.go`).
 - Repository scan helper files: `internal/account/repository/scan_helpers.go`, `internal/oauth2/repository/scan_helpers.go`, `internal/auth/repository/scan_helpers.go`.
+- Token lifecycle audit logging: `auth.token.rotate`, `auth.token.revoke` actions for refresh token rotation and revocation (`internal/token/service/token_service.go`).
+- `FindClientForAccount` method on `OAuth2ClientService` — encapsulates FindByClientID + ownership verification (`internal/oauth2/service/client_service.go`).
+- Test coverage for scan helpers (4 test files, ~20 test cases) and error handler (9 test cases).
 
 ### Fixed
 - `ErrCredentialOwnership` latent bug: inline `errors.New("credential does not belong to this account")` in `auth_service.go` would never match the sentinel `ErrCredentialOwnership` (`"credential does not belong to account"`) — now correctly returns the sentinel (`internal/auth/service/auth_service.go`).

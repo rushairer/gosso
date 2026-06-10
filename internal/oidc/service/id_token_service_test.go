@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/testutil"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
@@ -87,7 +88,7 @@ func (m *mockCredentialRepo) FindByTypeAndIdentifier(_ context.Context, credType
 			}
 		}
 	}
-	return nil, fmt.Errorf("credential not found")
+	return nil, accountRepo.ErrCredentialNotFound
 }
 
 func (m *mockCredentialRepo) CreateCredentials(_ context.Context, _ *sql.Tx, _ []*accountDomain.Credential) error {
@@ -129,6 +130,7 @@ func setupTestIDTokenService(t *testing.T) (*IDTokenService, func()) {
 		7*24*time.Hour,
 		redisClient,
 		blacklist,
+		nil,
 		logger,
 	)
 

@@ -23,7 +23,7 @@ func setupTestLogoutService(t *testing.T) (*LogoutService, *tokenService.KeyServ
 	require.NoError(t, err)
 
 	redisClient, _ := testutil.SetupTestRedis(t)
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, logger)
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, nil, logger)
 	logoutSvc := NewLogoutService(tokenSvc, nil, "https://sso.example.com", logger)
 
 	return logoutSvc, keySvc
@@ -153,7 +153,7 @@ func setupTestLogoutServiceWithSession(t *testing.T) (*LogoutService, *tokenServ
 	require.NoError(t, err)
 
 	redisClient, _ := testutil.SetupTestRedis(t)
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, logger)
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, nil, logger)
 	sessionSvc := sessionService.NewSessionService(redisClient, logger)
 	sessionSvc.SetTokenRevoker(tokenSvc)
 
@@ -210,7 +210,7 @@ func TestLogoutByAccountID_SessionServiceError(t *testing.T) {
 	require.NoError(t, err)
 
 	redisClient, _ := testutil.SetupTestRedis(t)
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, logger)
+	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, nil, logger)
 
 	// Create session service WITHOUT setting tokenRevoker.
 	// RevokeAllForAccount now gracefully skips token revocation and logs a warning.

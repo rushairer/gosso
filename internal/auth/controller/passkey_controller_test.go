@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountService "github.com/rushairer/gosso/internal/account/service"
 	authDomain "github.com/rushairer/gosso/internal/auth/domain"
 	"github.com/rushairer/gosso/internal/auth/repository"
 	"github.com/rushairer/gosso/internal/auth/service"
@@ -581,7 +582,7 @@ func TestPasskey_LoginComplete_LoginByPasskeyError(t *testing.T) {
 		passkeySvc: nil, // not needed for this test path
 		authSvc: &mockAuthOrchForPasskey{
 			loginByPasskeyFn: func() (*service.LoginResult, error) {
-				return nil, fmt.Errorf("account is not active")
+				return nil, accountService.ErrAccountNotActive
 			},
 		},
 		tokenMgr: &mockTokenMgrForPasskey{},

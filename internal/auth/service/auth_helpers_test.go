@@ -237,6 +237,7 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 		7*24*60*60*1e9, // 7d
 		redisClient,
 		blacklistSvc,
+		nil,
 		logger,
 	)
 

@@ -1914,7 +1914,7 @@ func TestResetPassword_InvalidToken(t *testing.T) {
 func TestForgotPassword_NonexistentEmail(t *testing.T) {
 	credRepo := &mockCredentialRepoForController{
 		findByTypeAndIdentifierFn: func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
-			return nil, fmt.Errorf("credential not found")
+			return nil, accountRepo.ErrCredentialNotFound
 		},
 	}
 	emailSender := &mockPasswordResetEmailSender{}

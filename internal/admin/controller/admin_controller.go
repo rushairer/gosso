@@ -70,8 +70,8 @@ func (c *AdminController) ListAccounts(ctx *gin.Context) {
 	pageSize, err := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
 	if err != nil || pageSize < 1 {
 		pageSize = 20
-	} else if pageSize > 100 {
-		pageSize = 100
+	} else if pageSize > accountRepository.MaxPageSize {
+		pageSize = accountRepository.MaxPageSize
 	}
 	status := ctx.Query("status")
 	if status != "" {
@@ -209,8 +209,8 @@ func (c *AdminController) GetAccountRoles(ctx *gin.Context) {
 
 	roles, err := c.accountSvc.GetAccountRoles(ctx, accountID)
 	if err != nil {
-		c.logger.Error("Failed to get account roles", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to get roles"))
+		controllerutil.HandleServiceError(ctx, c.logger, err, adminAccountErrorMap,
+			http.StatusInternalServerError, "Failed to get account roles")
 		return
 	}
 
