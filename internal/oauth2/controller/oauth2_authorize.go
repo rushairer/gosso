@@ -221,7 +221,10 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		return
 	}
 	// Delete immediately to prevent replay
-	_ = c.redis.Del(ctx, stateKey)
+	if delErr := c.redis.Del(ctx, stateKey); delErr != nil {
+		c.logger.Warn("Failed to delete consent state after read, replay possible within TTL",
+			zap.String("consent_id", req.ConsentID), zap.Error(delErr))
+	}
 
 	var stored consentState
 	if err := json.Unmarshal([]byte(stateData), &stored); err != nil {

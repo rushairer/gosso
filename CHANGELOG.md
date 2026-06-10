@@ -8,7 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
-- Unified sentinel errors to single canonical locations per ADR-001: `ErrAccountNotActive`, `ErrAccountNotFound`, `ErrRoleNotFound`, `ErrCredentialNotFound` no longer have duplicate definitions across packages (`internal/auth/service/errors.go`, `internal/account/service/errors.go`).
+- `normalizeIP` now returns `"invalid"` for unparseable IPs instead of the raw string — prevents rate-limit bypass via malformed IP addresses (`internal/auth/service/auth_login.go`).
+- `VerifyMFALogin` now checks IP-level rate limiting before MFA code verification — prevents brute-force TOTP/backup code attacks (`internal/auth/service/auth_login.go`).
+- `verifyMFACode` passkey Redis failure now returns `ErrServiceUnavailable` instead of `ErrPasskeyNotVerified` — matches fail-closed pattern for Redis failures (`internal/auth/service/auth_login.go`).
+- Login input validation: `Username` max 254 chars, `Password` max 128 chars, both required — prevents bcrypt CPU exhaustion from extremely long inputs (`internal/auth/service/auth_login.go`).
+- `verifyMFACode` default case no longer interpolates user-controlled `mfaType` in error message — prevents potential log injection (`internal/auth/service/auth_login.go`).
+- `ConfirmVerificationCredential` now performs find-check-update inside a single transaction — eliminates TOCTOU race condition (`internal/auth/service/auth_service.go`).
+- `buildTokenClaims` now deduplicates role names using a set — prevents duplicate roles in JWT payload (`internal/auth/service/auth_service.go`).
+- `SetBackupCodeCount` now enforces upper bound of 20, `SetBackupCodeLength` upper bound of 12 — prevents accidental DoS from extreme values (`internal/auth/service/mfa_service.go`).
+- `RegisterAccount` now validates `Username` format: max 50 chars, only alphanumeric/dot/underscore/hyphen — returns clean validation error instead of DB constraint error (`internal/account/service/account_service.go`).
+- `NewAccount` now uses a single `time.Now()` call for both `CreatedAt` and `UpdatedAt` — eliminates potential clock inconsistency (`internal/account/domain/account.go`).
+- `RefreshTokens` no longer wraps internal error details in returned errors — logs original errors at Debug level instead (`internal/auth/service/auth_session.go`).
+- OIDC Discovery Document and JWKS are now pre-computed once at startup — eliminates per-request map allocation (`internal/oidc/service/discovery_service.go`, `internal/oidc/service/jwks_service.go`).
+- Authorization code generation log downgraded from Info to Debug — avoids PII (account_id) exposure in production logs (`internal/oauth2/service/auth_code_service.go`).
+- Consent state deletion failure is now logged as a warning instead of silently ignored (`internal/oauth2/controller/oauth2_authorize.go`).
+- CSRF token rotation failure is now logged instead of silently swallowed (`middleware/csrf.go`).
+- CSP nonce generation now logs `crypto/rand.Read` failures instead of silently ignoring them (`middleware/middleware.go`).
+- Rate limit key delimiter changed from `:` to `|` — prevents collision with IPv6 colons (`middleware/redis_ratelimit.go`).
+- Audit batchflow schema now quotes `"old"` and `"new"` column names — matches SQL reserved word quoting in `LogSync` (`internal/audit/service/audit.go`).
+- Docker postgres and redis containers now have `no-new-privileges` security option (`docker-compose.yml`).
+- CI coverage threshold raised from 50% to 60% (`.github/workflows/ci.yml`).
+- `govulncheck` pinned to v1.1.4 instead of `@latest` for reproducible CI builds (`.github/workflows/ci.yml`).
 - Repository scan logic extracted into `scanXxx` helpers per ADR-002: `scanAccount`, `scanRole`, `scanCredential`, `scanFederatedIdentity`, `scanOAuth2Client`, `scanConsent`, `scanWebAuthnCredential` — eliminates duplicated `Scan` + `json.Unmarshal` blocks across 7 repository implementations.
 - Controller error handling extracted into shared `controllerutil.HandleServiceError` and `controllerutil.HandleClientAuthError` — eliminates duplicated `if errors.Is` chains in admin, auth, passkey, OIDC, and OAuth2 controllers.
 - OIDC `UserInfo` now uses `errors.Is()` instead of `==` for error comparison (`internal/oidc/controller/oidc_controller.go`).

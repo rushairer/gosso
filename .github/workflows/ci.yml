@@ -56,7 +56,7 @@ jobs:
 
       - name: Check coverage threshold
         run: |
-          go tool cover -func=coverage.out | grep -E '^total:' | awk '{print $3}' | sed 's/%//' | { read cov; echo "Total coverage: ${cov}%"; if [ "$(echo "$cov < 50" | bc -l)" -eq 1 ]; then echo "Coverage ${cov}% is below 50% threshold"; exit 1; fi; }
+          go tool cover -func=coverage.out | grep -E '^total:' | awk '{print $3}' | sed 's/%//' | { read cov; echo "Total coverage: ${cov}%"; if [ "$(echo "$cov < 60" | bc -l)" -eq 1 ]; then echo "Coverage ${cov}% is below 60% threshold"; exit 1; fi; }
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
@@ -104,7 +104,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 
       - name: Run govulncheck
         run: govulncheck ./...

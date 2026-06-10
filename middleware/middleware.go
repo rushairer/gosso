@@ -3,6 +3,7 @@ package middleware
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"log"
 	"net/http"
 	"runtime/debug"
 	"time"
@@ -83,7 +84,10 @@ func GetCSPNonce(ctx *gin.Context) string {
 
 func generateCSPNonce() string {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// crypto/rand.Read failure is practically impossible but log it for defense-in-depth
+		log.Printf("ERROR: crypto/rand.Read failed for CSP nonce: %v", err)
+	}
 	return base64.StdEncoding.EncodeToString(b)
 }
 

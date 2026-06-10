@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -124,7 +125,7 @@ func setCSRFCookie(ctx *gin.Context, cookieName string, secure bool) {
 func rotateCSRFCookie(ctx *gin.Context, cookieName string, secure bool) {
 	newToken, err := generateCSRFToken()
 	if err != nil {
-		// Fallback: keep the old token rather than failing the request
+		log.Printf("WARN: CSRF token rotation failed, keeping old token: %v", err)
 		return
 	}
 

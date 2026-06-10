@@ -130,17 +130,17 @@ func (s *AuthService) ConfirmVerificationCredential(ctx context.Context, credTyp
 		return fmt.Errorf("unsupported credential type: %s", credType)
 	}
 
-	cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, domainCredType, identifier)
-	if err != nil {
-		return fmt.Errorf("find credential: %w", err)
-	}
-
-	if cred.AccountID != accountID {
-		return ErrCredentialOwnership
-	}
-
-	cred.Verify()
 	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// Find inside the transaction to avoid TOCTOU: the credential could have been
+		// modified or deleted between the original find and this update.
+		cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, domainCredType, identifier)
+		if err != nil {
+			return fmt.Errorf("find credential: %w", err)
+		}
+		if cred.AccountID != accountID {
+			return ErrCredentialOwnership
+		}
+		cred.Verify()
 		return s.credentialRepo.UpdateCredential(ctx, tx, cred)
 	})
 }
@@ -221,10 +221,14 @@ func (s *AuthService) buildTokenClaims(ctx context.Context, accountID, sessionID
 	}
 
 	var roleNames []string
+	roleSet := make(map[string]struct{})
 	permSet := make(map[string]struct{})
 	var allPermissions []string
 	for _, role := range roles {
-		roleNames = append(roleNames, role.Name)
+		if _, exists := roleSet[role.Name]; !exists {
+			roleSet[role.Name] = struct{}{}
+			roleNames = append(roleNames, role.Name)
+		}
 		for _, p := range role.Permissions {
 			if _, exists := permSet[p]; !exists {
 				permSet[p] = struct{}{}

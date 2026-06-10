@@ -443,6 +443,9 @@ func TestConfirmVerificationCredential_NotFound(t *testing.T) {
 	defer fixture.mr.Close()
 	defer fixture.sqlDB.Close()
 
+	fixture.sqlMock.ExpectBegin()
+	fixture.sqlMock.ExpectRollback()
+
 	err := fixture.svc.ConfirmVerificationCredential(context.Background(), "email", "nobody@example.com", "account-001")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "find credential")
@@ -461,6 +464,9 @@ func TestConfirmVerificationCredential_WrongAccount(t *testing.T) {
 		Identifier: &email,
 		Verified:   false,
 	}
+
+	fixture.sqlMock.ExpectBegin()
+	fixture.sqlMock.ExpectRollback()
 
 	err := fixture.svc.ConfirmVerificationCredential(context.Background(), "email", email, "account-999")
 	assert.Error(t, err)

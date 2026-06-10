@@ -71,7 +71,7 @@ func NewMFAService(
 // SetBackupCodeCount overrides the backup code count.
 // Must be called during initialization; not safe for concurrent use.
 func (s *MFAService) SetBackupCodeCount(n int) {
-	if n > 0 {
+	if n > 0 && n <= 20 {
 		s.backupCodeCount = n
 	}
 }
@@ -79,7 +79,7 @@ func (s *MFAService) SetBackupCodeCount(n int) {
 // SetBackupCodeLength overrides the backup code length.
 // Must be called during initialization; not safe for concurrent use.
 func (s *MFAService) SetBackupCodeLength(n int) {
-	if n > 0 {
+	if n > 0 && n <= 12 {
 		s.backupCodeLength = n
 	}
 }

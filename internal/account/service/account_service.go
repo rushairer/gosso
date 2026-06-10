@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -201,7 +202,16 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		return nil, fmt.Errorf("create account: %w", err)
 	}
 	if req.Username != "" {
-		account.Username = &req.Username
+		username := strings.TrimSpace(req.Username)
+		if len(username) > 50 {
+			return nil, fmt.Errorf("username must not exceed 50 characters")
+		}
+		for _, c := range username {
+			if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.') {
+				return nil, fmt.Errorf("username may only contain lowercase letters, digits, hyphens, dots, and underscores")
+			}
+		}
+		account.Username = &username
 	}
 	account.Locale = req.Locale
 	account.Timezone = req.Timezone

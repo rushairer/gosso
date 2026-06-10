@@ -67,6 +67,14 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		}
 	}()
 
+	// Prevent brute-force attacks via extremely long inputs.
+	// bcrypt internally truncates to 72 bytes, but still hashes the full input.
+	const maxUsernameLen = 254
+	const maxPasswordLen = 128
+	if len(req.Username) > maxUsernameLen || len(req.Password) > maxPasswordLen || req.Username == "" || req.Password == "" {
+		return nil, ErrInvalidCredentials
+	}
+
 	// 0. Check rate limit for login failures (keyed on IP + normalized username).
 	// Fail-closed: if Redis is unavailable, deny login to prevent brute-force attacks.
 	normalizedUsername := strings.ToLower(req.Username)
@@ -157,6 +165,11 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 			)
 		}
 	}()
+
+	// Prevent brute-force against MFA codes (TOTP/backup code).
+	if err := s.checkIPRateLimit(ctx, ip); err != nil {
+		return nil, err
+	}
 
 	// 1. Verify MFA token
 	claims, err := s.tokenSvc.ValidateAccessTokenWithContext(ctx, mfaToken)
@@ -446,7 +459,7 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 		if verr != nil {
 			s.logger.Error("Redis GetDel failed for passkey MFA verification",
 				zap.Error(verr), zap.String("account_id", accountID))
-			return ErrPasskeyNotVerified
+			return ErrServiceUnavailable
 		}
 		if verified != "1" {
 			return ErrPasskeyNotVerified
@@ -471,7 +484,7 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 		}
 		return nil
 	default:
-		return fmt.Errorf("unsupported mfa type: %s", mfaType)
+		return fmt.Errorf("unsupported mfa type")
 	}
 }
 
@@ -511,7 +524,9 @@ func (s *AuthService) clearLoginRateLimits(ctx context.Context, ip string, usern
 func normalizeIP(ip string) string {
 	parsed := net.ParseIP(ip)
 	if parsed == nil {
-		return ip // return as-is if unparseable
+		// Return a fixed placeholder to prevent rate-limit bypass via unparseable IPs.
+		// Attackers sending different malformed IPs would otherwise each get a fresh bucket.
+		return "invalid"
 	}
 	return parsed.String()
 }

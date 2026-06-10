@@ -42,6 +42,7 @@ func NewAccount(displayName string) (*Account, error) {
 	if len(displayName) > 255 {
 		return nil, errors.New("display name must not exceed 255 characters")
 	}
+	now := time.Now()
 	return &Account{
 		ID:          uuid.New().String(),
 		DisplayName: displayName,
@@ -49,8 +50,8 @@ func NewAccount(displayName string) (*Account, error) {
 		Locale:      "en",
 		Timezone:    "UTC",
 		Metadata:    make(map[string]interface{}),
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}, nil
 }
 

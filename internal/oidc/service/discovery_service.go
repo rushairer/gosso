@@ -2,42 +2,21 @@ package service
 
 // DiscoveryService OIDC Discovery service
 type DiscoveryService struct {
-	issuer                      string
-	authEndpoint                string
-	tokenEndpoint               string
-	jwksURI                     string
-	userInfoEndpoint            string
-	endSessionEndpoint          string
-	deviceAuthorizationEndpoint string
-	revocationEndpoint          string
-	introspectionEndpoint       string
+	doc map[string]any
 }
 
-// NewDiscoveryService creates a new instance of DiscoveryService
+// NewDiscoveryService creates a new instance of DiscoveryService.
+// The discovery document is pre-computed once since it is static for the lifetime of the service.
 func NewDiscoveryService(issuer string) *DiscoveryService {
-	return &DiscoveryService{
-		issuer:                      issuer,
-		authEndpoint:                issuer + "/oauth2/authorize",
-		tokenEndpoint:               issuer + "/oauth2/token",
-		jwksURI:                     issuer + "/.well-known/jwks.json",
-		userInfoEndpoint:            issuer + "/oidc/userinfo",
-		endSessionEndpoint:          issuer + "/oidc/logout",
-		deviceAuthorizationEndpoint: issuer + "/oauth2/device/code",
-		revocationEndpoint:          issuer + "/oauth2/revoke",
-		introspectionEndpoint:       issuer + "/oauth2/introspect",
-	}
-}
-
-// GetDiscoveryDocument returns the OIDC Discovery document
-func (s *DiscoveryService) GetDiscoveryDocument() map[string]any {
-	return map[string]any{
-		"issuer":                        s.issuer,
-		"authorization_endpoint":        s.authEndpoint,
-		"token_endpoint":                s.tokenEndpoint,
-		"jwks_uri":                      s.jwksURI,
-		"userinfo_endpoint":             s.userInfoEndpoint,
-		"end_session_endpoint":          s.endSessionEndpoint,
-		"device_authorization_endpoint": s.deviceAuthorizationEndpoint,
+	s := &DiscoveryService{}
+	s.doc = map[string]any{
+		"issuer":                        issuer,
+		"authorization_endpoint":        issuer + "/oauth2/authorize",
+		"token_endpoint":                issuer + "/oauth2/token",
+		"jwks_uri":                      issuer + "/.well-known/jwks.json",
+		"userinfo_endpoint":             issuer + "/oidc/userinfo",
+		"end_session_endpoint":          issuer + "/oidc/logout",
+		"device_authorization_endpoint": issuer + "/oauth2/device/code",
 		"scopes_supported": []string{
 			"openid", "profile", "email", "phone",
 		},
@@ -69,14 +48,20 @@ func (s *DiscoveryService) GetDiscoveryDocument() map[string]any {
 		"code_challenge_methods_supported": []string{
 			"S256",
 		},
-		"revocation_endpoint": s.revocationEndpoint,
+		"revocation_endpoint": issuer + "/oauth2/revoke",
 		"revocation_endpoint_auth_methods_supported": []string{
 			"client_secret_post", "client_secret_basic",
 		},
-		"introspection_endpoint": s.introspectionEndpoint,
+		"introspection_endpoint": issuer + "/oauth2/introspect",
 		"introspection_endpoint_auth_methods_supported": []string{
 			"client_secret_post", "client_secret_basic",
 		},
 		"authorization_response_iss_parameter_supported": true,
 	}
+	return s
+}
+
+// GetDiscoveryDocument returns the OIDC Discovery document (pre-computed, immutable)
+func (s *DiscoveryService) GetDiscoveryDocument() map[string]any {
+	return s.doc
 }

@@ -81,7 +81,7 @@ func NewAuditor(_ context.Context, db *sql.DB, pipelineCfg *config.TaskPipelineC
 	auditor.recordSchema = batchflow.NewSQLSchema(
 		"audit_record",                                                                                       // Table name
 		batchflow.ConflictIgnoreOperationConfig,                                                              // Conflict policy
-		"id", "tx_id", "account_id", "action", "actor", "resource", "old", "new", "meta", "dd", "created_at", // Column names
+		"id", "tx_id", "account_id", "action", "actor", "resource", "\"old\"", "\"new\"", "meta", "dd", "created_at", // Column names
 	)
 
 	return &auditor

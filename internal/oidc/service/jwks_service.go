@@ -8,30 +8,33 @@ import (
 
 // JWKSService OIDC JWKS service
 type JWKSService struct {
-	keySvc *tokenService.KeyService
+	jwks map[string]any
 }
 
-// NewJWKSService creates a new instance of JWKSService
+// NewJWKSService creates a new instance of JWKSService.
+// The JWKS document is pre-computed once since the key is stable for the service lifetime.
 func NewJWKSService(keySvc *tokenService.KeyService) *JWKSService {
-	return &JWKSService{keySvc: keySvc}
-}
-
-// GetJWKS returns the JWKS document (RSA public key)
-func (s *JWKSService) GetJWKS() map[string]any {
-	pubKey := s.keySvc.PublicKey()
+	pubKey := keySvc.PublicKey()
 	n := base64.RawURLEncoding.EncodeToString(pubKey.N.Bytes())
 	e := base64.RawURLEncoding.EncodeToString(tokenService.BigEndianBytes(pubKey.E))
 
-	return map[string]any{
-		"keys": []map[string]string{
-			{
-				"kty": "RSA",
-				"kid": s.keySvc.KeyID(),
-				"alg": "RS256",
-				"use": "sig",
-				"n":   n,
-				"e":   e,
+	return &JWKSService{
+		jwks: map[string]any{
+			"keys": []map[string]string{
+				{
+					"kty": "RSA",
+					"kid": keySvc.KeyID(),
+					"alg": "RS256",
+					"use": "sig",
+					"n":   n,
+					"e":   e,
+				},
 			},
 		},
 	}
+}
+
+// GetJWKS returns the JWKS document (pre-computed, immutable)
+func (s *JWKSService) GetJWKS() map[string]any {
+	return s.jwks
 }

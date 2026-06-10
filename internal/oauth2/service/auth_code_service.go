@@ -76,7 +76,7 @@ func (s *AuthCodeService) GenerateCode(
 		return nil, fmt.Errorf("store authorization code: %w", err)
 	}
 
-	s.logger.Info("Authorization code generated",
+	s.logger.Debug("Authorization code generated",
 		zap.String("client_id", clientID),
 		zap.String("account_id", accountID))
 

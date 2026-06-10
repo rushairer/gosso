@@ -138,16 +138,20 @@ func TestSetBackupCodeLength(t *testing.T) {
 	svc := newTestMFAService(&mockCredentialRepo{})
 	assert.Equal(t, defaultBackupCodeLength, svc.backupCodeLength)
 
-	svc.SetBackupCodeLength(16)
-	assert.Equal(t, 16, svc.backupCodeLength)
+	svc.SetBackupCodeLength(10)
+	assert.Equal(t, 10, svc.backupCodeLength)
 
 	// No-op on 0
 	svc.SetBackupCodeLength(0)
-	assert.Equal(t, 16, svc.backupCodeLength)
+	assert.Equal(t, 10, svc.backupCodeLength)
 
 	// No-op on negative
 	svc.SetBackupCodeLength(-1)
-	assert.Equal(t, 16, svc.backupCodeLength)
+	assert.Equal(t, 10, svc.backupCodeLength)
+
+	// No-op on value exceeding upper bound (12)
+	svc.SetBackupCodeLength(16)
+	assert.Equal(t, 10, svc.backupCodeLength)
 }
 
 // ──────────────────────────────────────────────
