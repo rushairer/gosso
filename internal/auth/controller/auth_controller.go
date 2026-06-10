@@ -633,7 +633,7 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 type ConfirmVerificationRequest struct {
 	Type       string `json:"type" binding:"required"`
 	Identifier string `json:"identifier" binding:"required,max=255"`
-	Code       string `json:"code" binding:"required"`
+	Code       string `json:"code" binding:"required,max=32"`
 }
 
 // ConfirmVerification POST /api/auth/verify/confirm

@@ -60,7 +60,11 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	logger.Info("starting web server")
+	logger.Info("starting web server",
+		zap.String("env", env),
+		zap.Bool("debug", globalConfig.WebServerConfig.Debug),
+		zap.String("addr", globalConfig.WebServerConfig.Address+":"+globalConfig.WebServerConfig.Port),
+	)
 
 	db, err := initDatabase(globalConfig, logger)
 	if err != nil {

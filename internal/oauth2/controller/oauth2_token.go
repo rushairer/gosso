@@ -76,7 +76,7 @@ func (c *OAuth2Controller) Token(ctx *gin.Context) {
 func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *TokenRequest) {
 	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}
 

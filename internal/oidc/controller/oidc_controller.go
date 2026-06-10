@@ -275,13 +275,13 @@ func (c *OIDCController) handlePostLogoutRedirect(ctx *gin.Context, req logoutRe
 
 	redirectURI := req.PostLogoutRedirectURI
 	if req.State != "" {
-		params := url.Values{}
-		params.Set("state", req.State)
-		separator := "?"
-		if u, err := url.Parse(redirectURI); err == nil && u.RawQuery != "" {
-			separator = "&"
+		u, err := url.Parse(redirectURI)
+		if err == nil {
+			params := u.Query()
+			params.Set("state", req.State)
+			u.RawQuery = params.Encode()
+			redirectURI = u.String()
 		}
-		redirectURI = redirectURI + separator + params.Encode()
 	}
 	ctx.Redirect(http.StatusFound, redirectURI)
 }

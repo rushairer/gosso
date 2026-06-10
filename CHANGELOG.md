@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Device code secret no longer embedded in HTML form — resolved server-side via user_code (`internal/oauth2/controller/oauth2_device.go`).
 - Passkey controller responses now include `Cache-Control: no-store` headers to prevent token caching (`internal/auth/controller/passkey_controller.go`).
 - Logout now revokes session before tokens — prevents stale sessions on partial failure (`internal/oidc/service/logout_service.go`).
+- OAuth2 client deletion now enforces ownership verification at the service layer — prevents IDOR bypass if controller check is removed (`internal/oauth2/service/client_service.go`).
+- Login rate limit keys now normalize IP addresses — prevents IPv6 variant bypass (e.g. `::ffff:127.0.0.1` vs `127.0.0.1`) (`internal/auth/service/auth_login.go`).
+- Consent repository now uses soft-delete with partial unique index — consent revocation is auditable and recoverable (`internal/oauth2/repository/consent_repository_impl.go`, `db/migrations/0014`).
+- `config.Validate()` now checks that `private_key_path` file exists when configured (`config/config.go`).
+- Entrypoint script now properly distinguishes migration "no change" from actual failures — previously all non-zero exit codes were treated as "no change" (`script/entrypoint.sh`).
 
 ### Added
 - JSON log format support via `log.format` config field (`internal/utility/logger.go`, `config/config.go`).
@@ -59,6 +64,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Makefile `docker-dev` target no longer uses hardcoded container name — uses `docker compose exec` instead (`Makefile`).
 - Dockerfile builder image version aligned with `go.mod` (`Dockerfile`).
 - Production config `max_body_size` aligned with development default (10MB) to prevent environment-specific upload failures (`config/production.yaml`).
+- OAuth2 token endpoint `invalid_client` for authorization code grant now returns 401 (was 400) per RFC 6749 — consistent with client credentials grant (`internal/oauth2/controller/oauth2_token.go`).
+- Device authorization page CSRF cookie fallback now checks `__Host-csrf_token` first, matching consent page behavior (`internal/oauth2/controller/template/device.html`).
+- Post-logout redirect URL construction now uses `url.URL` manipulation instead of fragile string concatenation (`internal/oidc/controller/oidc_controller.go`).
+- Docker production compose now sets `stop_grace_period: 45s` — matches the 30s HTTP shutdown timeout to prevent container being killed prematurely (`docker-compose.yml`).
+- CI Go version aligned with Dockerfile from 1.25 to 1.26 (`.github/workflows/ci.yml`).
+- `ConfirmVerificationRequest.Code` now has `max=32` binding constraint (`internal/auth/controller/auth_controller.go`).
+- `SoftDeleteCredentialsByAccount` now also updates `updated_at` — consistent with other soft-delete implementations (`internal/account/repository/credential_repository_impl.go`).
+- Social login MFA check comment clarified — check correctly runs before session issuance for future mandatory-MFA compatibility (`internal/auth/service/social_login_service.go`).
+- Startup log now includes environment, debug mode, and listen address (`cmd/gouno/web.go`).
 
 ### Changed
 - `InitializeAuthModule` now returns `(*AuthModule, error)` — callers must handle initialization errors (`internal/auth/module.go`, `cmd/gouno/web_modules.go`).
@@ -67,6 +81,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Account.IsSuspended()` now also checks `!IsDeleted()` for consistency with `IsActive()`.
 - TOTP enrollment now uses a single transaction for delete-unverified + create — prevents race condition (`internal/auth/service/mfa_service.go`).
 - Removed unused `AuditEntry` struct from audit domain (`internal/audit/domain/audit.go`).
+- `OAuth2ClientService.DeleteClient` now accepts `accountID` parameter and enforces ownership at the service layer (`internal/oauth2/service/client_service.go`).
+- `RegisterAccount` now uses domain constructors (`NewCredential`, `NewEmailCredential`, `NewPhoneCredential`) instead of raw struct construction (`internal/account/service/account_service.go`).
+- `ConsentRepository.Delete` now performs soft-delete (was hard DELETE) — requires new `deletedAt` parameter (`internal/oauth2/repository/consent_repository.go`).
+- Migration 0001 now includes `CREATE EXTENSION IF NOT EXISTS "pgcrypto"` — ensures `gen_random_uuid()` works in non-Docker environments (`db/migrations/0001_audit.up.sql`).
+- Dev Docker image pinned to `golang:1.26-alpine` (was `golang:alpine`) (`docker-compose.development.yml`).
+- Makefile test target now includes `-race` flag — matches CI pipeline (`Makefile`).
 - Audit `Wait()` documents time-based heuristic limitation and recommends upgrading batchflow (`internal/audit/service/audit.go`).
 - Audit batch pipeline parameters (`buffer_size`, `flush_size`, `flush_interval`) are now configurable via `task_pipeline` config (`internal/audit/service/audit.go`, `cmd/gouno/web.go`).
 - Go version updated to 1.26 (`go.mod`, `Dockerfile`).

@@ -62,7 +62,7 @@ func (m *mockOAuth2ClientSvcForOAuth2) UpdateClient(_ context.Context, _ *oauth2
 	return nil
 }
 
-func (m *mockOAuth2ClientSvcForOAuth2) DeleteClient(_ context.Context, _ string) error {
+func (m *mockOAuth2ClientSvcForOAuth2) DeleteClient(_ context.Context, _, _ string) error {
 	return nil
 }
 
@@ -693,7 +693,7 @@ func TestToken_AuthCode_ClientNotFound(t *testing.T) {
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestToken_AuthCode_ConfidentialMissingSecret(t *testing.T) {

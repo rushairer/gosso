@@ -145,14 +145,35 @@ func TestDeleteClient(t *testing.T) {
 	defer db.Close()
 
 	ctx := context.Background()
+	now := time.Now()
 
+	// Mock FindByClientID
+	redirectURIs, _ := json.Marshal([]string{"http://localhost/callback"})
+	postLogoutURIs, _ := json.Marshal([]string{})
+	grantTypes, _ := json.Marshal([]string{domain.GrantTypeAuthorizationCode})
+	scopes, _ := json.Marshal([]string{"openid"})
+
+	rows := sqlmock.NewRows([]string{
+		"id", "account_id", "client_id", "client_secret_hash",
+		"name", "description", "redirect_uris", "post_logout_redirect_uris", "grant_types", "scopes",
+		"is_confidential", "metadata", "created_at", "updated_at",
+	}).AddRow(
+		"uuid-001", "account-001", "abc123", "$2a$10$hash",
+		"Test App", "desc", redirectURIs, postLogoutURIs, grantTypes, scopes,
+		true, nil, now, now,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").
+		WithArgs("abc123").
+		WillReturnRows(rows)
+
+	// Mock SoftDelete
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE oauth2_clients SET deleted_at").
 		WithArgs(sqlmock.AnyArg(), "uuid-001").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
-	err := svc.DeleteClient(ctx, "uuid-001")
+	err := svc.DeleteClient(ctx, "account-001", "abc123")
 	require.NoError(t, err)
 
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -165,14 +186,45 @@ func TestDeleteClient_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	mock.ExpectBegin()
-	mock.ExpectExec("UPDATE oauth2_clients SET deleted_at").
-		WithArgs(sqlmock.AnyArg(), "nonexistent").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectRollback()
+	// Mock FindByClientID returning not found
+	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").
+		WithArgs("nonexistent").
+		WillReturnError(domain.ErrClientNotFound)
 
-	err := svc.DeleteClient(ctx, "nonexistent")
+	err := svc.DeleteClient(ctx, "account-001", "nonexistent")
 	assert.ErrorIs(t, err, domain.ErrClientNotFound)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestDeleteClient_AccessDenied tests deleting a client owned by another account
+func TestDeleteClient_AccessDenied(t *testing.T) {
+	db, mock, svc := setupTestClientService(t)
+	defer db.Close()
+
+	ctx := context.Background()
+	now := time.Now()
+
+	redirectURIs, _ := json.Marshal([]string{"http://localhost/callback"})
+	postLogoutURIs, _ := json.Marshal([]string{})
+	grantTypes, _ := json.Marshal([]string{domain.GrantTypeAuthorizationCode})
+	scopes, _ := json.Marshal([]string{"openid"})
+
+	rows := sqlmock.NewRows([]string{
+		"id", "account_id", "client_id", "client_secret_hash",
+		"name", "description", "redirect_uris", "post_logout_redirect_uris", "grant_types", "scopes",
+		"is_confidential", "metadata", "created_at", "updated_at",
+	}).AddRow(
+		"uuid-001", "account-001", "abc123", "$2a$10$hash",
+		"Test App", "desc", redirectURIs, postLogoutURIs, grantTypes, scopes,
+		true, nil, now, now,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").
+		WithArgs("abc123").
+		WillReturnRows(rows)
+
+	err := svc.DeleteClient(ctx, "other-account", "abc123")
+	assert.ErrorIs(t, err, ErrClientAccessDenied)
 
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

@@ -60,7 +60,7 @@ func (m *mockOAuth2ClientService) UpdateClient(_ context.Context, _ *oauth2Domai
 	return nil
 }
 
-func (m *mockOAuth2ClientService) DeleteClient(_ context.Context, _ string) error {
+func (m *mockOAuth2ClientService) DeleteClient(_ context.Context, _, _ string) error {
 	if m.deleteFn != nil {
 		return m.deleteFn()
 	}
@@ -494,6 +494,7 @@ func TestDeleteClient_IDORProtection(t *testing.T) {
 		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
 			return client, nil
 		},
+		deleteFn: func() error { return oauth2Service.ErrClientAccessDenied },
 	}
 	engine := setupClientController(clientSvc)
 

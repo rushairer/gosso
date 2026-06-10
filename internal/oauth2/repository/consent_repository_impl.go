@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 )
@@ -30,7 +31,7 @@ func (r *consentRepositoryImpl) Upsert(ctx context.Context, tx *sql.Tx, consent 
 		INSERT INTO oauth2_consents (account_id, client_id, scopes, granted_at)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (account_id, client_id)
-		DO UPDATE SET scopes = EXCLUDED.scopes, granted_at = EXCLUDED.granted_at
+		DO UPDATE SET scopes = EXCLUDED.scopes, granted_at = EXCLUDED.granted_at, deleted_at = NULL
 		RETURNING id, created_at, updated_at`
 
 	return tx.QueryRowContext(ctx, query,
@@ -42,11 +43,12 @@ func (r *consentRepositoryImpl) Upsert(ctx context.Context, tx *sql.Tx, consent 
 }
 
 // FindByAccountAndClient finds a consent record by account and client ID.
+// Only returns non-deleted records.
 func (r *consentRepositoryImpl) FindByAccountAndClient(ctx context.Context, accountID, clientID string) (*domain.Consent, error) {
 	query := `
 		SELECT id, account_id, client_id, scopes, granted_at, created_at, updated_at
 		FROM oauth2_consents
-		WHERE account_id = $1 AND client_id = $2`
+		WHERE account_id = $1 AND client_id = $2 AND deleted_at IS NULL`
 
 	var consent domain.Consent
 	var scopesJSON []byte
@@ -73,10 +75,10 @@ func (r *consentRepositoryImpl) FindByAccountAndClient(ctx context.Context, acco
 	return &consent, nil
 }
 
-// Delete removes a consent record.
-func (r *consentRepositoryImpl) Delete(ctx context.Context, tx *sql.Tx, accountID, clientID string) error {
-	query := `DELETE FROM oauth2_consents WHERE account_id = $1 AND client_id = $2`
-	_, err := tx.ExecContext(ctx, query, accountID, clientID)
+// Delete soft-deletes a consent record.
+func (r *consentRepositoryImpl) Delete(ctx context.Context, tx *sql.Tx, accountID, clientID string, deletedAt time.Time) error {
+	query := `UPDATE oauth2_consents SET deleted_at = $3 WHERE account_id = $1 AND client_id = $2 AND deleted_at IS NULL`
+	_, err := tx.ExecContext(ctx, query, accountID, clientID, deletedAt)
 	if err != nil {
 		return fmt.Errorf("delete consent: %w", err)
 	}

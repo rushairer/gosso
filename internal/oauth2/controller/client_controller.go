@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -249,19 +250,14 @@ func (c *ClientController) DeleteClient(ctx *gin.Context) {
 		return
 	}
 
-	client, err := c.clientSvc.FindByClientID(ctx, clientID)
-	if err != nil {
-		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "client not found"))
-		return
-	}
-
-	if client.AccountID != accountID {
-		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "access denied"))
-		return
-	}
-
-	if err := c.clientSvc.DeleteClient(ctx, client.ID); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to delete client"))
+	if err := c.clientSvc.DeleteClient(ctx, accountID, clientID); err != nil {
+		if errors.Is(err, oauth2Domain.ErrClientNotFound) {
+			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "client not found"))
+		} else if errors.Is(err, oauth2Service.ErrClientAccessDenied) {
+			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "access denied"))
+		} else {
+			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to delete client"))
+		}
 		return
 	}
 

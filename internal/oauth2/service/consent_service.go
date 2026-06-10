@@ -113,7 +113,7 @@ func (s *ConsentService) SaveConsent(ctx context.Context, consent *domain.Consen
 // DeleteConsent deletes the user's consent record from both DB and Redis cache.
 func (s *ConsentService) DeleteConsent(ctx context.Context, accountID, clientID string) error {
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.consentRepo.Delete(ctx, tx, accountID, clientID)
+		return s.consentRepo.Delete(ctx, tx, accountID, clientID, time.Now())
 	})
 	if err != nil {
 		return fmt.Errorf("delete consent from DB: %w", err)

@@ -24,6 +24,7 @@ services:
     networks:
       - gosso-prod-network
     restart: unless-stopped
+    stop_grace_period: 45s
     read_only: true
     tmpfs:
       - /tmp

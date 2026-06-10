@@ -196,8 +196,6 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	}
 
 	// 3. Create account + credentials in transaction
-	now := time.Now()
-
 	account, err := domain.NewAccount(req.DisplayName)
 	if err != nil {
 		return nil, fmt.Errorf("create account: %w", err)
@@ -221,43 +219,19 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 			return fmt.Errorf("hash password: %w", err)
 		}
 
-		passwordCred := &domain.Credential{
-			ID:                uuid.New().String(),
-			AccountID:         account.ID,
-			Type:              domain.CredentialTypePassword,
-			Value:             passwordHash,
-			Verified:          true,
-			PrimaryCredential: false,
-			Metadata:          make(map[string]interface{}),
-			CreatedAt:         now,
-		}
+		passwordCred := domain.NewCredential(account.ID, domain.CredentialTypePassword, nil, passwordHash)
+		passwordCred.Verified = true
 		credentials = append(credentials, passwordCred)
 
 		if req.Email != "" {
-			emailCred := &domain.Credential{
-				ID:                uuid.New().String(),
-				AccountID:         account.ID,
-				Type:              domain.CredentialTypeEmail,
-				Identifier:        &req.Email,
-				Verified:          false,
-				PrimaryCredential: true,
-				Metadata:          make(map[string]interface{}),
-				CreatedAt:         now,
-			}
+			emailCred := domain.NewEmailCredential(account.ID, req.Email)
+			emailCred.PrimaryCredential = true
 			credentials = append(credentials, emailCred)
 		}
 
 		if req.Phone != "" {
-			phoneCred := &domain.Credential{
-				ID:                uuid.New().String(),
-				AccountID:         account.ID,
-				Type:              domain.CredentialTypePhone,
-				Identifier:        &req.Phone,
-				Verified:          false,
-				PrimaryCredential: req.Email == "",
-				Metadata:          make(map[string]interface{}),
-				CreatedAt:         now,
-			}
+			phoneCred := domain.NewPhoneCredential(account.ID, req.Phone)
+			phoneCred.PrimaryCredential = req.Email == ""
 			credentials = append(credentials, phoneCred)
 		}
 

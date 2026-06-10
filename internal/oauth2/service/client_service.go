@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -34,7 +35,7 @@ type OAuth2ClientService interface {
 	FindByClientID(ctx context.Context, clientID string) (*domain.OAuth2Client, error)
 	FindByAccountID(ctx context.Context, accountID string) ([]*domain.OAuth2Client, error)
 	UpdateClient(ctx context.Context, client *domain.OAuth2Client) error
-	DeleteClient(ctx context.Context, id string) error
+	DeleteClient(ctx context.Context, accountID, clientID string) error
 }
 
 type oauth2ClientServiceImpl struct {
@@ -117,9 +118,18 @@ func (s *oauth2ClientServiceImpl) UpdateClient(ctx context.Context, client *doma
 	})
 }
 
-func (s *oauth2ClientServiceImpl) DeleteClient(ctx context.Context, id string) error {
+var ErrClientAccessDenied = errors.New("access denied: client does not belong to this account")
+
+func (s *oauth2ClientServiceImpl) DeleteClient(ctx context.Context, accountID, clientID string) error {
+	client, err := s.clientRepo.FindByClientID(ctx, clientID)
+	if err != nil {
+		return err
+	}
+	if client.AccountID != accountID {
+		return ErrClientAccessDenied
+	}
 	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.clientRepo.SoftDelete(ctx, tx, id, time.Now())
+		return s.clientRepo.SoftDelete(ctx, tx, client.ID, time.Now())
 	})
 }
 

@@ -368,7 +368,10 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
 
-	// Check if MFA is required (consistency with loginExistingUser)
+	// Check if MFA is required before issuing session tokens.
+	// For newly created accounts, MFA is never enrolled so CheckMFA returns nil, nil.
+	// If MFA becomes mandatory at registration time in the future, this check will
+	// correctly intercept and return an MFA challenge before any tokens are issued.
 	if s.mfaChecker != nil {
 		mfaResult, mfaErr := s.mfaChecker.CheckMFA(ctx, account)
 		if mfaResult != nil || mfaErr != nil {

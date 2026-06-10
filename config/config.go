@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
+	"os"
 	"time"
 )
 
@@ -258,6 +259,11 @@ func (c *GoUnoConfig) Validate() error {
 	}
 	if c.AuthConfig.DeviceCodeInterval <= 0 {
 		return fmt.Errorf("auth: device_code_interval must be positive")
+	}
+	if c.AuthConfig.PrivateKeyPath != "" {
+		if _, err := os.Stat(c.AuthConfig.PrivateKeyPath); os.IsNotExist(err) {
+			return fmt.Errorf("auth: private_key_path file does not exist: %s", c.AuthConfig.PrivateKeyPath)
+		}
 	}
 	if c.WebServerConfig.RateLimits.Login <= 0 || c.WebServerConfig.RateLimits.Token <= 0 ||
 		c.WebServerConfig.RateLimits.Passkey <= 0 || c.WebServerConfig.RateLimits.API <= 0 ||

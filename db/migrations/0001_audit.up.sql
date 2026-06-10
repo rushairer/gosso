@@ -1,5 +1,8 @@
 -- 0001_audit.sql
 
+-- 确保必要的扩展已安装
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
 -- audit_record 表用于记录审计日志
 CREATE TABLE IF NOT EXISTS audit_record (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

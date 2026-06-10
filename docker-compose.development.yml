@@ -1,7 +1,7 @@
 services:
   # 应用服务 (开发模式 - 代码挂载 + 热重载)
   gosso:
-    image: golang:alpine
+    image: golang:1.26-alpine
     working_dir: /app
     ports:
       - "${APP_EXTERNAL_PORT:-8081}:${APP_PORT:-8080}"

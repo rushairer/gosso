@@ -116,12 +116,12 @@ func TestConsentRepo_Delete_DBError(t *testing.T) {
 	mock.ExpectBegin()
 	tx, _ := db.Begin()
 
-	mock.ExpectExec("DELETE FROM oauth2_consents").
-		WithArgs("account-001", "client-001").
+	mock.ExpectExec("UPDATE oauth2_consents SET deleted_at").
+		WithArgs("account-001", "client-001", sqlmock.AnyArg()).
 		WillReturnError(fmt.Errorf("connection lost"))
 
 	repo := NewConsentRepository(db)
-	err = repo.Delete(context.Background(), tx, "account-001", "client-001")
+	err = repo.Delete(context.Background(), tx, "account-001", "client-001", time.Now())
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "delete consent")
@@ -222,12 +222,12 @@ func TestConsentRepo_Delete_Success(t *testing.T) {
 	mock.ExpectBegin()
 	tx, _ := db.Begin()
 
-	mock.ExpectExec("DELETE FROM oauth2_consents").
-		WithArgs("account-001", "client-001").
+	mock.ExpectExec("UPDATE oauth2_consents SET deleted_at").
+		WithArgs("account-001", "client-001", sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewConsentRepository(db)
-	err = repo.Delete(context.Background(), tx, "account-001", "client-001")
+	err = repo.Delete(context.Background(), tx, "account-001", "client-001", time.Now())
 
 	require.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -67,7 +68,8 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	// 0. Check rate limit for login failures (keyed on IP + normalized username).
 	// Fail-closed: if Redis is unavailable, deny login to prevent brute-force attacks.
 	normalizedUsername := strings.ToLower(req.Username)
-	attemptsKey := fmt.Sprintf("login_attempts/%s/%s", req.IP, normalizedUsername)
+	normalizedIP := normalizeIP(req.IP)
+	attemptsKey := fmt.Sprintf("login_attempts/%s/%s", normalizedIP, normalizedUsername)
 	count, incrErr := s.redis.CheckAndIncr(ctx, attemptsKey, s.loginMaxAttempts, s.loginRateLimitWindow)
 	if incrErr != nil {
 		s.logger.Error("Failed to check login rate limit, denying login", zap.Error(incrErr))
@@ -475,7 +477,8 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 // Returns ErrAccountLocked if the limit is exceeded. Returns ErrServiceUnavailable
 // if Redis is unavailable (fail-closed for rate limiting).
 func (s *AuthService) checkIPRateLimit(ctx context.Context, ip string) error {
-	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", ip)
+	normalizedIP := normalizeIP(ip)
+	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", normalizedIP)
 	ipCount, ipIncrErr := s.redis.CheckAndIncr(ctx, ipAttemptsKey, s.loginMaxAttemptsPerIP, s.loginRateLimitWindow)
 	if ipIncrErr != nil {
 		s.logger.Error("Failed to check IP login rate limit, denying login", zap.Error(ipIncrErr))
@@ -492,9 +495,21 @@ func (s *AuthService) checkIPRateLimit(ctx context.Context, ip string) error {
 // that use many accounts from the same IP.
 func (s *AuthService) clearLoginRateLimits(ctx context.Context, ip string, username *string) {
 	if username != nil {
-		key := fmt.Sprintf("login_attempts/%s/%s", ip, strings.ToLower(*username))
+		normalizedIP := normalizeIP(ip)
+		key := fmt.Sprintf("login_attempts/%s/%s", normalizedIP, strings.ToLower(*username))
 		if err := s.redis.Del(ctx, key); err != nil {
 			s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key", key), zap.Error(err))
 		}
 	}
+}
+
+// normalizeIP parses an IP address and returns its canonical string form.
+// This prevents rate-limit bypass via different representations of the same IP
+// (e.g., "::ffff:127.0.0.1" vs "127.0.0.1", or IPv6 case differences).
+func normalizeIP(ip string) string {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return ip // return as-is if unparseable
+	}
+	return parsed.String()
 }
