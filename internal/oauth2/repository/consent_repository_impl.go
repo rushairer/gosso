@@ -50,17 +50,7 @@ func (r *consentRepositoryImpl) FindByAccountAndClient(ctx context.Context, acco
 		FROM oauth2_consents
 		WHERE account_id = $1 AND client_id = $2 AND deleted_at IS NULL`
 
-	var consent domain.Consent
-	var scopesJSON []byte
-	err := r.db.QueryRowContext(ctx, query, accountID, clientID).Scan(
-		&consent.ID,
-		&consent.AccountID,
-		&consent.ClientID,
-		&scopesJSON,
-		&consent.GrantedAt,
-		&consent.CreatedAt,
-		&consent.UpdatedAt,
-	)
+	consent, err := scanConsent(r.db.QueryRowContext(ctx, query, accountID, clientID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -68,11 +58,7 @@ func (r *consentRepositoryImpl) FindByAccountAndClient(ctx context.Context, acco
 		return nil, fmt.Errorf("find consent: %w", err)
 	}
 
-	if err := json.Unmarshal(scopesJSON, &consent.Scopes); err != nil {
-		return nil, fmt.Errorf("unmarshal scopes: %w", err)
-	}
-
-	return &consent, nil
+	return consent, nil
 }
 
 // Delete soft-deletes a consent record.

@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountRepo "github.com/rushairer/gosso/internal/account/repository"
+	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/audit"
 	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
@@ -30,13 +32,13 @@ func safeAuditReason(err error) string {
 		return "invalid_credentials"
 	case errors.Is(err, ErrAccountLocked):
 		return "account_locked"
-	case errors.Is(err, ErrAccountNotActive):
+	case errors.Is(err, accountService.ErrAccountNotActive):
 		return "account_inactive"
 	case errors.Is(err, ErrInvalidMFACode):
 		return "invalid_mfa_code"
 	case errors.Is(err, ErrInvalidMFAToken), errors.Is(err, ErrInvalidMFATokenScope):
 		return "invalid_mfa_token"
-	case errors.Is(err, ErrAccountNotFound):
+	case errors.Is(err, accountRepo.ErrAccountNotFound):
 		return "account_not_found"
 	default:
 		return "internal_error"
@@ -184,7 +186,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	// 4. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("%w", ErrAccountNotFound)
+		return nil, fmt.Errorf("%w", accountRepo.ErrAccountNotFound)
 	}
 	if !account.IsActive() {
 		return nil, ErrInvalidCredentials
@@ -260,7 +262,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	// 3. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("%w", ErrAccountNotFound)
+		return nil, fmt.Errorf("%w", accountRepo.ErrAccountNotFound)
 	}
 	if !account.IsActive() {
 		return nil, ErrInvalidCredentials

@@ -21,6 +21,7 @@ import (
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountRepository "github.com/rushairer/gosso/internal/account/repository"
 	"github.com/rushairer/gosso/internal/auth/domain"
 	"github.com/rushairer/gosso/internal/testutil"
 )
@@ -320,7 +321,7 @@ func TestDeleteCredential_NotFound(t *testing.T) {
 	svc := newTestPasskeyService(credRepo)
 
 	err := svc.DeleteCredential(context.Background(), "acct-1", "cred-999")
-	assert.ErrorIs(t, err, ErrCredentialNotFound)
+	assert.ErrorIs(t, err, accountRepository.ErrCredentialNotFound)
 }
 
 func TestDeleteCredential_WrongAccount(t *testing.T) {

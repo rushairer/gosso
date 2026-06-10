@@ -67,33 +67,13 @@ func (r *accountRepositoryImpl) FindByID(ctx context.Context, accountID string) 
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
-	account := &domain.Account{}
-	var metadataJSON []byte
-
-	err := r.db.QueryRowContext(ctx, query, accountID).Scan(
-		&account.ID,
-		&account.Username,
-		&account.DisplayName,
-		&account.AvatarURL,
-		&account.Status,
-		&account.Locale,
-		&account.Timezone,
-		&metadataJSON,
-		&account.CreatedAt,
-		&account.UpdatedAt,
-		&account.DeletedAt,
-	)
+	account, err := scanAccount(r.db.QueryRowContext(ctx, query, accountID))
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, accountID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query account: %w", err)
-	}
-
-	// Parse metadata
-	if err := json.Unmarshal(metadataJSON, &account.Metadata); err != nil {
-		return nil, fmt.Errorf("unmarshal metadata: %w", err)
 	}
 
 	return account, nil
@@ -107,33 +87,13 @@ func (r *accountRepositoryImpl) FindByUsername(ctx context.Context, username str
 		WHERE username = $1 AND deleted_at IS NULL
 	`
 
-	account := &domain.Account{}
-	var metadataJSON []byte
-
-	err := r.db.QueryRowContext(ctx, query, username).Scan(
-		&account.ID,
-		&account.Username,
-		&account.DisplayName,
-		&account.AvatarURL,
-		&account.Status,
-		&account.Locale,
-		&account.Timezone,
-		&metadataJSON,
-		&account.CreatedAt,
-		&account.UpdatedAt,
-		&account.DeletedAt,
-	)
+	account, err := scanAccount(r.db.QueryRowContext(ctx, query, username))
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, username)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query account: %w", err)
-	}
-
-	// Parse metadata
-	if err := json.Unmarshal(metadataJSON, &account.Metadata); err != nil {
-		return nil, fmt.Errorf("unmarshal metadata: %w", err)
 	}
 
 	return account, nil
@@ -253,33 +213,9 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 	}
 	defer func() { _ = rows.Close() }()
 
-	var accounts []*domain.Account
-	for rows.Next() {
-		account := &domain.Account{}
-		var metadataJSON []byte
-		if err := rows.Scan(
-			&account.ID,
-			&account.Username,
-			&account.DisplayName,
-			&account.AvatarURL,
-			&account.Status,
-			&account.Locale,
-			&account.Timezone,
-			&metadataJSON,
-			&account.CreatedAt,
-			&account.UpdatedAt,
-			&account.DeletedAt,
-		); err != nil {
-			return nil, 0, fmt.Errorf("scan account: %w", err)
-		}
-		if err := json.Unmarshal(metadataJSON, &account.Metadata); err != nil {
-			return nil, 0, fmt.Errorf("unmarshal metadata: %w", err)
-		}
-		accounts = append(accounts, account)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("iterate accounts: %w", err)
+	accounts, err := scanAccounts(rows)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	return accounts, total, nil

@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -10,10 +9,23 @@ import (
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
+	accountRepository "github.com/rushairer/gosso/internal/account/repository"
 	authService "github.com/rushairer/gosso/internal/auth/service"
+	"github.com/rushairer/gosso/internal/controllerutil"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/middleware"
 )
+
+// passkeyLoginErrorMap maps passkey login errors to HTTP responses.
+var passkeyLoginErrorMap = map[error]controllerutil.ErrorMapping{
+	authService.ErrPasskeyNotFound: {Status: http.StatusNotFound, Message: "no passkey found for this account"},
+}
+
+// passkeyDeleteErrorMap maps passkey credential deletion errors to HTTP responses.
+var passkeyDeleteErrorMap = map[error]controllerutil.ErrorMapping{
+	authService.ErrCredentialOwnership:     {Status: http.StatusForbidden, Message: "credential does not belong to account"},
+	accountRepository.ErrCredentialNotFound: {Status: http.StatusNotFound, Message: "credential not found"},
+}
 
 // passkeyAuthService defines the auth service methods used by PasskeyController.
 type passkeyAuthService interface {
@@ -147,12 +159,8 @@ func (c *PasskeyController) LoginBegin(ctx *gin.Context) {
 		}
 		options, requestID, err := c.passkeySvc.BeginLogin(ctx, req.AccountID)
 		if err != nil {
-			if errors.Is(err, authService.ErrPasskeyNotFound) {
-				ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "no passkey found for this account"))
-				return
-			}
-			c.logger.Error("Failed to begin passkey login", zap.Error(err))
-			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to begin login"))
+			controllerutil.HandleServiceError(ctx, c.logger, err, passkeyLoginErrorMap,
+				http.StatusInternalServerError, "Failed to begin passkey login")
 			return
 		}
 		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
@@ -341,16 +349,8 @@ func (c *PasskeyController) DeleteCredential(ctx *gin.Context) {
 	}
 
 	if err := c.passkeySvc.DeleteCredential(ctx, accountID, credentialID); err != nil {
-		if errors.Is(err, authService.ErrCredentialOwnership) {
-			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "credential does not belong to account"))
-			return
-		}
-		if errors.Is(err, authService.ErrCredentialNotFound) {
-			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "credential not found"))
-			return
-		}
-		c.logger.Error("Failed to delete passkey", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
+		controllerutil.HandleServiceError(ctx, c.logger, err, passkeyDeleteErrorMap,
+			http.StatusInternalServerError, "Failed to delete passkey")
 		return
 	}
 

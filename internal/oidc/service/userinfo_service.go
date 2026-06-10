@@ -9,7 +9,6 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
-	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/utility"
 )
 
@@ -42,7 +41,7 @@ func (s *UserInfoService) GetUserInfo(ctx context.Context, accountID string, sco
 	}
 
 	if account.Status != accountDomain.AccountStatusActive {
-		return nil, authService.ErrAccountNotActive
+		return nil, accountService.ErrAccountNotActive
 	}
 
 	info := map[string]any{

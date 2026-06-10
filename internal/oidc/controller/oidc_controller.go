@@ -9,8 +9,9 @@ import (
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
+	accountService "github.com/rushairer/gosso/internal/account/service"
 	authMiddleware "github.com/rushairer/gosso/internal/auth/middleware"
-	authService "github.com/rushairer/gosso/internal/auth/service"
+	"github.com/rushairer/gosso/internal/controllerutil"
 	oauth2Repo "github.com/rushairer/gosso/internal/oauth2/repository"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
@@ -18,6 +19,11 @@ import (
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 	"github.com/rushairer/gosso/middleware"
 )
+
+// userInfoErrorMap maps user info service errors to HTTP responses.
+var userInfoErrorMap = map[error]controllerutil.ErrorMapping{
+	accountService.ErrAccountNotActive: {Status: http.StatusForbidden, Message: "account is not active"},
+}
 
 // OIDCController OIDC protocol controller
 type OIDCController struct {
@@ -96,11 +102,8 @@ func (c *OIDCController) UserInfo(ctx *gin.Context) {
 
 	info, err := c.userInfoSvc.GetUserInfo(ctx, claims.AccountID, scopes)
 	if err != nil {
-		if err == authService.ErrAccountNotActive {
-			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "account is not active"))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to get user info"))
+		controllerutil.HandleServiceError(ctx, c.logger, err, userInfoErrorMap,
+			http.StatusInternalServerError, "Failed to get user info")
 		return
 	}
 

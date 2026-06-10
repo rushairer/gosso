@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Unified sentinel errors to single canonical locations per ADR-001: `ErrAccountNotActive`, `ErrAccountNotFound`, `ErrRoleNotFound`, `ErrCredentialNotFound` no longer have duplicate definitions across packages (`internal/auth/service/errors.go`, `internal/account/service/errors.go`).
+- Repository scan logic extracted into `scanXxx` helpers per ADR-002: `scanAccount`, `scanRole`, `scanCredential`, `scanFederatedIdentity`, `scanOAuth2Client`, `scanConsent`, `scanWebAuthnCredential` — eliminates duplicated `Scan` + `json.Unmarshal` blocks across 7 repository implementations.
+- Controller error handling extracted into shared `controllerutil.HandleServiceError` and `controllerutil.HandleClientAuthError` — eliminates duplicated `if errors.Is` chains in admin, auth, passkey, OIDC, and OAuth2 controllers.
+- OIDC `UserInfo` now uses `errors.Is()` instead of `==` for error comparison (`internal/oidc/controller/oidc_controller.go`).
+- Added `wrapcheck`, `errorlint`, `dupl`, `exhaustive` linters to golangci-lint config for automated architecture invariant enforcement (`.golangci.yml`).
+- Added `architecture-check` CI job and per-module coverage report to GitHub Actions (`.github/workflows/ci.yml`).
+- PR template now includes Architecture Invariants checklist and Review Scope dimensions (`.github/PULL_REQUEST_TEMPLATE.md`).
+- CONTRIBUTING.md now references Architecture Invariants and ADR documents.
+
+### Added
+- Architecture Invariants document (`doc/ARCHITECTURE_INVARIANTS.md`) — 8 categories of non-negotiable rules with CI enforcement levels.
+- Architecture Decision Records: ADR-001 (Sentinel Error Strategy), ADR-002 (Repository Scan Helper Pattern) (`doc/ADR/`).
+- Architecture invariant checker script (`script/check-architecture.sh`) — checks E1/E3/C1/L1/L2/R3 rules.
+- `controllerutil` package with shared error handling helpers (`internal/controllerutil/error_handler.go`).
+- Repository scan helper files: `internal/account/repository/scan_helpers.go`, `internal/oauth2/repository/scan_helpers.go`, `internal/auth/repository/scan_helpers.go`.
+
+### Fixed
+- `ErrCredentialOwnership` latent bug: inline `errors.New("credential does not belong to this account")` in `auth_service.go` would never match the sentinel `ErrCredentialOwnership` (`"credential does not belong to account"`) — now correctly returns the sentinel (`internal/auth/service/auth_service.go`).
+
 ### Security
 - CSRF skipPaths now uses path-boundary match (`/path` + `/path/`) instead of prefix match — prevents `/begin` from matching `/beginners` (`middleware/csrf.go`).
 - OAuth2 authorization endpoint now requires Redis for PKCE consent state storage — returns 503 when unavailable instead of silently bypassing PKCE validation (`internal/oauth2/controller/oauth2_authorize.go`).

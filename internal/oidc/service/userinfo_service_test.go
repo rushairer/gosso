@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
-	authService "github.com/rushairer/gosso/internal/auth/service"
+	accountService "github.com/rushairer/gosso/internal/account/service"
 )
 
 func newTestUserInfoService(t *testing.T) *UserInfoService {
@@ -125,7 +125,7 @@ func TestUserInfo_GetUserInfo_AccountNotFound(t *testing.T) {
 func TestUserInfo_GetUserInfo_AccountNotActive(t *testing.T) {
 	svc := newTestUserInfoService(t)
 	_, err := svc.GetUserInfo(context.Background(), "suspended-001", []string{"openid"})
-	assert.ErrorIs(t, err, authService.ErrAccountNotActive)
+	assert.ErrorIs(t, err, accountService.ErrAccountNotActive)
 }
 
 func TestUserInfo_GetUserInfo_NoAvatar(t *testing.T) {

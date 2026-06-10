@@ -4,10 +4,9 @@ import "errors"
 
 var (
 	// Authentication errors
-	ErrInvalidCredentials  = errors.New("invalid credentials")
-	ErrAccountNotActive    = errors.New("account is not active")
-	ErrAccountLocked       = errors.New("account locked, try again later")
-	ErrServiceUnavailable  = errors.New("service temporarily unavailable")
+	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrAccountLocked      = errors.New("account locked, try again later")
+	ErrServiceUnavailable = errors.New("service temporarily unavailable")
 
 	// MFA errors
 	ErrInvalidMFAToken      = errors.New("invalid or expired MFA token")
@@ -17,8 +16,7 @@ var (
 	ErrPasskeyNotVerified   = errors.New("passkey verification not completed")
 
 	// Session errors
-	ErrSessionInvalid  = errors.New("session invalid")
-	ErrAccountNotFound = errors.New("account not found")
+	ErrSessionInvalid = errors.New("session invalid")
 
 	// Token errors
 	ErrInvalidRefreshToken = errors.New("invalid refresh token")
@@ -30,7 +28,6 @@ var (
 	ErrChallengeNotFound   = errors.New("challenge not found or expired")
 	ErrPasskeyNotFound     = errors.New("no passkey found for account")
 	ErrRequestBodyTooLarge = errors.New("request body too large")
-	ErrCredentialNotFound  = errors.New("credential not found")
 	ErrCredentialOwnership = errors.New("credential does not belong to account")
 
 	// Social login errors

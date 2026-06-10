@@ -103,33 +103,13 @@ func (r *roleRepositoryImpl) FindByID(ctx context.Context, roleID string) (*doma
 		LIMIT 1
 	`
 
-	role := &domain.Role{}
-	var permissionsJSON, metadataJSON []byte
-
-	err := r.db.QueryRowContext(ctx, query, roleID).Scan(
-		&role.ID,
-		&role.Name,
-		&role.Description,
-		&permissionsJSON,
-		&metadataJSON,
-		&role.CreatedAt,
-		&role.UpdatedAt,
-		&role.DeletedAt,
-	)
+	role, err := scanRole(r.db.QueryRowContext(ctx, query, roleID))
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", ErrRoleNotFound, roleID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query role: %w", err)
-	}
-
-	if err := json.Unmarshal(permissionsJSON, &role.Permissions); err != nil {
-		return nil, fmt.Errorf("unmarshal permissions: %w", err)
-	}
-
-	if err := json.Unmarshal(metadataJSON, &role.Metadata); err != nil {
-		return nil, fmt.Errorf("unmarshal metadata: %w", err)
 	}
 
 	return role, nil
@@ -144,33 +124,13 @@ func (r *roleRepositoryImpl) FindByName(ctx context.Context, name string) (*doma
 		LIMIT 1
 	`
 
-	role := &domain.Role{}
-	var permissionsJSON, metadataJSON []byte
-
-	err := r.db.QueryRowContext(ctx, query, name).Scan(
-		&role.ID,
-		&role.Name,
-		&role.Description,
-		&permissionsJSON,
-		&metadataJSON,
-		&role.CreatedAt,
-		&role.UpdatedAt,
-		&role.DeletedAt,
-	)
+	role, err := scanRole(r.db.QueryRowContext(ctx, query, name))
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", ErrRoleNotFound, name)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query role: %w", err)
-	}
-
-	if err := json.Unmarshal(permissionsJSON, &role.Permissions); err != nil {
-		return nil, fmt.Errorf("unmarshal permissions: %w", err)
-	}
-
-	if err := json.Unmarshal(metadataJSON, &role.Metadata); err != nil {
-		return nil, fmt.Errorf("unmarshal metadata: %w", err)
 	}
 
 	return role, nil
@@ -191,38 +151,9 @@ func (r *roleRepositoryImpl) FindAll(ctx context.Context) ([]*domain.Role, error
 	}
 	defer func() { _ = rows.Close() }()
 
-	var roles []*domain.Role
-	for rows.Next() {
-		role := &domain.Role{}
-		var permissionsJSON, metadataJSON []byte
-
-		err := rows.Scan(
-			&role.ID,
-			&role.Name,
-			&role.Description,
-			&permissionsJSON,
-			&metadataJSON,
-			&role.CreatedAt,
-			&role.UpdatedAt,
-			&role.DeletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scan role: %w", err)
-		}
-
-		if err := json.Unmarshal(permissionsJSON, &role.Permissions); err != nil {
-			return nil, fmt.Errorf("unmarshal permissions: %w", err)
-		}
-
-		if err := json.Unmarshal(metadataJSON, &role.Metadata); err != nil {
-			return nil, fmt.Errorf("unmarshal metadata: %w", err)
-		}
-
-		roles = append(roles, role)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate roles: %w", err)
+	roles, err := scanRoles(rows)
+	if err != nil {
+		return nil, err
 	}
 
 	return roles, nil
@@ -308,38 +239,9 @@ func (r *roleRepositoryImpl) FindRolesByAccountID(ctx context.Context, accountID
 	}
 	defer func() { _ = rows.Close() }()
 
-	var roles []*domain.Role
-	for rows.Next() {
-		role := &domain.Role{}
-		var permissionsJSON, metadataJSON []byte
-
-		err := rows.Scan(
-			&role.ID,
-			&role.Name,
-			&role.Description,
-			&permissionsJSON,
-			&metadataJSON,
-			&role.CreatedAt,
-			&role.UpdatedAt,
-			&role.DeletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scan role: %w", err)
-		}
-
-		if err := json.Unmarshal(permissionsJSON, &role.Permissions); err != nil {
-			return nil, fmt.Errorf("unmarshal permissions: %w", err)
-		}
-
-		if err := json.Unmarshal(metadataJSON, &role.Metadata); err != nil {
-			return nil, fmt.Errorf("unmarshal metadata: %w", err)
-		}
-
-		roles = append(roles, role)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate roles: %w", err)
+	roles, err := scanRoles(rows)
+	if err != nil {
+		return nil, err
 	}
 
 	return roles, nil

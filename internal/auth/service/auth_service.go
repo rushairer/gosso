@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -137,7 +136,7 @@ func (s *AuthService) ConfirmVerificationCredential(ctx context.Context, credTyp
 	}
 
 	if cred.AccountID != accountID {
-		return errors.New("credential does not belong to this account")
+		return ErrCredentialOwnership
 	}
 
 	cred.Verify()

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/audit"
 )
 
@@ -161,7 +162,7 @@ func TestRefreshTokens_AccountInactive(t *testing.T) {
 	fixture.accountSvc.byID["account-001"].Status = accountDomain.AccountStatusSuspended
 
 	_, err = fixture.svc.RefreshTokens(context.Background(), loginResult.RefreshToken)
-	assert.ErrorIs(t, err, ErrAccountNotActive)
+	assert.ErrorIs(t, err, accountService.ErrAccountNotActive)
 }
 
 // ──────────────────────────────────────────────

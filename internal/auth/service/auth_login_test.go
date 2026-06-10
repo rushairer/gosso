@@ -15,6 +15,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountRepo "github.com/rushairer/gosso/internal/account/repository"
+	accountService "github.com/rushairer/gosso/internal/account/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
@@ -30,11 +32,11 @@ func TestSafeAuditReason(t *testing.T) {
 	}{
 		{"invalid credentials", ErrInvalidCredentials, "invalid_credentials"},
 		{"account locked", ErrAccountLocked, "account_locked"},
-		{"account inactive", ErrAccountNotActive, "account_inactive"},
+		{"account inactive", accountService.ErrAccountNotActive, "account_inactive"},
 		{"invalid mfa code", ErrInvalidMFACode, "invalid_mfa_code"},
 		{"invalid mfa token", ErrInvalidMFAToken, "invalid_mfa_token"},
 		{"invalid mfa token scope", ErrInvalidMFATokenScope, "invalid_mfa_token"},
-		{"account not found", ErrAccountNotFound, "account_not_found"},
+		{"account not found", accountRepo.ErrAccountNotFound, "account_not_found"},
 		{"unknown error", errors.New("something"), "internal_error"},
 		{"wrapped credentials", fmt.Errorf("wrap: %w", ErrInvalidCredentials), "invalid_credentials"},
 	}
@@ -757,7 +759,7 @@ func TestCompletePasskeyMFALogin_AccountNotFound(t *testing.T) {
 
 	result, err := fixture.svc.CompletePasskeyMFALogin(context.Background(), mfaToken, "127.0.0.1", "test-agent")
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrAccountNotFound)
+	assert.ErrorIs(t, err, accountRepo.ErrAccountNotFound)
 	assert.Nil(t, result)
 }
 

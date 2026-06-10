@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"errors"
 	"mime"
 	"net/http"
 	"slices"
@@ -10,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"github.com/rushairer/gosso/internal/controllerutil"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
@@ -86,11 +86,9 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 	}
 
 	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-		if errors.Is(err, oauth2Service.ErrClientSecretRequired) {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client_secret required"})
-		} else {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "invalid client_secret"})
-		}
+		controllerutil.HandleClientAuthError(ctx, err,
+			oauth2Service.ErrClientSecretRequired,
+			"client_secret required", "invalid client_secret")
 		return
 	} else if !client.IsConfidential && req.CodeVerifier == "" {
 		// Public clients MUST use PKCE (RFC 7636)
@@ -195,11 +193,9 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		return
 	}
 	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-		if errors.Is(err, oauth2Service.ErrClientSecretRequired) {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client_secret required for confidential clients"})
-		} else {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "invalid client_secret"})
-		}
+		controllerutil.HandleClientAuthError(ctx, err,
+			oauth2Service.ErrClientSecretRequired,
+			"client_secret required for confidential clients", "invalid client_secret")
 		return
 	}
 

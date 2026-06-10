@@ -14,12 +14,18 @@ import (
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	authService "github.com/rushairer/gosso/internal/auth/service"
+	"github.com/rushairer/gosso/internal/controllerutil"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	utility "github.com/rushairer/gosso/internal/utility"
 	"github.com/rushairer/gosso/middleware"
 )
+
+// loginErrorMap maps login service errors to HTTP responses.
+var loginErrorMap = map[error]controllerutil.ErrorMapping{
+	authService.ErrServiceUnavailable: {Status: http.StatusServiceUnavailable, Message: "service temporarily unavailable"},
+}
 
 // authServiceDeps defines the auth service methods used by AuthController.
 type authServiceDeps interface {
@@ -218,13 +224,8 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		UserAgent: ctx.Request.UserAgent(),
 	})
 	if err != nil {
-		if errors.Is(err, authService.ErrServiceUnavailable) {
-			c.logger.Error("Login rate limit check failed", zap.Error(err))
-			ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "service temporarily unavailable"))
-			return
-		}
-		c.logger.Warn("Login failed", zap.Error(err))
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid credentials"))
+		controllerutil.HandleServiceError(ctx, c.logger, err, loginErrorMap,
+			http.StatusUnauthorized, "Login failed")
 		return
 	}
 

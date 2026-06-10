@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -11,10 +10,17 @@ import (
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
+	"github.com/rushairer/gosso/internal/controllerutil"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	"github.com/rushairer/gosso/middleware"
 )
+
+// clientDeleteErrorMap maps client deletion errors to HTTP responses.
+var clientDeleteErrorMap = map[error]controllerutil.ErrorMapping{
+	oauth2Domain.ErrClientNotFound:    {Status: http.StatusNotFound, Message: "client not found"},
+	oauth2Service.ErrClientAccessDenied: {Status: http.StatusForbidden, Message: "access denied"},
+}
 
 // ClientController handles OAuth2 client management endpoints
 type ClientController struct {
@@ -251,13 +257,8 @@ func (c *ClientController) DeleteClient(ctx *gin.Context) {
 	}
 
 	if err := c.clientSvc.DeleteClient(ctx, accountID, clientID); err != nil {
-		if errors.Is(err, oauth2Domain.ErrClientNotFound) {
-			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "client not found"))
-		} else if errors.Is(err, oauth2Service.ErrClientAccessDenied) {
-			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "access denied"))
-		} else {
-			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to delete client"))
-		}
+		controllerutil.HandleServiceError(ctx, c.logger, err, clientDeleteErrorMap,
+			http.StatusInternalServerError, "Failed to delete client")
 		return
 	}
 

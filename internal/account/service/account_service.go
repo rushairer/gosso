@@ -565,7 +565,7 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 		return err
 	}
 	if role == nil || role.IsDeleted() {
-		return ErrRoleNotFound
+		return repository.ErrRoleNotFound
 	}
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {

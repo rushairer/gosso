@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountRepository "github.com/rushairer/gosso/internal/account/repository"
 	"github.com/rushairer/gosso/internal/auth/domain"
 	"github.com/rushairer/gosso/internal/auth/repository"
 	"github.com/rushairer/gosso/internal/cache"
@@ -255,7 +256,7 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 	credID := parsedResponse.RawID
 	cred, err := s.credRepo.FindByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credID))
 	if err != nil {
-		return "", nil, ErrCredentialNotFound
+		return "", nil, accountRepository.ErrCredentialNotFound
 	}
 
 	// Find all credentials for this account
@@ -345,7 +346,7 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, requestID string,
 	credID := parsedResponse.RawID
 	cred, err := s.credRepo.FindByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credID))
 	if err != nil {
-		return ErrCredentialNotFound
+		return accountRepository.ErrCredentialNotFound
 	}
 
 	if cred.AccountID != accountID {
@@ -415,7 +416,7 @@ func (s *PasskeyService) ListCredentials(ctx context.Context, accountID string) 
 func (s *PasskeyService) DeleteCredential(ctx context.Context, accountID, credentialID string) error {
 	cred, err := s.credRepo.FindByCredentialID(ctx, credentialID)
 	if err != nil {
-		return ErrCredentialNotFound
+		return accountRepository.ErrCredentialNotFound
 	}
 
 	if cred.AccountID != accountID {

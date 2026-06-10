@@ -97,6 +97,7 @@ The project uses [golangci-lint v2](https://golangci-lint.run/) with these linte
 2. `make lint` — all lint checks pass
 3. `make test` — all unit tests pass
 4. `make build` — binary builds successfully
+5. Review your changes against the [Architecture Invariants](doc/ARCHITECTURE_INVARIANTS.md)
 
 ## Code Style
 
@@ -124,17 +125,20 @@ The project uses [golangci-lint v2](https://golangci-lint.run/) with these linte
 - The project follows a 3-layer architecture: **domain -> repository -> service**
 - Each internal module (account, admin, audit, auth, cache, db, notification, oauth2, oidc, session, token, utility) owns its layers
 - The project is built on the [gouno](https://github.com/rushairer/gouno) scaffold -- `cmd/` entry point, `GoUnoConfig` structure, and `gouno` dependency are architectural foundations
+- **Must read**: [Architecture Invariants](doc/ARCHITECTURE_INVARIANTS.md) — non-negotiable rules for error handling, repository patterns, controller conventions, and more
+- Design decisions are documented as [Architecture Decision Records](doc/ADR/)
 
 ## CI Pipeline
 
 All pull requests run through GitHub Actions (`.github/workflows/ci.yml`):
 
 1. **Lint** -- `golangci-lint` v2.12.2
-2. **Unit Tests** -- `go test -race -coverprofile=coverage.out ./...` with a **50% coverage threshold**
-3. **Vulnerability Check** -- `govulncheck ./...`
-4. **Integration Tests** -- run against PostgreSQL 15 and Redis 7 service containers
-5. **Build** -- binary compilation with stripped symbols
-6. **Docker** -- image build on pushes to `main`/`develop`
+2. **Architecture Invariants** -- automated checks from [doc/ARCHITECTURE_INVARIANTS.md](doc/ARCHITECTURE_INVARIANTS.md)
+3. **Unit Tests** -- `go test -race -coverprofile=coverage.out ./...` with a **50% coverage threshold** and per-module coverage report
+4. **Vulnerability Check** -- `govulncheck ./...`
+5. **Integration Tests** -- run against PostgreSQL 15 and Redis 7 service containers
+6. **Build** -- binary compilation with stripped symbols
+7. **Docker** -- image build on pushes to `main`/`develop`
 
 ## Security
 
@@ -257,6 +261,7 @@ make lint-fix   # 自动修复可修复的问题
 2. `make lint` -- 全部 lint 检查通过
 3. `make test` -- 全部单元测试通过
 4. `make build` -- 二进制文件构建成功
+5. 对照[架构不变量](doc/ARCHITECTURE_INVARIANTS.md)审查变更
 
 ## 代码规范
 
@@ -266,17 +271,20 @@ make lint-fix   # 自动修复可修复的问题
 - 公共 API 需要 Go doc 注释
 - 新测试优先使用表驱动测试
 - 测试断言使用 `testify/assert`
+- **必读**：[架构不变量](doc/ARCHITECTURE_INVARIANTS.md) — 错误处理、Repository 模式、Controller 规范等不可违反的规则
+- 设计决策记录在 [ADR 目录](doc/ADR/) 中
 
 ## CI 流水线
 
 所有 PR 将运行 GitHub Actions 流水线：
 
 1. **Lint** -- `golangci-lint` v2.12.2
-2. **单元测试** -- 50% 覆盖率阈值
-3. **漏洞扫描** -- `govulncheck`
-4. **集成测试** -- PostgreSQL 15 + Redis 7
-5. **构建** -- 二进制编译
-6. **Docker** -- 推送到 `main`/`develop` 时构建镜像
+2. **架构不变量检查** -- 自动化检查 [doc/ARCHITECTURE_INVARIANTS.md](doc/ARCHITECTURE_INVARIANTS.md) 中的规则
+3. **单元测试** -- 50% 覆盖率阈值 + 模块级覆盖率报告
+4. **漏洞扫描** -- `govulncheck`
+5. **集成测试** -- PostgreSQL 15 + Redis 7
+6. **构建** -- 二进制编译
+7. **Docker** -- 推送到 `main`/`develop` 时构建镜像
 
 ## 安全
 

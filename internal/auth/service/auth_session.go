@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/audit"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 )
@@ -45,7 +46,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	// 4. Validate account BEFORE rotation
 	account, err := s.accountSvc.FindAccountByID(ctx, oldRT.AccountID)
 	if err != nil || account == nil || account.Status != accountDomain.AccountStatusActive {
-		return nil, ErrAccountNotActive
+		return nil, accountService.ErrAccountNotActive
 	}
 
 	// 5. Build claims and generate new access token BEFORE rotating refresh token.

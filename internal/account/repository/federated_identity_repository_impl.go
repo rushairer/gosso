@@ -57,29 +57,13 @@ func (r *federatedIdentityRepositoryImpl) FindByProvider(ctx context.Context, pr
 		LIMIT 1
 	`
 
-	identity := &domain.FederatedIdentity{}
-	var profileJSON []byte
-
-	err := r.db.QueryRowContext(ctx, query, provider, providerUserID).Scan(
-		&identity.ID,
-		&identity.AccountID,
-		&identity.Provider,
-		&identity.ProviderUserID,
-		&profileJSON,
-		&identity.CreatedAt,
-		&identity.UpdatedAt,
-		&identity.DeletedAt,
-	)
+	identity, err := scanFederatedIdentity(r.db.QueryRowContext(ctx, query, provider, providerUserID))
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s/%s", ErrFederatedIdentityNotFound, provider, providerUserID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query federated identity: %w", err)
-	}
-
-	if err := json.Unmarshal(profileJSON, &identity.Profile); err != nil {
-		return nil, fmt.Errorf("unmarshal profile: %w", err)
 	}
 
 	return identity, nil
@@ -100,34 +84,9 @@ func (r *federatedIdentityRepositoryImpl) FindByAccountID(ctx context.Context, a
 	}
 	defer func() { _ = rows.Close() }()
 
-	var identities []*domain.FederatedIdentity
-	for rows.Next() {
-		identity := &domain.FederatedIdentity{}
-		var profileJSON []byte
-
-		err := rows.Scan(
-			&identity.ID,
-			&identity.AccountID,
-			&identity.Provider,
-			&identity.ProviderUserID,
-			&profileJSON,
-			&identity.CreatedAt,
-			&identity.UpdatedAt,
-			&identity.DeletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scan federated identity: %w", err)
-		}
-
-		if err := json.Unmarshal(profileJSON, &identity.Profile); err != nil {
-			return nil, fmt.Errorf("unmarshal profile: %w", err)
-		}
-
-		identities = append(identities, identity)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate federated identities: %w", err)
+	identities, err := scanFederatedIdentities(rows)
+	if err != nil {
+		return nil, err
 	}
 
 	return identities, nil

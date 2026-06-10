@@ -59,39 +59,12 @@ func (r *webAuthnCredentialRepositoryImpl) FindByCredentialID(ctx context.Contex
 		WHERE credential_id = $1 AND deleted_at IS NULL
 	`
 
-	cred := &domain.WebAuthnCredential{}
-	var transportsJSON []byte
-	var lastUsedAt, deletedAt *time.Time
-
-	err := r.db.QueryRowContext(ctx, query, credentialID).Scan(
-		&cred.ID,
-		&cred.AccountID,
-		&cred.CredentialID,
-		&cred.PublicKey,
-		&cred.SignCount,
-		&cred.AAGUID,
-		&transportsJSON,
-		&cred.AttestationType,
-		&cred.Name,
-		&cred.Verified,
-		&cred.CreatedAt,
-		&lastUsedAt,
-		&deletedAt,
-	)
+	cred, err := scanWebAuthnCredential(r.db.QueryRowContext(ctx, query, credentialID))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("%w: %s", ErrWebAuthnCredentialNotFound, credentialID)
 		}
 		return nil, fmt.Errorf("find webauthn credential: %w", err)
-	}
-
-	cred.LastUsedAt = lastUsedAt
-	cred.DeletedAt = deletedAt
-
-	if transportsJSON != nil {
-		if err := json.Unmarshal(transportsJSON, &cred.Transports); err != nil {
-			return nil, fmt.Errorf("unmarshal transports: %w", err)
-		}
 	}
 
 	return cred, nil
@@ -113,37 +86,10 @@ func (r *webAuthnCredentialRepositoryImpl) FindByAccountID(ctx context.Context, 
 
 	var credentials []*domain.WebAuthnCredential
 	for rows.Next() {
-		cred := &domain.WebAuthnCredential{}
-		var transportsJSON []byte
-		var lastUsedAt, deletedAt *time.Time
-
-		if err := rows.Scan(
-			&cred.ID,
-			&cred.AccountID,
-			&cred.CredentialID,
-			&cred.PublicKey,
-			&cred.SignCount,
-			&cred.AAGUID,
-			&transportsJSON,
-			&cred.AttestationType,
-			&cred.Name,
-			&cred.Verified,
-			&cred.CreatedAt,
-			&lastUsedAt,
-			&deletedAt,
-		); err != nil {
+		cred, err := scanWebAuthnCredential(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan webauthn credential: %w", err)
 		}
-
-		cred.LastUsedAt = lastUsedAt
-		cred.DeletedAt = deletedAt
-
-		if transportsJSON != nil {
-			if err := json.Unmarshal(transportsJSON, &cred.Transports); err != nil {
-				return nil, fmt.Errorf("unmarshal transports: %w", err)
-			}
-		}
-
 		credentials = append(credentials, cred)
 	}
 

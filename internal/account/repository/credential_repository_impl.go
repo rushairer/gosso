@@ -71,38 +71,9 @@ func (r *credentialRepositoryImpl) FindByAccountAndType(ctx context.Context, acc
 	}
 	defer func() { _ = rows.Close() }()
 
-	var credentials []*domain.Credential
-	for rows.Next() {
-		cred := &domain.Credential{}
-		var metadataJSON []byte
-
-		err := rows.Scan(
-			&cred.ID,
-			&cred.AccountID,
-			&cred.Type,
-			&cred.Identifier,
-			&cred.Value,
-			&cred.Verified,
-			&cred.PrimaryCredential,
-			&metadataJSON,
-			&cred.CreatedAt,
-			&cred.VerifiedAt,
-			&cred.LastUsedAt,
-			&cred.DeletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scan credential: %w", err)
-		}
-
-		if err := json.Unmarshal(metadataJSON, &cred.Metadata); err != nil {
-			return nil, fmt.Errorf("unmarshal metadata: %w", err)
-		}
-
-		credentials = append(credentials, cred)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate credentials: %w", err)
+	credentials, err := scanCredentials(rows)
+	if err != nil {
+		return nil, err
 	}
 
 	return credentials, nil
@@ -118,33 +89,13 @@ func (r *credentialRepositoryImpl) FindByTypeAndIdentifier(ctx context.Context, 
 		LIMIT 1
 	`
 
-	cred := &domain.Credential{}
-	var metadataJSON []byte
-
-	err := r.db.QueryRowContext(ctx, query, credType, identifier).Scan(
-		&cred.ID,
-		&cred.AccountID,
-		&cred.Type,
-		&cred.Identifier,
-		&cred.Value,
-		&cred.Verified,
-		&cred.PrimaryCredential,
-		&metadataJSON,
-		&cred.CreatedAt,
-		&cred.VerifiedAt,
-		&cred.LastUsedAt,
-		&cred.DeletedAt,
-	)
+	cred, err := scanCredential(r.db.QueryRowContext(ctx, query, credType, identifier))
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", ErrCredentialNotFound, credType)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query credential: %w", err)
-	}
-
-	if err := json.Unmarshal(metadataJSON, &cred.Metadata); err != nil {
-		return nil, fmt.Errorf("unmarshal metadata: %w", err)
 	}
 
 	return cred, nil
@@ -260,38 +211,9 @@ func (r *credentialRepositoryImpl) FindByAccountAndTypeForUpdate(ctx context.Con
 	}
 	defer func() { _ = rows.Close() }()
 
-	var credentials []*domain.Credential
-	for rows.Next() {
-		cred := &domain.Credential{}
-		var metadataJSON []byte
-
-		err := rows.Scan(
-			&cred.ID,
-			&cred.AccountID,
-			&cred.Type,
-			&cred.Identifier,
-			&cred.Value,
-			&cred.Verified,
-			&cred.PrimaryCredential,
-			&metadataJSON,
-			&cred.CreatedAt,
-			&cred.VerifiedAt,
-			&cred.LastUsedAt,
-			&cred.DeletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scan credential: %w", err)
-		}
-
-		if err := json.Unmarshal(metadataJSON, &cred.Metadata); err != nil {
-			return nil, fmt.Errorf("unmarshal metadata: %w", err)
-		}
-
-		credentials = append(credentials, cred)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate credentials: %w", err)
+	credentials, err := scanCredentials(rows)
+	if err != nil {
+		return nil, err
 	}
 
 	return credentials, nil

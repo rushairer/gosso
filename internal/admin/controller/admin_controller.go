@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 
@@ -12,8 +11,26 @@ import (
 
 	accountRepository "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
+	"github.com/rushairer/gosso/internal/controllerutil"
 	"github.com/rushairer/gosso/middleware"
 )
+
+// adminAccountErrorMap maps account lookup/mutation errors to HTTP responses.
+var adminAccountErrorMap = map[error]controllerutil.ErrorMapping{
+	accountRepository.ErrAccountNotFound:      {Status: http.StatusNotFound, Message: "account not found"},
+	accountRepository.ErrInvalidStatusTransition: {Status: http.StatusConflict, Message: "invalid account status transition"},
+}
+
+// adminDeleteAccountErrorMap maps account deletion errors to HTTP responses.
+var adminDeleteAccountErrorMap = map[error]controllerutil.ErrorMapping{
+	accountService.ErrAccountNotActive: {Status: http.StatusConflict, Message: "account is not active"},
+}
+
+// adminRoleErrorMap maps role assignment/removal errors to HTTP responses.
+var adminRoleErrorMap = map[error]controllerutil.ErrorMapping{
+	accountService.ErrAccountNotActive:        {Status: http.StatusConflict, Message: "account is not active"},
+	accountRepository.ErrRoleNotFound:         {Status: http.StatusNotFound, Message: "role not found"},
+}
 
 // AdminController handles admin operations
 type AdminController struct {
@@ -112,12 +129,8 @@ func (c *AdminController) GetAccount(ctx *gin.Context) {
 
 	account, err := c.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
-		if errors.Is(err, accountRepository.ErrAccountNotFound) {
-			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "account not found"))
-		} else {
-			c.logger.Error("Failed to get account", zap.Error(err), zap.String("account_id", accountID))
-			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
-		}
+		controllerutil.HandleServiceError(ctx, c.logger, err, adminAccountErrorMap,
+			http.StatusInternalServerError, "Failed to get account")
 		return
 	}
 
@@ -137,12 +150,8 @@ func (c *AdminController) DeleteAccount(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.SoftDeleteAccount(ctx, accountID); err != nil {
-		if errors.Is(err, accountService.ErrAccountNotActive) {
-			ctx.JSON(http.StatusConflict, gouno.NewErrorResponse(http.StatusConflict, "account is not active"))
-			return
-		}
-		c.logger.Error("Failed to delete account", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
+		controllerutil.HandleServiceError(ctx, c.logger, err, adminDeleteAccountErrorMap,
+			http.StatusInternalServerError, "Failed to delete account")
 		return
 	}
 
@@ -162,16 +171,8 @@ func (c *AdminController) DisableAccount(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.SuspendAccount(ctx, accountID); err != nil {
-		if errors.Is(err, accountRepository.ErrAccountNotFound) {
-			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "account not found"))
-			return
-		}
-		if errors.Is(err, accountRepository.ErrInvalidStatusTransition) {
-			ctx.JSON(http.StatusConflict, gouno.NewErrorResponse(http.StatusConflict, "invalid account status transition"))
-			return
-		}
-		c.logger.Error("Failed to disable account", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
+		controllerutil.HandleServiceError(ctx, c.logger, err, adminAccountErrorMap,
+			http.StatusInternalServerError, "Failed to disable account")
 		return
 	}
 
@@ -191,16 +192,8 @@ func (c *AdminController) EnableAccount(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.ActivateAccount(ctx, accountID); err != nil {
-		if errors.Is(err, accountRepository.ErrAccountNotFound) {
-			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "account not found"))
-			return
-		}
-		if errors.Is(err, accountRepository.ErrInvalidStatusTransition) {
-			ctx.JSON(http.StatusConflict, gouno.NewErrorResponse(http.StatusConflict, "invalid account status transition"))
-			return
-		}
-		c.logger.Error("Failed to enable account", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
+		controllerutil.HandleServiceError(ctx, c.logger, err, adminAccountErrorMap,
+			http.StatusInternalServerError, "Failed to enable account")
 		return
 	}
 
@@ -246,16 +239,8 @@ func (c *AdminController) AddRole(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.AssignRole(ctx, accountID, req.RoleID); err != nil {
-		if errors.Is(err, accountService.ErrAccountNotActive) {
-			ctx.JSON(http.StatusConflict, gouno.NewErrorResponse(http.StatusConflict, "account is not active"))
-			return
-		}
-		if errors.Is(err, accountService.ErrRoleNotFound) {
-			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "role not found"))
-			return
-		}
-		c.logger.Error("Failed to assign role", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to assign role"))
+		controllerutil.HandleServiceError(ctx, c.logger, err, adminRoleErrorMap,
+			http.StatusInternalServerError, "Failed to assign role")
 		return
 	}
 
@@ -274,16 +259,8 @@ func (c *AdminController) RemoveRole(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.RemoveRole(ctx, accountID, roleID); err != nil {
-		if errors.Is(err, accountService.ErrAccountNotActive) {
-			ctx.JSON(http.StatusConflict, gouno.NewErrorResponse(http.StatusConflict, "account is not active"))
-			return
-		}
-		if errors.Is(err, accountService.ErrRoleNotFound) {
-			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "role not found"))
-			return
-		}
-		c.logger.Error("Failed to remove role", zap.Error(err), zap.String("account_id", accountID))
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to remove role"))
+		controllerutil.HandleServiceError(ctx, c.logger, err, adminRoleErrorMap,
+			http.StatusInternalServerError, "Failed to remove role")
 		return
 	}
 

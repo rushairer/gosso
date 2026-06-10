@@ -123,26 +123,12 @@ func (r *oauth2ClientRepositoryImpl) FindByClientID(ctx context.Context, clientI
 		FROM oauth2_clients
 		WHERE client_id = $1 AND deleted_at IS NULL`
 
-	client := &domain.OAuth2Client{}
-	var redirectURIs, postLogoutURIs, grantTypes, scopes, metadata []byte
-
-	err := r.db.QueryRowContext(ctx, query, clientID).Scan(
-		&client.ID, &client.AccountID, &client.ClientID, &client.ClientSecretHash,
-		&client.Name, &client.Description, &redirectURIs, &postLogoutURIs, &grantTypes, &scopes,
-		&client.IsConfidential, &metadata, &client.CreatedAt, &client.UpdatedAt,
-	)
+	client, err := scanOAuth2Client(r.db.QueryRowContext(ctx, query, clientID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrClientNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find oauth2_client by client_id: %w", err)
-	}
-
-	if err := unmarshalClientJSONFields(client, &clientJSONFields{
-		redirectURIs: redirectURIs, postLogoutURIs: postLogoutURIs,
-		grantTypes: grantTypes, scopes: scopes, metadata: metadata,
-	}); err != nil {
-		return nil, err
 	}
 
 	return client, nil
@@ -161,34 +147,7 @@ func (r *oauth2ClientRepositoryImpl) FindByAccountID(ctx context.Context, accoun
 	}
 	defer func() { _ = rows.Close() }()
 
-	var clients []*domain.OAuth2Client
-	for rows.Next() {
-		client := &domain.OAuth2Client{}
-		var redirectURIs, postLogoutURIs, grantTypes, scopes, metadata []byte
-
-		if err := rows.Scan(
-			&client.ID, &client.AccountID, &client.ClientID, &client.ClientSecretHash,
-			&client.Name, &client.Description, &redirectURIs, &postLogoutURIs, &grantTypes, &scopes,
-			&client.IsConfidential, &metadata, &client.CreatedAt, &client.UpdatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("scan oauth2_client: %w", err)
-		}
-
-		if err := unmarshalClientJSONFields(client, &clientJSONFields{
-			redirectURIs: redirectURIs, postLogoutURIs: postLogoutURIs,
-			grantTypes: grantTypes, scopes: scopes, metadata: metadata,
-		}); err != nil {
-			return nil, err
-		}
-
-		clients = append(clients, client)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate clients: %w", err)
-	}
-
-	return clients, nil
+	return scanOAuth2Clients(rows)
 }
 
 func (r *oauth2ClientRepositoryImpl) Update(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client) error {
