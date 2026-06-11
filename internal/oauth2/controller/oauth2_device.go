@@ -255,7 +255,7 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 	// Atomically claim the device code (status authorized→used) to prevent double-use.
 	// The Lua script handles all status validation atomically, so no non-atomic
 	// status check is needed before this call.
-	claimedDC, err := c.deviceCodeSvc.ClaimAuthorizedDeviceCode(ctx, req.DeviceCode)
+	claimedDC, err := c.deviceCodeSvc.ClaimAuthorizedDeviceCode(ctx, req.DeviceCode, req.ClientID)
 	if err != nil {
 		// Distinguish expired vs consumed per RFC 8628 §3.5
 		errorDesc := "device code already consumed"
@@ -312,5 +312,6 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		response["id_token"] = idToken
 	}
 
+	setNoCacheHeaders(ctx)
 	ctx.JSON(http.StatusOK, response)
 }

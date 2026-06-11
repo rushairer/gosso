@@ -2,14 +2,17 @@ package controller
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
@@ -18,6 +21,17 @@ import (
 
 const consentStateTTL = 10 * time.Minute
 const consentStateKeyPrefix = "consent_state:"
+
+// getAndDeleteConsentScript atomically retrieves and deletes consent state from Redis.
+// This prevents replay attacks where a concurrent request reads the same consent state
+// before it is deleted.
+var getAndDeleteConsentScript = redis.NewScript(`
+local data = redis.call('GET', KEYS[1])
+if data then
+    redis.call('DEL', KEYS[1])
+end
+return data
+`)
 
 // consentState stores the PKCE and authorization parameters from the GET /authorize request.
 // It is persisted in Redis to prevent tampering between the consent page render and the POST.
@@ -192,6 +206,19 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		return
 	}
 
+	// Validate CSRF token (double-submit cookie pattern).
+	// Skip for Bearer-authenticated requests — JWT tokens are not affected by CSRF.
+	authHeader := ctx.GetHeader("Authorization")
+	isBearerAuth := strings.HasPrefix(authHeader, "Bearer ") && len(authHeader) > 7
+	if !isBearerAuth {
+		cookieToken := csrfTokenFromCookie(ctx)
+		formToken := ctx.PostForm("csrf_token")
+		if cookieToken == "" || formToken == "" || subtle.ConstantTimeCompare([]byte(cookieToken), []byte(formToken)) != 1 {
+			ctx.JSON(http.StatusForbidden, gin.H{"error": "invalid_csrf", "error_description": "CSRF token mismatch"})
+			return
+		}
+	}
+
 	// approved is submitted via form button value
 	approved := ctx.PostForm("approved")
 	req.Approved = approved == "true"
@@ -202,6 +229,12 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	}
 
 	if !req.Approved {
+		// Validate redirect_uri against client registration before redirecting
+		client, clientErr := c.clientSvc.FindByClientID(ctx, req.ClientID)
+		if clientErr != nil || !client.ValidateRedirectURI(req.RedirectURI) {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client", "error_description": "invalid client or redirect_uri"})
+			return
+		}
 		redirectURI := req.RedirectURI
 		if req.State != "" {
 			u, err := url.Parse(redirectURI)
@@ -230,15 +263,15 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		return
 	}
 	stateKey := consentStateKeyPrefix + req.ConsentID
-	stateData, err := c.redis.Get(ctx, stateKey)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid or expired consent session"})
+	stateDataRaw, err := c.redis.RunScript(ctx, getAndDeleteConsentScript, []string{stateKey}).Result()
+	if err != nil && err != redis.Nil {
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{"error": "server_error", "error_description": "consent state storage error"})
 		return
 	}
-	// Delete immediately to prevent replay
-	if delErr := c.redis.Del(ctx, stateKey); delErr != nil {
-		c.logger.Warn("Failed to delete consent state after read, replay possible within TTL",
-			zap.String("consent_id", req.ConsentID), zap.Error(delErr))
+	stateData, _ := stateDataRaw.(string)
+	if stateData == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid or expired consent session"})
+		return
 	}
 
 	var stored consentState

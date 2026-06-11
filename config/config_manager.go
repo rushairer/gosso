@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -60,12 +61,20 @@ func NewConfigManager(
 	}
 
 	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("read config: %w", err)
+		// Allow missing config file — all settings can come from environment variables
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if !errors.As(err, &configFileNotFoundError) {
+			return nil, fmt.Errorf("read config: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Warning: config file not found at %s, using defaults and environment variables\n", configPath)
 	}
 
 	newConfig := GoUnoConfig{}
 	if err := v.Unmarshal(&newConfig); err != nil {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
+	}
+	if err := newConfig.Validate(); err != nil {
+		return nil, fmt.Errorf("validate config: %w", err)
 	}
 	configManager.SetConfig(&newConfig)
 	return &configManager, nil

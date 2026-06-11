@@ -18,7 +18,6 @@ import (
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
-	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
@@ -714,7 +713,7 @@ func TestLoginExistingUser_AccountNotFound(t *testing.T) {
 
 	_, err := svc.loginExistingUser(context.Background(), "missing-acc", "127.0.0.1", "agent")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, accountRepo.ErrAccountNotFound)
+	assert.Contains(t, err.Error(), "find account for social login")
 }
 
 func TestLoginExistingUser_AccountNotActive(t *testing.T) {

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ type Role struct {
 // NewRole creates a new role.
 // Returns an error if name is empty or exceeds 255 characters.
 func NewRole(name string, description *string) (*Role, error) {
+	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, errors.New("role name is required")
 	}

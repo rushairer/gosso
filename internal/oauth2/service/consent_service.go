@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -65,7 +66,7 @@ func (s *ConsentService) GetConsent(ctx context.Context, accountID, clientID str
 	// Cache miss or error — read from DB
 	consent, err := s.consentRepo.FindByAccountAndClient(ctx, accountID, clientID)
 	if err != nil {
-		if err == domain.ErrConsentNotFound {
+		if errors.Is(err, domain.ErrConsentNotFound) {
 			return nil, domain.ErrConsentNotFound
 		}
 		return nil, fmt.Errorf("get consent from DB: %w", err)

@@ -38,6 +38,9 @@ func NewDiscoveryService(issuer string) *DiscoveryService {
 		"token_endpoint_auth_methods_supported": []string{
 			"client_secret_post", "client_secret_basic", "none",
 		},
+		"token_endpoint_auth_signing_alg_values_supported": []string{
+			"none",
+		},
 		"claims_supported": []string{
 			"sub", "iss", "aud", "exp", "iat", "auth_time", "nonce",
 			"name", "preferred_username", "picture",

@@ -336,7 +336,8 @@ redis.call('SET', KEYS[2], ARGV[3], 'EX', ARGV[2])
 return 1
 `)
 
-// Returns the JSON data if the transition succeeded, or nil if the status was not "authorized".
+// Returns the JSON data if the transition succeeded, or nil if the status was not "authorized"
+// or the client_id does not match. ARGV[1] = client_id to verify ownership.
 var claimAuthorizedScript = redis.NewScript(`
 local cjson = require('cjson')
 local data = redis.call('GET', KEYS[1])
@@ -345,6 +346,9 @@ if not data then
 end
 local dc = cjson.decode(data)
 if dc.status ~= "authorized" then
+    return nil
+end
+if ARGV[1] ~= '' and dc.client_id ~= ARGV[1] then
     return nil
 end
 dc.status = "used"
@@ -359,12 +363,13 @@ return updated
 `)
 
 // ClaimAuthorizedDeviceCode atomically validates that a device code is authorized and marks it as used.
+// The clientID parameter is verified against the stored device code to prevent cross-client claims.
 // Returns the device code data if the claim succeeded, or an error if the code is not in authorized state.
 // This prevents double-use race conditions.
-func (s *DeviceCodeService) ClaimAuthorizedDeviceCode(ctx context.Context, deviceCode string) (*domain.DeviceCode, error) {
+func (s *DeviceCodeService) ClaimAuthorizedDeviceCode(ctx context.Context, deviceCode string, clientID string) (*domain.DeviceCode, error) {
 	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
 
-	result, err := s.redis.RunScript(ctx, claimAuthorizedScript, []string{key}).Result()
+	result, err := s.redis.RunScript(ctx, claimAuthorizedScript, []string{key}, clientID).Result()
 	if err == redis.Nil || result == nil {
 		return nil, domain.ErrDeviceCodeNotFound
 	}

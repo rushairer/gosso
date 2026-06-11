@@ -280,7 +280,7 @@ func TestClaimAuthorizedDeviceCode_Success(t *testing.T) {
 	err = svc.AuthorizeDeviceCode(ctx, dc.DeviceCode, "account-123")
 	require.NoError(t, err)
 
-	claimed, err := svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode)
+	claimed, err := svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode, "test-client")
 	require.NoError(t, err)
 	assert.Equal(t, domain.DeviceCodeStatusUsed, claimed.Status)
 	assert.Equal(t, "account-123", claimed.AccountID)
@@ -296,11 +296,11 @@ func TestClaimAuthorizedDeviceCode_AlreadyUsed(t *testing.T) {
 	err = svc.AuthorizeDeviceCode(ctx, dc.DeviceCode, "account-123")
 	require.NoError(t, err)
 
-	_, err = svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode)
+	_, err = svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode, "test-client")
 	require.NoError(t, err)
 
 	// Double-claim must be rejected
-	_, err = svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode)
+	_, err = svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode, "test-client")
 	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
 }
 
@@ -312,7 +312,7 @@ func TestClaimAuthorizedDeviceCode_PendingNotClaimable(t *testing.T) {
 	require.NoError(t, err)
 
 	// Code is still pending — not yet authorized
-	_, err = svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode)
+	_, err = svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode, "test-client")
 	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
 }
 
@@ -327,7 +327,7 @@ func TestClaimAuthorizedDeviceCode_DeniedNotClaimable(t *testing.T) {
 	require.NoError(t, err)
 
 	// Denied code cannot be claimed
-	_, err = svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode)
+	_, err = svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode, "test-client")
 	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
 }
 
@@ -379,7 +379,7 @@ func TestClaimAuthorizedDeviceCode_ScriptError(t *testing.T) {
 	require.NoError(t, err)
 
 	// claimAuthorizedScript uses cjson which fails on miniredis
-	claimed, err := svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode)
+	claimed, err := svc.ClaimAuthorizedDeviceCode(ctx, dc.DeviceCode, "test-client")
 	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
 	assert.Nil(t, claimed)
 }

@@ -265,9 +265,18 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 
 	cred.Value = hashedPassword
 
-	// One-time use: delete token before updating password.
-	// If the process crashes between token deletion and DB update, the worst case
-	// is that the user must request a new reset link — a safe failure mode.
+	// Update password first, then delete the reset token.
+	// If the process crashes between DB commit and Redis deletion, the password
+	// is already changed and the token will expire naturally via TTL — a safe
+	// failure mode that avoids locking the user out.
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.credentialRepo.UpdateCredential(ctx, tx, cred)
+	})
+	if err != nil {
+		return fmt.Errorf("update password: %w", err)
+	}
+
+	// One-time use: delete token after successful password update.
 	if err := s.redis.Del(ctx, tokenKey); err != nil {
 		// Retry once immediately without blocking the HTTP handler.
 		// If the retry also fails, the token will expire naturally via TTL.
@@ -275,13 +284,6 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 			s.logger.Warn("Failed to delete reset token from Redis after retry, token will expire via TTL",
 				zap.Error(retryErr), zap.String("token_hash", tokenHash))
 		}
-	}
-
-	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.credentialRepo.UpdateCredential(ctx, tx, cred)
-	})
-	if err != nil {
-		return fmt.Errorf("update password: %w", err)
 	}
 
 	// Asynchronously revoke all old sessions

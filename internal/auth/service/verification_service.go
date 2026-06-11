@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,9 +36,9 @@ var (
 	ErrUnsupportedType = errors.New("unsupported verification type")
 )
 
-// verifyAndIncrementScript atomically verifies a code and manages the attempt counter.
-// Returns JSON array: ["ok", accountID] | ["mismatch", ""] | ["exhausted", ""] | ["not_found", ""]
-// ARGV[1]=code, ARGV[2]=max_attempts, ARGV[3]=default_ttl_seconds
+// verifyAndIncrementScript atomically verifies a code hash and manages the attempt counter.
+// Returns JSON array: ["ok", accountID] | ["mismatch", "" | "exhausted", "" | "not_found", ""]
+// ARGV[1]=SHA256 hex hash of the code, ARGV[2]=max_attempts, ARGV[3]=default_ttl_seconds
 var verifyAndIncrementScript = redis.NewScript(`
 local cjson = require('cjson')
 local data = redis.call('GET', KEYS[1])
@@ -128,7 +130,7 @@ func (s *VerificationService) SetMaxAttempts(n int) {
 }
 
 type verifyCodeData struct {
-	Code      string `json:"code"`
+	CodeHash  string `json:"code"`
 	Attempts  int    `json:"attempts"`
 	AccountID string `json:"account_id"`
 }
@@ -168,9 +170,12 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 		return fmt.Errorf("%w: %s", ErrUnsupportedType, credType)
 	}
 
-	// Store in Redis (only after successful send)
+	// Store in Redis (only after successful send).
+	// The code is stored as its SHA-256 hash so that a Redis compromise
+	// does not expose active verification codes.
+	codeHash := sha256Hex(code)
 	data := verifyCodeData{
-		Code:      code,
+		CodeHash:  codeHash,
 		Attempts:  0,
 		AccountID: accountID,
 	}
@@ -195,14 +200,18 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 	return nil
 }
 
-// VerifyCode verifies verification code, returns accountID upon success
+// VerifyCode verifies verification code, returns accountID upon success.
+// The input code is hashed with SHA-256 before comparison against the stored hash.
 func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifier, code string) (string, error) {
 	identifier = strings.ToLower(strings.TrimSpace(identifier))
 	codeKey := s.buildCodeKey(credType, identifier)
 
-	// Atomically verify code and increment attempts
+	// Hash the input code to compare against the stored hash
+	codeHash := sha256Hex(code)
+
+	// Atomically verify code hash and increment attempts
 	resultJSON, err := s.redis.RunScript(ctx, verifyAndIncrementScript, []string{codeKey},
-		code, s.maxAttempts, int(s.codeTTL.Seconds())).Result()
+		codeHash, s.maxAttempts, int(s.codeTTL.Seconds())).Result()
 	if err != nil {
 		return "", fmt.Errorf("verify code: %w", err)
 	}
@@ -252,6 +261,12 @@ func generateNumericCode(length int) (string, error) {
 // maskIdentifier masks PII for logging (e.g., "user@example.com" -> "u***@e***.com")
 func maskIdentifier(credType, identifier string) string {
 	return utility.MaskIdentifier(credType, identifier)
+}
+
+// sha256Hex returns the hex-encoded SHA-256 hash of the input string.
+func sha256Hex(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:])
 }
 
 // ValidateCredentialOwnership checks that the given identifier belongs to the specified account.

@@ -195,7 +195,7 @@ func (m *mockDeviceCodeMgr) MarkUsed(_ context.Context, _ string) error {
 	return nil
 }
 
-func (m *mockDeviceCodeMgr) ClaimAuthorizedDeviceCode(_ context.Context, _ string) (*oauth2Domain.DeviceCode, error) {
+func (m *mockDeviceCodeMgr) ClaimAuthorizedDeviceCode(_ context.Context, _ string, _ string) (*oauth2Domain.DeviceCode, error) {
 	if m.claimFn != nil {
 		return m.claimFn()
 	}
@@ -1784,8 +1784,13 @@ func TestSubmitConsent_MissingFields(t *testing.T) {
 
 func TestSubmitConsent_NotApproved(t *testing.T) {
 	redisClient := setupTestRedis(t)
+	client := newConfidentialTestClient()
 	ctrl, err := NewOAuth2Controller(
-		&mockOAuth2ClientSvcForOAuth2{},
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+				return client, nil
+			},
+		},
 		nil, nil,
 		&mockTokenMgr{},
 		nil, nil,

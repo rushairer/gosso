@@ -36,6 +36,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Device code consent page CSRF comparison now uses `subtle.ConstantTimeCompare` — prevents timing side-channel on CSRF token validation (`internal/oauth2/controller/oauth2_device.go`).
 - Redis address password is now masked in initialization logs (`internal/cache/redis_client.go`).
 - `IntrospectToken` now rejects tokens with `nbf` (not-before) claim in the future (`internal/token/service/token_service.go`).
+- Password reset now updates DB password before deleting Redis token — prevents user lockout on crash between operations (`internal/auth/service/password_reset_service.go`).
+- Verification codes now stored as SHA-256 hash in Redis — prevents plaintext code exposure on Redis compromise (`internal/auth/service/verification_service.go`).
+- Production deployments now require TOTP encryption key — prevents plaintext TOTP secret storage (`cmd/gouno/web_modules.go`, `internal/auth/service/mfa_service.go`).
+- `SubmitConsent` (POST /oauth2/authorize) now validates CSRF token — prevents cross-site consent forgery (`internal/oauth2/controller/oauth2_authorize.go`).
+- Consent denial now validates `redirect_uri` against client registration before redirecting — prevents open redirect on denial (`internal/oauth2/controller/oauth2_authorize.go`).
+- Consent state retrieval and deletion now atomic via Lua script — prevents replay attacks (`internal/oauth2/controller/oauth2_authorize.go`).
+- Device code `ClaimAuthorizedDeviceCode` now atomically verifies `client_id` in Lua script — prevents cross-client device code claims (`internal/oauth2/service/device_code_service.go`).
+- Refresh token rotation now reads old token data inside the atomic Lua script — eliminates TOCTOU race condition on concurrent rotation (`internal/token/service/token_service.go`).
+- `SoftDeleteAccount` now returns error when session revocation fails — ensures callers are aware of partial failures (`internal/account/service/account_service.go`).
+- `FindByTypeAndIdentifier` error message no longer includes raw identifier — prevents PII leakage in logs (`internal/account/repository/credential_repository_impl.go`).
+- `NewRole` now trims whitespace from role name — prevents whitespace-only names (`internal/account/domain/role.go`).
+- `RegisterAccount` now validates username is not empty after trim — prevents whitespace-only usernames (`internal/account/service/account_service.go`).
+- `RegisterAccount` now validates timezone via `time.LoadLocation` — prevents invalid timezone values (`internal/account/service/account_service.go`).
+- `NewConfigManager` now calls `Validate()` automatically — prevents startup with invalid configuration (`config/config_manager.go`).
+- Config file not found now falls back to defaults + environment variables instead of failing — supports containerized deployments (`config/config_manager.go`).
+- Device code token endpoint now includes `Cache-Control: no-store` headers per RFC 6749 §5.1 (`internal/oauth2/controller/oauth2_device.go`).
+- `GetConsent` error comparison now uses `errors.Is()` — correct handling of wrapped errors (`internal/oauth2/service/consent_service.go`).
+- `loginExistingUser` error wrapping no longer leaks internal error details (`internal/auth/service/social_login_service.go`).
+- OIDC discovery document now includes `token_endpoint_auth_signing_alg_values_supported` per OIDC Discovery §3 (`internal/oidc/service/discovery_service.go`).
+- ID Token now includes `azp` (Authorized Party) claim per OIDC Core §2 (`internal/oidc/service/id_token_service.go`).
+- `SecurityHeadersMiddleware` no longer uses `log.Printf` — eliminates unused import and inconsistent logging (`middleware/middleware.go`).
 
 ### Changed
 - `SendVerification` error handling now classifies errors: rate limit → 429, unsupported type → 400, internal → 500 (previously all returned 429) (`internal/auth/controller/auth_controller.go`).

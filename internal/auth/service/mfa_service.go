@@ -101,6 +101,16 @@ func (s *MFAService) SetTOTPEncryptionKey(hexKey string) error {
 	return nil
 }
 
+// RequireTOTPEncryption panics if no TOTP encryption key is configured.
+// Call this during startup for production deployments to prevent TOTP secrets
+// from being stored in plaintext in the database.
+func (s *MFAService) RequireTOTPEncryption() {
+	if s.totpEncryptionKey == nil {
+		panic("TOTP encryption key is required for production deployments. " +
+			"Set auth.totp_encryption_key (env GOUNO_AUTH_TOTP_ENCRYPTION_KEY) to a 64-char hex string (32 bytes).")
+	}
+}
+
 // IsMFAEnabled checks whether the account has TOTP activated or has Passkeys
 func (s *MFAService) IsMFAEnabled(ctx context.Context, accountID string) (bool, error) {
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)

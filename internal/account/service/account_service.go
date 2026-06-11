@@ -203,6 +203,9 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	}
 	if req.Username != "" {
 		username := strings.TrimSpace(req.Username)
+		if username == "" {
+			return nil, fmt.Errorf("username must not be empty")
+		}
 		if len(username) > 50 {
 			return nil, fmt.Errorf("username must not exceed 50 characters")
 		}
@@ -214,7 +217,12 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		account.Username = &username
 	}
 	account.Locale = req.Locale
-	account.Timezone = req.Timezone
+	if req.Timezone != "" {
+		if _, err := time.LoadLocation(req.Timezone); err != nil {
+			return nil, fmt.Errorf("invalid timezone: %s", req.Timezone)
+		}
+		account.Timezone = req.Timezone
+	}
 	account.Metadata = nonNilMap(req.Metadata)
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
@@ -355,7 +363,8 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	// Access tokens are invalidated by the JWT middleware's session existence check
 	// (JWTAuthMiddleware validates sessions on every authenticated request), so explicit
 	// blacklisting of access token JTIs is not required here.
-	if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
+	var revokeErr error
+	if revokeErr = s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
 		s.logger.Error("Failed to revoke sessions after account deletion", zap.String("account_id", accountID), zap.Error(revokeErr))
 	}
 
@@ -368,6 +377,9 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		auditMetaFromContext(ctx),
 	))
 
+	if revokeErr != nil {
+		return fmt.Errorf("account deleted but session revocation failed: %w", revokeErr)
+	}
 	return nil
 }
 
