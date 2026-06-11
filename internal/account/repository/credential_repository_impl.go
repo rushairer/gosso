@@ -79,6 +79,22 @@ func (r *credentialRepositoryImpl) FindByAccountAndType(ctx context.Context, acc
 	return credentials, nil
 }
 
+// FindByAccountAndTypeTx finds credentials by account ID and type within a transaction.
+func (r *credentialRepositoryImpl) FindByAccountAndTypeTx(ctx context.Context, tx *sql.Tx, accountID string, credType domain.CredentialType) ([]*domain.Credential, error) {
+	rows, err := tx.QueryContext(ctx, credentialsByAccountAndTypeQuery, accountID, credType)
+	if err != nil {
+		return nil, fmt.Errorf("query credentials: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	credentials, err := scanCredentials(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	return credentials, nil
+}
+
 // FindByTypeAndIdentifier finds a credential by type and identifier
 func (r *credentialRepositoryImpl) FindByTypeAndIdentifier(ctx context.Context, credType domain.CredentialType, identifier string) (*domain.Credential, error) {
 	query := `
@@ -90,6 +106,28 @@ func (r *credentialRepositoryImpl) FindByTypeAndIdentifier(ctx context.Context, 
 	`
 
 	cred, err := scanCredential(r.db.QueryRowContext(ctx, query, credType, identifier))
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w: type=%s identifier=%s", ErrCredentialNotFound, credType, identifier)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query credential: %w", err)
+	}
+
+	return cred, nil
+}
+
+// FindByTypeAndIdentifierTx finds a credential by type and identifier within a transaction.
+func (r *credentialRepositoryImpl) FindByTypeAndIdentifierTx(ctx context.Context, tx *sql.Tx, credType domain.CredentialType, identifier string) (*domain.Credential, error) {
+	query := `
+		SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
+		       metadata, created_at, verified_at, last_used_at, deleted_at
+		FROM account_credentials
+		WHERE credential_type = $1 AND identifier = $2 AND deleted_at IS NULL
+		LIMIT 1
+	`
+
+	cred, err := scanCredential(tx.QueryRowContext(ctx, query, credType, identifier))
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: type=%s identifier=%s", ErrCredentialNotFound, credType, identifier)
@@ -158,7 +196,7 @@ func (r *credentialRepositoryImpl) UpdateCredential(ctx context.Context, tx *sql
 func (r *credentialRepositoryImpl) SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `
 		UPDATE account_credentials
-		SET deleted_at = $1
+		SET deleted_at = $1, updated_at = $1
 		WHERE account_id = $2 AND deleted_at IS NULL
 	`
 
@@ -174,7 +212,7 @@ func (r *credentialRepositoryImpl) SoftDeleteCredentialsByAccount(ctx context.Co
 func (r *credentialRepositoryImpl) SoftDeleteCredential(ctx context.Context, tx *sql.Tx, credentialID string, deletedAt time.Time) error {
 	query := `
 		UPDATE account_credentials
-		SET deleted_at = $1
+		SET deleted_at = $1, updated_at = $1
 		WHERE id = $2 AND deleted_at IS NULL
 	`
 

@@ -206,6 +206,14 @@ func (m *mockCredentialRepoForController) VerifyFirstUnverifiedTOTP(_ context.Co
 	return m.verifyFirstUnverifiedTOTPOK, m.verifyFirstUnverifiedTOTPError
 }
 
+func (m *mockCredentialRepoForController) FindByAccountAndTypeTx(ctx context.Context, _ *sql.Tx, _ string, credType accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	return m.FindByAccountAndType(ctx, "", credType)
+}
+
+func (m *mockCredentialRepoForController) FindByTypeAndIdentifierTx(ctx context.Context, _ *sql.Tx, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error) {
+	return m.FindByTypeAndIdentifier(ctx, credType, identifier)
+}
+
 // newTestMFAService creates an MFAService backed by sqlmock for controller-level tests.
 func newTestMFAService(t *testing.T, credRepo accountRepo.CredentialRepository) (*service.MFAService, sqlmock.Sqlmock) {
 	t.Helper()
@@ -315,7 +323,7 @@ func setupAuthControllerWithPasswordResetSvc(t *testing.T, credRepo accountRepo.
 	t.Helper()
 	redisClient, _ := testutil.SetupTestRedis(t)
 
-	passwordResetSvc := service.NewPasswordResetService(redisClient, credRepo, emailSender, nil, accountSvc, nil, "https://app.example.com/reset", zap.NewNop())
+	passwordResetSvc := service.NewPasswordResetService(redisClient, credRepo, emailSender, nil, nil, accountSvc, nil, "https://app.example.com/reset", zap.NewNop())
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -1511,6 +1519,10 @@ func (m *mockFederatedIdentityRepoForSocial) SoftDeleteByAccountID(_ context.Con
 
 func (m *mockFederatedIdentityRepoForSocial) SoftDeleteByID(_ context.Context, _ *sql.Tx, _, _ string, _ time.Time) error {
 	return fmt.Errorf("not implemented")
+}
+
+func (m *mockFederatedIdentityRepoForSocial) FindByProviderTx(ctx context.Context, _ *sql.Tx, provider accountDomain.Provider, providerUserID string) (*accountDomain.FederatedIdentity, error) {
+	return m.FindByProvider(ctx, provider, providerUserID)
 }
 
 type mockSessionTokenCreator struct {

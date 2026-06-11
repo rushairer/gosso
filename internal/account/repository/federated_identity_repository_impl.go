@@ -69,6 +69,27 @@ func (r *federatedIdentityRepositoryImpl) FindByProvider(ctx context.Context, pr
 	return identity, nil
 }
 
+// FindByProviderTx finds a federated identity by provider and provider user ID within a transaction.
+func (r *federatedIdentityRepositoryImpl) FindByProviderTx(ctx context.Context, tx *sql.Tx, provider domain.Provider, providerUserID string) (*domain.FederatedIdentity, error) {
+	query := `
+		SELECT id, account_id, provider, provider_user_id, profile, created_at, updated_at, deleted_at
+		FROM federated_identities
+		WHERE provider = $1 AND provider_user_id = $2 AND deleted_at IS NULL
+		LIMIT 1
+	`
+
+	identity, err := scanFederatedIdentity(tx.QueryRowContext(ctx, query, provider, providerUserID))
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w: %s/%s", ErrFederatedIdentityNotFound, provider, providerUserID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query federated identity: %w", err)
+	}
+
+	return identity, nil
+}
+
 // FindByAccountID finds all federated identities by account ID
 func (r *federatedIdentityRepositoryImpl) FindByAccountID(ctx context.Context, accountID string) ([]*domain.FederatedIdentity, error) {
 	query := `

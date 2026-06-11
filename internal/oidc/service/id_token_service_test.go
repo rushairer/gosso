@@ -112,6 +112,12 @@ func (m *mockCredentialRepo) VerifyFirstUnverifiedTOTP(_ context.Context, _ *sql
 func (m *mockCredentialRepo) FindByAccountAndTypeForUpdate(_ context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
 	return nil, nil
 }
+func (m *mockCredentialRepo) FindByAccountAndTypeTx(ctx context.Context, _ *sql.Tx, accountID string, credType accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	return m.FindByAccountAndType(ctx, accountID, credType)
+}
+func (m *mockCredentialRepo) FindByTypeAndIdentifierTx(ctx context.Context, _ *sql.Tx, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error) {
+	return m.FindByTypeAndIdentifier(ctx, credType, identifier)
+}
 
 func setupTestIDTokenService(t *testing.T) (*IDTokenService, func()) {
 	t.Helper()

@@ -69,10 +69,10 @@ func (s *AuthService) CreateSessionAndTokens(ctx context.Context, account *accou
 }
 
 // loginAuditLogs logs a login success or failure audit record.
-func (s *AuthService) loginAuditLogs(ctx context.Context, action string, username string, accountID *string, detail map[string]any, meta map[string]any) {
+func (s *AuthService) loginAuditLogs(ctx context.Context, action string, actor string, accountID *string, detail map[string]any, meta map[string]any) {
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		action,
-		username,
+		actor,
 		accountID,
 		utility.MustMarshalJSON(detail),
 		utility.MustMarshalJSON(meta),
@@ -80,10 +80,10 @@ func (s *AuthService) loginAuditLogs(ctx context.Context, action string, usernam
 }
 
 // loginAuditLogsSync logs a login failure audit record synchronously for critical security events.
-func (s *AuthService) loginAuditLogsSync(ctx context.Context, action string, username string, accountID *string, detail map[string]any, meta map[string]any) {
+func (s *AuthService) loginAuditLogsSync(ctx context.Context, action string, actor string, accountID *string, detail map[string]any, meta map[string]any) {
 	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		action,
-		username,
+		actor,
 		accountID,
 		utility.MustMarshalJSON(detail),
 		utility.MustMarshalJSON(meta),

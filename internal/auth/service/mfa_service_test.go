@@ -69,6 +69,14 @@ func (m *mockCredentialRepo) FindByAccountAndTypeForUpdate(_ context.Context, _ 
 	return m.FindByAccountAndType(context.Background(), accountID, credType)
 }
 
+func (m *mockCredentialRepo) FindByAccountAndTypeTx(ctx context.Context, _ *sql.Tx, accountID string, credType accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	return m.FindByAccountAndType(ctx, accountID, credType)
+}
+
+func (m *mockCredentialRepo) FindByTypeAndIdentifierTx(ctx context.Context, _ *sql.Tx, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error) {
+	return m.FindByTypeAndIdentifier(ctx, credType, identifier)
+}
+
 func newTestMFAService(credRepo *mockCredentialRepo) *MFAService {
 	return NewMFAService(credRepo, nil, "http://localhost:8080", nil)
 }

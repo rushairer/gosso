@@ -133,7 +133,7 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 		verificationSvc.SetMaxAttempts(cfg.AuthConfig.VerifyCodeMaxAttempts)
 	}
 
-	passwordResetSvc := service.NewPasswordResetService(cfg.Redis, cfg.CredentialRepo, emailSvc, sessionSvc, cfg.AccountSvc, cfg.DB, cfg.BaseURL, cfg.Logger)
+	passwordResetSvc := service.NewPasswordResetService(cfg.Redis, cfg.CredentialRepo, emailSvc, sessionSvc, cfg.TokenSvc, cfg.AccountSvc, cfg.DB, cfg.BaseURL, cfg.Logger)
 	if cfg.AuthConfig.PasswordResetWaitTimeout > 0 {
 		passwordResetSvc.SetWaitTimeout(cfg.AuthConfig.PasswordResetWaitTimeout)
 	}

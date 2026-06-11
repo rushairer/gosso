@@ -59,7 +59,7 @@ func buildLoginResult(account *accountDomain.Account, session *sessionDomain.Ses
 func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginRequest) (result *LoginResult, err error) {
 	defer func() {
 		if err != nil {
-			s.loginAuditLogsSync(ctx, auditDomain.ActionLoginFailure, req.Username, nil,
+			s.loginAuditLogsSync(ctx, auditDomain.ActionLoginFailure, req.IP, nil,
 				map[string]any{"username": req.Username},
 				map[string]any{"ip": req.IP, "user_agent": req.UserAgent, "reason": safeAuditReason(err)},
 			)
@@ -144,7 +144,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	s.clearLoginRateLimits(ctx, req.IP, account.Username)
 
 	// 8. Audit log
-	s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, req.Username, &account.ID,
+	s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, req.IP, &account.ID,
 		map[string]any{"account_id": account.ID, "session_id": session.ID},
 		map[string]any{"ip": req.IP, "user_agent": req.UserAgent},
 	)
@@ -158,7 +158,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	var mfaAccountID *string
 	defer func() {
 		if err != nil {
-			s.loginAuditLogsSync(ctx, auditDomain.ActionMFALoginFailure, "", mfaAccountID,
+			s.loginAuditLogsSync(ctx, auditDomain.ActionMFALoginFailure, ip, mfaAccountID,
 				map[string]any{"reason": safeAuditReason(err)},
 				map[string]any{"ip": ip, "user_agent": userAgent},
 			)
@@ -216,7 +216,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	s.clearLoginRateLimits(ctx, ip, account.Username)
 
 	// 5. Audit log
-	s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, "", &account.ID,
+	s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, ip, &account.ID,
 		map[string]any{"account_id": account.ID, "session_id": session.ID},
 		map[string]any{"ip": ip, "user_agent": userAgent},
 	)
@@ -231,7 +231,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	var mfaAccountID *string
 	defer func() {
 		if err != nil {
-			s.loginAuditLogsSync(ctx, auditDomain.ActionMFALoginFailure, "", mfaAccountID,
+			s.loginAuditLogsSync(ctx, auditDomain.ActionMFALoginFailure, ip, mfaAccountID,
 				map[string]any{"reason": safeAuditReason(err)},
 				map[string]any{"ip": ip, "user_agent": userAgent},
 			)
@@ -289,7 +289,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	s.clearLoginRateLimits(ctx, ip, account.Username)
 
 	// 5. Audit log
-	s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, "", &account.ID,
+	s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, ip, &account.ID,
 		map[string]any{"account_id": account.ID, "session_id": session.ID},
 		map[string]any{"ip": ip, "user_agent": userAgent},
 	)
@@ -301,7 +301,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAgent string) (result *LoginResult, err error) {
 	defer func() {
 		if err != nil {
-			s.loginAuditLogsSync(ctx, auditDomain.ActionLoginFailure, accountID, nil,
+			s.loginAuditLogsSync(ctx, auditDomain.ActionLoginFailure, ip, nil,
 				map[string]any{"method": "passkey", "account_id": accountID},
 				map[string]any{"ip": ip, "user_agent": userAgent, "reason": safeAuditReason(err)},
 			)
@@ -339,7 +339,7 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 		zap.String("session_id", session.ID))
 
 	// 5. Audit log
-	s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, accountID, &account.ID,
+	s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, ip, &account.ID,
 		map[string]any{"method": "passkey", "account_id": account.ID, "session_id": session.ID},
 		map[string]any{"ip": ip, "user_agent": userAgent},
 	)

@@ -22,6 +22,10 @@ type FederatedIdentityRepository interface {
 	// FindByProvider finds a federated identity by provider and provider user ID
 	FindByProvider(ctx context.Context, provider domain.Provider, providerUserID string) (*domain.FederatedIdentity, error)
 
+	// FindByProviderTx finds a federated identity by provider and provider user ID within a transaction.
+	// Use this variant inside RunInTransaction to avoid TOCTOU race conditions.
+	FindByProviderTx(ctx context.Context, tx *sql.Tx, provider domain.Provider, providerUserID string) (*domain.FederatedIdentity, error)
+
 	// FindByAccountID finds all federated identities by account ID
 	FindByAccountID(ctx context.Context, accountID string) ([]*domain.FederatedIdentity, error)
 

@@ -507,13 +507,9 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 	}
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		// Check inside transaction to reduce TOCTOU window.
-		// FindByProvider uses the main DB connection (not tx), so two concurrent
-		// requests may both pass this check. The DB unique constraint on
-		// (provider, provider_user_id) is the authoritative guard — if the insert
-		// fails with a unique violation, we look up the existing identity and
-		// return ErrFederatedIdentityAlreadyBound instead of a raw DB error.
-		existing, err := s.federatedIdentityRepo.FindByProvider(ctx, provider, providerUserID)
+		// Check inside the transaction to avoid TOCTOU: a concurrent request
+		// could bind the same identity between our check and the insert.
+		existing, err := s.federatedIdentityRepo.FindByProviderTx(ctx, tx, provider, providerUserID)
 		if err == nil && existing != nil {
 			return ErrFederatedIdentityAlreadyBound
 		}

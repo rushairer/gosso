@@ -133,7 +133,7 @@ func (s *AuthService) ConfirmVerificationCredential(ctx context.Context, credTyp
 	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		// Find inside the transaction to avoid TOCTOU: the credential could have been
 		// modified or deleted between the original find and this update.
-		cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, domainCredType, identifier)
+		cred, err := s.credentialRepo.FindByTypeAndIdentifierTx(ctx, tx, domainCredType, identifier)
 		if err != nil {
 			return fmt.Errorf("find credential: %w", err)
 		}

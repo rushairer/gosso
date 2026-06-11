@@ -273,6 +273,14 @@ func (m *mockCredentialRepoForReset) FindByAccountAndTypeForUpdate(_ context.Con
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *mockCredentialRepoForReset) FindByAccountAndTypeTx(ctx context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	return m.FindByAccountAndType(ctx, "", "")
+}
+
+func (m *mockCredentialRepoForReset) FindByTypeAndIdentifierTx(ctx context.Context, _ *sql.Tx, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error) {
+	return m.FindByTypeAndIdentifier(ctx, credType, identifier)
+}
+
 type mockAccountSvcForReset struct {
 	findByIDFn func(ctx context.Context, accountID string) (*accountDomain.Account, error)
 }
@@ -546,13 +554,13 @@ func TestVerifyAndReset_TokenExhausted(t *testing.T) {
 
 func TestNewPasswordResetService_NilLogger(t *testing.T) {
 	// Should not panic — EnsureLogger replaces nil with a nop logger.
-	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, "", nil)
+	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, nil, "", nil)
 	assert.NotNil(t, svc)
 	assert.NotNil(t, svc.logger)
 }
 
 func TestPasswordResetService_SetWaitTimeout(t *testing.T) {
-	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, "", nil)
+	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, nil, "", nil)
 	defaultTimeout := svc.waitTimeout
 	assert.Greater(t, defaultTimeout, time.Duration(0))
 
@@ -567,7 +575,7 @@ func TestPasswordResetService_SetWaitTimeout(t *testing.T) {
 }
 
 func TestPasswordResetService_SetTokenTTL(t *testing.T) {
-	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, "", nil)
+	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, nil, "", nil)
 
 	svc.SetTokenTTL(15 * time.Minute)
 	assert.Equal(t, 15*time.Minute, svc.tokenTTL)
@@ -577,7 +585,7 @@ func TestPasswordResetService_SetTokenTTL(t *testing.T) {
 }
 
 func TestPasswordResetService_SetCooldownTTL(t *testing.T) {
-	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, "", nil)
+	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, nil, "", nil)
 
 	svc.SetCooldownTTL(30 * time.Second)
 	assert.Equal(t, 30*time.Second, svc.cooldownTTL)
@@ -587,7 +595,7 @@ func TestPasswordResetService_SetCooldownTTL(t *testing.T) {
 }
 
 func TestPasswordResetService_SetMaxAttempts(t *testing.T) {
-	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, "", nil)
+	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, nil, "", nil)
 
 	svc.SetMaxAttempts(10)
 	assert.Equal(t, 10, svc.maxAttempts)
@@ -597,7 +605,7 @@ func TestPasswordResetService_SetMaxAttempts(t *testing.T) {
 }
 
 func TestPasswordResetService_Wait(t *testing.T) {
-	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, "", nil)
+	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, nil, "", nil)
 	svc.SetWaitTimeout(100 * time.Millisecond)
 
 	// No background goroutines — Wait() should return immediately.

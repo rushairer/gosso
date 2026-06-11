@@ -27,30 +27,37 @@ type OAuth2Client struct {
 	DeletedAt              *time.Time     `json:"deleted_at,omitempty"`
 }
 
-// ValidateRedirectURI validates that the redirect URI is in the registered list
+// ValidateRedirectURI validates that the redirect URI is in the registered list.
+// Uses constant-time comparison throughout: all registered URIs are checked even
+// after a match is found, to avoid leaking the matched position via timing.
 func (c *OAuth2Client) ValidateRedirectURI(uri string) bool {
 	if !isValidRedirectScheme(uri) {
 		return false
 	}
+	uriBytes := []byte(uri)
+	found := 0
 	for _, registered := range c.RedirectURIs {
-		if subtle.ConstantTimeCompare([]byte(uri), []byte(registered)) == 1 {
-			return true
+		if subtle.ConstantTimeCompare(uriBytes, []byte(registered)) == 1 {
+			found = 1
 		}
 	}
-	return false
+	return found == 1
 }
 
-// ValidatePostLogoutRedirectURI validates that the post-logout redirect URI is in the registered list
+// ValidatePostLogoutRedirectURI validates that the post-logout redirect URI is in the registered list.
+// Uses constant-time comparison throughout to avoid leaking the matched position via timing.
 func (c *OAuth2Client) ValidatePostLogoutRedirectURI(uri string) bool {
 	if !isValidRedirectScheme(uri) {
 		return false
 	}
+	uriBytes := []byte(uri)
+	found := 0
 	for _, registered := range c.PostLogoutRedirectURIs {
-		if subtle.ConstantTimeCompare([]byte(uri), []byte(registered)) == 1 {
-			return true
+		if subtle.ConstantTimeCompare(uriBytes, []byte(registered)) == 1 {
+			found = 1
 		}
 	}
-	return false
+	return found == 1
 }
 
 // isValidRedirectScheme checks that the URI uses http or https scheme and has no fragment.

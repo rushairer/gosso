@@ -111,6 +111,12 @@ func (m *mockCredentialRepo) VerifyFirstUnverifiedTOTP(_ context.Context, _ *sql
 func (m *mockCredentialRepo) FindByAccountAndTypeForUpdate(_ context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
 	return nil, nil
 }
+func (m *mockCredentialRepo) FindByAccountAndTypeTx(ctx context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	return m.FindByAccountAndType(ctx, "", "")
+}
+func (m *mockCredentialRepo) FindByTypeAndIdentifierTx(ctx context.Context, _ *sql.Tx, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+	return m.FindByTypeAndIdentifier(ctx, "", "")
+}
 
 // ──────────────────────────────────────────────
 // Mock OAuth2ClientRepository

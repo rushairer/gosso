@@ -62,6 +62,12 @@ type PasswordResetEmailSender interface {
 	SendPasswordResetLink(ctx context.Context, to, resetLink string) error
 }
 
+// AccountTokenRevoker abstracts account-level token revocation.
+// Implementations blacklist all access tokens issued before the revocation timestamp.
+type AccountTokenRevoker interface {
+	RevokeAccountTokens(ctx context.Context, accountID string) error
+}
+
 type passwordResetData struct {
 	AccountID string `json:"account_id"`
 	Email     string `json:"email"`
@@ -74,6 +80,7 @@ type PasswordResetService struct {
 	credentialRepo accountRepo.CredentialRepository
 	emailSender    PasswordResetEmailSender
 	sessionSvc     *sessionService.SessionService
+	tokenRevoker   AccountTokenRevoker
 	accountSvc     accountService.AccountService
 	db             *sql.DB
 	baseURL        string
@@ -92,6 +99,7 @@ func NewPasswordResetService(
 	credentialRepo accountRepo.CredentialRepository,
 	emailSender PasswordResetEmailSender,
 	sessionSvc *sessionService.SessionService,
+	tokenRevoker AccountTokenRevoker,
 	accountSvc accountService.AccountService,
 	db *sql.DB,
 	baseURL string,
@@ -103,6 +111,7 @@ func NewPasswordResetService(
 		credentialRepo: credentialRepo,
 		emailSender:    emailSender,
 		sessionSvc:     sessionSvc,
+		tokenRevoker:   tokenRevoker,
 		accountSvc:     accountSvc,
 		db:             db,
 		baseURL:        baseURL,
@@ -283,6 +292,18 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		if retryErr := s.redis.Del(ctx, tokenKey); retryErr != nil {
 			s.logger.Warn("Failed to delete reset token from Redis after retry, token will expire via TTL",
 				zap.Error(retryErr), zap.String("token_hash", tokenHash))
+		}
+	}
+
+	// Synchronously revoke all access tokens issued before this password reset.
+	// This is a single Redis SET operation and is fast — doing it synchronously
+	// closes the window where a stolen access token could still be used.
+	if s.tokenRevoker != nil {
+		revokeCtx, revokeCancel := context.WithTimeout(ctx, PasswordResetSyncRevokeTimeout)
+		defer revokeCancel()
+		if err := s.tokenRevoker.RevokeAccountTokens(revokeCtx, data.AccountID); err != nil {
+			s.logger.Error("Failed to revoke access tokens after password reset",
+				zap.String("account_id", data.AccountID), zap.Error(err))
 		}
 	}
 

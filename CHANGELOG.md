@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- `ConfirmVerificationCredential` now uses transactional read (`FindByTypeAndIdentifierTx`) — eliminates TOCTOU race condition between credential lookup and update (`internal/auth/service/auth_service.go`).
+- `EnrollTOTP` now uses transactional read (`FindByAccountAndTypeTx`) — eliminates TOCTOU race condition during TOTP credential cleanup (`internal/auth/service/mfa_service.go`).
+- `BindFederatedIdentity` now uses transactional read (`FindByProviderTx`) — eliminates TOCTOU race condition during federated identity binding (`internal/account/service/account_service.go`).
+- Password reset now revokes all access tokens via account-level token blacklist before revoking sessions — closes the window where a stolen access token could remain valid after password change (`internal/auth/service/password_reset_service.go`).
+- `ValidateRedirectURI` and `ValidatePostLogoutRedirectURI` now iterate all registered URIs before returning — eliminates timing side-channel that could leak which redirect URI matched (`internal/oauth2/domain/client.go`).
 - `SoftDeleteAccount` now uses transactional read (`FindByIDTx`) for idempotency check — prevents concurrent deletion race condition (`internal/account/service/account_service.go`).
 - `GetAccountID` middleware now calls `ctx.Abort()` on failure — prevents handlers from continuing after 401 response (`middleware/account.go`).
 - OAuth2 Token endpoint Basic Auth now takes precedence over body parameters per RFC 6749 §2.3.1 (`internal/oauth2/controller/oauth2_token.go`).
@@ -75,6 +80,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Consent `Upsert` error now wrapped with context (`internal/oauth2/repository/consent_repository_impl.go`).
 
 ### Changed
+- Audit log `actor` field now consistently uses client IP address across all login flows — previously mixed username, account ID, and empty string (`internal/auth/service/auth_login.go`).
+- `SoftDeleteCredential` and `SoftDeleteCredentialsByAccount` now update `updated_at` alongside `deleted_at` — consistent with `SoftDeleteAccount` pattern (`internal/account/repository/credential_repository_impl.go`).
+- `PasswordResetService` constructor now accepts `AccountTokenRevoker` dependency — enables access token blacklisting on password reset (`internal/auth/service/password_reset_service.go`).
 - `SendVerification` error handling now classifies errors: rate limit → 429, unsupported type → 400, internal → 500 (previously all returned 429) (`internal/auth/controller/auth_controller.go`).
 - `BeginLogin` and `BeginMFALogin` now log database errors at Warn level before returning `ErrPasskeyNotFound` — aids debugging without enabling enumeration (`internal/auth/service/passkey_service.go`).
 - `CompleteRegistration` now logs credential-fetch errors instead of silently discarding (`internal/auth/service/passkey_service.go`).

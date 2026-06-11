@@ -200,7 +200,7 @@ func (s *MFAService) EnrollTOTP(ctx context.Context, accountID string) (*TOTPEnr
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		// Delete unverified TOTP credentials in the same transaction to prevent race conditions
-		existingCreds, findErr := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
+		existingCreds, findErr := s.credentialRepo.FindByAccountAndTypeTx(ctx, tx, accountID, accountDomain.CredentialTypeTOTP)
 		if findErr == nil {
 			for _, c := range existingCreds {
 				if !c.Verified && !c.IsDeleted() {

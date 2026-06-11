@@ -102,6 +102,9 @@ func (m *mockSocialFederatedIdentityRepo) SoftDeleteByAccountID(_ context.Contex
 func (m *mockSocialFederatedIdentityRepo) SoftDeleteByID(_ context.Context, _ *sql.Tx, _, _ string, _ time.Time) error {
 	panic("not implemented")
 }
+func (m *mockSocialFederatedIdentityRepo) FindByProviderTx(ctx context.Context, _ *sql.Tx, provider accountDomain.Provider, providerUserID string) (*accountDomain.FederatedIdentity, error) {
+	return m.findByProvider(ctx, provider, providerUserID)
+}
 
 // mockSocialSessionTokenCreator implements SessionTokenCreator.
 type mockSocialSessionTokenCreator struct {
@@ -343,6 +346,12 @@ func (m *mockSocialCredentialRepo) FindByAccountAndTypeForUpdate(_ context.Conte
 }
 func (m *mockSocialCredentialRepo) VerifyFirstUnverifiedTOTP(_ context.Context, _ *sql.Tx, _ string) (bool, error) {
 	panic("not implemented")
+}
+func (m *mockSocialCredentialRepo) FindByAccountAndTypeTx(ctx context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	panic("not implemented")
+}
+func (m *mockSocialCredentialRepo) FindByTypeAndIdentifierTx(ctx context.Context, _ *sql.Tx, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error) {
+	return m.findByTypeAndIdentifier(ctx, credType, identifier)
 }
 
 // createNewUserTestHarness bundles the service and mocks for createNewUser tests.

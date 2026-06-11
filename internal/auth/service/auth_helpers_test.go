@@ -185,6 +185,14 @@ func (m *authTestCredentialRepo) FindByAccountAndTypeForUpdate(ctx context.Conte
 	return m.mockCredentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, credType)
 }
 
+func (m *authTestCredentialRepo) FindByTypeAndIdentifierTx(ctx context.Context, _ *sql.Tx, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error) {
+	return m.FindByTypeAndIdentifier(ctx, credType, identifier)
+}
+
+func (m *authTestCredentialRepo) FindByAccountAndTypeTx(ctx context.Context, _ *sql.Tx, accountID string, credType accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	return m.mockCredentialRepo.FindByAccountAndType(ctx, accountID, credType)
+}
+
 // ──────────────────────────────────────────────
 // Auth service test fixture
 // ──────────────────────────────────────────────

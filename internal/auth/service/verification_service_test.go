@@ -349,6 +349,14 @@ func (m *mockCredRepoForVerification) FindByAccountAndTypeForUpdate(_ context.Co
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *mockCredRepoForVerification) FindByAccountAndTypeTx(ctx context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	return m.FindByAccountAndType(ctx, "", "")
+}
+
+func (m *mockCredRepoForVerification) FindByTypeAndIdentifierTx(ctx context.Context, _ *sql.Tx, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
+	return m.FindByTypeAndIdentifier(ctx, "", "")
+}
+
 func strPtr(s string) *string { return &s }
 
 // ──────────────────────────────────────────────

@@ -22,8 +22,16 @@ type CredentialRepository interface {
 	// FindByAccountAndType finds credentials by account ID and type
 	FindByAccountAndType(ctx context.Context, accountID string, credType domain.CredentialType) ([]*domain.Credential, error)
 
+	// FindByAccountAndTypeTx finds credentials by account ID and type within a transaction.
+	// Use this variant inside RunInTransaction to avoid TOCTOU race conditions.
+	FindByAccountAndTypeTx(ctx context.Context, tx *sql.Tx, accountID string, credType domain.CredentialType) ([]*domain.Credential, error)
+
 	// FindByTypeAndIdentifier finds a credential by type and identifier (e.g. by email)
 	FindByTypeAndIdentifier(ctx context.Context, credType domain.CredentialType, identifier string) (*domain.Credential, error)
+
+	// FindByTypeAndIdentifierTx finds a credential by type and identifier within a transaction.
+	// Use this variant inside RunInTransaction to avoid TOCTOU race conditions.
+	FindByTypeAndIdentifierTx(ctx context.Context, tx *sql.Tx, credType domain.CredentialType, identifier string) (*domain.Credential, error)
 
 	// FindPasswordCredential finds password credential of an account
 	FindPasswordCredential(ctx context.Context, accountID string) (*domain.Credential, error)
