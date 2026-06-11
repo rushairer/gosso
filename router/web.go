@@ -188,13 +188,18 @@ func registerHealthRoutes(server *gin.Engine, db *sql.DB, redis *cache.RedisClie
 			checks["redis"] = "ok"
 		}
 
+		statusStr := "ok"
+		if !ready {
+			statusStr = "unavailable"
+		}
+
 		status := http.StatusOK
 		if !ready {
 			status = http.StatusServiceUnavailable
 		}
 
 		ctx.JSON(status, gin.H{
-			"status": status,
+			"status": statusStr,
 			"ready":  ready,
 			"checks": checks,
 		})

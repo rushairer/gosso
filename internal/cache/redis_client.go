@@ -221,6 +221,9 @@ func (r *RedisClient) SAdd(ctx context.Context, key string, members ...interface
 // The Lua script ensures SADD and EXPIRE execute atomically within Redis,
 // eliminating any window for partial execution.
 func (r *RedisClient) SAddWithTTL(ctx context.Context, key string, member string, ttl time.Duration) error {
+	if ttl <= 0 {
+		return fmt.Errorf("sadd_with_ttl: TTL must be positive, got %v", ttl)
+	}
 	script := redis.NewScript(`redis.call('SADD', KEYS[1], ARGV[1]); return redis.call('EXPIRE', KEYS[1], ARGV[2])`)
 	_, err := script.Run(ctx, r.client, []string{key}, member, int(ttl.Seconds())).Result()
 	if err != nil {
@@ -325,6 +328,10 @@ func (r *RedisClient) CheckAndIncr(ctx context.Context, key string, limit int, e
 // SetIfExists atomically sets a key only if it already exists, preventing TOCTOU issues.
 // Returns true if the key was updated, false if the key did not exist.
 func (r *RedisClient) SetIfExists(ctx context.Context, key string, value interface{}, expiry time.Duration) (bool, error) {
+	expirySec := int(math.Ceil(expiry.Seconds()))
+	if expirySec <= 0 {
+		expirySec = 1 // Minimum 1 second to prevent persistent keys
+	}
 	script := redis.NewScript(`
 		if redis.call('EXISTS', KEYS[1]) == 1 then
 			redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
@@ -332,7 +339,7 @@ func (r *RedisClient) SetIfExists(ctx context.Context, key string, value interfa
 		end
 		return 0
 	`)
-	result, err := script.Run(ctx, r.client, []string{key}, value, int(math.Ceil(expiry.Seconds()))).Int64()
+	result, err := script.Run(ctx, r.client, []string{key}, value, expirySec).Int64()
 	if err != nil {
 		r.logger.Error("Redis SetIfExists failed", zap.String("key", key), zap.Error(err))
 		return false, fmt.Errorf("setIfExists key %s: %w", key, err)

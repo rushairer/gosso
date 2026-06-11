@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"html/template"
 	"net"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/wneessen/go-mail"
@@ -50,6 +52,7 @@ type EmailService struct {
 	verifyCodeTTL    time.Duration
 	passwordResetTTL time.Duration
 	sendLimiter      *time.Ticker // rate limiter for outgoing emails
+	closed           atomic.Bool  // prevents use-after-close
 }
 
 // NewEmailService creates a new email service instance.
@@ -87,6 +90,7 @@ func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) *EmailService {
 
 // Close stops the internal ticker and releases resources.
 func (s *EmailService) Close() {
+	s.closed.Store(true)
 	if s.sendLimiter != nil {
 		s.sendLimiter.Stop()
 	}
@@ -120,8 +124,12 @@ func (s *EmailService) SendVerificationCode(ctx context.Context, to, code string
 	return s.send(ctx, to, subject, body.String())
 }
 
-// SendPasswordResetLink sends a password reset email
+// SendPasswordResetLink sends a password reset email.
+// Validates that resetLink uses http or https scheme to prevent javascript: URLs.
 func (s *EmailService) SendPasswordResetLink(ctx context.Context, to, resetLink string) error {
+	if !strings.HasPrefix(resetLink, "https://") && !strings.HasPrefix(resetLink, "http://") {
+		return fmt.Errorf("send password reset link: reset link must use http or https scheme")
+	}
 	subject := "Reset Your Password"
 	var body bytes.Buffer
 	if err := passwordResetTmpl.Execute(&body, struct {
@@ -137,6 +145,9 @@ func (s *EmailService) SendPasswordResetLink(ctx context.Context, to, resetLink 
 func (s *EmailService) send(ctx context.Context, to, subject, htmlBody string) error {
 	if s.client == nil {
 		return fmt.Errorf("send email: mail client not initialized")
+	}
+	if s.closed.Load() {
+		return fmt.Errorf("send email: service is closed")
 	}
 
 	// Rate limit outgoing emails
@@ -212,6 +223,9 @@ func isTransientError(err error) bool {
 // formatDuration returns a human-readable duration string (e.g. "10 minutes", "1 hour").
 func formatDuration(d time.Duration) string {
 	minutes := int(d.Minutes())
+	if minutes < 1 {
+		return "less than a minute"
+	}
 	if minutes == 1 {
 		return "1 minute"
 	}
@@ -219,8 +233,15 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%d minutes", minutes)
 	}
 	hours := int(d.Hours())
-	if hours == 1 {
-		return "1 hour"
+	remainingMin := minutes - hours*60
+	if remainingMin == 0 {
+		if hours == 1 {
+			return "1 hour"
+		}
+		return fmt.Sprintf("%d hours", hours)
 	}
-	return fmt.Sprintf("%d hours", hours)
+	if hours == 1 {
+		return fmt.Sprintf("1 hour %d minutes", remainingMin)
+	}
+	return fmt.Sprintf("%d hours %d minutes", hours, remainingMin)
 }

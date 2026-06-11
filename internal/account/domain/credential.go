@@ -52,6 +52,9 @@ type Credential struct {
 // For password credentials, use NewPasswordCredential instead — this function
 // returns an error if called with CredentialTypePassword to prevent accidental plaintext storage.
 func NewCredential(accountID string, credType CredentialType, identifier *string, value string) (*Credential, error) {
+	if accountID == "" {
+		return nil, errors.New("account ID is required")
+	}
 	if credType == CredentialTypePassword {
 		return nil, fmt.Errorf("NewCredential must not be used with CredentialTypePassword; use NewPasswordCredential instead")
 	}
@@ -69,6 +72,9 @@ func NewCredential(accountID string, credType CredentialType, identifier *string
 
 // NewPasswordCredential creates a password credential (auto-hashed).
 func NewPasswordCredential(accountID string, plainPassword string) (*Credential, error) {
+	if accountID == "" {
+		return nil, errors.New("account ID is required")
+	}
 	hashedPassword, err := HashPassword(plainPassword)
 	if err != nil {
 		return nil, err

@@ -34,6 +34,9 @@ func NewFederatedIdentity(accountID string, provider Provider, providerUserID st
 	if accountID == "" {
 		return nil, errors.New("account ID is required")
 	}
+	if provider == "" {
+		return nil, errors.New("provider is required")
+	}
 	if providerUserID == "" {
 		return nil, errors.New("provider user ID is required")
 	}

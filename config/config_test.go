@@ -21,6 +21,7 @@ func validConfig() GoUnoConfig {
 			ReadHeaderTimeout: 5 * time.Second,
 			IdleTimeout:       120 * time.Second,
 			RequestTimeout:    30 * time.Second,
+			ShutdownTimeout:   30 * time.Second,
 			RateLimits: RateLimitsConfig{
 				Login:      5,
 				Token:      10,

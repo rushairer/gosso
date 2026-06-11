@@ -364,6 +364,12 @@ func (c *GoUnoConfig) Validate() error {
 	if c.WebServerConfig.RequestTimeout <= 0 {
 		return fmt.Errorf("web_server: request_timeout must be positive")
 	}
+	if c.WebServerConfig.ShutdownTimeout <= 0 {
+		return fmt.Errorf("web_server: shutdown_timeout must be positive")
+	}
+	if c.CORSConfig.MaxAge < 0 {
+		return fmt.Errorf("cors: max_age must not be negative (got %d)", c.CORSConfig.MaxAge)
+	}
 	// CORS: AllowCredentials + wildcard origin is a security misconfiguration
 	if c.CORSConfig.AllowCredentials {
 		for _, origin := range c.CORSConfig.AllowedOrigins {

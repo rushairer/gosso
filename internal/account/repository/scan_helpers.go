@@ -35,8 +35,12 @@ func scanAccount(s scannable) (*domain.Account, error) {
 		return nil, err
 	}
 
-	if err := json.Unmarshal(metadataJSON, &account.Metadata); err != nil {
-		return nil, fmt.Errorf("unmarshal metadata: %w", err)
+	if metadataJSON != nil {
+		if err := json.Unmarshal(metadataJSON, &account.Metadata); err != nil {
+			return nil, fmt.Errorf("unmarshal metadata: %w", err)
+		}
+	} else {
+		account.Metadata = make(map[string]any)
 	}
 
 	return account, nil
@@ -79,12 +83,20 @@ func scanRole(s scannable) (*domain.Role, error) {
 		return nil, err
 	}
 
-	if err := json.Unmarshal(permissionsJSON, &role.Permissions); err != nil {
-		return nil, fmt.Errorf("unmarshal permissions: %w", err)
+	if permissionsJSON != nil {
+		if err := json.Unmarshal(permissionsJSON, &role.Permissions); err != nil {
+			return nil, fmt.Errorf("unmarshal permissions: %w", err)
+		}
+	} else {
+		role.Permissions = make([]string, 0)
 	}
 
-	if err := json.Unmarshal(metadataJSON, &role.Metadata); err != nil {
-		return nil, fmt.Errorf("unmarshal metadata: %w", err)
+	if metadataJSON != nil {
+		if err := json.Unmarshal(metadataJSON, &role.Metadata); err != nil {
+			return nil, fmt.Errorf("unmarshal metadata: %w", err)
+		}
+	} else {
+		role.Metadata = make(map[string]any)
 	}
 
 	return role, nil
@@ -131,8 +143,12 @@ func scanCredential(s scannable) (*domain.Credential, error) {
 		return nil, err
 	}
 
-	if err := json.Unmarshal(metadataJSON, &cred.Metadata); err != nil {
-		return nil, fmt.Errorf("unmarshal metadata: %w", err)
+	if metadataJSON != nil {
+		if err := json.Unmarshal(metadataJSON, &cred.Metadata); err != nil {
+			return nil, fmt.Errorf("unmarshal metadata: %w", err)
+		}
+	} else {
+		cred.Metadata = make(map[string]any)
 	}
 
 	return cred, nil
@@ -175,8 +191,12 @@ func scanFederatedIdentity(s scannable) (*domain.FederatedIdentity, error) {
 		return nil, err
 	}
 
-	if err := json.Unmarshal(profileJSON, &identity.Profile); err != nil {
-		return nil, fmt.Errorf("unmarshal profile: %w", err)
+	if profileJSON != nil {
+		if err := json.Unmarshal(profileJSON, &identity.Profile); err != nil {
+			return nil, fmt.Errorf("unmarshal profile: %w", err)
+		}
+	} else {
+		identity.Profile = make(map[string]any)
 	}
 
 	return identity, nil

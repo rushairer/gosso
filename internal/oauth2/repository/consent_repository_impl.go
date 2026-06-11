@@ -34,12 +34,15 @@ func (r *consentRepositoryImpl) Upsert(ctx context.Context, tx *sql.Tx, consent 
 		DO UPDATE SET scopes = EXCLUDED.scopes, granted_at = EXCLUDED.granted_at, deleted_at = NULL
 		RETURNING id, created_at, updated_at`
 
-	return tx.QueryRowContext(ctx, query,
+	if err := tx.QueryRowContext(ctx, query,
 		consent.AccountID,
 		consent.ClientID,
 		scopesJSON,
 		consent.GrantedAt,
-	).Scan(&consent.ID, &consent.CreatedAt, &consent.UpdatedAt)
+	).Scan(&consent.ID, &consent.CreatedAt, &consent.UpdatedAt); err != nil {
+		return fmt.Errorf("upsert consent: %w", err)
+	}
+	return nil
 }
 
 // FindByAccountAndClient finds a consent record by account and client ID.

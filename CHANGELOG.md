@@ -57,6 +57,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - OIDC discovery document now includes `token_endpoint_auth_signing_alg_values_supported` per OIDC Discovery §3 (`internal/oidc/service/discovery_service.go`).
 - ID Token now includes `azp` (Authorized Party) claim per OIDC Core §2 (`internal/oidc/service/id_token_service.go`).
 - `SecurityHeadersMiddleware` no longer uses `log.Printf` — eliminates unused import and inconsistent logging (`middleware/middleware.go`).
+- Scan helpers now guard `json.Unmarshal` against nil JSON bytes — prevents runtime crash on NULL database columns (`internal/account/repository/scan_helpers.go`).
+- Rate limiter `IPKeyFunc` now normalizes IPs via `NormalizeIP` — prevents IPv4-mapped IPv6 rate limit bypass (`middleware/redis_ratelimit.go`).
+- `NewCredential` and `NewPasswordCredential` now validate `accountID` is non-empty — prevents orphaned credentials (`internal/account/domain/credential.go`).
+- `NewFederatedIdentity` now validates `provider` is non-empty (`internal/account/domain/federated_identity.go`).
+- Passkey login no longer double-counts IP rate limits — service-level check removed in favor of middleware (`internal/auth/service/auth_login.go`).
+- `LoginByUsernamePassword` IP rate limit error now correctly captured in deferred audit log (`internal/auth/service/auth_login.go`).
+- `HandleServiceError` and `HandleClientAuthError` now call `ctx.Abort()` — prevents handler chain continuation after error response (`internal/controllerutil/error_handler.go`).
+- `SAddWithTTL` now validates TTL is positive — prevents immediate key deletion (`internal/cache/redis_client.go`).
+- `SetIfExists` now enforces minimum 1-second expiry — prevents persistent keys on zero expiry (`internal/cache/redis_client.go`).
+- `/readiness` endpoint now returns string status (`"ok"` / `"unavailable"`) instead of integer — consistent with `/health` (`router/web.go`).
+- `Validate()` now checks `ShutdownTimeout` and `CORSConfig.MaxAge` ranges (`config/config.go`).
+- `EmailService` now guards against use-after-close with `atomic.Bool` flag (`internal/notification/service/email_service.go`).
+- `SendPasswordResetLink` now validates reset link uses http/https scheme — prevents `javascript:` URLs (`internal/notification/service/email_service.go`).
+- `formatDuration` now shows hours+minutes (e.g., "1 hour 30 minutes") instead of truncating to hours (`internal/notification/service/email_service.go`).
+- `FindByCredentialID` now uses `LIMIT 1` for consistency with other single-result queries (`internal/auth/repository/webauthn_repository_impl.go`).
+- Consent `Upsert` error now wrapped with context (`internal/oauth2/repository/consent_repository_impl.go`).
 
 ### Changed
 - `SendVerification` error handling now classifies errors: rate limit → 429, unsupported type → 400, internal → 500 (previously all returned 429) (`internal/auth/controller/auth_controller.go`).

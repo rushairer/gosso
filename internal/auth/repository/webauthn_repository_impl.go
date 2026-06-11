@@ -57,6 +57,7 @@ func (r *webAuthnCredentialRepositoryImpl) FindByCredentialID(ctx context.Contex
 		SELECT id, account_id, credential_id, public_key, sign_count, aaguid, transports, attestation_type, name, verified, created_at, last_used_at, deleted_at
 		FROM webauthn_credentials
 		WHERE credential_id = $1 AND deleted_at IS NULL
+		LIMIT 1
 	`
 
 	cred, err := scanWebAuthnCredential(r.db.QueryRowContext(ctx, query, credentialID))

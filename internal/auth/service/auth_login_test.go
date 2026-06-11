@@ -557,24 +557,9 @@ func TestLoginByPasskey_MFARequired(t *testing.T) {
 	assert.Contains(t, result.MFATypes, "totp")
 }
 
-func TestLoginByPasskey_IPRateLimited(t *testing.T) {
-	fixture := setupTestAuthService(t)
-	defer fixture.mr.Close()
-	defer fixture.sqlDB.Close()
-
-	fixture.seedTestAccount("account-001", "testuser", "password123")
-	fixture.svc.SetLoginMaxAttemptsPerIP(2)
-
-	// First call succeeds (CheckAndIncr returns 1, 1 < 2 → proceed)
-	result, err := fixture.svc.LoginByPasskey(context.Background(), "account-001", "10.0.0.1", "test-agent")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	// Second call from same IP is rate limited
-	result2, err := fixture.svc.LoginByPasskey(context.Background(), "account-001", "10.0.0.1", "test-agent")
-	assert.ErrorIs(t, err, ErrAccountLocked)
-	assert.Nil(t, result2)
-}
+// TestLoginByPasskey_IPRateLimited was removed because IP rate limiting for passkey
+// endpoints is now handled exclusively by the passkeyRateLimit middleware.
+// A service-level check would double-count each attempt.
 
 // ──────────────────────────────────────────────
 // VerifyMFALogin

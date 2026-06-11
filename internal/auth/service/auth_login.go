@@ -89,7 +89,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	}
 
 	// Check overall IP-level rate limit to prevent username enumeration
-	if err := s.checkIPRateLimit(ctx, req.IP); err != nil {
+	if err = s.checkIPRateLimit(ctx, req.IP); err != nil {
 		return nil, err
 	}
 
@@ -238,10 +238,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 		}
 	}()
 
-	// 0. Check IP-level rate limit
-	if err := s.checkIPRateLimit(ctx, ip); err != nil {
-		return nil, err
-	}
+	// IP-level rate limiting is handled by the passkeyRateLimit middleware.
 
 	// 1. Validate MFA token
 	claims, err := s.tokenSvc.ValidateAccessTokenWithContext(ctx, mfaToken)
@@ -311,10 +308,8 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 		}
 	}()
 
-	// 0. Check IP-level rate limit
-	if err := s.checkIPRateLimit(ctx, ip); err != nil {
-		return nil, err
-	}
+	// IP-level rate limiting is handled by the passkeyRateLimit middleware.
+	// Adding a service-level check here would double-count each attempt.
 
 	// 1. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)

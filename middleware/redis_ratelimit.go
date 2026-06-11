@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // slidingWindowScript Redis Lua sliding window rate limiter script
@@ -124,6 +125,7 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, endpoint string, keyFunc f
 }
 
 // IPKeyFunc extracts rate limit key based on client IP.
+// Normalizes IPv4-mapped IPv6 addresses to prevent rate limit bypass.
 func IPKeyFunc(ctx *gin.Context) string {
-	return ctx.ClientIP()
+	return utility.NormalizeIP(ctx.ClientIP())
 }
