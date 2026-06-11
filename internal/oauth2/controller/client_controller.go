@@ -153,7 +153,7 @@ func (c *ClientController) GetClient(ctx *gin.Context) {
 
 	client, err := c.clientSvc.FindByClientID(ctx, clientID)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "client not found"))
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "access denied"))
 		return
 	}
 
@@ -176,7 +176,7 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 
 	client, err := c.clientSvc.FindByClientID(ctx, clientID)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "client not found"))
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "access denied"))
 		return
 	}
 
@@ -198,6 +198,10 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 		client.Description = req.Description
 	}
 	if req.RedirectURIs != nil {
+		if len(req.RedirectURIs) == 0 {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "redirect_uris must not be empty when provided"))
+			return
+		}
 		for _, uri := range req.RedirectURIs {
 			u, err := url.Parse(uri)
 			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Fragment != "" {
@@ -239,8 +243,8 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 
 // UpdateClientRequest is the request body for updating a client
 type UpdateClientRequest struct {
-	Name                   string   `json:"name"`
-	Description            string   `json:"description"`
+	Name                   string   `json:"name" binding:"max=255"`
+	Description            string   `json:"description" binding:"max=2000"`
 	RedirectURIs           []string `json:"redirect_uris"`
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
 	GrantTypes             []string `json:"grant_types"`

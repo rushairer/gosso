@@ -255,7 +255,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 
 // RefreshTokenRequest refresh token request body
 type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required"`
+	RefreshToken string `json:"refresh_token" binding:"required,max=2048"`
 }
 
 // Refresh POST /api/auth/refresh

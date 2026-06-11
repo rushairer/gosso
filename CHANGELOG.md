@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- Passkey login endpoints (`/passkey/login/begin`, `/passkey/login/complete`) now have rate limiting — prevents brute-force and account enumeration (`internal/auth/controller/passkey_controller.go`).
+- Password reset and verification rate limiters now fail-closed when Redis is unavailable — prevents brute-force during Redis outages (`router/web.go`).
+- `GetClient` and `UpdateClient` now return 403 for both not-found and wrong-account — prevents client_id enumeration (`internal/oauth2/controller/client_controller.go`).
+- `RefreshTokenRequest.RefreshToken` now has `max=2048` length constraint (`internal/auth/controller/auth_controller.go`).
+- `UpdateClientRequest` now has `max=255` on Name and `max=2000` on Description; empty `RedirectURIs` array is rejected (`internal/oauth2/controller/client_controller.go`).
 - JWT validation now enforces RS256 algorithm specifically — prevents algorithm downgrade attacks via RS384/RS512 (`internal/token/service/token_service.go`).
 - `NewCredential` now panics if called with `CredentialTypePassword` — prevents accidental plaintext password storage; callers must use `NewPasswordCredential` (`internal/account/domain/credential.go`).
 - `VerifyMFALogin` and `CompletePasskeyMFALogin` now return generic `ErrInvalidCredentials` instead of `ErrAccountNotFound` — prevents leaking account deletion status during MFA flow (`internal/auth/service/auth_login.go`).
@@ -48,6 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Docker postgres and redis containers now have `no-new-privileges` security option (`docker-compose.yml`).
 - CI coverage threshold raised from 50% to 60% (`.github/workflows/ci.yml`).
 - `govulncheck` pinned to v1.1.4 instead of `@latest` for reproducible CI builds (`.github/workflows/ci.yml`).
+- `config.Validate()` now checks `Port` (1-65535), `LogConfig.Level` (-1 to 5), and `LogConfig.Format` ("console" or "json") (`config/config.go`).
+- `test.yaml` now includes `rate_limits` and `max_body_size` sections — prevents validation failure in test environment (`config/test.yaml`).
+- `.air.toml` binary name changed from `gouno` to `gosso` — matches Makefile output (`.air.toml`).
+- `CONTRIBUTING.md` Go version updated to 1.26.0+, linter list updated with `wrapcheck`, `errorlint`, `dupl`, `exhaustive` (`CONTRIBUTING.md`).
+- `logger.Sync()` now called before process exit to flush buffered log messages (`cmd/gouno/web.go`).
 - Repository scan logic extracted into `scanXxx` helpers per ADR-002: `scanAccount`, `scanRole`, `scanCredential`, `scanFederatedIdentity`, `scanOAuth2Client`, `scanConsent`, `scanWebAuthnCredential` — eliminates duplicated `Scan` + `json.Unmarshal` blocks across 7 repository implementations.
 - Controller error handling extracted into shared `controllerutil.HandleServiceError` and `controllerutil.HandleClientAuthError` — eliminates duplicated `if errors.Is` chains in admin, auth, passkey, OIDC, and OAuth2 controllers.
 - OIDC `UserInfo` now uses `errors.Is()` instead of `==` for error comparison (`internal/oidc/controller/oidc_controller.go`).

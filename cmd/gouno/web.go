@@ -131,5 +131,6 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	// Drain in-flight audit batches before exiting
 	auditAuditor.Wait()
 
+	_ = logger.Sync()
 	logger.Info("server exiting")
 }

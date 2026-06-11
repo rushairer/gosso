@@ -3,12 +3,12 @@ testdata_dir = "testdata"
 tmp_dir = "tmp"
 [env]
   DEFAULT = "./cmd"
-  OUTPUT = "./bin/gouno"
+  OUTPUT = "./bin/gosso"
 
 [build]
   args_bin = ["web -d -e development"]
-  bin = "./bin/gouno"
-  cmd = "go build -buildvcs=false -gcflags \"-N -l\" -o ./bin/gouno ./cmd"
+  bin = "./bin/gosso"
+  cmd = "go build -buildvcs=false -gcflags \"-N -l\" -o ./bin/gosso ./cmd"
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "bin"]
   exclude_file = ["README.md"]

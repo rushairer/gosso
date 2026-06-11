@@ -4,7 +4,7 @@ Thank you for your interest in contributing to gosso. This guide will help you g
 
 ## Prerequisites
 
-- **Go 1.25.0+**
+- **Go 1.26.0+**
 - **PostgreSQL 15+**
 - **Redis 7+**
 - **Docker & Docker Compose** (optional, for containerized development)
@@ -89,7 +89,7 @@ To auto-fix fixable issues:
 make lint-fix
 ```
 
-The project uses [golangci-lint v2](https://golangci-lint.run/) with these linters enabled: `errcheck`, `govet`, `ineffassign`, `staticcheck`, `unused`, `gocritic`, `misspell`, `unconvert`, `bodyclose`, `nilerr`. Formatters include `gofmt` and `goimports` (with `github.com/rushairer/gosso` as the local prefix).
+The project uses [golangci-lint v2](https://golangci-lint.run/) with these linters enabled: `errcheck`, `govet`, `ineffassign`, `staticcheck`, `unused`, `gocritic`, `misspell`, `unconvert`, `bodyclose`, `nilerr`, `wrapcheck`, `errorlint`, `dupl`, `exhaustive`. Formatters include `gofmt` and `goimports` (with `github.com/rushairer/gosso` as the local prefix).
 
 ### Full Checklist Before Submitting
 
@@ -179,7 +179,7 @@ By contributing to gosso, you agree that your contributions will be licensed und
 
 ## 环境要求
 
-- **Go 1.25.0+**
+- **Go 1.26.0+**
 - **PostgreSQL 15+**
 - **Redis 7+**
 - **Docker & Docker Compose**（可选，用于容器化开发）

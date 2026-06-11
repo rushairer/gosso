@@ -223,7 +223,7 @@ func TestGetClient_NotFound(t *testing.T) {
 
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Equal(t, http.StatusForbidden, w.Code)
 }
 
 func TestGetClient_IDORProtection(t *testing.T) {

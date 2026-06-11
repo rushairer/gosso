@@ -66,9 +66,10 @@ func RegisterWebRouter(deps RouterDeps) {
 	mfaLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "mfa", middleware.IPKeyFunc, deps.RateLimits.Token, time.Minute, false, deps.Logger)
 	passkeyLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "passkey", middleware.IPKeyFunc, deps.RateLimits.Passkey, time.Minute, false, deps.Logger)
 	refreshLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "refresh", middleware.IPKeyFunc, deps.RateLimits.Token, time.Minute, false, deps.Logger)
+	// Security-sensitive endpoints fail-closed (reject if Redis is unavailable)
+	passwordLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "password", middleware.IPKeyFunc, deps.RateLimits.API, time.Minute, false, deps.Logger)
+	verifyLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "verify", middleware.IPKeyFunc, deps.RateLimits.API, time.Minute, false, deps.Logger)
 	// Non-security endpoints fail-open (allow if Redis is unavailable)
-	passwordLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "password", middleware.IPKeyFunc, deps.RateLimits.API, time.Minute, true, deps.Logger)
-	verifyLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "verify", middleware.IPKeyFunc, deps.RateLimits.API, time.Minute, true, deps.Logger)
 	socialLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "social", middleware.IPKeyFunc, deps.RateLimits.API, time.Minute, true, deps.Logger)
 
 	// /api/* routes

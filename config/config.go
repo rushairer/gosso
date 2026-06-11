@@ -203,6 +203,21 @@ type OAuthProvidersConfig struct {
 
 // Validate checks that critical configuration values are present and valid.
 func (c *GoUnoConfig) Validate() error {
+	// Web server validation
+	if c.WebServerConfig.Port == "" {
+		return fmt.Errorf("web_server: port is required")
+	}
+	var port int
+	if _, err := fmt.Sscanf(c.WebServerConfig.Port, "%d", &port); err != nil || port < 1 || port > 65535 {
+		return fmt.Errorf("web_server: port must be a valid port number (1-65535), got %q", c.WebServerConfig.Port)
+	}
+	if c.LogConfig.Level < -1 || c.LogConfig.Level > 5 {
+		return fmt.Errorf("log: level must be between -1 (debug) and 5 (fatal), got %d", c.LogConfig.Level)
+	}
+	if c.LogConfig.Format != "" && c.LogConfig.Format != "console" && c.LogConfig.Format != "json" {
+		return fmt.Errorf("log: format must be \"console\" or \"json\", got %q", c.LogConfig.Format)
+	}
+
 	if c.DatabaseConfig.GetDefaultDriver() == nil {
 		return fmt.Errorf("database: no default driver configured")
 	}

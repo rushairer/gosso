@@ -66,9 +66,9 @@ func (c *PasskeyController) RegisterRoutes(rg *gin.RouterGroup, jwtAuth gin.Hand
 		passkey.POST("/register/begin", jwtAuth, c.RegisterBegin)
 		passkey.POST("/register/complete", jwtAuth, c.RegisterComplete)
 
-		// Login (no authentication required)
-		passkey.POST("/login/begin", c.LoginBegin)
-		passkey.POST("/login/complete", c.LoginComplete)
+		// Login (no authentication required, but rate-limited)
+		passkey.POST("/login/begin", passkeyRateLimit, c.LoginBegin)
+		passkey.POST("/login/complete", passkeyRateLimit, c.LoginComplete)
 	}
 
 	// Passkey management (requires authentication)
