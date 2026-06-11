@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"net/http"
 	"net/mail"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -623,7 +624,15 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 
 	if err := c.verificationSvc.SendCode(ctx, req.Type, req.Identifier, tc.AccountID); err != nil {
 		c.logger.Warn("Failed to send verification code", zap.String("type", req.Type), zap.Error(err))
-		ctx.JSON(http.StatusTooManyRequests, gouno.NewErrorResponse(http.StatusTooManyRequests, "too many requests, please try again later"))
+		errMsg := err.Error()
+		switch {
+		case strings.Contains(errMsg, "please wait"):
+			ctx.JSON(http.StatusTooManyRequests, gouno.NewErrorResponse(http.StatusTooManyRequests, "too many requests, please try again later"))
+		case strings.Contains(errMsg, "unsupported"):
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "unsupported credential type"))
+		default:
+			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to send verification code"))
+		}
 		return
 	}
 

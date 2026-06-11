@@ -146,11 +146,11 @@ func (r *accountRepositoryImpl) UpdateAccount(ctx context.Context, tx *sql.Tx, a
 func (r *accountRepositoryImpl) SoftDeleteAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `
 		UPDATE accounts
-		SET deleted_at = $1, updated_at = $1, status = 'deleted'
+		SET deleted_at = $1, updated_at = $1, status = $3
 		WHERE id = $2 AND deleted_at IS NULL
 	`
 
-	result, err := tx.ExecContext(ctx, query, deletedAt, accountID)
+	result, err := tx.ExecContext(ctx, query, deletedAt, accountID, string(domain.AccountStatusDeleted))
 	if err != nil {
 		return fmt.Errorf("soft delete account: %w", err)
 	}

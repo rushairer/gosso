@@ -205,8 +205,9 @@ func TestConsentRepo_FindByAccountAndClient_NotFound(t *testing.T) {
 	repo := NewConsentRepository(db)
 	result, err := repo.FindByAccountAndClient(context.Background(), "account-001", "nonexistent")
 
-	require.NoError(t, err)
+	require.Error(t, err)
 	assert.Nil(t, result)
+	assert.ErrorIs(t, err, domain.ErrConsentNotFound)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 

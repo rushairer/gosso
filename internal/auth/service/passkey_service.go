@@ -136,6 +136,8 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, accountID, us
 	// Find existing credentials
 	existingCreds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil {
+		s.logger.Warn("Failed to find existing credentials for passkey registration, proceeding without exclusion list",
+			zap.String("account_id", accountID), zap.Error(err))
 		existingCreds = nil
 	}
 
@@ -179,7 +181,11 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, accountID, us
 // BeginLogin starts Passkey login (MFA scenario, known accountID)
 func (s *PasskeyService) BeginLogin(ctx context.Context, accountID string) (*protocol.CredentialAssertion, string, error) {
 	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
-	if err != nil || len(creds) == 0 {
+	if err != nil {
+		s.logger.Warn("Failed to find passkey credentials for login", zap.String("account_id", accountID), zap.Error(err))
+		return nil, "", ErrPasskeyNotFound
+	}
+	if len(creds) == 0 {
 		return nil, "", ErrPasskeyNotFound
 	}
 
@@ -293,7 +299,11 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 // BeginMFALogin starts MFA Passkey verification
 func (s *PasskeyService) BeginMFALogin(ctx context.Context, accountID string) (*protocol.CredentialAssertion, string, error) {
 	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
-	if err != nil || len(creds) == 0 {
+	if err != nil {
+		s.logger.Warn("Failed to find passkey credentials for MFA", zap.String("account_id", accountID), zap.Error(err))
+		return nil, "", ErrPasskeyNotFound
+	}
+	if len(creds) == 0 {
 		return nil, "", ErrPasskeyNotFound
 	}
 

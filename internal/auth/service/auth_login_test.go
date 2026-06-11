@@ -765,7 +765,7 @@ func TestCompletePasskeyMFALogin_AccountNotFound(t *testing.T) {
 
 	result, err := fixture.svc.CompletePasskeyMFALogin(context.Background(), mfaToken, "127.0.0.1", "test-agent")
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, accountRepo.ErrAccountNotFound)
+	assert.ErrorIs(t, err, ErrInvalidCredentials)
 	assert.Nil(t, result)
 }
 

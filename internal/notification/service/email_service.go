@@ -49,7 +49,7 @@ type EmailService struct {
 	logger           *zap.Logger
 	verifyCodeTTL    time.Duration
 	passwordResetTTL time.Duration
-	sendLimiter      <-chan time.Time // rate limiter for outgoing emails
+	sendLimiter      *time.Ticker // rate limiter for outgoing emails
 }
 
 // NewEmailService creates a new email service instance.
@@ -81,7 +81,14 @@ func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) *EmailService {
 		logger:           logger,
 		verifyCodeTTL:    10 * time.Minute,
 		passwordResetTTL: 30 * time.Minute,
-		sendLimiter:      time.Tick(100 * time.Millisecond), // 10 emails/sec
+		sendLimiter:      time.NewTicker(100 * time.Millisecond), // 10 emails/sec
+	}
+}
+
+// Close stops the internal ticker and releases resources.
+func (s *EmailService) Close() {
+	if s.sendLimiter != nil {
+		s.sendLimiter.Stop()
 	}
 }
 
@@ -134,7 +141,7 @@ func (s *EmailService) send(ctx context.Context, to, subject, htmlBody string) e
 
 	// Rate limit outgoing emails
 	select {
-	case <-s.sendLimiter:
+	case <-s.sendLimiter.C:
 	case <-ctx.Done():
 		return ctx.Err()
 	}

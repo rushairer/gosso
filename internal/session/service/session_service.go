@@ -214,11 +214,6 @@ func (s *SessionService) GetSession(ctx context.Context, sessionID string) (*dom
 // Uses a Lua script to ensure the session still exists before overwriting,
 // preventing resurrection of sessions that expired between the read and write.
 func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Session) error {
-	// Load current session data for UpdateActivity
-	if _, err := s.GetSession(ctx, session.ID); err != nil {
-		return err
-	}
-
 	session.UpdateActivity()
 
 	// Serialize session data

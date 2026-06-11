@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -51,8 +52,16 @@ func NewRedisClient(dsn string, maxActiveConns int, poolTimeout time.Duration, l
 
 	logger = utility.EnsureLogger(logger)
 
+	// Mask password in address for logging
+	safeAddr := opts.Addr
+	if atIndex := strings.LastIndex(safeAddr, "@"); atIndex != -1 {
+		if colonIndex := strings.LastIndex(safeAddr[:atIndex], ":"); colonIndex != -1 && colonIndex > strings.LastIndex(safeAddr[:atIndex], "/") {
+			safeAddr = safeAddr[:colonIndex+1] + "***" + safeAddr[atIndex:]
+		}
+	}
+
 	logger.Info("Redis client initialized",
-		zap.String("addr", opts.Addr),
+		zap.String("addr", safeAddr),
 		zap.Int("pool_size", opts.PoolSize),
 		zap.Duration("pool_timeout", opts.PoolTimeout))
 

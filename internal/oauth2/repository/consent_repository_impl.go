@@ -52,7 +52,7 @@ func (r *consentRepositoryImpl) FindByAccountAndClient(ctx context.Context, acco
 
 	consent, err := scanConsent(r.db.QueryRowContext(ctx, query, accountID, clientID))
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
+		return nil, domain.ErrConsentNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find consent: %w", err)
@@ -64,9 +64,16 @@ func (r *consentRepositoryImpl) FindByAccountAndClient(ctx context.Context, acco
 // Delete soft-deletes a consent record.
 func (r *consentRepositoryImpl) Delete(ctx context.Context, tx *sql.Tx, accountID, clientID string, deletedAt time.Time) error {
 	query := `UPDATE oauth2_consents SET deleted_at = $3 WHERE account_id = $1 AND client_id = $2 AND deleted_at IS NULL`
-	_, err := tx.ExecContext(ctx, query, accountID, clientID, deletedAt)
+	result, err := tx.ExecContext(ctx, query, accountID, clientID, deletedAt)
 	if err != nil {
 		return fmt.Errorf("delete consent: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return domain.ErrConsentNotFound
 	}
 	return nil
 }

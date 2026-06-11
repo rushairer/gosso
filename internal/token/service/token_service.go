@@ -133,6 +133,10 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
+		// Enforce RS256 specifically to prevent algorithm downgrade attacks (e.g., RS384/RS512).
+		if token.Method.Alg() != "RS256" {
+			return nil, fmt.Errorf("unexpected signing algorithm: %v", token.Method.Alg())
+		}
 		return s.keySvc.PublicKey(), nil
 	})
 	if err != nil {
@@ -502,6 +506,11 @@ func (s *TokenService) IntrospectToken(ctx context.Context, tokenString string) 
 		if err == ErrBlacklistUnavailable {
 			return nil, err
 		}
+		return map[string]any{"active": false}, nil
+	}
+
+	// Reject tokens with a not-before claim in the future
+	if claims.NotBefore != nil && claims.NotBefore.Time.After(time.Now()) {
 		return map[string]any{"active": false}, nil
 	}
 

@@ -631,7 +631,7 @@ func TestSoftDeleteAccount(t *testing.T) {
 
 	// Expect soft deleting account
 	mock.ExpectExec("UPDATE accounts SET deleted_at").
-		WithArgs(sqlmock.AnyArg(), accountID).
+		WithArgs(sqlmock.AnyArg(), accountID, string(domain.AccountStatusDeleted)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	mock.ExpectCommit()

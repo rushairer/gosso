@@ -92,7 +92,7 @@ func (r *credentialRepositoryImpl) FindByTypeAndIdentifier(ctx context.Context, 
 	cred, err := scanCredential(r.db.QueryRowContext(ctx, query, credType, identifier))
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: %s", ErrCredentialNotFound, credType)
+		return nil, fmt.Errorf("%w: %s/%s", ErrCredentialNotFound, credType, identifier)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query credential: %w", err)

@@ -509,7 +509,8 @@ func TestSessionService_UpdateSession_NotFound(t *testing.T) {
 
 	session := &domain.Session{ID: uuid.New().String(), AccountID: "a1", Username: "u"}
 	err := service.UpdateSession(context.Background(), session)
-	assert.Equal(t, ErrSessionNotFound, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no longer exists")
 }
 
 // ──────────────────────────────────────────────

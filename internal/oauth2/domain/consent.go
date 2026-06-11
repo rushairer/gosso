@@ -1,6 +1,12 @@
 package domain
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+// ErrConsentNotFound is returned when a consent record does not exist.
+var ErrConsentNotFound = errors.New("consent not found")
 
 // Consent user authorization consent record for an OAuth2 client
 type Consent struct {

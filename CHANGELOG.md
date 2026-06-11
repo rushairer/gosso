@@ -7,7 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- JWT validation now enforces RS256 algorithm specifically — prevents algorithm downgrade attacks via RS384/RS512 (`internal/token/service/token_service.go`).
+- `NewCredential` now panics if called with `CredentialTypePassword` — prevents accidental plaintext password storage; callers must use `NewPasswordCredential` (`internal/account/domain/credential.go`).
+- `VerifyMFALogin` and `CompletePasskeyMFALogin` now return generic `ErrInvalidCredentials` instead of `ErrAccountNotFound` — prevents leaking account deletion status during MFA flow (`internal/auth/service/auth_login.go`).
+- Device code consent page CSRF comparison now uses `subtle.ConstantTimeCompare` — prevents timing side-channel on CSRF token validation (`internal/oauth2/controller/oauth2_device.go`).
+- Redis address password is now masked in initialization logs (`internal/cache/redis_client.go`).
+- `IntrospectToken` now rejects tokens with `nbf` (not-before) claim in the future (`internal/token/service/token_service.go`).
+
 ### Changed
+- `SendVerification` error handling now classifies errors: rate limit → 429, unsupported type → 400, internal → 500 (previously all returned 429) (`internal/auth/controller/auth_controller.go`).
+- `BeginLogin` and `BeginMFALogin` now log database errors at Warn level before returning `ErrPasskeyNotFound` — aids debugging without enabling enumeration (`internal/auth/service/passkey_service.go`).
+- `CompleteRegistration` now logs credential-fetch errors instead of silently discarding (`internal/auth/service/passkey_service.go`).
+- `SoftDeleteAccount` now uses `domain.AccountStatusDeleted` constant instead of hardcoded `'deleted'` string in SQL (`internal/account/repository/account_repository_impl.go`).
+- `FindByTypeAndIdentifier` error message now includes both `credType` and `identifier` for easier debugging (`internal/account/repository/credential_repository_impl.go`).
+- `EmailService` now uses `time.NewTicker` with a `Close()` method instead of `time.Tick` — prevents goroutine leak (`internal/notification/service/email_service.go`).
+- `consent_repository.FindByAccountAndClient` now returns `ErrConsentNotFound` instead of `nil, nil` for not-found — consistent with other repositories (`internal/oauth2/repository/consent_repository_impl.go`).
+- `consent_repository.Delete` now checks `RowsAffected` — returns `ErrConsentNotFound` for non-existent records instead of silent success (`internal/oauth2/repository/consent_repository_impl.go`).
+- Consent cache key delimiter changed from `:` to `|` — prevents collision with UUID colons (`internal/oauth2/service/consent_service.go`).
+- `UpdateSession` no longer performs redundant `GetSession` read before atomic `SetIfExists` (`internal/session/service/session_service.go`).
+- `RegisterAccount` now uses `NewPasswordCredential` for password hashing instead of manual `HashPassword` + `NewCredential` (`internal/account/service/account_service.go`).
 - `normalizeIP` now returns `"invalid"` for unparseable IPs instead of the raw string — prevents rate-limit bypass via malformed IP addresses (`internal/auth/service/auth_login.go`).
 - `VerifyMFALogin` now checks IP-level rate limiting before MFA code verification — prevents brute-force TOTP/backup code attacks (`internal/auth/service/auth_login.go`).
 - `verifyMFACode` passkey Redis failure now returns `ErrServiceUnavailable` instead of `ErrPasskeyNotVerified` — matches fail-closed pattern for Redis failures (`internal/auth/service/auth_login.go`).

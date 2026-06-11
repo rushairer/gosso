@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -160,7 +161,7 @@ func (c *OAuth2Controller) DeviceUserSubmit(ctx *gin.Context) {
 	// Validate CSRF token (double-submit cookie pattern)
 	cookieToken := csrfTokenFromCookie(ctx)
 	formToken := ctx.PostForm("csrf_token")
-	if cookieToken == "" || formToken == "" || cookieToken != formToken {
+	if cookieToken == "" || formToken == "" || subtle.ConstantTimeCompare([]byte(cookieToken), []byte(formToken)) != 1 {
 		ctx.JSON(http.StatusForbidden, gin.H{"error": "invalid_csrf", "error_description": "CSRF token mismatch"})
 		return
 	}

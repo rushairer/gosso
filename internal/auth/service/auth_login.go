@@ -199,7 +199,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	// 4. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("%w", accountRepo.ErrAccountNotFound)
+		return nil, ErrInvalidCredentials
 	}
 	if !account.IsActive() {
 		return nil, ErrInvalidCredentials
@@ -275,7 +275,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	// 3. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("%w", accountRepo.ErrAccountNotFound)
+		return nil, ErrInvalidCredentials
 	}
 	if !account.IsActive() {
 		return nil, ErrInvalidCredentials

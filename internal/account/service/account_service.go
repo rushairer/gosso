@@ -224,13 +224,10 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 
 		var credentials []*domain.Credential
 
-		passwordHash, err := domain.HashPassword(req.Password)
+		passwordCred, err := domain.NewPasswordCredential(account.ID, req.Password)
 		if err != nil {
 			return fmt.Errorf("hash password: %w", err)
 		}
-
-		passwordCred := domain.NewCredential(account.ID, domain.CredentialTypePassword, nil, passwordHash)
-		passwordCred.Verified = true
 		credentials = append(credentials, passwordCred)
 
 		if req.Email != "" {

@@ -65,10 +65,10 @@ func (s *ConsentService) GetConsent(ctx context.Context, accountID, clientID str
 	// Cache miss or error — read from DB
 	consent, err := s.consentRepo.FindByAccountAndClient(ctx, accountID, clientID)
 	if err != nil {
+		if err == domain.ErrConsentNotFound {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("get consent from DB: %w", err)
-	}
-	if consent == nil {
-		return nil, nil
 	}
 
 	// Write back to cache
@@ -128,5 +128,5 @@ func (s *ConsentService) DeleteConsent(ctx context.Context, accountID, clientID 
 }
 
 func (s *ConsentService) buildConsentKey(accountID, clientID string) string {
-	return fmt.Sprintf("%s%s:%s", ConsentKeyPrefix, accountID, clientID)
+	return fmt.Sprintf("%s%s|%s", ConsentKeyPrefix, accountID, clientID)
 }

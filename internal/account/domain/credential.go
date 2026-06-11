@@ -49,7 +49,12 @@ type Credential struct {
 }
 
 // NewCredential creates a new credential.
+// For password credentials, use NewPasswordCredential instead — this function
+// panics if called with CredentialTypePassword to prevent accidental plaintext storage.
 func NewCredential(accountID string, credType CredentialType, identifier *string, value string) *Credential {
+	if credType == CredentialTypePassword {
+		panic("NewCredential must not be used with CredentialTypePassword; use NewPasswordCredential instead")
+	}
 	return &Credential{
 		ID:         uuid.New().String(),
 		AccountID:  accountID,
