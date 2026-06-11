@@ -136,27 +136,44 @@ func (r *roleRepositoryImpl) FindByName(ctx context.Context, name string) (*doma
 	return role, nil
 }
 
-// FindAll finds all roles
-func (r *roleRepositoryImpl) FindAll(ctx context.Context) ([]*domain.Role, error) {
+// FindAll finds all roles with pagination.
+func (r *roleRepositoryImpl) FindAll(ctx context.Context, page, pageSize int) ([]*domain.Role, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > MaxPageSize {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	var total int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM roles WHERE deleted_at IS NULL`).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count roles: %w", err)
+	}
+	if total == 0 {
+		return []*domain.Role{}, 0, nil
+	}
+
 	query := `
 		SELECT id, name, description, permissions, metadata, created_at, updated_at, deleted_at
 		FROM roles
 		WHERE deleted_at IS NULL
 		ORDER BY name
+		LIMIT $1 OFFSET $2
 	`
 
-	rows, err := r.db.QueryContext(ctx, query)
+	rows, err := r.db.QueryContext(ctx, query, pageSize, offset)
 	if err != nil {
-		return nil, fmt.Errorf("query roles: %w", err)
+		return nil, 0, fmt.Errorf("query roles: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
 	roles, err := scanRoles(rows)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return roles, nil
+	return roles, total, nil
 }
 
 // SoftDeleteByID soft deletes a role

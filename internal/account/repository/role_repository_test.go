@@ -134,13 +134,15 @@ func TestRoleRepo_FindAll_Success(t *testing.T) {
 	rows := sqlmock.NewRows(roleColumns()).
 		AddRow(roleRowValues(role1)...).
 		AddRow(roleRowValues(role2)...)
+	mock.ExpectQuery("SELECT COUNT").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
 	mock.ExpectQuery("SELECT (.+) FROM roles").WillReturnRows(rows)
 
 	repo := NewRoleRepository(sqlDB)
-	results, err := repo.FindAll(context.Background())
+	results, total, err := repo.FindAll(context.Background(), 1, 20)
 
 	require.NoError(t, err)
 	assert.Len(t, results, 2)
+	assert.Equal(t, 2, total)
 	assert.Equal(t, "admin", results[0].Name)
 	assert.Equal(t, "user", results[1].Name)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -151,14 +153,14 @@ func TestRoleRepo_FindAll_Empty(t *testing.T) {
 	require.NoError(t, err)
 	defer sqlDB.Close()
 
-	rows := sqlmock.NewRows(roleColumns())
-	mock.ExpectQuery("SELECT (.+) FROM roles").WillReturnRows(rows)
+	mock.ExpectQuery("SELECT COUNT").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
 	repo := NewRoleRepository(sqlDB)
-	results, err := repo.FindAll(context.Background())
+	results, total, err := repo.FindAll(context.Background(), 1, 20)
 
 	require.NoError(t, err)
 	assert.Len(t, results, 0)
+	assert.Equal(t, 0, total)
 }
 
 func TestRoleRepo_FindRolesByAccountID_Success(t *testing.T) {

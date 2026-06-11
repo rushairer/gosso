@@ -21,7 +21,7 @@ type Session struct {
 	LastActiveAt time.Time `json:"last_active_at"`
 	MFAVerified  bool      `json:"mfa_verified"`
 	// Metadata stores additional session information (e.g., device type, browser).
-	Metadata map[string]string `json:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 // IsExpired reports whether the session has expired.

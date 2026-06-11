@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -93,7 +94,7 @@ func TestAccount_Suspend_AlreadySuspended(t *testing.T) {
 	require.NoError(t, a.Suspend())
 	err := a.Suspend()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot suspend")
+	assert.True(t, errors.Is(err, ErrInvalidAccountStatus))
 }
 
 func TestAccount_Suspend_Deleted(t *testing.T) {
@@ -101,14 +102,14 @@ func TestAccount_Suspend_Deleted(t *testing.T) {
 	require.NoError(t, a.SoftDelete())
 	err := a.Suspend()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "deleted")
+	assert.True(t, errors.Is(err, ErrCannotSuspendDeleted))
 }
 
 func TestAccount_Activate_AlreadyActive(t *testing.T) {
 	a, _ := NewAccount("Test")
 	err := a.Activate()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot activate")
+	assert.True(t, errors.Is(err, ErrInvalidAccountStatus))
 }
 
 func TestAccount_Activate_Deleted(t *testing.T) {
@@ -116,7 +117,7 @@ func TestAccount_Activate_Deleted(t *testing.T) {
 	require.NoError(t, a.SoftDelete())
 	err := a.Activate()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "deleted")
+	assert.True(t, errors.Is(err, ErrCannotActivateDeleted))
 }
 
 func TestAccount_SoftDelete_AlreadyDeleted(t *testing.T) {
@@ -124,5 +125,5 @@ func TestAccount_SoftDelete_AlreadyDeleted(t *testing.T) {
 	require.NoError(t, a.SoftDelete())
 	err := a.SoftDelete()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "already deleted")
+	assert.True(t, errors.Is(err, ErrAccountAlreadyDeleted))
 }

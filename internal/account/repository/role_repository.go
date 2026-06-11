@@ -28,8 +28,8 @@ type RoleRepository interface {
 	// FindByName finds a role by name
 	FindByName(ctx context.Context, name string) (*domain.Role, error)
 
-	// FindAll finds all roles
-	FindAll(ctx context.Context) ([]*domain.Role, error)
+	// FindAll finds all roles with pagination. Returns roles and total count.
+	FindAll(ctx context.Context, page, pageSize int) ([]*domain.Role, int, error)
 
 	// SoftDeleteByID soft deletes a role by ID (requires transaction)
 	SoftDeleteByID(ctx context.Context, tx *sql.Tx, roleID string, deletedAt time.Time) error

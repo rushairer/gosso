@@ -282,41 +282,44 @@ return oldData
 // The old token is read, deleted, and replaced with a new token in a single Lua script,
 // eliminating TOCTOU race conditions between concurrent rotation requests.
 func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) (*domain.RefreshToken, error) {
-	// 1. Generate new token (no Redis read needed here — the Lua script reads atomically)
+	// 1. Generate new token
 	newBytes := make([]byte, RefreshTokenLength)
 	if _, err := rand.Read(newBytes); err != nil {
 		return nil, fmt.Errorf("generate new token: %w", err)
 	}
 	newTokenString := hex.EncodeToString(newBytes)
 
-	// Build keys and hashes before the Lua script
+	// 2. Build keys and hashes
 	oldKey := s.buildRefreshTokenKey(oldToken)
 	newHash := domain.HashToken(newTokenString)
 	oldHash := domain.HashToken(oldToken)
 	newKey := s.buildRefreshTokenKey(newTokenString)
 	expirySeconds := int(s.refreshExpiry.Seconds())
 
-	// We don't know the old token's session ID yet (it's read inside the Lua script),
-	// so we use a placeholder sessionKey. After the script returns the old data,
-	// we parse it to get the session ID and build the actual session key.
-	// Since the Lua script handles session key update internally, we pass a wildcard
-	// pattern and let the script handle it. However, we need the session key for the
-	// script's KEYS array. We'll use a two-phase approach:
-	// Phase 1: Try rotation without session key (common case: no session).
-	// Phase 2: If old data has a session ID, re-run with the session key.
-	// For efficiency, we'll use a single script that conditionally updates session keys.
+	// 3. Pre-read old token to get SessionID before running the Lua script.
+	//    This enables the session index update to happen atomically inside the script.
+	oldData, err := s.redis.Get(ctx, oldKey)
+	if err != nil {
+		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
+	}
+	var oldRT domain.RefreshToken
+	if err := json.Unmarshal([]byte(oldData), &oldRT); err != nil {
+		return nil, fmt.Errorf("unmarshal old refresh token: %w", err)
+	}
 
-	// Pre-allocate the new token data with a placeholder session ID.
-	// The actual session ID comes from the old token (read atomically in Lua).
-	// We'll build the final newData after reading old data from the script.
-	// To keep it single-pass, we pass empty sessionKey and handle session update
-	// separately if needed after the script returns.
+	// 4. Build session key from the old token's SessionID (empty string if no session)
 	sessionKey := ""
+	if oldRT.SessionID != "" {
+		sessionKey = s.buildSessionTokensKey(oldRT.SessionID)
+	}
 
-	// We need to pass the new token JSON to the Lua script, but we don't know
-	// the session ID yet. Build with empty session ID first — we'll update it after.
+	// 5. Build new token data with the correct SessionID from the old token
 	newRT := &domain.RefreshToken{
 		Token:     newTokenString,
+		AccountID: oldRT.AccountID,
+		ClientID:  oldRT.ClientID,
+		SessionID: oldRT.SessionID,
+		Scope:     oldRT.Scope,
 		ExpiresAt: time.Now().Add(s.refreshExpiry),
 		CreatedAt: time.Now(),
 	}
@@ -326,7 +329,8 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 		return nil, fmt.Errorf("marshal new refresh token: %w", err)
 	}
 
-	// 2. Atomically rotate: read old, delete old, store new, update session index
+	// 6. Atomically rotate: read old, delete old, store new, update session index.
+	//    The Lua script handles session index (SREM/SADD) atomically with the rotation.
 	result, err := s.redis.RunScript(ctx, rotateTokenScript,
 		[]string{oldKey, newKey, sessionKey},
 		newData, expirySeconds, oldHash, newHash,
@@ -336,38 +340,6 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	}
 	if err != nil {
 		return nil, fmt.Errorf("rotate refresh token: %w", err)
-	}
-
-	// 3. Parse old token data to populate the returned new token and update session index
-	oldDataStr, ok := result.(string)
-	if !ok {
-		return nil, fmt.Errorf("unexpected old token data type")
-	}
-
-	var oldRT domain.RefreshToken
-	if err := json.Unmarshal([]byte(oldDataStr), &oldRT); err != nil {
-		return nil, fmt.Errorf("unmarshal old refresh token: %w", err)
-	}
-
-	// Populate the new token with data from the old token
-	newRT.AccountID = oldRT.AccountID
-	newRT.ClientID = oldRT.ClientID
-	newRT.SessionID = oldRT.SessionID
-	newRT.Scope = oldRT.Scope
-
-	// Update session token index if the old token had a session
-	if oldRT.SessionID != "" {
-		sk := s.buildSessionTokensKey(oldRT.SessionID)
-		// Remove old hash, add new hash
-		if err := s.redis.SRem(ctx, sk, oldHash); err != nil {
-			s.logger.Warn("Failed to remove old token hash from session index", zap.Error(err), zap.String("session_id", oldRT.SessionID))
-		}
-		if err := s.redis.SAdd(ctx, sk, newHash); err != nil {
-			s.logger.Warn("Failed to add new token hash to session index", zap.Error(err), zap.String("session_id", oldRT.SessionID))
-		}
-		if err := s.redis.Expire(ctx, sk, s.refreshExpiry); err != nil {
-			s.logger.Warn("Failed to set session index expiry", zap.Error(err), zap.String("session_id", oldRT.SessionID))
-		}
 	}
 
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(

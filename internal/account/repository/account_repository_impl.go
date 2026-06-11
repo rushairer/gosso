@@ -82,12 +82,12 @@ func (r *accountRepositoryImpl) FindByID(ctx context.Context, accountID string) 
 	return account, nil
 }
 
-// FindByIDTx finds an account by ID within a transaction (for transactional reads).
-func (r *accountRepositoryImpl) FindByIDTx(ctx context.Context, tx *sql.Tx, accountID string) (*domain.Account, error) {
+// FindByIDIncludingDeletedTx finds an account by ID within a transaction, including soft-deleted rows.
+func (r *accountRepositoryImpl) FindByIDIncludingDeletedTx(ctx context.Context, tx *sql.Tx, accountID string) (*domain.Account, error) {
 	query := `
 		SELECT id, username, display_name, avatar_url, status, locale, timezone, metadata, created_at, updated_at, deleted_at
 		FROM accounts
-		WHERE id = $1
+		WHERE id = $1 -- intentionally includes soft-deleted rows
 	`
 
 	account, err := scanAccount(tx.QueryRowContext(ctx, query, accountID))

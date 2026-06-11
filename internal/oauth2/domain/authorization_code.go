@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -20,6 +21,37 @@ type AuthorizationCode struct {
 	Nonce               string    `json:"nonce,omitempty"`
 	ExpiresAt           time.Time `json:"expires_at"`
 	AuthTime            time.Time `json:"auth_time"` // When the user authenticated (consent time)
+}
+
+// NewAuthorizationCode creates a new AuthorizationCode with the required fields.
+// Validates that code, clientID, accountID, and redirectURI are non-empty and expiresAt is not zero.
+func NewAuthorizationCode(code, clientID, accountID, redirectURI string, scopes []string, expiresAt time.Time) (*AuthorizationCode, error) {
+	if code == "" {
+		return nil, fmt.Errorf("authorization code: code is required")
+	}
+	if clientID == "" {
+		return nil, fmt.Errorf("authorization code: client_id is required")
+	}
+	if accountID == "" {
+		return nil, fmt.Errorf("authorization code: account_id is required")
+	}
+	if redirectURI == "" {
+		return nil, fmt.Errorf("authorization code: redirect_uri is required")
+	}
+	if expiresAt.IsZero() {
+		return nil, fmt.Errorf("authorization code: expires_at is required")
+	}
+	if scopes == nil {
+		scopes = []string{}
+	}
+	return &AuthorizationCode{
+		Code:        code,
+		ClientID:    clientID,
+		AccountID:   accountID,
+		RedirectURI: redirectURI,
+		Scopes:      scopes,
+		ExpiresAt:   expiresAt,
+	}, nil
 }
 
 // IsExpired checks if the authorization code has expired

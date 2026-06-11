@@ -1,21 +1,17 @@
 package repository
 
 import (
-	"encoding/json"
 	"time"
+
+	dbPkg "github.com/rushairer/gosso/internal/db"
 
 	"github.com/rushairer/gosso/internal/auth/domain"
 )
 
-// scannable is satisfied by both *sql.Row and *sql.Rows.
-type scannable interface {
-	Scan(dest ...any) error
-}
-
 // scanWebAuthnCredential scans all 13 columns of a webauthn_credentials row
 // into a new WebAuthnCredential. Returns the raw scan error so callers can
 // check for sql.ErrNoRows.
-func scanWebAuthnCredential(s scannable) (*domain.WebAuthnCredential, error) {
+func scanWebAuthnCredential(s dbPkg.Scannable) (*domain.WebAuthnCredential, error) {
 	cred := &domain.WebAuthnCredential{}
 	var transportsJSON []byte
 	var lastUsedAt, deletedAt *time.Time
@@ -42,10 +38,8 @@ func scanWebAuthnCredential(s scannable) (*domain.WebAuthnCredential, error) {
 	cred.LastUsedAt = lastUsedAt
 	cred.DeletedAt = deletedAt
 
-	if transportsJSON != nil {
-		if err := json.Unmarshal(transportsJSON, &cred.Transports); err != nil {
-			return nil, err
-		}
+	if err := dbPkg.UnmarshalJSONField(transportsJSON, &cred.Transports, "transports"); err != nil {
+		return nil, err
 	}
 
 	return cred, nil

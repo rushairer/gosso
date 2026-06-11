@@ -9,6 +9,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// Account domain sentinel errors.
+var (
+	ErrDisplayNameRequired   = errors.New("display name is required")
+	ErrDisplayNameTooLong    = errors.New("display name must not exceed 255 characters")
+	ErrAccountAlreadyDeleted = errors.New("account is already deleted")
+	ErrCannotSuspendDeleted  = errors.New("cannot suspend a deleted account")
+	ErrCannotActivateDeleted = errors.New("cannot activate a deleted account")
+	ErrInvalidAccountStatus  = errors.New("invalid account status for this operation")
+)
+
 // AccountStatus represents the account lifecycle state.
 type AccountStatus string
 
@@ -43,10 +53,10 @@ type Account struct {
 // snapshot testing or reproducible time-based logic), introduce a Clock parameter here.
 func NewAccount(displayName string) (*Account, error) {
 	if strings.TrimSpace(displayName) == "" {
-		return nil, errors.New("display name is required")
+		return nil, ErrDisplayNameRequired
 	}
 	if len(displayName) > 255 {
-		return nil, errors.New("display name must not exceed 255 characters")
+		return nil, ErrDisplayNameTooLong
 	}
 	now := time.Now()
 	return &Account{
@@ -79,7 +89,7 @@ func (a *Account) IsSuspended() bool {
 // SoftDelete soft-deletes the account. Returns an error if already deleted.
 func (a *Account) SoftDelete() error {
 	if a.IsDeleted() {
-		return errors.New("account is already deleted")
+		return ErrAccountAlreadyDeleted
 	}
 	now := time.Now()
 	a.DeletedAt = &now
@@ -91,10 +101,10 @@ func (a *Account) SoftDelete() error {
 // Suspend suspends the account. Only active accounts can be suspended.
 func (a *Account) Suspend() error {
 	if a.IsDeleted() {
-		return errors.New("cannot suspend a deleted account")
+		return ErrCannotSuspendDeleted
 	}
 	if a.Status != AccountStatusActive {
-		return fmt.Errorf("cannot suspend account in %q status", a.Status)
+		return fmt.Errorf("%w: current status %q", ErrInvalidAccountStatus, a.Status)
 	}
 	a.Status = AccountStatusSuspended
 	a.UpdatedAt = time.Now()
@@ -104,10 +114,10 @@ func (a *Account) Suspend() error {
 // Activate reactivates the account. Only suspended accounts can be activated.
 func (a *Account) Activate() error {
 	if a.IsDeleted() {
-		return errors.New("cannot activate a deleted account")
+		return ErrCannotActivateDeleted
 	}
 	if a.Status != AccountStatusSuspended {
-		return fmt.Errorf("cannot activate account in %q status", a.Status)
+		return fmt.Errorf("%w: current status %q", ErrInvalidAccountStatus, a.Status)
 	}
 	a.Status = AccountStatusActive
 	a.UpdatedAt = time.Now()

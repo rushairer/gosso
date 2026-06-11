@@ -116,8 +116,8 @@ func (m *testRoleRepository) FindByName(_ context.Context, _ string) (*accountDo
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (m *testRoleRepository) FindAll(_ context.Context) ([]*accountDomain.Role, error) {
-	return nil, fmt.Errorf("not implemented")
+func (m *testRoleRepository) FindAll(_ context.Context, _, _ int) ([]*accountDomain.Role, int, error) {
+	return nil, 0, fmt.Errorf("not implemented")
 }
 
 func (m *testRoleRepository) SoftDeleteByID(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {

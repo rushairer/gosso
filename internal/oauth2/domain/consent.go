@@ -2,11 +2,31 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
 // ErrConsentNotFound is returned when a consent record does not exist.
 var ErrConsentNotFound = errors.New("consent not found")
+
+// NewConsent creates a new Consent with the required fields.
+// Validates that accountID and clientID are non-empty.
+func NewConsent(accountID, clientID string, scopes []string) (*Consent, error) {
+	if accountID == "" {
+		return nil, fmt.Errorf("consent: account_id is required")
+	}
+	if clientID == "" {
+		return nil, fmt.Errorf("consent: client_id is required")
+	}
+	if scopes == nil {
+		scopes = []string{}
+	}
+	return &Consent{
+		AccountID: accountID,
+		ClientID:  clientID,
+		Scopes:    scopes,
+	}, nil
+}
 
 // Consent user authorization consent record for an OAuth2 client
 type Consent struct {

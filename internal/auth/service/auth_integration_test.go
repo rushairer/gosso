@@ -52,12 +52,24 @@ func initAuthService(t *testing.T, e *testutil.TestEnv) *service.AuthService {
 	require.NoError(t, err)
 	blacklistSvc := tokenService.NewBlacklistService(e.Redis, e.Logger)
 	tokenSvc := tokenService.NewTokenService(keySvc, "http://localhost:8080", 15*time.Minute, 720*time.Hour, e.Redis, blacklistSvc, nil, e.Logger)
-	authMod := authModule.InitializeAuthModule(
-		e.DB, e.Redis, e.Logger,
-		e.Config.AuthConfig, e.Config.SMTPConfig,
-		accountMod.Service, nil, keySvc, "", auditor, tokenSvc,
-		accountMod.CredentialRepo, accountMod.AccountRepo, accountMod.RoleRepo, accountMod.FederatedIdentityRepo,
-	)
+	authMod, err := authModule.InitializeAuthModule(authModule.AuthModuleConfig{
+		DB:                    e.DB,
+		Redis:                 e.Redis,
+		Logger:                e.Logger,
+		AuthConfig:            e.Config.AuthConfig,
+		SMTPConfig:            e.Config.SMTPConfig,
+		AccountSvc:            accountMod.Service,
+		Providers:             nil,
+		KeySvc:                keySvc,
+		BaseURL:               "",
+		Auditor:               auditor,
+		TokenSvc:              tokenSvc,
+		CredentialRepo:        accountMod.CredentialRepo,
+		AccountRepo:           accountMod.AccountRepo,
+		RoleRepo:              accountMod.RoleRepo,
+		FederatedIdentityRepo: accountMod.FederatedIdentityRepo,
+	})
+	require.NoError(t, err)
 	return authMod.AuthService
 }
 

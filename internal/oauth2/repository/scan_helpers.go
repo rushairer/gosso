@@ -1,26 +1,16 @@
 package repository
 
 import (
-	"encoding/json"
+	"database/sql"
 	"fmt"
+
+	dbPkg "github.com/rushairer/gosso/internal/db"
 
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 )
 
-// scannable is satisfied by both *sql.Row and *sql.Rows.
-type scannable interface {
-	Scan(dest ...any) error
-}
-
-// rowsIterable is satisfied by *sql.Rows for scanning multiple result rows.
-type rowsIterable interface {
-	Next() bool
-	Scan(dest ...any) error
-	Err() error
-}
-
 // scanOAuth2Client scans a single oauth2_clients row (14 columns) into an OAuth2Client.
-func scanOAuth2Client(s scannable) (*domain.OAuth2Client, error) {
+func scanOAuth2Client(s dbPkg.Scannable) (*domain.OAuth2Client, error) {
 	client := &domain.OAuth2Client{}
 	var redirectURIs, postLogoutURIs, grantTypes, scopes, metadata []byte
 
@@ -43,7 +33,7 @@ func scanOAuth2Client(s scannable) (*domain.OAuth2Client, error) {
 }
 
 // scanOAuth2Clients iterates all rows and returns a slice of OAuth2Client.
-func scanOAuth2Clients(rows rowsIterable) ([]*domain.OAuth2Client, error) {
+func scanOAuth2Clients(rows *sql.Rows) ([]*domain.OAuth2Client, error) {
 	var clients []*domain.OAuth2Client
 	for rows.Next() {
 		client, err := scanOAuth2Client(rows)
@@ -59,7 +49,7 @@ func scanOAuth2Clients(rows rowsIterable) ([]*domain.OAuth2Client, error) {
 }
 
 // scanConsent scans a single oauth2_consents row (7 columns) into a Consent.
-func scanConsent(s scannable) (*domain.Consent, error) {
+func scanConsent(s dbPkg.Scannable) (*domain.Consent, error) {
 	var consent domain.Consent
 	var scopesJSON []byte
 
@@ -75,15 +65,16 @@ func scanConsent(s scannable) (*domain.Consent, error) {
 		return nil, err
 	}
 
-	if err := json.Unmarshal(scopesJSON, &consent.Scopes); err != nil {
-		return nil, fmt.Errorf("unmarshal scopes: %w", err)
+	consent.Scopes = make([]string, 0)
+	if err := dbPkg.UnmarshalJSONField(scopesJSON, &consent.Scopes, "scopes"); err != nil {
+		return nil, err
 	}
 
 	return &consent, nil
 }
 
 // scanConsents iterates all rows and returns a slice of Consent.
-func scanConsents(rows rowsIterable) ([]*domain.Consent, error) {
+func scanConsents(rows *sql.Rows) ([]*domain.Consent, error) {
 	var consents []*domain.Consent
 	for rows.Next() {
 		consent, err := scanConsent(rows)

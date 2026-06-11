@@ -53,18 +53,14 @@ func (s *AuthCodeService) GenerateCode(
 	codeString := hex.EncodeToString(bytes)
 
 	now := time.Now()
-	ac := &domain.AuthorizationCode{
-		Code:                codeString,
-		ClientID:            clientID,
-		AccountID:           accountID,
-		RedirectURI:         redirectURI,
-		Scopes:              scopes,
-		CodeChallenge:       codeChallenge,
-		CodeChallengeMethod: codeChallengeMethod,
-		Nonce:               nonce,
-		ExpiresAt:           now.Add(s.expiry),
-		AuthTime:            now, // User just authenticated/consented
+	ac, err := domain.NewAuthorizationCode(codeString, clientID, accountID, redirectURI, scopes, now.Add(s.expiry))
+	if err != nil {
+		return nil, fmt.Errorf("create authorization code: %w", err)
 	}
+	ac.CodeChallenge = codeChallenge
+	ac.CodeChallengeMethod = codeChallengeMethod
+	ac.Nonce = nonce
+	ac.AuthTime = now // User just authenticated/consented
 
 	// Clear the plaintext code before storing in Redis — only the hash is used as the key.
 	// The raw code is returned to the caller but never persisted.

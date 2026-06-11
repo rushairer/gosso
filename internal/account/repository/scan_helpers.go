@@ -2,19 +2,15 @@ package repository
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
+
+	dbPkg "github.com/rushairer/gosso/internal/db"
 
 	"github.com/rushairer/gosso/internal/account/domain"
 )
 
-// scannable is satisfied by both *sql.Row and *sql.Rows.
-type scannable interface {
-	Scan(dest ...any) error
-}
-
 // scanAccount scans a single Account from a scannable row.
-func scanAccount(s scannable) (*domain.Account, error) {
+func scanAccount(s dbPkg.Scannable) (*domain.Account, error) {
 	account := &domain.Account{}
 	var metadataJSON []byte
 
@@ -35,12 +31,9 @@ func scanAccount(s scannable) (*domain.Account, error) {
 		return nil, err
 	}
 
-	if metadataJSON != nil {
-		if err := json.Unmarshal(metadataJSON, &account.Metadata); err != nil {
-			return nil, fmt.Errorf("unmarshal metadata: %w", err)
-		}
-	} else {
-		account.Metadata = make(map[string]any)
+	account.Metadata = make(map[string]any)
+	if err := dbPkg.UnmarshalJSONField(metadataJSON, &account.Metadata, "metadata"); err != nil {
+		return nil, err
 	}
 
 	return account, nil
@@ -65,7 +58,7 @@ func scanAccounts(rows *sql.Rows) ([]*domain.Account, error) {
 }
 
 // scanRole scans a single Role from a scannable row.
-func scanRole(s scannable) (*domain.Role, error) {
+func scanRole(s dbPkg.Scannable) (*domain.Role, error) {
 	role := &domain.Role{}
 	var permissionsJSON, metadataJSON []byte
 
@@ -83,20 +76,14 @@ func scanRole(s scannable) (*domain.Role, error) {
 		return nil, err
 	}
 
-	if permissionsJSON != nil {
-		if err := json.Unmarshal(permissionsJSON, &role.Permissions); err != nil {
-			return nil, fmt.Errorf("unmarshal permissions: %w", err)
-		}
-	} else {
-		role.Permissions = make([]string, 0)
+	role.Permissions = make([]string, 0)
+	if err := dbPkg.UnmarshalJSONField(permissionsJSON, &role.Permissions, "permissions"); err != nil {
+		return nil, err
 	}
 
-	if metadataJSON != nil {
-		if err := json.Unmarshal(metadataJSON, &role.Metadata); err != nil {
-			return nil, fmt.Errorf("unmarshal metadata: %w", err)
-		}
-	} else {
-		role.Metadata = make(map[string]any)
+	role.Metadata = make(map[string]any)
+	if err := dbPkg.UnmarshalJSONField(metadataJSON, &role.Metadata, "metadata"); err != nil {
+		return nil, err
 	}
 
 	return role, nil
@@ -121,7 +108,7 @@ func scanRoles(rows *sql.Rows) ([]*domain.Role, error) {
 }
 
 // scanCredential scans a single Credential from a scannable row.
-func scanCredential(s scannable) (*domain.Credential, error) {
+func scanCredential(s dbPkg.Scannable) (*domain.Credential, error) {
 	cred := &domain.Credential{}
 	var metadataJSON []byte
 
@@ -143,12 +130,9 @@ func scanCredential(s scannable) (*domain.Credential, error) {
 		return nil, err
 	}
 
-	if metadataJSON != nil {
-		if err := json.Unmarshal(metadataJSON, &cred.Metadata); err != nil {
-			return nil, fmt.Errorf("unmarshal metadata: %w", err)
-		}
-	} else {
-		cred.Metadata = make(map[string]any)
+	cred.Metadata = make(map[string]any)
+	if err := dbPkg.UnmarshalJSONField(metadataJSON, &cred.Metadata, "metadata"); err != nil {
+		return nil, err
 	}
 
 	return cred, nil
@@ -173,7 +157,7 @@ func scanCredentials(rows *sql.Rows) ([]*domain.Credential, error) {
 }
 
 // scanFederatedIdentity scans a single FederatedIdentity from a scannable row.
-func scanFederatedIdentity(s scannable) (*domain.FederatedIdentity, error) {
+func scanFederatedIdentity(s dbPkg.Scannable) (*domain.FederatedIdentity, error) {
 	identity := &domain.FederatedIdentity{}
 	var profileJSON []byte
 
@@ -191,12 +175,9 @@ func scanFederatedIdentity(s scannable) (*domain.FederatedIdentity, error) {
 		return nil, err
 	}
 
-	if profileJSON != nil {
-		if err := json.Unmarshal(profileJSON, &identity.Profile); err != nil {
-			return nil, fmt.Errorf("unmarshal profile: %w", err)
-		}
-	} else {
-		identity.Profile = make(map[string]any)
+	identity.Profile = make(map[string]any)
+	if err := dbPkg.UnmarshalJSONField(profileJSON, &identity.Profile, "profile"); err != nil {
+		return nil, err
 	}
 
 	return identity, nil

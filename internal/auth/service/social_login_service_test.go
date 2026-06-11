@@ -289,7 +289,7 @@ func (m *mockSocialAccountRepo) CreateAccount(ctx context.Context, tx *sql.Tx, a
 func (m *mockSocialAccountRepo) FindByID(_ context.Context, _ string) (*accountDomain.Account, error) {
 	panic("not implemented")
 }
-func (m *mockSocialAccountRepo) FindByIDTx(_ context.Context, _ *sql.Tx, _ string) (*accountDomain.Account, error) {
+func (m *mockSocialAccountRepo) FindByIDIncludingDeletedTx(_ context.Context, _ *sql.Tx, _ string) (*accountDomain.Account, error) {
 	panic("not implemented")
 }
 func (m *mockSocialAccountRepo) FindByUsername(_ context.Context, _ string) (*accountDomain.Account, error) {

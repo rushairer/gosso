@@ -2,8 +2,41 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
+
+// ErrDeviceCodeNotFound is returned when a device code does not exist.
+var ErrDeviceCodeNotFound = errors.New("device code not found")
+
+// NewDeviceCode creates a new DeviceCode with the required fields.
+// Validates that deviceCode, userCode, clientID are non-empty and expiresAt is not zero.
+func NewDeviceCode(deviceCode, userCode, clientID string, scopes []string, expiresAt time.Time, interval int) (*DeviceCode, error) {
+	if deviceCode == "" {
+		return nil, fmt.Errorf("device code: device_code is required")
+	}
+	if userCode == "" {
+		return nil, fmt.Errorf("device code: user_code is required")
+	}
+	if clientID == "" {
+		return nil, fmt.Errorf("device code: client_id is required")
+	}
+	if expiresAt.IsZero() {
+		return nil, fmt.Errorf("device code: expires_at is required")
+	}
+	if scopes == nil {
+		scopes = []string{}
+	}
+	return &DeviceCode{
+		DeviceCode: deviceCode,
+		UserCode:   userCode,
+		ClientID:   clientID,
+		Scopes:     scopes,
+		Status:     DeviceCodeStatusPending,
+		ExpiresAt:  expiresAt,
+		Interval:   interval,
+	}, nil
+}
 
 // DeviceCodeStatus represents the lifecycle state of a device authorization code.
 type DeviceCodeStatus string
@@ -41,7 +74,6 @@ func (d *DeviceCode) IsPending() bool {
 
 // Sentinel errors for device code operations.
 var (
-	ErrDeviceCodeNotFound = errors.New("device code not found")
-	ErrDeviceCodeExpired  = errors.New("device code expired")
-	ErrSlowDown           = errors.New("slow down")
+	ErrDeviceCodeExpired = errors.New("device code expired")
+	ErrSlowDown          = errors.New("slow down")
 )

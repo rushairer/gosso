@@ -20,6 +20,14 @@ func NewCredentialRepository(db *sql.DB) CredentialRepository {
 	return &credentialRepositoryImpl{db: db}
 }
 
+// credentialsByAccountAndTypeQuery is the base SELECT for querying credentials by account and type.
+const credentialsByAccountAndTypeQuery = `
+	SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
+	       metadata, created_at, verified_at, last_used_at, deleted_at
+	FROM account_credentials
+	WHERE account_id = $1 AND credential_type = $2 AND deleted_at IS NULL
+	ORDER BY primary_credential DESC, created_at ASC`
+
 // CreateCredentials creates multiple credentials
 func (r *credentialRepositoryImpl) CreateCredentials(ctx context.Context, tx *sql.Tx, credentials []*domain.Credential) error {
 	query := `
@@ -57,15 +65,7 @@ func (r *credentialRepositoryImpl) CreateCredentials(ctx context.Context, tx *sq
 
 // FindByAccountAndType finds credentials by account ID and type
 func (r *credentialRepositoryImpl) FindByAccountAndType(ctx context.Context, accountID string, credType domain.CredentialType) ([]*domain.Credential, error) {
-	query := `
-		SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
-		       metadata, created_at, verified_at, last_used_at, deleted_at
-		FROM account_credentials
-		WHERE account_id = $1 AND credential_type = $2 AND deleted_at IS NULL
-		ORDER BY primary_credential DESC, created_at ASC
-	`
-
-	rows, err := r.db.QueryContext(ctx, query, accountID, credType)
+	rows, err := r.db.QueryContext(ctx, credentialsByAccountAndTypeQuery, accountID, credType)
 	if err != nil {
 		return nil, fmt.Errorf("query credentials: %w", err)
 	}
@@ -92,7 +92,7 @@ func (r *credentialRepositoryImpl) FindByTypeAndIdentifier(ctx context.Context, 
 	cred, err := scanCredential(r.db.QueryRowContext(ctx, query, credType, identifier))
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: %s", ErrCredentialNotFound, credType)
+		return nil, fmt.Errorf("%w: type=%s identifier=%s", ErrCredentialNotFound, credType, identifier)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query credential: %w", err)
@@ -196,14 +196,7 @@ func (r *credentialRepositoryImpl) SoftDeleteCredential(ctx context.Context, tx 
 
 // FindByAccountAndTypeForUpdate finds credentials by account ID and type with row-level locking.
 func (r *credentialRepositoryImpl) FindByAccountAndTypeForUpdate(ctx context.Context, tx *sql.Tx, accountID string, credType domain.CredentialType) ([]*domain.Credential, error) {
-	query := `
-		SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
-		       metadata, created_at, verified_at, last_used_at, deleted_at
-		FROM account_credentials
-		WHERE account_id = $1 AND credential_type = $2 AND deleted_at IS NULL
-		ORDER BY primary_credential DESC, created_at ASC
-		FOR UPDATE
-	`
+	query := credentialsByAccountAndTypeQuery + "\n\tFOR UPDATE"
 
 	rows, err := tx.QueryContext(ctx, query, accountID, credType)
 	if err != nil {

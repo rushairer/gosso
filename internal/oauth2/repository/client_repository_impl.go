@@ -125,7 +125,7 @@ func (r *oauth2ClientRepositoryImpl) FindByClientID(ctx context.Context, clientI
 
 	client, err := scanOAuth2Client(r.db.QueryRowContext(ctx, query, clientID))
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, domain.ErrClientNotFound
+		return nil, fmt.Errorf("%w: %s", domain.ErrClientNotFound, clientID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find oauth2_client by client_id: %w", err)
@@ -167,7 +167,7 @@ func (r *oauth2ClientRepositoryImpl) Update(ctx context.Context, tx *sql.Tx, cli
 	).Scan(&client.UpdatedAt)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return domain.ErrClientNotFound
+		return fmt.Errorf("%w: %s", domain.ErrClientNotFound, client.ID)
 	}
 	if err != nil {
 		return fmt.Errorf("update oauth2_client: %w", err)
@@ -187,7 +187,7 @@ func (r *oauth2ClientRepositoryImpl) SoftDelete(ctx context.Context, tx *sql.Tx,
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rows == 0 {
-		return domain.ErrClientNotFound
+		return fmt.Errorf("%w: %s", domain.ErrClientNotFound, id)
 	}
 	return nil
 }

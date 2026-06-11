@@ -101,7 +101,7 @@ func sessionExample(ctx context.Context, redisClient *cache.RedisClient, logger 
 		Username:  "johndoe",
 		IP:        "192.168.1.100",
 		UserAgent: "Mozilla/5.0",
-		Metadata: map[string]string{
+		Metadata: map[string]any{
 			"device": "desktop",
 			"os":     "macOS",
 		},

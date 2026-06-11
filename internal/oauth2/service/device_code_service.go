@@ -73,15 +73,9 @@ func (s *DeviceCodeService) CreateDeviceCode(ctx context.Context, clientID strin
 	formattedUserCode := userCode[:4] + "-" + userCode[4:]
 
 	now := time.Now()
-	dc := &domain.DeviceCode{
-		DeviceCode: deviceCodeStr,
-		UserCode:   formattedUserCode,
-		ClientID:   clientID,
-		Scopes:     scopes,
-		Status:     domain.DeviceCodeStatusPending,
-		ExpiresAt:  now.Add(s.expiry),
-		LastPollAt: time.Time{},
-		Interval:   int(s.interval.Seconds()),
+	dc, err := domain.NewDeviceCode(deviceCodeStr, formattedUserCode, clientID, scopes, now.Add(s.expiry), int(s.interval.Seconds()))
+	if err != nil {
+		return nil, fmt.Errorf("create device code: %w", err)
 	}
 
 	data, err := json.Marshal(dc)

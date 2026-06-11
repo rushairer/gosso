@@ -55,7 +55,7 @@ func (r *consentRepositoryImpl) FindByAccountAndClient(ctx context.Context, acco
 
 	consent, err := scanConsent(r.db.QueryRowContext(ctx, query, accountID, clientID))
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, domain.ErrConsentNotFound
+		return nil, fmt.Errorf("%w: account=%s client=%s", domain.ErrConsentNotFound, accountID, clientID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find consent: %w", err)
@@ -76,7 +76,7 @@ func (r *consentRepositoryImpl) Delete(ctx context.Context, tx *sql.Tx, accountI
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return domain.ErrConsentNotFound
+		return fmt.Errorf("%w: account=%s client=%s", domain.ErrConsentNotFound, accountID, clientID)
 	}
 	return nil
 }

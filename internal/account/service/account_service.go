@@ -327,7 +327,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		// Re-check inside transaction to prevent concurrent deletion
-		account, err := s.accountRepo.FindByIDTx(ctx, tx, accountID)
+		account, err := s.accountRepo.FindByIDIncludingDeletedTx(ctx, tx, accountID)
 		if err != nil {
 			return fmt.Errorf("find account: %w", err)
 		}
@@ -702,7 +702,7 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 	}
 
 	if req.DisplayName == "" {
-		return errors.New("display name is required")
+		return domain.ErrDisplayNameRequired
 	}
 
 	// Validate email format

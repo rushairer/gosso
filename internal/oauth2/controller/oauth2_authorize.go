@@ -308,11 +308,12 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.consentSvc.SaveConsent(ctx, &oauth2Domain.Consent{
-		AccountID: accountIDStr,
-		ClientID:  req.ClientID,
-		Scopes:    scopes,
-	}); err != nil {
+	consent, err := oauth2Domain.NewConsent(accountIDStr, req.ClientID, scopes)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
+	}
+	if err := c.consentSvc.SaveConsent(ctx, consent); err != nil {
 		c.logger.Error("Failed to save consent", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
