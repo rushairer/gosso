@@ -17,9 +17,9 @@ import (
 )
 
 // clientDeleteErrorMap maps client deletion errors to HTTP responses.
-var clientDeleteErrorMap = map[error]controllerutil.ErrorMapping{
-	oauth2Domain.ErrClientNotFound:    {Status: http.StatusNotFound, Message: "client not found"},
-	oauth2Service.ErrClientAccessDenied: {Status: http.StatusForbidden, Message: "access denied"},
+var clientDeleteErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: oauth2Domain.ErrClientNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "client not found"}},
+	{Sentinel: oauth2Service.ErrClientAccessDenied, Mapping: controllerutil.ErrorMapping{Status: http.StatusForbidden, Message: "access denied"}},
 }
 
 // ClientController handles OAuth2 client management endpoints

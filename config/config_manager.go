@@ -92,6 +92,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("web_server.read_header_timeout", "2s")
 	v.SetDefault("web_server.write_timeout", "30s")
 	v.SetDefault("web_server.request_timeout", "10s")
+	v.SetDefault("web_server.shutdown_timeout", "30s")
 	v.SetDefault("web_server.max_body_size", 10*1024*1024) // 10MB
 	v.SetDefault("web_server.rate_limits.login", 5)
 	v.SetDefault("web_server.rate_limits.token", 10)
@@ -115,7 +116,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("auth.access_token_expiry", "15m")
 	v.SetDefault("auth.refresh_token_expiry", "168h")
 	v.SetDefault("auth.session_ttl", "24h")
-	v.SetDefault("auth.issuer", "gosso")
+	v.SetDefault("auth.issuer", "http://localhost:8080")
 	v.SetDefault("auth.authorization_code_expiry", "5m")
 	v.SetDefault("auth.device_code_expiry", "10m")
 	v.SetDefault("auth.device_code_interval", "5s")

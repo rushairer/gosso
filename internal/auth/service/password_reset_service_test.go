@@ -409,7 +409,7 @@ func TestRequestReset_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Len(t, emailSvc.sentLinks, 1)
-	assert.Contains(t, emailSvc.sentLinks[0], "http://localhost:3000/reset-password?token=")
+	assert.Contains(t, emailSvc.sentLinks[0], "http://localhost:3000/reset-password#token=")
 }
 
 func TestRequestReset_CooldownActive(t *testing.T) {

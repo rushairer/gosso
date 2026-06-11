@@ -17,14 +17,14 @@ import (
 )
 
 // passkeyLoginErrorMap maps passkey login errors to HTTP responses.
-var passkeyLoginErrorMap = map[error]controllerutil.ErrorMapping{
-	authService.ErrPasskeyNotFound: {Status: http.StatusNotFound, Message: "no passkey found for this account"},
+var passkeyLoginErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: authService.ErrPasskeyNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "no passkey found for this account"}},
 }
 
 // passkeyDeleteErrorMap maps passkey credential deletion errors to HTTP responses.
-var passkeyDeleteErrorMap = map[error]controllerutil.ErrorMapping{
-	authService.ErrCredentialOwnership:     {Status: http.StatusForbidden, Message: "credential does not belong to account"},
-	accountRepository.ErrCredentialNotFound: {Status: http.StatusNotFound, Message: "credential not found"},
+var passkeyDeleteErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: authService.ErrCredentialOwnership, Mapping: controllerutil.ErrorMapping{Status: http.StatusForbidden, Message: "credential does not belong to account"}},
+	{Sentinel: accountRepository.ErrCredentialNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "credential not found"}},
 }
 
 // passkeyAuthService defines the auth service methods used by PasskeyController.

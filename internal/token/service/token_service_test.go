@@ -465,9 +465,10 @@ func TestRevokeAccountTokens(t *testing.T) {
 	require.NoError(t, err)
 
 	// Revoke all tokens for account
-	// Sleep 1s to ensure revocation timestamp (Unix-second precision) lands
-	// in a different second than the token's IssuedAt.
-	time.Sleep(time.Second)
+	// Wait until the next second boundary so the revocation timestamp
+	// (stored as Unix seconds) lands strictly after the token's IssuedAt.
+	nextSecond := time.Now().Truncate(time.Second).Add(time.Second)
+	time.Sleep(time.Until(nextSecond))
 
 	err = svc.RevokeAccountTokens(ctx, parsed.AccountID)
 	require.NoError(t, err)

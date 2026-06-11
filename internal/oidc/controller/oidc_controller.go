@@ -21,8 +21,8 @@ import (
 )
 
 // userInfoErrorMap maps user info service errors to HTTP responses.
-var userInfoErrorMap = map[error]controllerutil.ErrorMapping{
-	accountService.ErrAccountNotActive: {Status: http.StatusForbidden, Message: "account is not active"},
+var userInfoErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: accountService.ErrAccountNotActive, Mapping: controllerutil.ErrorMapping{Status: http.StatusForbidden, Message: "account is not active"}},
 }
 
 // OIDCController OIDC protocol controller

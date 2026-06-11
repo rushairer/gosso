@@ -50,10 +50,10 @@ type Credential struct {
 
 // NewCredential creates a new credential.
 // For password credentials, use NewPasswordCredential instead — this function
-// panics if called with CredentialTypePassword to prevent accidental plaintext storage.
-func NewCredential(accountID string, credType CredentialType, identifier *string, value string) *Credential {
+// returns an error if called with CredentialTypePassword to prevent accidental plaintext storage.
+func NewCredential(accountID string, credType CredentialType, identifier *string, value string) (*Credential, error) {
 	if credType == CredentialTypePassword {
-		panic("NewCredential must not be used with CredentialTypePassword; use NewPasswordCredential instead")
+		return nil, fmt.Errorf("NewCredential must not be used with CredentialTypePassword; use NewPasswordCredential instead")
 	}
 	return &Credential{
 		ID:         uuid.New().String(),
@@ -62,9 +62,9 @@ func NewCredential(accountID string, credType CredentialType, identifier *string
 		Identifier: identifier,
 		Value:      value,
 		Verified:   false,
-		Metadata:   make(map[string]interface{}),
+		Metadata:   make(map[string]any),
 		CreatedAt:  time.Now(),
-	}
+	}, nil
 }
 
 // NewPasswordCredential creates a password credential (auto-hashed).
@@ -80,7 +80,7 @@ func NewPasswordCredential(accountID string, plainPassword string) (*Credential,
 		Type:      CredentialTypePassword,
 		Value:     hashedPassword,
 		Verified:  true, // password credentials are verified at creation
-		Metadata:  make(map[string]interface{}),
+		Metadata:  make(map[string]any),
 		CreatedAt: time.Now(),
 	}, nil
 }
@@ -93,7 +93,7 @@ func NewEmailCredential(accountID string, email string) *Credential {
 		Type:       CredentialTypeEmail,
 		Identifier: &email,
 		Verified:   false,
-		Metadata:   make(map[string]interface{}),
+		Metadata:   make(map[string]any),
 		CreatedAt:  time.Now(),
 	}
 }
@@ -106,7 +106,7 @@ func NewPhoneCredential(accountID string, phone string) *Credential {
 		Type:       CredentialTypePhone,
 		Identifier: &phone,
 		Verified:   false,
-		Metadata:   make(map[string]interface{}),
+		Metadata:   make(map[string]any),
 		CreatedAt:  time.Now(),
 	}
 }

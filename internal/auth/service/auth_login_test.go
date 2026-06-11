@@ -53,8 +53,6 @@ func TestSafeAuditReason(t *testing.T) {
 
 func TestAuthServiceSetters(t *testing.T) {
 	fixture := setupTestAuthService(t)
-	defer fixture.mr.Close()
-	defer fixture.sqlDB.Close()
 
 	assert.Equal(t, defaultLoginRateLimitWindow, fixture.svc.loginRateLimitWindow)
 	assert.Equal(t, defaultLoginMaxAttempts, fixture.svc.loginMaxAttempts)
@@ -89,8 +87,6 @@ func TestAuthServiceSetters(t *testing.T) {
 
 func TestLoginByUsernamePassword_Success(t *testing.T) {
 	fixture := setupTestAuthService(t)
-	defer fixture.mr.Close()
-	defer fixture.sqlDB.Close()
 
 	fixture.seedTestAccount("account-001", "testuser", "password123")
 
@@ -627,7 +623,7 @@ func TestVerifyMFALogin_UnsupportedMFAType(t *testing.T) {
 
 	result, err := fixture.svc.VerifyMFALogin(context.Background(), mfaToken, "123456", "sms", "127.0.0.1", "test-agent")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported mfa type")
+	assert.Contains(t, err.Error(), "unsupported")
 	assert.Nil(t, result)
 }
 
@@ -654,8 +650,6 @@ func TestVerifyMFALogin_PasskeyNotVerified(t *testing.T) {
 
 func TestVerifyMFALogin_Success(t *testing.T) {
 	fixture := setupTestAuthService(t)
-	defer fixture.mr.Close()
-	defer fixture.sqlDB.Close()
 
 	fixture.seedTestAccount("account-001", "testuser", "password123")
 

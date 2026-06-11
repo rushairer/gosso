@@ -33,7 +33,7 @@ func NewRole(name string, description *string) (*Role, error) {
 		Name:        name,
 		Description: description,
 		Permissions: make([]string, 0),
-		Metadata:    make(map[string]interface{}),
+		Metadata:    make(map[string]any),
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}, nil

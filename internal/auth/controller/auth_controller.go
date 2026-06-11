@@ -3,9 +3,9 @@ package controller
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"net/http"
 	"net/mail"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -23,13 +23,13 @@ import (
 )
 
 // loginErrorMap maps login service errors to HTTP responses.
-var loginErrorMap = map[error]controllerutil.ErrorMapping{
-	authService.ErrServiceUnavailable: {Status: http.StatusServiceUnavailable, Message: "service temporarily unavailable"},
+var loginErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: authService.ErrServiceUnavailable, Mapping: controllerutil.ErrorMapping{Status: http.StatusServiceUnavailable, Message: "service temporarily unavailable"}},
 }
 
 // revokeSessionErrorMap maps session revocation errors to HTTP responses.
-var revokeSessionErrorMap = map[error]controllerutil.ErrorMapping{
-	sessionService.ErrSessionAccessDenied: {Status: http.StatusForbidden, Message: "session not found or access denied"},
+var revokeSessionErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: sessionService.ErrSessionAccessDenied, Mapping: controllerutil.ErrorMapping{Status: http.StatusForbidden, Message: "session not found or access denied"}},
 }
 
 // authServiceDeps defines the auth service methods used by AuthController.
@@ -624,11 +624,10 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 
 	if err := c.verificationSvc.SendCode(ctx, req.Type, req.Identifier, tc.AccountID); err != nil {
 		c.logger.Warn("Failed to send verification code", zap.String("type", req.Type), zap.Error(err))
-		errMsg := err.Error()
 		switch {
-		case strings.Contains(errMsg, "please wait"):
+		case errors.Is(err, authService.ErrCooldownActive):
 			ctx.JSON(http.StatusTooManyRequests, gouno.NewErrorResponse(http.StatusTooManyRequests, "too many requests, please try again later"))
-		case strings.Contains(errMsg, "unsupported"):
+		case errors.Is(err, authService.ErrUnsupportedType):
 			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "unsupported credential type"))
 		default:
 			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to send verification code"))

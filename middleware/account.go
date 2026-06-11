@@ -13,12 +13,12 @@ import (
 func GetAccountID(ctx *gin.Context) (string, bool) {
 	raw, exists := ctx.Get(ContextKeyAccountID)
 	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+		ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
 		return "", false
 	}
 	accountID, ok := raw.(string)
 	if !ok || accountID == "" {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
+		ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "unauthorized"))
 		return "", false
 	}
 	return accountID, true

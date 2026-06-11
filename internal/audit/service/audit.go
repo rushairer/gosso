@@ -45,9 +45,9 @@ type Auditor struct {
 // before process exit to flush pending records.
 // If pipelineCfg is non-nil, its BufferSize/FlushSize/FlushInterval values override
 // the built-in defaults (zero-valued fields keep the default).
-func NewAuditor(_ context.Context, db *sql.DB, pipelineCfg *config.TaskPipelineConfig, logger *zap.Logger) *Auditor {
+func NewAuditor(ctx context.Context, db *sql.DB, pipelineCfg *config.TaskPipelineConfig, logger *zap.Logger) *Auditor {
 	logger = utility.EnsureLogger(logger)
-	auditorCtx, cancel := context.WithCancel(context.Background())
+	auditorCtx, cancel := context.WithCancel(ctx)
 	auditor := Auditor{db: db, cancel: cancel, logger: logger, drainGracePeriod: auditDrainGracePeriod}
 
 	bufferSize := uint32(auditBufferSize)

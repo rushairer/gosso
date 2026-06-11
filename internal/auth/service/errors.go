@@ -12,6 +12,7 @@ var (
 	ErrInvalidMFAToken      = errors.New("invalid or expired MFA token")
 	ErrInvalidMFATokenScope = errors.New("invalid MFA token scope")
 	ErrInvalidMFACode       = errors.New("invalid MFA code")
+	ErrUnsupportedMFAType   = errors.New("unsupported MFA type")
 	ErrPasskeyNotAvailable  = errors.New("passkey not available")
 	ErrPasskeyNotVerified   = errors.New("passkey verification not completed")
 

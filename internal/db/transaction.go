@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
+	"log"
 )
 
 // RunInTransaction executes fn within a database transaction with LevelReadCommitted isolation.
@@ -25,12 +25,12 @@ func RunInTransactionIsolation(ctx context.Context, db *sql.DB, isolation sql.Is
 	defer func() {
 		if p := recover(); p != nil {
 			if rerr := tx.Rollback(); rerr != nil {
-				fmt.Fprintf(os.Stderr, "rollback failed during panic recovery: %v\n", rerr)
+				log.Printf("rollback failed during panic recovery: %v", rerr)
 			}
 			panic(p)
 		} else if panicked || err != nil {
 			if rerr := tx.Rollback(); rerr != nil {
-				fmt.Fprintf(os.Stderr, "rollback failed: %v\n", rerr)
+				log.Printf("rollback failed: %v", rerr)
 				if err != nil {
 					err = errors.Join(err, fmt.Errorf("transaction rollback failed: %w", rerr))
 				} else {

@@ -34,6 +34,7 @@ type WebServerConfig struct {
 	ReadHeaderTimeout time.Duration    `mapstructure:"read_header_timeout"`
 	WriteTimeout      time.Duration    `mapstructure:"write_timeout"`
 	RequestTimeout    time.Duration    `mapstructure:"request_timeout"`
+	ShutdownTimeout  time.Duration    `mapstructure:"shutdown_timeout"`
 	MaxBodySize       int64            `mapstructure:"max_body_size"`
 	TrustedProxies    []string         `mapstructure:"trusted_proxies"`
 	RateLimits        RateLimitsConfig `mapstructure:"rate_limits"`

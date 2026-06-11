@@ -30,7 +30,7 @@ services:
       sh -c "
         apk add --no-cache git ca-certificates tzdata &&
         if ! command -v air &> /dev/null; then
-          go install github.com/air-verse/air@latest;
+          go install github.com/air-verse/air@v1.61.7;
         fi &&
         air -c .air.toml
       "

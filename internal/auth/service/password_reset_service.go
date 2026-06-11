@@ -206,10 +206,9 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 	if err != nil {
 		return fmt.Errorf("invalid password reset base URL: %w", err)
 	}
-	q := u.Query()
-	q.Set("token", token)
-	u.RawQuery = q.Encode()
-	resetLink := u.String()
+	// Use fragment (#) instead of query (?) to prevent token leakage in server logs,
+	// HTTP Referer headers, and browser history.
+	resetLink := u.String() + "#token=" + url.QueryEscape(token)
 	if err := s.emailSender.SendPasswordResetLink(ctx, email, resetLink); err != nil {
 		s.logger.Error("Failed to send password reset email", zap.Error(err), zap.String("email", utility.MaskEmail(email)))
 		return fmt.Errorf("send reset email: %w", err)

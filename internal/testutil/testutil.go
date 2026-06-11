@@ -73,7 +73,10 @@ func SetupTestEnv(ctx context.Context) (*TestEnv, error) {
 	}
 	cfg := cm.Config()
 
-	logger, _ := zap.NewDevelopment()
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		return nil, fmt.Errorf("create logger: %w", err)
+	}
 
 	// Connect to Postgres
 	dbDriver := cfg.DatabaseConfig.GetDefaultDriver()
@@ -127,6 +130,17 @@ func (e *TestEnv) Cleanup() {
 	for i := len(e.cleanups) - 1; i >= 0; i-- {
 		e.cleanups[i]()
 	}
+}
+
+// SetupTestEnvT is like SetupTestEnv but automatically registers cleanup with t.Cleanup().
+func SetupTestEnvT(t *testing.T) *TestEnv {
+	t.Helper()
+	env, err := SetupTestEnv(context.Background())
+	if err != nil {
+		t.Fatalf("setup test env: %v", err)
+	}
+	t.Cleanup(env.Cleanup)
+	return env
 }
 
 // TruncateAll truncates all test data between tests.

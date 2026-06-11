@@ -172,6 +172,8 @@ func (s *MFAService) EnrollTOTP(ctx context.Context, accountID string) (*TOTPEnr
 			return nil, fmt.Errorf("encrypt totp secret: %w", err)
 		}
 		storedSecret = enc
+	} else {
+		s.logger.Warn("TOTP encryption key not configured; storing secret in plaintext")
 	}
 
 	// Delete existing unverified TOTP credentials and save the new one atomically.
@@ -275,12 +277,11 @@ func (s *MFAService) ActivateTOTP(ctx context.Context, accountID, code string) e
 
 // DisableTOTP disables TOTP
 func (s *MFAService) DisableTOTP(ctx context.Context, accountID string) error {
-	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
-	if err != nil {
-		return fmt.Errorf("find totp credential: %w", err)
-	}
-
-	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		creds, err := s.credentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, accountDomain.CredentialTypeTOTP)
+		if err != nil {
+			return fmt.Errorf("find totp credential: %w", err)
+		}
 		for _, c := range creds {
 			if !c.IsDeleted() {
 				if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
@@ -290,7 +291,7 @@ func (s *MFAService) DisableTOTP(ctx context.Context, accountID string) error {
 		}
 
 		// Also delete all backup codes
-		backupCreds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeBackupCode)
+		backupCreds, err := s.credentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, accountDomain.CredentialTypeBackupCode)
 		if err != nil {
 			return fmt.Errorf("find backup code credentials: %w", err)
 		}

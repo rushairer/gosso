@@ -66,7 +66,7 @@ func (s *ConsentService) GetConsent(ctx context.Context, accountID, clientID str
 	consent, err := s.consentRepo.FindByAccountAndClient(ctx, accountID, clientID)
 	if err != nil {
 		if err == domain.ErrConsentNotFound {
-			return nil, nil
+			return nil, domain.ErrConsentNotFound
 		}
 		return nil, fmt.Errorf("get consent from DB: %w", err)
 	}

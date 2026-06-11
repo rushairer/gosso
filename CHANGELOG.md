@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- `SoftDeleteAccount` now uses transactional read (`FindByIDTx`) for idempotency check — prevents concurrent deletion race condition (`internal/account/service/account_service.go`).
+- `GetAccountID` middleware now calls `ctx.Abort()` on failure — prevents handlers from continuing after 401 response (`middleware/account.go`).
+- OAuth2 Token endpoint Basic Auth now takes precedence over body parameters per RFC 6749 §2.3.1 (`internal/oauth2/controller/oauth2_token.go`).
+- `HandleServiceError` now uses ordered slice instead of map — eliminates non-deterministic HTTP status codes (`internal/controllerutil/error_handler.go`).
+- Authorization codes no longer store plaintext code in Redis value — only the hash key is used (`internal/oauth2/service/auth_code_service.go`).
+- `DisableTOTP` now fetches credentials inside transaction with `SELECT FOR UPDATE` — eliminates TOCTOU race condition (`internal/auth/service/mfa_service.go`).
+- TOTP enrollment now logs a warning when encryption key is not configured (`internal/auth/service/mfa_service.go`).
+- Client authentication now calls bcrypt with dummy hash when secret is empty — normalizes response timing to prevent timing attacks (`internal/oauth2/service/client_auth_service.go`).
+- IP normalization is now shared between login and token refresh flows — prevents IPv4-mapped IPv6 mismatch (`internal/utility/iputil.go`).
+- Password reset token now sent as URL fragment (#) instead of query parameter (?) — prevents leakage in server logs and Referer headers (`internal/auth/service/password_reset_service.go`).
+- Device code user codes are no longer logged in plaintext — only first 4 characters logged for debugging (`internal/oauth2/service/device_code_service.go`).
+- Token endpoint responses now include `Cache-Control: no-store` and `Pragma: no-cache` headers per RFC 6749 §5.1 (`internal/oauth2/controller/oauth2_token.go`).
+- Consent denial now redirects to client with `error=access_denied` per RFC 6749 §4.1.2.1 instead of returning JSON 400 (`internal/oauth2/controller/oauth2_authorize.go`).
+- Introspect endpoint now accepts `application/x-www-form-urlencoded` per RFC 7662 (`internal/oauth2/controller/oauth2_revoke.go`).
+- Private key file now written atomically via temp file + rename — prevents corruption on crash (`internal/token/service/key_service.go`).
+- `NewCredential` now returns error instead of panicking on `CredentialTypePassword` (`internal/account/domain/credential.go`).
+- `GetConsent` now returns `ErrConsentNotFound` instead of `(nil, nil)` for not-found — consistent error handling (`internal/oauth2/service/consent_service.go`).
 - Passkey login endpoints (`/passkey/login/begin`, `/passkey/login/complete`) now have rate limiting — prevents brute-force and account enumeration (`internal/auth/controller/passkey_controller.go`).
 - Password reset and verification rate limiters now fail-closed when Redis is unavailable — prevents brute-force during Redis outages (`router/web.go`).
 - `GetClient` and `UpdateClient` now return 403 for both not-found and wrong-account — prevents client_id enumeration (`internal/oauth2/controller/client_controller.go`).
@@ -70,6 +87,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Added `architecture-check` CI job and per-module coverage report to GitHub Actions (`.github/workflows/ci.yml`).
 - PR template now includes Architecture Invariants checklist and Review Scope dimensions (`.github/PULL_REQUEST_TEMPLATE.md`).
 - CONTRIBUTING.md now references Architecture Invariants and ADR documents.
+- `HandleServiceError` now uses ordered `[]ErrorRule` slice instead of `map[error]ErrorMapping` — ensures deterministic error matching (`internal/controllerutil/error_handler.go`).
+- Error handling in `SendVerification` now uses sentinel errors (`ErrCooldownActive`, `ErrUnsupportedType`) instead of `strings.Contains` on error messages (`internal/auth/controller/auth_controller.go`).
+- `verifyMFACode` default case now returns `ErrUnsupportedMFAType` sentinel error (`internal/auth/service/auth_login.go`).
+- `db/transaction.go` rollback failures now use `log.Printf` instead of `fmt.Fprintf(os.Stderr, ...)`.
+- `NewAuditor` now accepts and uses the caller's context instead of ignoring it (`internal/audit/service/audit.go`).
+- `stringPtr` helper moved to shared `internal/utility/ptr.go` — eliminates duplication across `account_service.go` and `token_service.go`.
+- `interface{}` replaced with `any` across domain types (`internal/account/domain/`).
+- `MaxPasswordLength` comment updated to reference Argon2id instead of bcrypt (`internal/utility/password.go`).
+- `auth.issuer` default value changed from `"gosso"` to `"http://localhost:8080"` — valid URL for development (`config/config_manager.go`).
+- Production Docker image now only copies `production.yaml` instead of all config files (`Dockerfile`).
+- `test.yaml` `redis.max_active_conns` reduced from 6000 to 100 (`config/test.yaml`).
+- Shutdown timeout now configurable via `web_server.shutdown_timeout` (default 30s) (`cmd/gouno/web.go`).
+- `passwordResetSvc.Wait()` now has nil guard to prevent panic when disabled (`cmd/gouno/web.go`).
+- `gosec` linter added to golangci-lint config (`.golangci.yml`).
+- Air version pinned to `@v1.61.7` in development compose (`docker-compose.development.yml`).
+- Test cleanup now uses `t.Cleanup()` pattern in auth test fixtures (`internal/auth/service/auth_helpers_test.go`).
+- `testutil.SetupTestEnv` now properly handles logger creation errors (`internal/testutil/testutil.go`).
+- Added `SetupTestEnvT` helper with automatic `t.Cleanup` registration (`internal/testutil/testutil.go`).
+- Added SMS service stub test (`internal/notification/service/sms_service_test.go`).
+- `FindByIDTx` added to `AccountRepository` interface for transactional reads (`internal/account/repository/account_repository.go`).
+- Production YAML config files now document `GOUNO_` environment variable override mechanism (`config/production.yaml`).
+- `DisableTOTP` now uses `SELECT FOR UPDATE` inside transaction for credential lookup — eliminates TOCTOU (`internal/auth/service/mfa_service.go`).
+- Architecture trade-offs documented: exported repositories in `AccountModule`, late-binding type assertions (`internal/account/module.go`, `internal/account/service/late_bind.go`).
 
 ### Added
 - Architecture Invariants document (`doc/ARCHITECTURE_INVARIANTS.md`) — 8 categories of non-negotiable rules with CI enforcement levels.
@@ -80,6 +120,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Token lifecycle audit logging: `auth.token.rotate`, `auth.token.revoke` actions for refresh token rotation and revocation (`internal/token/service/token_service.go`).
 - `FindClientForAccount` method on `OAuth2ClientService` — encapsulates FindByClientID + ownership verification (`internal/oauth2/service/client_service.go`).
 - Test coverage for scan helpers (4 test files, ~20 test cases) and error handler (9 test cases).
+- `ErrorRule` type for ordered error-to-HTTP-status mapping (`internal/controllerutil/error_handler.go`).
+- `NormalizeIP` shared utility for IP address canonicalization (`internal/utility/iputil.go`).
+- `StringPtr` shared utility helper (`internal/utility/ptr.go`).
+- `FindByIDTx` transactional read method on `AccountRepository` (`internal/account/repository/account_repository.go`).
+- `ErrCooldownActive`, `ErrUnsupportedType`, `ErrUnsupportedMFAType`, `ErrConsentNotFound` sentinel errors.
+- `SetupTestEnvT` test helper with automatic cleanup registration (`internal/testutil/testutil.go`).
+- SMS service stub test (`internal/notification/service/sms_service_test.go`).
+- Configurable `shutdown_timeout` in `WebServerConfig` (`config/config.go`).
 
 ### Fixed
 - `ErrCredentialOwnership` latent bug: inline `errors.New("credential does not belong to this account")` in `auth_service.go` would never match the sentinel `ErrCredentialOwnership` (`"credential does not belong to account"`) — now correctly returns the sentinel (`internal/auth/service/auth_service.go`).

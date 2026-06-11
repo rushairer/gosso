@@ -870,9 +870,12 @@ func TestVerifyTOTP_DecryptionFailure(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestDisableTOTP_FindByAccountAndTypeError(t *testing.T) {
-	sqlDB, _, err := sqlmock.New()
+	sqlDB, sqlMock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer sqlDB.Close()
+
+	sqlMock.ExpectBegin()
+	sqlMock.ExpectRollback()
 
 	credRepo := &dbMockCredentialRepo{
 		mockCredentialRepo: &mockCredentialRepo{

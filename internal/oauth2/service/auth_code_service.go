@@ -66,7 +66,12 @@ func (s *AuthCodeService) GenerateCode(
 		AuthTime:            now, // User just authenticated/consented
 	}
 
-	data, err := json.Marshal(ac)
+	// Clear the plaintext code before storing in Redis — only the hash is used as the key.
+	// The raw code is returned to the caller but never persisted.
+	storedCode := *ac
+	storedCode.Code = ""
+
+	data, err := json.Marshal(storedCode)
 	if err != nil {
 		return nil, fmt.Errorf("marshal authorization code: %w", err)
 	}

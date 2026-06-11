@@ -9,6 +9,10 @@ import "fmt"
 // operations (e.g. SoftDeleteAccount) depend on SessionService and
 // OAuth2ClientDeleter which are only available after AuthModule/OAuth2Module
 // initialization.
+//
+// NOTE: Late-binding uses runtime type assertions on the service implementation.
+// This means test doubles that implement AccountService but aren't *accountServiceImpl
+// will fail to bind. Consider refactoring to functional options at construction time.
 
 // BindSessionRevoker sets the session revoker on an AccountService after construction.
 // Returns an error if svc is not an *accountServiceImpl.

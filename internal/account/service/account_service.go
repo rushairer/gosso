@@ -46,7 +46,7 @@ type AccountService interface {
 	ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error
 
 	// BindFederatedIdentity binds a third-party identity to the account.
-	BindFederatedIdentity(ctx context.Context, accountID string, provider domain.Provider, providerUserID string, profile map[string]interface{}) error
+	BindFederatedIdentity(ctx context.Context, accountID string, provider domain.Provider, providerUserID string, profile map[string]any) error
 
 	// UnbindFederatedIdentity unbinds a third-party identity from the account.
 	UnbindFederatedIdentity(ctx context.Context, accountID, identityID string) error
@@ -257,7 +257,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountRegister,
 		audit.IPFromContext(ctx),
-		stringPtr(account.ID),
+		utility.StringPtr(account.ID),
 		utility.MustMarshalJSON(map[string]any{"account_id": account.ID}),
 		auditMetaFromContext(ctx),
 	))
@@ -289,7 +289,7 @@ func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountUpdate,
 		audit.IPFromContext(ctx),
-		stringPtr(account.ID),
+		utility.StringPtr(account.ID),
 		utility.MustMarshalJSON(map[string]any{"account_id": account.ID}),
 		auditMetaFromContext(ctx),
 	))
@@ -319,7 +319,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		// Re-check inside transaction to prevent concurrent deletion
-		account, err := s.accountRepo.FindByID(ctx, accountID)
+		account, err := s.accountRepo.FindByIDTx(ctx, tx, accountID)
 		if err != nil {
 			return fmt.Errorf("find account: %w", err)
 		}
@@ -363,7 +363,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountDelete,
 		audit.IPFromContext(ctx),
-		stringPtr(accountID),
+		utility.StringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
 		auditMetaFromContext(ctx),
 	))
@@ -408,7 +408,7 @@ func (s *accountServiceImpl) VerifyCredential(ctx context.Context, accountID str
 	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionCredentialVerify,
 		audit.IPFromContext(ctx),
-		stringPtr(accountID),
+		utility.StringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "credential_type": credential.Type}),
 		auditMetaFromContext(ctx),
 	))
@@ -470,7 +470,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionPasswordChange,
 		audit.IPFromContext(ctx),
-		stringPtr(accountID),
+		utility.StringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
 		auditMetaFromContext(ctx),
 	))
@@ -479,7 +479,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 }
 
 // BindFederatedIdentity binds a third-party identity.
-func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountID string, provider domain.Provider, providerUserID string, profile map[string]interface{}) error {
+func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountID string, provider domain.Provider, providerUserID string, profile map[string]any) error {
 	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
 		return err
 	}
@@ -527,7 +527,7 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionFederatedIdentityBind,
 		audit.IPFromContext(ctx),
-		stringPtr(accountID),
+		utility.StringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "provider": string(provider), "provider_user_id": providerUserID}),
 		auditMetaFromContext(ctx),
 	))
@@ -552,7 +552,7 @@ func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accoun
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionFederatedIdentityUnbind,
 		audit.IPFromContext(ctx),
-		stringPtr(accountID),
+		utility.StringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "identity_id": identityID}),
 		auditMetaFromContext(ctx),
 	))
@@ -585,7 +585,7 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionRoleAssign,
 		audit.IPFromContext(ctx),
-		stringPtr(accountID),
+		utility.StringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
 		auditMetaFromContext(ctx),
 	))
@@ -609,7 +609,7 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionRoleRemove,
 		audit.IPFromContext(ctx),
-		stringPtr(accountID),
+		utility.StringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
 		auditMetaFromContext(ctx),
 	))
@@ -644,7 +644,7 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountSuspend,
 		audit.IPFromContext(ctx),
-		stringPtr(accountID),
+		utility.StringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
 		auditMetaFromContext(ctx),
 	))
@@ -663,7 +663,7 @@ func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID stri
 	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountActivate,
 		audit.IPFromContext(ctx),
-		stringPtr(accountID),
+		utility.StringPtr(accountID),
 		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
 		auditMetaFromContext(ctx),
 	))
@@ -731,9 +731,6 @@ func (s *accountServiceImpl) checkCredentialExists(ctx context.Context, credType
 	return nil
 }
 
-func stringPtr(s string) *string {
-	return &s
-}
 
 // auditMetaFromContext extracts IP and user-agent from context for audit logging.
 func auditMetaFromContext(ctx context.Context) json.RawMessage {

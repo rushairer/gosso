@@ -121,7 +121,9 @@ func TestNewPhoneCredential(t *testing.T) {
 
 func TestNewCredential(t *testing.T) {
 	email := "user@example.com"
-	cred := NewCredential("acc-1", CredentialTypeTOTP, &email, "secret-value")
+	cred, err := NewCredential("acc-1", CredentialTypeTOTP, &email, "secret-value")
+	require.NoError(t, err)
+	require.NotNil(t, cred)
 	assert.NotEmpty(t, cred.ID)
 	assert.Equal(t, "acc-1", cred.AccountID)
 	assert.Equal(t, CredentialTypeTOTP, cred.Type)

@@ -23,6 +23,10 @@ type AccountRepository interface {
 	// FindByID finds an account by ID
 	FindByID(ctx context.Context, accountID string) (*domain.Account, error)
 
+	// FindByIDTx finds an account by ID within a transaction (for transactional reads).
+	// Use this when the read must participate in the same transaction snapshot as writes.
+	FindByIDTx(ctx context.Context, tx *sql.Tx, accountID string) (*domain.Account, error)
+
 	// FindByUsername finds an account by username
 	FindByUsername(ctx context.Context, username string) (*domain.Account, error)
 

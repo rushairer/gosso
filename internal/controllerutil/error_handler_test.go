@@ -32,11 +32,11 @@ func TestHandleServiceError_SentinelMatch(t *testing.T) {
 	logger := nopLogger()
 
 	sentinel := errors.New("not found")
-	errMap := map[error]ErrorMapping{
-		sentinel: {Status: http.StatusNotFound, Message: "resource not found"},
+	rules := []ErrorRule{
+		{Sentinel: sentinel, Mapping: ErrorMapping{Status: http.StatusNotFound, Message: "resource not found"}},
 	}
 
-	HandleServiceError(ctx, logger, sentinel, errMap, http.StatusInternalServerError, "internal error")
+	HandleServiceError(ctx, logger, sentinel, rules, http.StatusInternalServerError, "internal error")
 
 	assert.Equal(t, http.StatusNotFound, recorder.Code)
 
@@ -51,12 +51,12 @@ func TestHandleServiceError_NoMatch(t *testing.T) {
 	logger := nopLogger()
 
 	sentinel := errors.New("not found")
-	errMap := map[error]ErrorMapping{
-		sentinel: {Status: http.StatusNotFound, Message: "resource not found"},
+	rules := []ErrorRule{
+		{Sentinel: sentinel, Mapping: ErrorMapping{Status: http.StatusNotFound, Message: "resource not found"}},
 	}
 
 	unknownErr := errors.New("something unexpected")
-	HandleServiceError(ctx, logger, unknownErr, errMap, http.StatusInternalServerError, "internal error")
+	HandleServiceError(ctx, logger, unknownErr, rules, http.StatusInternalServerError, "internal error")
 
 	assert.Equal(t, http.StatusInternalServerError, recorder.Code)
 
@@ -70,10 +70,10 @@ func TestHandleServiceError_EmptyErrorMap(t *testing.T) {
 	ctx, recorder := setupTestContext()
 	logger := nopLogger()
 
-	errMap := map[error]ErrorMapping{}
+	rules := []ErrorRule{}
 
 	err := errors.New("any error")
-	HandleServiceError(ctx, logger, err, errMap, http.StatusConflict, "conflict fallback")
+	HandleServiceError(ctx, logger, err, rules, http.StatusConflict, "conflict fallback")
 
 	assert.Equal(t, http.StatusConflict, recorder.Code)
 
@@ -88,12 +88,12 @@ func TestHandleServiceError_NilError(t *testing.T) {
 	logger := nopLogger()
 
 	sentinel := errors.New("not found")
-	errMap := map[error]ErrorMapping{
-		sentinel: {Status: http.StatusNotFound, Message: "resource not found"},
+	rules := []ErrorRule{
+		{Sentinel: sentinel, Mapping: ErrorMapping{Status: http.StatusNotFound, Message: "resource not found"}},
 	}
 
 	assert.NotPanics(t, func() {
-		HandleServiceError(ctx, logger, nil, errMap, http.StatusInternalServerError, "internal error")
+		HandleServiceError(ctx, logger, nil, rules, http.StatusInternalServerError, "internal error")
 	})
 
 	// nil should not match any sentinel, so fallback is used
@@ -110,12 +110,12 @@ func TestHandleServiceError_WrappedErrorMatches(t *testing.T) {
 	logger := nopLogger()
 
 	sentinel := errors.New("forbidden")
-	errMap := map[error]ErrorMapping{
-		sentinel: {Status: http.StatusForbidden, Message: "access denied"},
+	rules := []ErrorRule{
+		{Sentinel: sentinel, Mapping: ErrorMapping{Status: http.StatusForbidden, Message: "access denied"}},
 	}
 
 	wrappedErr := fmt.Errorf("operation failed: %w", sentinel)
-	HandleServiceError(ctx, logger, wrappedErr, errMap, http.StatusInternalServerError, "internal error")
+	HandleServiceError(ctx, logger, wrappedErr, rules, http.StatusInternalServerError, "internal error")
 
 	assert.Equal(t, http.StatusForbidden, recorder.Code)
 
@@ -130,12 +130,12 @@ func TestHandleServiceError_WrappedErrorNoMatch(t *testing.T) {
 	logger := nopLogger()
 
 	sentinel := errors.New("forbidden")
-	errMap := map[error]ErrorMapping{
-		sentinel: {Status: http.StatusForbidden, Message: "access denied"},
+	rules := []ErrorRule{
+		{Sentinel: sentinel, Mapping: ErrorMapping{Status: http.StatusForbidden, Message: "access denied"}},
 	}
 
 	wrappedErr := fmt.Errorf("wrap: %w", errors.New("something else"))
-	HandleServiceError(ctx, logger, wrappedErr, errMap, http.StatusInternalServerError, "internal error")
+	HandleServiceError(ctx, logger, wrappedErr, rules, http.StatusInternalServerError, "internal error")
 
 	assert.Equal(t, http.StatusInternalServerError, recorder.Code)
 }

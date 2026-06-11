@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
@@ -117,16 +116,19 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	<-ctx.Done()
 
 	stop()
-	logger.Info("shutting down gracefully, waiting up to 30s for active requests to finish")
+	logger.Info("shutting down gracefully, waiting for active requests to finish",
+		zap.Duration("timeout", globalConfig.WebServerConfig.ShutdownTimeout))
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), globalConfig.WebServerConfig.ShutdownTimeout)
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		logger.Error("server forced to shutdown", zap.Error(err))
 	}
 
 	// Wait for background goroutines (e.g., session revocation after password reset) to complete
-	modules.passwordResetSvc.Wait()
+	if modules.passwordResetSvc != nil {
+		modules.passwordResetSvc.Wait()
+	}
 
 	// Drain in-flight audit batches before exiting
 	auditAuditor.Wait()

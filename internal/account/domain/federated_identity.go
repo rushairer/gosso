@@ -30,7 +30,7 @@ type FederatedIdentity struct {
 
 // NewFederatedIdentity creates a new federated identity.
 // Returns an error if accountID or providerUserID is empty.
-func NewFederatedIdentity(accountID string, provider Provider, providerUserID string, profile map[string]interface{}) (*FederatedIdentity, error) {
+func NewFederatedIdentity(accountID string, provider Provider, providerUserID string, profile map[string]any) (*FederatedIdentity, error) {
 	if accountID == "" {
 		return nil, errors.New("account ID is required")
 	}
@@ -38,7 +38,7 @@ func NewFederatedIdentity(accountID string, provider Provider, providerUserID st
 		return nil, errors.New("provider user ID is required")
 	}
 	if profile == nil {
-		profile = make(map[string]interface{})
+		profile = make(map[string]any)
 	}
 
 	return &FederatedIdentity{
@@ -69,7 +69,7 @@ func (fi *FederatedIdentity) SoftDelete() error {
 }
 
 // UpdateProfile updates the profile data.
-func (fi *FederatedIdentity) UpdateProfile(profile map[string]interface{}) {
+func (fi *FederatedIdentity) UpdateProfile(profile map[string]any) {
 	fi.Profile = profile
 	fi.UpdatedAt = time.Now()
 }

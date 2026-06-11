@@ -116,17 +116,35 @@ func savePrivateKeyToPEM(path string, key *rsa.PrivateKey) error {
 		return fmt.Errorf("marshal PKCS8: %w", err)
 	}
 
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".private-key-*.pem.tmp")
 	if err != nil {
-		return fmt.Errorf("open file: %w", err)
+		return fmt.Errorf("create temp file: %w", err)
 	}
-	defer func() { _ = f.Close() }()
+	tmpPath := tmp.Name()
+	defer func() {
+		_ = os.Remove(tmpPath) // cleanup on failure
+	}()
 
-	if err := pem.Encode(f, &pem.Block{
+	if err := tmp.Chmod(0600); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("chmod temp file: %w", err)
+	}
+
+	if err := pem.Encode(tmp, &pem.Block{
 		Type:  "PRIVATE KEY",
 		Bytes: der,
 	}); err != nil {
+		_ = tmp.Close()
 		return fmt.Errorf("encode PEM: %w", err)
+	}
+
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("rename temp file: %w", err)
 	}
 
 	return nil

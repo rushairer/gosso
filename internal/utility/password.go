@@ -10,8 +10,8 @@ import (
 const MinPasswordLength = 12
 
 // MaxPasswordLength is the maximum allowed password length.
-// bcrypt is preceded by SHA-256 so the 72-byte bcrypt limit no longer applies;
-// this cap prevents excessive CPU/memory usage from oversized inputs.
+// Argon2id has no 72-byte limit (unlike bcrypt), but this cap prevents
+// excessive CPU/memory usage from oversized inputs.
 const MaxPasswordLength = 1024
 
 // ValidatePasswordStrength checks that a password meets minimum strength requirements:

@@ -27,6 +27,10 @@ func (a *ClientAuthenticator) AuthenticateClient(client *domain.OAuth2Client, cl
 		return nil
 	}
 	if clientSecret == "" {
+		// Timing normalization: always call bcrypt even when secret is empty
+		// to prevent attackers from distinguishing "no secret provided" from
+		// "wrong secret provided" via response timing.
+		_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$0000000000000000000000000000000000000000000000000000000"), []byte("dummy"))
 		return ErrClientSecretRequired
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecretHash), []byte(clientSecret)); err != nil {

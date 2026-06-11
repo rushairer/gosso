@@ -82,6 +82,26 @@ func (r *accountRepositoryImpl) FindByID(ctx context.Context, accountID string) 
 	return account, nil
 }
 
+// FindByIDTx finds an account by ID within a transaction (for transactional reads).
+func (r *accountRepositoryImpl) FindByIDTx(ctx context.Context, tx *sql.Tx, accountID string) (*domain.Account, error) {
+	query := `
+		SELECT id, username, display_name, avatar_url, status, locale, timezone, metadata, created_at, updated_at, deleted_at
+		FROM accounts
+		WHERE id = $1
+	`
+
+	account, err := scanAccount(tx.QueryRowContext(ctx, query, accountID))
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, accountID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query account: %w", err)
+	}
+
+	return account, nil
+}
+
 // FindByUsername finds an account by username
 func (r *accountRepositoryImpl) FindByUsername(ctx context.Context, username string) (*domain.Account, error) {
 	query := `

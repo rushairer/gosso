@@ -3,7 +3,9 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -112,7 +114,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 	}
 
 	existingConsent, consentErr := c.consentSvc.GetConsent(ctx, accountIDStr, clientID)
-	if consentErr != nil {
+	if consentErr != nil && !errors.Is(consentErr, oauth2Domain.ErrConsentNotFound) {
 		c.logger.Warn("Failed to get consent, showing consent page", zap.Error(consentErr), zap.String("account_id", accountIDStr), zap.String("client_id", clientID))
 	}
 	if existingConsent != nil {
@@ -200,7 +202,20 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	}
 
 	if !req.Approved {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "consent_denied"})
+		redirectURI := req.RedirectURI
+		if req.State != "" {
+			u, err := url.Parse(redirectURI)
+			if err == nil {
+				q := u.Query()
+				q.Set("error", "access_denied")
+				q.Set("state", req.State)
+				u.RawQuery = q.Encode()
+				redirectURI = u.String()
+			}
+		} else {
+			redirectURI += "?error=access_denied"
+		}
+		ctx.Redirect(http.StatusFound, redirectURI)
 		return
 	}
 

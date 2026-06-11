@@ -16,20 +16,20 @@ import (
 )
 
 // adminAccountErrorMap maps account lookup/mutation errors to HTTP responses.
-var adminAccountErrorMap = map[error]controllerutil.ErrorMapping{
-	accountRepository.ErrAccountNotFound:      {Status: http.StatusNotFound, Message: "account not found"},
-	accountRepository.ErrInvalidStatusTransition: {Status: http.StatusConflict, Message: "invalid account status transition"},
+var adminAccountErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: accountRepository.ErrAccountNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "account not found"}},
+	{Sentinel: accountRepository.ErrInvalidStatusTransition, Mapping: controllerutil.ErrorMapping{Status: http.StatusConflict, Message: "invalid account status transition"}},
 }
 
 // adminDeleteAccountErrorMap maps account deletion errors to HTTP responses.
-var adminDeleteAccountErrorMap = map[error]controllerutil.ErrorMapping{
-	accountService.ErrAccountNotActive: {Status: http.StatusConflict, Message: "account is not active"},
+var adminDeleteAccountErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: accountService.ErrAccountNotActive, Mapping: controllerutil.ErrorMapping{Status: http.StatusConflict, Message: "account is not active"}},
 }
 
 // adminRoleErrorMap maps role assignment/removal errors to HTTP responses.
-var adminRoleErrorMap = map[error]controllerutil.ErrorMapping{
-	accountService.ErrAccountNotActive:        {Status: http.StatusConflict, Message: "account is not active"},
-	accountRepository.ErrRoleNotFound:         {Status: http.StatusNotFound, Message: "role not found"},
+var adminRoleErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: accountService.ErrAccountNotActive, Mapping: controllerutil.ErrorMapping{Status: http.StatusConflict, Message: "account is not active"}},
+	{Sentinel: accountRepository.ErrRoleNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "role not found"}},
 }
 
 // AdminController handles admin operations

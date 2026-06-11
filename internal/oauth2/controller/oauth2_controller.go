@@ -227,3 +227,9 @@ func csrfTokenFromCookie(ctx *gin.Context) string {
 	}
 	return cookie
 }
+
+// setNoCacheHeaders sets HTTP headers to prevent caching of responses containing tokens.
+func setNoCacheHeaders(ctx *gin.Context) {
+	ctx.Header("Cache-Control", "no-store")
+	ctx.Header("Pragma", "no-cache")
+}

@@ -204,7 +204,7 @@ type authServiceFixture struct {
 }
 
 // setupTestAuthService creates a fully-wired AuthService backed by miniredis and sqlmock.
-// Callers must defer fixture.mr.Close() and fixture.sqlDB.Close().
+// Cleanup (miniredis close and sqlmock DB close) is automatically registered with t.Cleanup().
 func setupTestAuthService(t *testing.T) *authServiceFixture {
 	t.Helper()
 	logger := zap.NewNop()
@@ -218,6 +218,12 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 		mr.Close()
 		t.Fatalf("failed to create sqlmock: %v", err)
 	}
+
+	// Register automatic cleanup so individual tests don't need manual defers.
+	t.Cleanup(func() {
+		mr.Close()
+		sqlDB.Close()
+	})
 
 	// Real SessionService backed by miniredis
 	sessSvc := sessionService.NewSessionService(redisClient, logger)

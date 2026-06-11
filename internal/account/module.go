@@ -10,7 +10,10 @@ import (
 	auditService "github.com/rushairer/gosso/internal/audit/service"
 )
 
-// AccountModule holds the account service and shared repositories.
+// AccountModule holds the account domain's public interfaces and repositories.
+// NOTE: Repositories are exported for cross-module wiring (auth module needs direct
+// access to credential/role repos). This is a known architectural trade-off — see
+// doc/ARCHITECTURE_INVARIANTS.md for the rationale.
 type AccountModule struct {
 	Service               service.AccountService
 	AccountRepo           repository.AccountRepository

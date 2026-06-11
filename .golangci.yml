@@ -17,7 +17,8 @@ linters:
     - wrapcheck      # E1/E2: cross-package errors must be wrapped with %w
     - errorlint      # E1: correct errors.Is/errors.As usage
     - dupl           # R1: detect duplicate code blocks (scan helpers)
-    - exhaustive     # General: switch exhaustiveness
+    - exhaustive
+    - gosec     # General: switch exhaustiveness
   settings:
     govet:
       enable-all: true

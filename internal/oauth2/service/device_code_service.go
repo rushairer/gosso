@@ -103,7 +103,7 @@ func (s *DeviceCodeService) CreateDeviceCode(ctx context.Context, clientID strin
 
 	s.logger.Info("Device code created",
 		zap.String("client_id", clientID),
-		zap.String("user_code", formattedUserCode))
+		zap.String("user_code_prefix", formattedUserCode[:4]+"****"))
 
 	return dc, nil
 }
@@ -221,7 +221,7 @@ func (s *DeviceCodeService) DenyDeviceCode(ctx context.Context, deviceCode strin
 
 	s.logger.Info("Device code denied",
 		zap.String("client_id", dc.ClientID),
-		zap.String("user_code", dc.UserCode))
+		zap.String("user_code_prefix", safeUserCodePrefix(dc.UserCode)))
 	return nil
 }
 
@@ -383,6 +383,15 @@ func (s *DeviceCodeService) ClaimAuthorizedDeviceCode(ctx context.Context, devic
 	}
 
 	return &dc, nil
+}
+
+// safeUserCodePrefix returns the first 4 characters masked for safe logging.
+// Returns "****" if the user code is too short to safely slice.
+func safeUserCodePrefix(userCode string) string {
+	if len(userCode) >= 4 {
+		return userCode[:4] + "****"
+	}
+	return "****"
 }
 
 func generateUserCode(length int) (string, error) {

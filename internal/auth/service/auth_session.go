@@ -10,6 +10,7 @@ import (
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/audit"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // RefreshTokens refreshes access and refresh tokens
@@ -28,7 +29,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 			s.logger.Warn("Refresh token has IP binding but current request has no IP; rejecting",
 				zap.String("account_id", oldRT.AccountID))
 			return nil, ErrInvalidRefreshToken
-		} else if oldRT.IP != currentIP {
+		} else if utility.NormalizeIP(oldRT.IP) != utility.NormalizeIP(currentIP) {
 			s.logger.Warn("Refresh token IP mismatch",
 				zap.String("original_ip", oldRT.IP),
 				zap.String("current_ip", currentIP),

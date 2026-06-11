@@ -49,14 +49,10 @@ func (c *OAuth2Controller) Token(ctx *gin.Context) {
 		return
 	}
 
-	// Support client_secret_basic (RFC 6749 §2.3.1): parse Authorization: Basic header
+	// RFC 6749 §2.3.1: When Basic Auth is present, it takes precedence over body parameters.
 	if clientID, clientSecret, ok := ctx.Request.BasicAuth(); ok {
-		if req.ClientID == "" {
-			req.ClientID = clientID
-		}
-		if req.ClientSecret == "" {
-			req.ClientSecret = clientSecret
-		}
+		req.ClientID = clientID
+		req.ClientSecret = clientSecret
 	}
 
 	switch req.GrantType {
@@ -154,6 +150,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		response["id_token"] = idToken
 	}
 
+	setNoCacheHeaders(ctx)
 	ctx.JSON(http.StatusOK, response)
 }
 
@@ -240,6 +237,7 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		return
 	}
 
+	setNoCacheHeaders(ctx)
 	ctx.JSON(http.StatusOK, gin.H{
 		"access_token":  accessToken,
 		"refresh_token": newRefreshToken.Token,
@@ -301,6 +299,7 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 		return
 	}
 
+	setNoCacheHeaders(ctx)
 	ctx.JSON(http.StatusOK, gin.H{
 		"access_token": accessToken,
 		"token_type":   "Bearer",

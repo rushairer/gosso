@@ -192,7 +192,13 @@ func (m *mockCredentialRepoForController) SoftDeleteCredential(_ context.Context
 	return m.softDeleteCredentialErr
 }
 
-func (m *mockCredentialRepoForController) FindByAccountAndTypeForUpdate(_ context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+func (m *mockCredentialRepoForController) FindByAccountAndTypeForUpdate(_ context.Context, _ *sql.Tx, _ string, credType accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	if m.findByAccountAndTypeErr != nil {
+		return nil, m.findByAccountAndTypeErr
+	}
+	if results, ok := m.findByAccountAndTypeResults[credType]; ok {
+		return results, nil
+	}
 	return nil, nil
 }
 
@@ -1963,7 +1969,7 @@ func TestForgotPassword_Success(t *testing.T) {
 	emailSender := &mockPasswordResetEmailSender{
 		sendFn: func(_ context.Context, to, resetLink string) error {
 			assert.Equal(t, userEmail, to)
-			assert.Contains(t, resetLink, "https://app.example.com/reset?token=")
+			assert.Contains(t, resetLink, "https://app.example.com/reset#token=")
 			resetEmailSent = true
 			return nil
 		},

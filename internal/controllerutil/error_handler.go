@@ -15,16 +15,23 @@ type ErrorMapping struct {
 	Message string
 }
 
+// ErrorRule pairs a sentinel error with its HTTP mapping, used in an ordered slice
+// to guarantee deterministic matching when multiple sentinels could match.
+type ErrorRule struct {
+	Sentinel error
+	Mapping  ErrorMapping
+}
+
 // HandleServiceError maps a service error to an HTTP response using gouno.NewErrorResponse.
-// It iterates errorMap and returns the first matching entry via errors.Is.
+// It iterates rules in order and returns the first matching entry via errors.Is.
 // If no match, it returns fallbackStatus with fallbackMsg.
 // Matched errors are logged at Warn level; unmatched errors are logged at Error level.
 func HandleServiceError(ctx *gin.Context, logger *zap.Logger, err error,
-	errorMap map[error]ErrorMapping, fallbackStatus int, fallbackMsg string) {
-	for sentinel, mapping := range errorMap {
-		if errors.Is(err, sentinel) {
-			logger.Warn(fallbackMsg, zap.Error(err))
-			ctx.JSON(mapping.Status, gouno.NewErrorResponse(mapping.Status, mapping.Message))
+	rules []ErrorRule, fallbackStatus int, fallbackMsg string) {
+	for _, rule := range rules {
+		if errors.Is(err, rule.Sentinel) {
+			logger.Warn(rule.Mapping.Message, zap.Error(err))
+			ctx.JSON(rule.Mapping.Status, gouno.NewErrorResponse(rule.Mapping.Status, rule.Mapping.Message))
 			return
 		}
 	}

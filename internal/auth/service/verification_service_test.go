@@ -218,7 +218,7 @@ func TestSendCode_UnsupportedType(t *testing.T) {
 	ctx := context.Background()
 	err := svc.SendCode(ctx, "sms_unsupported", "+1234567890", "account-xxx")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported credential type")
+	assert.Contains(t, err.Error(), "unsupported")
 }
 
 // ──────────────────────────────────────────────

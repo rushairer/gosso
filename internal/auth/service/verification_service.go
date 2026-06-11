@@ -28,6 +28,12 @@ const (
 	VerifyCodeLength     = 6
 )
 
+// Sentinel errors for verification service operations.
+var (
+	ErrCooldownActive  = errors.New("verification cooldown active")
+	ErrUnsupportedType = errors.New("unsupported verification type")
+)
+
 // verifyAndIncrementScript atomically verifies a code and manages the attempt counter.
 // Returns JSON array: ["ok", accountID] | ["mismatch", ""] | ["exhausted", ""] | ["not_found", ""]
 // ARGV[1]=code, ARGV[2]=max_attempts, ARGV[3]=default_ttl_seconds
@@ -139,7 +145,7 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 		s.logger.Warn("Failed to check cooldown, proceeding anyway", zap.Error(err))
 	}
 	if exists {
-		return errors.New("please wait before requesting another code")
+		return fmt.Errorf("%w: please wait before requesting another code", ErrCooldownActive)
 	}
 
 	// Generate 6-digit random numeric code
@@ -159,7 +165,7 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 			return fmt.Errorf("send SMS: %w", err)
 		}
 	default:
-		return fmt.Errorf("unsupported credential type: %s", credType)
+		return fmt.Errorf("%w: %s", ErrUnsupportedType, credType)
 	}
 
 	// Store in Redis (only after successful send)

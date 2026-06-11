@@ -110,7 +110,7 @@ func (s *BlacklistService) GetRevokeInfo(ctx context.Context, jti string) (*doma
 	return &blacklist, nil
 }
 
-// removeFromBlacklist removes a token from the blacklist (testing only)
+// removeFromBlacklist is used only in tests to reset state between test runs.
 func (s *BlacklistService) removeFromBlacklist(ctx context.Context, jti string) error {
 	key := s.buildBlacklistKey(jti)
 	if err := s.redis.Del(ctx, key); err != nil {

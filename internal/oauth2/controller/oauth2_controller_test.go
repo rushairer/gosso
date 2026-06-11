@@ -1810,8 +1810,9 @@ func TestSubmitConsent_NotApproved(t *testing.T) {
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "consent_denied")
+	assert.Equal(t, http.StatusFound, w.Code)
+	assert.Contains(t, w.Header().Get("Location"), "error=access_denied")
+	assert.Contains(t, w.Header().Get("Location"), "state=abc")
 }
 
 // ──────────────────────────────────────────────

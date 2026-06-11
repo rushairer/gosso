@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"mime"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -49,15 +50,33 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 
 // IntrospectRequest is the token introspection request body.
 type IntrospectRequest struct {
-	Token string `json:"token" binding:"required"`
+	Token string `json:"token" form:"token" binding:"required"`
 }
 
 // Introspect POST /oauth2/introspect (RFC 7662)
 func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 	var req IntrospectRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
-		return
+
+	// RFC 7662: accept both JSON and application/x-www-form-urlencoded
+	if contentType := ctx.GetHeader("Content-Type"); contentType != "" {
+		mediaType, _, _ := mime.ParseMediaType(contentType)
+		if mediaType == "application/json" {
+			if err := ctx.ShouldBindJSON(&req); err != nil {
+				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+				return
+			}
+		} else {
+			if err := ctx.ShouldBind(&req); err != nil {
+				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+				return
+			}
+		}
+	} else {
+		// Default to form binding when Content-Type is not specified
+		if err := ctx.ShouldBind(&req); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+			return
+		}
 	}
 
 	// Client authentication (Basic Auth or client_id/client_secret) - RFC 7662 requires authentication

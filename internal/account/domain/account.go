@@ -35,6 +35,12 @@ type Account struct {
 
 // NewAccount creates a new account.
 // Returns an error if displayName is empty or exceeds 255 characters.
+//
+// NOTE: time.Now() is used directly for domain-level timestamps (CreatedAt, UpdatedAt).
+// Full clock injection (e.g. accepting a Clock interface) was considered but deemed
+// over-engineering for this project; the domain timestamps are not critical-path for
+// testability at this stage. If deterministic timestamps become needed (e.g. for
+// snapshot testing or reproducible time-based logic), introduce a Clock parameter here.
 func NewAccount(displayName string) (*Account, error) {
 	if strings.TrimSpace(displayName) == "" {
 		return nil, errors.New("display name is required")
@@ -49,7 +55,7 @@ func NewAccount(displayName string) (*Account, error) {
 		Status:      AccountStatusActive,
 		Locale:      "en",
 		Timezone:    "UTC",
-		Metadata:    make(map[string]interface{}),
+		Metadata:    make(map[string]any),
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}, nil
