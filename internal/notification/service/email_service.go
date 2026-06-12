@@ -96,6 +96,14 @@ func (s *EmailService) Close() {
 	}
 }
 
+// SetSendRateLimit overrides the minimum interval between email sends.
+// A value of 100ms equals 10 emails/sec (the built-in default).
+func (s *EmailService) SetSendRateLimit(d time.Duration) {
+	if d > 0 {
+		s.sendLimiter.Reset(d)
+	}
+}
+
 // SetVerifyCodeTTL overrides the default verification code expiry displayed in emails.
 func (s *EmailService) SetVerifyCodeTTL(d time.Duration) {
 	if d > 0 {

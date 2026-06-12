@@ -13,7 +13,7 @@ import (
 func setupCSRFTestRouter(secure bool, skipPaths ...string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(CSRFMiddleware(secure, zap.NewNop(), skipPaths...))
+	r.Use(CSRFMiddleware(secure, zap.NewNop(), 0, skipPaths...))
 	return r
 }
 

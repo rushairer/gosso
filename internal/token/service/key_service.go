@@ -18,7 +18,18 @@ import (
 
 // rsaKeyBits is the key size for new RSA key generation.
 // NOTE: Existing keys are not affected; rotate keys to upgrade.
-const rsaKeyBits = 3072
+var rsaKeyBits = 3072
+
+// SetRSAKeyBits overrides the default RSA key size for new key generation.
+// Must be called before NewKeyService. Panics if called with a value < 2048.
+func SetRSAKeyBits(bits int) {
+	if bits > 0 {
+		if bits < 2048 {
+			panic("rsa_key_bits must be at least 2048")
+		}
+		rsaKeyBits = bits
+	}
+}
 
 // KeyService manages RSA key pairs for RS256 JWT signing.
 type KeyService struct {

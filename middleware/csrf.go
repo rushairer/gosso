@@ -20,6 +20,7 @@ const (
 	csrfSecureCookieName = "__Host-csrf_token"
 	csrfHeaderName       = "X-CSRF-Token"
 	csrfTokenLen         = 32
+	defaultCSRFMaxAge    = 4 * time.Hour
 )
 
 // CSRFMiddleware double-submit cookie CSRF protection middleware.
@@ -28,11 +29,17 @@ const (
 // When secure=true, the cookie uses the __Host- prefix (__Host-csrf_token)
 // which enforces Secure, Path=/, and no Domain via the browser.
 //
+// maxAge controls the CSRF cookie lifetime. If zero, defaults to 4 hours.
+//
 // IMPORTANT: CSRFMiddleware must run BEFORE JWTAuthMiddleware in the middleware chain.
 // The Bearer skip relies on the raw Authorization header — if JWTAuthMiddleware
 // runs first and strips/rewrites the header, CSRF would be enforced on API calls
 // that should be exempt.
-func CSRFMiddleware(secure bool, logger *zap.Logger, skipPaths ...string) gin.HandlerFunc {
+func CSRFMiddleware(secure bool, logger *zap.Logger, maxAge time.Duration, skipPaths ...string) gin.HandlerFunc {
+	if maxAge <= 0 {
+		maxAge = defaultCSRFMaxAge
+	}
+
 	cookieName := csrfCookieName
 	if secure {
 		cookieName = csrfSecureCookieName
@@ -42,7 +49,7 @@ func CSRFMiddleware(secure bool, logger *zap.Logger, skipPaths ...string) gin.Ha
 		// Skip idempotent methods
 		method := ctx.Request.Method
 		if method == "GET" || method == "HEAD" || method == "OPTIONS" {
-			setCSRFCookie(ctx, cookieName, secure)
+			setCSRFCookie(ctx, cookieName, secure, maxAge)
 			ctx.Next()
 			return
 		}
@@ -62,7 +69,7 @@ func CSRFMiddleware(secure bool, logger *zap.Logger, skipPaths ...string) gin.Ha
 		path := ctx.Request.URL.Path
 		for _, sp := range skipPaths {
 			if path == sp || strings.HasPrefix(path, sp+"/") {
-				setCSRFCookie(ctx, cookieName, secure)
+				setCSRFCookie(ctx, cookieName, secure, maxAge)
 				ctx.Next()
 				return
 			}
@@ -87,13 +94,13 @@ func CSRFMiddleware(secure bool, logger *zap.Logger, skipPaths ...string) gin.Ha
 			return
 		}
 
-		rotateCSRFCookie(ctx, cookieName, secure, logger)
+		rotateCSRFCookie(ctx, cookieName, secure, logger, maxAge)
 		ctx.Next()
 	}
 }
 
 // setCSRFCookie sets the CSRF token cookie (generates one if absent).
-func setCSRFCookie(ctx *gin.Context, cookieName string, secure bool) {
+func setCSRFCookie(ctx *gin.Context, cookieName string, secure bool, maxAge time.Duration) {
 	cookie, _ := ctx.Cookie(cookieName)
 	if cookie == "" {
 		var err error
@@ -109,7 +116,7 @@ func setCSRFCookie(ctx *gin.Context, cookieName string, secure bool) {
 		Name:     cookieName,
 		Value:    cookie,
 		Path:     "/",
-		MaxAge:   int((4 * time.Hour).Seconds()),
+		MaxAge:   int(maxAge.Seconds()),
 		HttpOnly: false, // JS needs to read it
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
@@ -122,7 +129,7 @@ func setCSRFCookie(ctx *gin.Context, cookieName string, secure bool) {
 // rotateCSRFCookie generates a new CSRF token and replaces the existing cookie.
 // Called after successful validation to prevent token fixation attacks.
 // Falls back to keeping the old token if generation fails.
-func rotateCSRFCookie(ctx *gin.Context, cookieName string, secure bool, logger *zap.Logger) {
+func rotateCSRFCookie(ctx *gin.Context, cookieName string, secure bool, logger *zap.Logger, maxAge time.Duration) {
 	newToken, err := generateCSRFToken()
 	if err != nil {
 		logger.Warn("CSRF token rotation failed, keeping old token", zap.Error(err))
@@ -133,7 +140,7 @@ func rotateCSRFCookie(ctx *gin.Context, cookieName string, secure bool, logger *
 		Name:     cookieName,
 		Value:    newToken,
 		Path:     "/",
-		MaxAge:   int((4 * time.Hour).Seconds()),
+		MaxAge:   int(maxAge.Seconds()),
 		HttpOnly: false,
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,

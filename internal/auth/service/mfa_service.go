@@ -405,25 +405,6 @@ func (s *MFAService) VerifyBackupCode(ctx context.Context, accountID, code strin
 	return verified, nil
 }
 
-func (s *MFAService) deleteUnverifiedTOTP(ctx context.Context, accountID string) error {
-	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
-	if err != nil {
-		s.logger.Warn("Failed to find TOTP credentials for cleanup", zap.Error(err), zap.String("account_id", accountID))
-		return err
-	}
-	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		for _, c := range creds {
-			if !c.Verified && !c.IsDeleted() {
-				if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
-					s.logger.Error("Failed to soft-delete unverified TOTP", zap.String("cred_id", c.ID), zap.Error(err))
-					return fmt.Errorf("soft delete credential: %w", err)
-				}
-			}
-		}
-		return nil
-	})
-}
-
 func generateRandomCode(length int) (string, error) {
 	b := make([]byte, length)
 	if _, err := rand.Read(b); err != nil {

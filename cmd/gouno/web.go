@@ -15,6 +15,7 @@ import (
 
 	"github.com/rushairer/gosso/config"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
+	dbutil "github.com/rushairer/gosso/internal/db"
 	"github.com/rushairer/gosso/internal/utility"
 )
 
@@ -53,6 +54,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 
 	loggerLevel := zap.NewAtomicLevelAt(zapcore.Level(globalConfig.LogConfig.Level))
 	logger := utility.NewLogger(loggerLevel, globalConfig.LogConfig.Format)
+	dbutil.SetLogger(logger)
 
 	logger.Info("starting web server",
 		zap.String("env", env),

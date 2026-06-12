@@ -106,17 +106,25 @@ type TaskPipelineConfig struct {
 	BufferSize uint32 `mapstructure:"buffer_size"`
 	// FlushInterval is the time interval for periodic flushing
 	FlushInterval time.Duration `mapstructure:"flush_interval"`
+
+	// Retry and concurrency tuning (0 = use built-in defaults)
+	Timeout     time.Duration `mapstructure:"timeout"`
+	MaxAttempts int           `mapstructure:"max_attempts"`
+	BackoffBase time.Duration `mapstructure:"backoff_base"`
+	MaxBackoff  time.Duration `mapstructure:"max_backoff"`
+	Concurrency int           `mapstructure:"concurrency"`
 }
 
 // SMTPConfig holds outbound email (SMTP) settings used for password-reset
 // and verification emails. When Host is empty the email subsystem is disabled.
 type SMTPConfig struct {
-	Host      string `mapstructure:"host"`
-	Port      int    `mapstructure:"port"`
-	Username  string `mapstructure:"username"`
-	Password  string `mapstructure:"password"`
-	From      string `mapstructure:"from"`
-	TLSPolicy string `mapstructure:"tls_policy"`
+	Host        string        `mapstructure:"host"`
+	Port        int           `mapstructure:"port"`
+	Username    string        `mapstructure:"username"`
+	Password    string        `mapstructure:"password"`
+	From        string        `mapstructure:"from"`
+	TLSPolicy   string        `mapstructure:"tls_policy"`
+	SendRateLimit time.Duration `mapstructure:"send_rate_limit"` // minimum interval between sends (0 = 100ms default)
 }
 
 // LogConfig holds logging configuration.
@@ -173,6 +181,15 @@ type AuthConfig struct {
 
 	// OIDC settings
 	IDTokenExpiry time.Duration `mapstructure:"id_token_expiry"`
+
+	// Social login HTTP client timeout (0 = 10s default)
+	SocialLoginHTTPTimeout time.Duration `mapstructure:"social_login_http_timeout"`
+
+	// CSRF cookie lifetime (0 = 4h default)
+	CSRFCookieMaxAge time.Duration `mapstructure:"csrf_cookie_max_age"`
+
+	// RSA key size in bits for new key generation (0 = 3072 default)
+	RSAKeyBits int `mapstructure:"rsa_key_bits"`
 }
 
 // CORSConfig configures Cross-Origin Resource Sharing (CORS) headers.

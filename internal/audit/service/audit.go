@@ -53,6 +53,11 @@ func NewAuditor(ctx context.Context, db *sql.DB, pipelineCfg *config.TaskPipelin
 	bufferSize := uint32(auditBufferSize)
 	flushSize := uint32(auditFlushSize)
 	flushInterval := auditFlushInterval
+	timeout := auditTimeout
+	maxAttempts := auditMaxAttempts
+	backoffBase := auditBackoffBase
+	maxBackoff := auditMaxBackoff
+	concurrency := auditConcurrency
 	if pipelineCfg != nil {
 		if pipelineCfg.BufferSize > 0 {
 			bufferSize = pipelineCfg.BufferSize
@@ -63,20 +68,35 @@ func NewAuditor(ctx context.Context, db *sql.DB, pipelineCfg *config.TaskPipelin
 		if pipelineCfg.FlushInterval > 0 {
 			flushInterval = pipelineCfg.FlushInterval
 		}
+		if pipelineCfg.Timeout > 0 {
+			timeout = pipelineCfg.Timeout
+		}
+		if pipelineCfg.MaxAttempts > 0 {
+			maxAttempts = pipelineCfg.MaxAttempts
+		}
+		if pipelineCfg.BackoffBase > 0 {
+			backoffBase = pipelineCfg.BackoffBase
+		}
+		if pipelineCfg.MaxBackoff > 0 {
+			maxBackoff = pipelineCfg.MaxBackoff
+		}
+		if pipelineCfg.Concurrency > 0 {
+			concurrency = pipelineCfg.Concurrency
+		}
 	}
 
 	auditor.batchflow = batchflow.NewPostgreSQLBatchFlow(auditorCtx, db, batchflow.PipelineConfig{
 		BufferSize:    bufferSize,
 		FlushSize:     flushSize,
 		FlushInterval: flushInterval,
-		Timeout:       auditTimeout,
+		Timeout:       timeout,
 		Retry: batchflow.RetryConfig{
 			Enabled:     true,
-			MaxAttempts: auditMaxAttempts,
-			BackoffBase: auditBackoffBase,
-			MaxBackoff:  auditMaxBackoff,
+			MaxAttempts: maxAttempts,
+			BackoffBase: backoffBase,
+			MaxBackoff:  maxBackoff,
 		},
-		ConcurrencyLimit: auditConcurrency,
+		ConcurrencyLimit: concurrency,
 	})
 	auditor.recordSchema = batchflow.NewSQLSchema(
 		"audit_record",                                                                                       // Table name

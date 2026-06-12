@@ -321,6 +321,6 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		response["id_token"] = idToken
 	}
 
-	setNoCacheHeaders(ctx)
+	controllerutil.SetNoCacheHeaders(ctx)
 	ctx.JSON(http.StatusOK, response)
 }

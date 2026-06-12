@@ -4,6 +4,7 @@ package middleware_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,7 +26,8 @@ func TestMain(m *testing.M) {
 	var err error
 	env, err = testutil.SetupTestEnv(ctx)
 	if err != nil {
-		os.Exit(0)
+		fmt.Fprintf(os.Stderr, "integration test setup failed: %v\n", err)
+		os.Exit(1)
 	}
 	defer env.Cleanup()
 	os.Exit(m.Run())

@@ -43,6 +43,9 @@ type appModules struct {
 func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logger *zap.Logger, cfg config.GoUnoConfig, auditor *auditService.Auditor) (*appModules, error) {
 	accountMod := account.InitializeAccountModule(db, auditor, logger)
 
+	if cfg.AuthConfig.RSAKeyBits > 0 {
+		tokenService.SetRSAKeyBits(cfg.AuthConfig.RSAKeyBits)
+	}
 	keySvc, err := tokenService.NewKeyService(
 		cfg.AuthConfig.PrivateKeyPath,
 		cfg.AuthConfig.KeyID,

@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- Replaced `log.Printf` with structured `zap.Logger` in transaction rollback logging — adds `db.SetLogger()` for package-level logger injection, called during server startup (`internal/db/transaction.go`, `cmd/gouno/web.go`).
+- Removed duplicate `setNoCacheHeaders` wrapper functions from `auth_controller.go` and `oauth2_controller.go` — all 12 call sites now use `controllerutil.SetNoCacheHeaders` directly.
+- `PasswordResetService` WaitGroup race condition fixed — `wg.Add(1)` moved before `select` to eliminate the window between semaphore acquisition and goroutine launch (`internal/auth/service/password_reset_service.go`).
+- `CSRFMiddleware` now accepts configurable `maxAge` parameter — replaces hardcoded 4-hour cookie lifetime (`middleware/csrf.go`).
 - `SocialLoginService` constructor now accepts `mfaChecker` and `auditor` as required parameters — eliminates silent MFA/audit skip when setters are forgotten (`internal/auth/service/social_login_service.go`).
 - `AssignRole` now performs role existence check inside the transaction via `FindByIDTx` — eliminates TOCTOU race condition between role lookup and assignment (`internal/account/service/account_service.go`).
 - `RevokeAllForSession` now returns errors on partial Redis deletion failures instead of silently swallowing them (`internal/token/service/token_service.go`).
@@ -17,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Migration README table updated with entries 0009-0016.
 
 ### Added
+- `AuthConfig.SocialLoginHTTPTimeout` — configurable HTTP client timeout for social login provider requests.
+- `AuthConfig.CSRFCookieMaxAge` — configurable CSRF cookie lifetime (default: 4h).
+- `AuthConfig.RSAKeyBits` — configurable RSA key size for new key generation (default: 3072).
+- `SMTPConfig.SendRateLimit` — configurable minimum interval between email sends (default: 100ms / 10 per sec).
+- `TaskPipelineConfig` extended with `Timeout`, `MaxAttempts`, `BackoffBase`, `MaxBackoff`, `Concurrency` fields — audit pipeline retry and concurrency parameters are now configurable.
 - `FindByClientIDTx` method on `OAuth2ClientRepository` — enables transactional client lookups (`internal/oauth2/repository/client_repository.go`).
 - `FindByIDTx` method on `RoleRepository` — enables transactional role lookups (`internal/account/repository/role_repository.go`).
 - Migration 0016: `updated_at` column and auto-update trigger for `webauthn_credentials` table — aligns with other soft-deletable tables.
@@ -39,10 +48,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `max_session_age` configuration field in `auth` config — allows overriding the default 7-day absolute session lifetime (`config/config.go`).
 
 ### Removed
+- Dead code: `deleteUnverifiedTOTP` method from `MFAService` — zero call sites in codebase (`internal/auth/service/mfa_service.go`).
 - Dead code: private `setSessionRevoker` / `setOAuth2ClientDeleter` methods replaced by public equivalents (`internal/account/service/account_service.go`).
 - Redundant `Validate()` call in `startWebServer` — already called inside `NewConfigManager()` (`cmd/gouno/web.go`).
 
 ### Fixed
+- Integration test `TestMain` in `redis_ratelimit_integration_test.go` now exits with code 1 instead of 0 on setup failure — prevents silent pass when test infrastructure is unavailable (`middleware/redis_ratelimit_integration_test.go`).
 - `account_credentials` table now has `updated_at` column with auto-update trigger — `SoftDeleteCredential` and `SoftDeleteCredentialsByAccount` previously referenced a non-existent column (`db/migrations/0015_credentials_updated_at.up.sql`).
 - OAuth2 refresh token IP comparison now uses `utility.NormalizeIP()` — prevents IPv4-mapped IPv6 format mismatch from bypassing IP binding check (`internal/oauth2/controller/oauth2_token.go`).
 

@@ -307,10 +307,13 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		}
 	}
 
-	// Asynchronously revoke all old sessions
+	// Asynchronously revoke all old sessions.
+	// wg.Add(1) is placed before the select to close the race window between
+	// the semaphore send and the goroutine launch. If the default (sync) path
+	// is taken, wg.Done() is called immediately to balance the counter.
+	s.wg.Add(1)
 	select {
 	case s.revokeSem <- struct{}{}:
-		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
 			defer func() { <-s.revokeSem }()
@@ -322,6 +325,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 			}
 		}()
 	default:
+		s.wg.Done()
 		s.logger.Warn("Revoke goroutine limit reached, falling back to synchronous revocation",
 			zap.String("account_id", data.AccountID))
 		syncCtx, syncCancel := context.WithTimeout(context.Background(), PasswordResetSyncRevokeTimeout)

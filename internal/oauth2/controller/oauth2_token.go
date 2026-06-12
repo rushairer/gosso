@@ -153,7 +153,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		response["id_token"] = idToken
 	}
 
-	setNoCacheHeaders(ctx)
+	controllerutil.SetNoCacheHeaders(ctx)
 	ctx.JSON(http.StatusOK, response)
 }
 
@@ -243,7 +243,7 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		return
 	}
 
-	setNoCacheHeaders(ctx)
+	controllerutil.SetNoCacheHeaders(ctx)
 	ctx.JSON(http.StatusOK, gin.H{
 		"access_token":  accessToken,
 		"refresh_token": newRefreshToken.Token,
@@ -307,7 +307,7 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 		return
 	}
 
-	setNoCacheHeaders(ctx)
+	controllerutil.SetNoCacheHeaders(ctx)
 	ctx.JSON(http.StatusOK, gin.H{
 		"access_token": accessToken,
 		"token_type":   "Bearer",

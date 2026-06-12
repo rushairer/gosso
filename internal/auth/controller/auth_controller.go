@@ -57,11 +57,6 @@ type AuthController struct {
 	logger           *zap.Logger
 }
 
-// setNoCacheHeaders delegates to the shared controllerutil helper.
-func setNoCacheHeaders(ctx *gin.Context) {
-	controllerutil.SetNoCacheHeaders(ctx)
-}
-
 // getClaimsFromContext extracts and validates JWT claims from gin.Context
 func getClaimsFromContext(ctx *gin.Context) (*tokenDomain.AccessTokenClaims, bool) {
 	jwtClaims, exists := ctx.Get(middleware.ContextKeyClaims)
@@ -234,7 +229,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 	}
 
 	if result.RequiresMFA {
-		setNoCacheHeaders(ctx)
+		controllerutil.SetNoCacheHeaders(ctx)
 		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
 			"requires_mfa":   true,
 			"mfa_token":      result.AccessToken,
@@ -245,7 +240,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 	}
 
 	// Prevent caching of responses containing tokens
-	setNoCacheHeaders(ctx)
+	controllerutil.SetNoCacheHeaders(ctx)
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
 		result.AccessToken, result.RefreshToken, result.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),
@@ -273,7 +268,7 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 	}
 
 	// Prevent caching of responses containing tokens
-	setNoCacheHeaders(ctx)
+	controllerutil.SetNoCacheHeaders(ctx)
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
 		result.AccessToken, result.RefreshToken, result.SessionID, int(c.tokenMgr.AccessExpiry().Seconds()),
@@ -395,7 +390,7 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 	}
 
 	// Prevent caching of responses containing tokens
-	setNoCacheHeaders(ctx)
+	controllerutil.SetNoCacheHeaders(ctx)
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
 		result.AccessToken, result.RefreshToken, result.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),
@@ -562,7 +557,7 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 	}
 
 	// Prevent caching of responses containing tokens
-	setNoCacheHeaders(ctx)
+	controllerutil.SetNoCacheHeaders(ctx)
 
 	if result.RequiresMFA {
 		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{

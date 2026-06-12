@@ -36,7 +36,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		middleware.SecurityHeadersMiddleware(!cfg.WebServerConfig.Debug),
 		middleware.MaxBodySizeMiddleware(cfg.WebServerConfig.MaxBodySize),
 		middleware.TimeoutMiddleware(cfg.WebServerConfig.RequestTimeout),
-		middleware.CSRFMiddleware(!cfg.WebServerConfig.Debug, logger,
+		middleware.CSRFMiddleware(!cfg.WebServerConfig.Debug, logger, cfg.AuthConfig.CSRFCookieMaxAge,
 			"/api/passkey/login/begin",
 			"/api/passkey/login/complete",
 			"/api/passkey/mfa/begin",

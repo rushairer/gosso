@@ -86,6 +86,13 @@ func NewSocialLoginService(
 	}
 }
 
+// SetHTTPClientTimeout overrides the default HTTP client timeout for social login provider requests.
+func (s *SocialLoginService) SetHTTPClientTimeout(d time.Duration) {
+	if d > 0 {
+		s.httpClient.Timeout = d
+	}
+}
+
 // GenerateAuthState generates a cryptographic state parameter for OAuth CSRF protection.
 func GenerateAuthState() (string, error) {
 	stateBytes := make([]byte, 32)
