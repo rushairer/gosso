@@ -82,7 +82,7 @@ func (r *RedisClient) Ping(ctx context.Context) error {
 }
 
 // Set sets a key-value pair (with expiration)
-func (r *RedisClient) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
+func (r *RedisClient) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
 	err := r.client.Set(ctx, key, value, expiration).Err()
 	if err != nil {
 		r.logger.Error("Redis SET failed", zap.String("key", key), zap.Error(err))
@@ -155,7 +155,7 @@ func (r *RedisClient) Decr(ctx context.Context, key string) (int64, error) {
 }
 
 // SetNX sets a key only if it does not exist (distributed lock)
-func (r *RedisClient) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {
+func (r *RedisClient) SetNX(ctx context.Context, key string, value any, expiration time.Duration) (bool, error) {
 	ok, err := r.client.SetNX(ctx, key, value, expiration).Result()
 	if err != nil {
 		r.logger.Error("Redis SETNX failed", zap.String("key", key), zap.Error(err))
@@ -165,7 +165,7 @@ func (r *RedisClient) SetNX(ctx context.Context, key string, value interface{}, 
 }
 
 // HSet sets hash fields
-func (r *RedisClient) HSet(ctx context.Context, key string, values ...interface{}) error {
+func (r *RedisClient) HSet(ctx context.Context, key string, values ...any) error {
 	err := r.client.HSet(ctx, key, values...).Err()
 	if err != nil {
 		r.logger.Error("Redis HSET failed", zap.String("key", key), zap.Error(err))
@@ -208,7 +208,7 @@ func (r *RedisClient) HDel(ctx context.Context, key string, fields ...string) er
 }
 
 // SAdd adds set members
-func (r *RedisClient) SAdd(ctx context.Context, key string, members ...interface{}) error {
+func (r *RedisClient) SAdd(ctx context.Context, key string, members ...any) error {
 	err := r.client.SAdd(ctx, key, members...).Err()
 	if err != nil {
 		r.logger.Error("Redis SADD failed", zap.String("key", key), zap.Error(err))
@@ -244,7 +244,7 @@ func (r *RedisClient) SMembers(ctx context.Context, key string) ([]string, error
 }
 
 // SIsMember checks if a member is in the set
-func (r *RedisClient) SIsMember(ctx context.Context, key string, member interface{}) (bool, error) {
+func (r *RedisClient) SIsMember(ctx context.Context, key string, member any) (bool, error) {
 	ok, err := r.client.SIsMember(ctx, key, member).Result()
 	if err != nil {
 		r.logger.Error("Redis SISMEMBER failed", zap.String("key", key), zap.Error(err))
@@ -254,7 +254,7 @@ func (r *RedisClient) SIsMember(ctx context.Context, key string, member interfac
 }
 
 // SRem removes set members
-func (r *RedisClient) SRem(ctx context.Context, key string, members ...interface{}) error {
+func (r *RedisClient) SRem(ctx context.Context, key string, members ...any) error {
 	err := r.client.SRem(ctx, key, members...).Err()
 	if err != nil {
 		r.logger.Error("Redis SREM failed", zap.String("key", key), zap.Error(err))
@@ -280,7 +280,7 @@ func (r *RedisClient) GetClient() *redis.Client {
 }
 
 // RunScript executes a Redis Lua script, providing encapsulation for direct client access.
-func (r *RedisClient) RunScript(ctx context.Context, script *redis.Script, keys []string, args ...interface{}) *redis.Cmd {
+func (r *RedisClient) RunScript(ctx context.Context, script *redis.Script, keys []string, args ...any) *redis.Cmd {
 	return script.Run(ctx, r.client, keys, args...)
 }
 
@@ -327,7 +327,7 @@ func (r *RedisClient) CheckAndIncr(ctx context.Context, key string, limit int, e
 
 // SetIfExists atomically sets a key only if it already exists, preventing TOCTOU issues.
 // Returns true if the key was updated, false if the key did not exist.
-func (r *RedisClient) SetIfExists(ctx context.Context, key string, value interface{}, expiry time.Duration) (bool, error) {
+func (r *RedisClient) SetIfExists(ctx context.Context, key string, value any, expiry time.Duration) (bool, error) {
 	expirySec := int(math.Ceil(expiry.Seconds()))
 	if expirySec <= 0 {
 		expirySec = 1 // Minimum 1 second to prevent persistent keys
