@@ -112,9 +112,7 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 
 	var socialSvc *service.SocialLoginService
 	if len(cfg.Providers) > 0 {
-		socialSvc = service.NewSocialLoginService(cfg.DB, cfg.AccountSvc, authSvc, cfg.AccountRepo, cfg.CredentialRepo, cfg.FederatedIdentityRepo, cfg.Providers, cfg.Logger)
-		socialSvc.SetMFAChecker(authSvc)
-		socialSvc.SetAuditor(cfg.Auditor)
+		socialSvc = service.NewSocialLoginService(cfg.DB, cfg.AccountSvc, authSvc, cfg.AccountRepo, cfg.CredentialRepo, cfg.FederatedIdentityRepo, cfg.Providers, cfg.Logger, authSvc, cfg.Auditor)
 	}
 
 	emailSvc := notificationService.NewEmailService(cfg.SMTPConfig, cfg.Logger)

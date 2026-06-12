@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -423,6 +424,7 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 	// If index deletion fails, it points to already-deleted tokens (harmless).
 	// The reverse order would leave usable tokens if individual deletion fails,
 	// since ValidateRefreshToken only checks key existence.
+	var errs []error
 	if len(hashes) > 0 {
 		keys := make([]string, len(hashes))
 		for i, hash := range hashes {
@@ -431,11 +433,17 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 		if err := s.redis.Del(ctx, keys...); err != nil {
 			s.logger.Warn("Failed to delete refresh tokens during session revoke",
 				zap.String("session_id", sessionID), zap.Error(err))
+			errs = append(errs, fmt.Errorf("delete refresh tokens: %w", err))
 		}
 	}
 
 	if err := s.redis.Del(ctx, sessionKey); err != nil {
 		s.logger.Warn("Failed to delete session tokens set", zap.String("session_id", sessionID), zap.Error(err))
+		errs = append(errs, fmt.Errorf("delete session tokens set: %w", err))
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("revoke session tokens (partial failure): %w", errors.Join(errs...))
 	}
 
 	s.logger.Info("Revoked all refresh tokens for session",

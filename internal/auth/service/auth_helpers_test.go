@@ -114,6 +114,10 @@ func (m *testRoleRepository) FindByID(_ context.Context, _ string) (*accountDoma
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *testRoleRepository) FindByIDTx(_ context.Context, _ *sql.Tx, _ string) (*accountDomain.Role, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 func (m *testRoleRepository) FindByName(_ context.Context, _ string) (*accountDomain.Role, error) {
 	return nil, fmt.Errorf("not implemented")
 }

@@ -39,11 +39,11 @@ gosso provides a complete SSO server with OAuth 2.0 authorization, OIDC discover
 - Health and readiness probes (`/health`, `/readiness`)
 - OpenAPI spec and Swagger UI (debug mode)
 - Docker and docker-compose for dev, test, and production
-- GitHub Actions CI (lint, unit tests with 50% coverage threshold, govulncheck, integration tests, build, Docker build)
+- GitHub Actions CI (lint, unit tests with 60% coverage threshold, govulncheck, integration tests, build, Docker build)
 
 ## Prerequisites
 
-- Go 1.25.0+
+- Go 1.26.0+
 - PostgreSQL 15+
 - Redis 7+
 
@@ -304,7 +304,7 @@ make docker-test-up
 make test-integration
 ```
 
-Unit tests use `testify/assert`, `go-sqlmock`, and `miniredis`. The CI pipeline requires a minimum of 50% test coverage.
+Unit tests use `testify/assert`, `go-sqlmock`, and `miniredis`. The CI pipeline requires a minimum of 60% test coverage.
 
 ## Configuration Reference
 
@@ -403,11 +403,11 @@ gosso 提供完整的 SSO 服务器，包含 OAuth 2.0 授权、OIDC 发现、JW
 - 健康检查和就绪探针（`/health`、`/readiness`）
 - OpenAPI 规范和 Swagger UI（调试模式）
 - Docker + docker-compose 支持开发、测试和生产环境
-- GitHub Actions CI（lint、单测 50% 覆盖率门槛、govulncheck、集成测试、构建、Docker 构建）
+- GitHub Actions CI（lint、单测 60% 覆盖率门槛、govulncheck、集成测试、构建、Docker 构建）
 
 ## 前置条件
 
-- Go 1.25.0+
+- Go 1.26.0+
 - PostgreSQL 15+
 - Redis 7+
 
@@ -499,7 +499,7 @@ make docker-test-up
 make test-integration
 ```
 
-单元测试使用 `testify/assert`、`go-sqlmock` 和 `miniredis`。CI 管线要求最低 50% 测试覆盖率。
+单元测试使用 `testify/assert`、`go-sqlmock` 和 `miniredis`。CI 管线要求最低 60% 测试覆盖率。
 
 ## 贡献
 

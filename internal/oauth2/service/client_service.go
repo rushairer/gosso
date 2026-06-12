@@ -121,14 +121,14 @@ func (s *oauth2ClientServiceImpl) UpdateClient(ctx context.Context, client *doma
 var ErrClientAccessDenied = errors.New("access denied: client does not belong to this account")
 
 func (s *oauth2ClientServiceImpl) DeleteClient(ctx context.Context, accountID, clientID string) error {
-	client, err := s.clientRepo.FindByClientID(ctx, clientID)
-	if err != nil {
-		return err
-	}
-	if client.AccountID != accountID {
-		return ErrClientAccessDenied
-	}
 	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		client, err := s.clientRepo.FindByClientIDTx(ctx, tx, clientID)
+		if err != nil {
+			return err
+		}
+		if client.AccountID != accountID {
+			return ErrClientAccessDenied
+		}
 		return s.clientRepo.SoftDelete(ctx, tx, client.ID, time.Now())
 	})
 }

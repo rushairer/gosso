@@ -115,6 +115,27 @@ func (r *roleRepositoryImpl) FindByID(ctx context.Context, roleID string) (*doma
 	return role, nil
 }
 
+// FindByIDTx finds a role by ID within a transaction
+func (r *roleRepositoryImpl) FindByIDTx(ctx context.Context, tx *sql.Tx, roleID string) (*domain.Role, error) {
+	query := `
+		SELECT id, name, description, permissions, metadata, created_at, updated_at, deleted_at
+		FROM roles
+		WHERE id = $1 AND deleted_at IS NULL
+		LIMIT 1
+	`
+
+	role, err := scanRole(tx.QueryRowContext(ctx, query, roleID))
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w: %s", ErrRoleNotFound, roleID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query role: %w", err)
+	}
+
+	return role, nil
+}
+
 // FindByName finds a role by name
 func (r *roleRepositoryImpl) FindByName(ctx context.Context, name string) (*domain.Role, error) {
 	query := `

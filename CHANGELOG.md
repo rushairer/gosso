@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- `SocialLoginService` constructor now accepts `mfaChecker` and `auditor` as required parameters — eliminates silent MFA/audit skip when setters are forgotten (`internal/auth/service/social_login_service.go`).
+- `AssignRole` now performs role existence check inside the transaction via `FindByIDTx` — eliminates TOCTOU race condition between role lookup and assignment (`internal/account/service/account_service.go`).
+- `RevokeAllForSession` now returns errors on partial Redis deletion failures instead of silently swallowing them (`internal/token/service/token_service.go`).
+- Credential repository `FindByTypeAndIdentifier` / `FindByTypeAndIdentifierTx` now share a common query constant and helper — eliminates duplicated SQL (`internal/account/repository/credential_repository_impl.go`).
+- README.md and CONTRIBUTING.md coverage threshold updated from 50% to 60% to match CI configuration.
+- README.md Go version updated from 1.25.0+ to 1.26.0+ to match CONTRIBUTING.md.
+- Migration README table updated with entries 0009-0016.
+
+### Added
+- `FindByClientIDTx` method on `OAuth2ClientRepository` — enables transactional client lookups (`internal/oauth2/repository/client_repository.go`).
+- `FindByIDTx` method on `RoleRepository` — enables transactional role lookups (`internal/account/repository/role_repository.go`).
+- Migration 0016: `updated_at` column and auto-update trigger for `webauthn_credentials` table — aligns with other soft-deletable tables.
+- Unit tests for `NormalizeIP`, `UnmarshalJSONField`, `NewConsent`, and `SetNoCacheHeaders`.
+
+### Security
+- `DeleteClient` now performs ownership check inside the transaction via `FindByClientIDTx` — eliminates TOCTOU race condition between client lookup and soft-delete (`internal/oauth2/service/client_service.go`).
+- `webauthn_credentials` soft-delete now sets `updated_at` — consistent audit trail across all soft-deletable tables (`internal/auth/repository/webauthn_repository_impl.go`).
+
+### Changed
 - `SetSessionRevoker` / `SetOAuth2ClientDeleter` now panic on nil — consistent safety contract with constructor-time validation (`internal/account/service/account_service.go`).
 - Removed unused `AccountOption` functional options (`WithSessionRevoker`, `WithOAuth2ClientDeleter`) — setter injection is the only viable pattern due to circular dependency between account and auth modules (`internal/account/service/account_service.go`).
 - `Auditor.Do()` and `Auditor.submit()` now delegate to shared `buildBatchRequest()` — eliminates duplicated batchflow request construction (`internal/audit/service/audit.go`).

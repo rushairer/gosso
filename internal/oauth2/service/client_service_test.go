@@ -147,7 +147,6 @@ func TestDeleteClient(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	// Mock FindByClientID
 	redirectURIs, _ := json.Marshal([]string{"http://localhost/callback"})
 	postLogoutURIs, _ := json.Marshal([]string{})
 	grantTypes, _ := json.Marshal([]string{domain.GrantTypeAuthorizationCode})
@@ -162,12 +161,12 @@ func TestDeleteClient(t *testing.T) {
 		"Test App", "desc", redirectURIs, postLogoutURIs, grantTypes, scopes,
 		true, nil, now, now,
 	)
+
+	// FindByClientID and SoftDelete now both run inside the same transaction
+	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").
 		WithArgs("abc123").
 		WillReturnRows(rows)
-
-	// Mock SoftDelete
-	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE oauth2_clients SET deleted_at").
 		WithArgs(sqlmock.AnyArg(), "uuid-001").
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -186,10 +185,12 @@ func TestDeleteClient_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Mock FindByClientID returning not found
+	// FindByClientID now runs inside the transaction
+	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").
 		WithArgs("nonexistent").
 		WillReturnError(domain.ErrClientNotFound)
+	mock.ExpectRollback()
 
 	err := svc.DeleteClient(ctx, "account-001", "nonexistent")
 	assert.ErrorIs(t, err, domain.ErrClientNotFound)
@@ -219,9 +220,13 @@ func TestDeleteClient_AccessDenied(t *testing.T) {
 		"Test App", "desc", redirectURIs, postLogoutURIs, grantTypes, scopes,
 		true, nil, now, now,
 	)
+
+	// FindByClientID now runs inside the transaction; access denied triggers rollback
+	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").
 		WithArgs("abc123").
 		WillReturnRows(rows)
+	mock.ExpectRollback()
 
 	err := svc.DeleteClient(ctx, "other-account", "abc123")
 	assert.ErrorIs(t, err, ErrClientAccessDenied)

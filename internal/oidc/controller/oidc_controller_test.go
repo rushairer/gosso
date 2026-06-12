@@ -138,6 +138,12 @@ func (m *mockClientRepo) FindByClientID(_ context.Context, _ string) (*oauth2Dom
 	}
 	return nil, oauth2Domain.ErrClientNotFound
 }
+func (m *mockClientRepo) FindByClientIDTx(_ context.Context, _ *sql.Tx, _ string) (*oauth2Domain.OAuth2Client, error) {
+	if m.findByClientIDFn != nil {
+		return m.findByClientIDFn()
+	}
+	return nil, oauth2Domain.ErrClientNotFound
+}
 func (m *mockClientRepo) FindByAccountID(_ context.Context, _ string) ([]*oauth2Domain.OAuth2Client, error) {
 	return nil, nil
 }

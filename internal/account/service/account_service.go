@@ -563,16 +563,15 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 		return err
 	}
 
-	// Verify role exists before assignment
-	role, err := s.roleRepo.FindByID(ctx, roleID)
-	if err != nil {
-		return err
-	}
-	if role == nil || role.IsDeleted() {
-		return repository.ErrRoleNotFound
-	}
-
-	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+	// Verify role exists and assign atomically to prevent TOCTOU race conditions.
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		role, err := s.roleRepo.FindByIDTx(ctx, tx, roleID)
+		if err != nil {
+			return err
+		}
+		if role.IsDeleted() {
+			return repository.ErrRoleNotFound
+		}
 		return s.roleRepo.AssignRoleToAccount(ctx, tx, accountID, roleID)
 	})
 	if err != nil {

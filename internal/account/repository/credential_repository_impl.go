@@ -28,6 +28,14 @@ const credentialsByAccountAndTypeQuery = `
 	WHERE account_id = $1 AND credential_type = $2 AND deleted_at IS NULL
 	ORDER BY primary_credential DESC, created_at ASC`
 
+// findByTypeAndIdentifierQuery is the base SELECT for querying a credential by type and identifier.
+const findByTypeAndIdentifierQuery = `
+	SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
+	       metadata, created_at, verified_at, last_used_at, deleted_at
+	FROM account_credentials
+	WHERE credential_type = $1 AND identifier = $2 AND deleted_at IS NULL
+	LIMIT 1`
+
 // CreateCredentials creates multiple credentials
 func (r *credentialRepositoryImpl) CreateCredentials(ctx context.Context, tx *sql.Tx, credentials []*domain.Credential) error {
 	query := `
@@ -97,37 +105,17 @@ func (r *credentialRepositoryImpl) FindByAccountAndTypeTx(ctx context.Context, t
 
 // FindByTypeAndIdentifier finds a credential by type and identifier
 func (r *credentialRepositoryImpl) FindByTypeAndIdentifier(ctx context.Context, credType domain.CredentialType, identifier string) (*domain.Credential, error) {
-	query := `
-		SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
-		       metadata, created_at, verified_at, last_used_at, deleted_at
-		FROM account_credentials
-		WHERE credential_type = $1 AND identifier = $2 AND deleted_at IS NULL
-		LIMIT 1
-	`
-
-	cred, err := scanCredential(r.db.QueryRowContext(ctx, query, credType, identifier))
-
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: type=%s identifier=%s", ErrCredentialNotFound, credType, identifier)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("query credential: %w", err)
-	}
-
-	return cred, nil
+	return findByTypeAndIdentifier(ctx, r.db.QueryRowContext, credType, identifier)
 }
 
 // FindByTypeAndIdentifierTx finds a credential by type and identifier within a transaction.
 func (r *credentialRepositoryImpl) FindByTypeAndIdentifierTx(ctx context.Context, tx *sql.Tx, credType domain.CredentialType, identifier string) (*domain.Credential, error) {
-	query := `
-		SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
-		       metadata, created_at, verified_at, last_used_at, deleted_at
-		FROM account_credentials
-		WHERE credential_type = $1 AND identifier = $2 AND deleted_at IS NULL
-		LIMIT 1
-	`
+	return findByTypeAndIdentifier(ctx, tx.QueryRowContext, credType, identifier)
+}
 
-	cred, err := scanCredential(tx.QueryRowContext(ctx, query, credType, identifier))
+// findByTypeAndIdentifier is the shared implementation for both transactional and non-transactional variants.
+func findByTypeAndIdentifier(ctx context.Context, queryRow func(context.Context, string, ...any) *sql.Row, credType domain.CredentialType, identifier string) (*domain.Credential, error) {
+	cred, err := scanCredential(queryRow(ctx, findByTypeAndIdentifierQuery, credType, identifier))
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: type=%s identifier=%s", ErrCredentialNotFound, credType, identifier)

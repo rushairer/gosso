@@ -52,7 +52,8 @@ type SocialLoginService struct {
 	logger                *zap.Logger
 }
 
-// NewSocialLoginService creates a social login service
+// NewSocialLoginService creates a social login service.
+// mfaChecker may be nil if MFA is not configured; auditor may be nil to skip audit logging.
 func NewSocialLoginService(
 	db *sql.DB,
 	accountSvc accountService.AccountService,
@@ -62,12 +63,15 @@ func NewSocialLoginService(
 	federatedIdentityRepo accountRepo.FederatedIdentityRepository,
 	providers map[string]*OAuthProviderConfig,
 	logger *zap.Logger,
+	mfaChecker MFAChecker,
+	auditor *auditService.Auditor,
 ) *SocialLoginService {
 	logger = utility.EnsureLogger(logger)
 	return &SocialLoginService{
 		db:                    db,
 		accountSvc:            accountSvc,
 		sessionTokenCreator:   sessionTokenCreator,
+		mfaChecker:            mfaChecker,
 		accountRepo:           accountRepo,
 		credentialRepo:        credentialRepo,
 		federatedIdentityRepo: federatedIdentityRepo,
@@ -77,26 +81,9 @@ func NewSocialLoginService(
 			// Uses Go's default TLS config which enforces TLS 1.2+ and verifies certificates.
 			// All configured OAuth provider URLs (Google, GitHub, WeChat) serve over HTTPS.
 		},
-		logger: logger,
+		auditor: auditor,
+		logger:  logger,
 	}
-}
-
-// SetMFAChecker sets the MFA checker dependency (setter injection to avoid circular constructor deps).
-// Must be called during initialization; not safe for concurrent use.
-func (s *SocialLoginService) SetMFAChecker(checker MFAChecker) {
-	if checker == nil {
-		panic("SetMFAChecker: checker must not be nil")
-	}
-	s.mfaChecker = checker
-}
-
-// SetAuditor sets the audit service dependency (setter injection to avoid circular constructor deps).
-// Must be called during initialization; not safe for concurrent use.
-func (s *SocialLoginService) SetAuditor(auditor *auditService.Auditor) {
-	if auditor == nil {
-		panic("SetAuditor: auditor must not be nil")
-	}
-	s.auditor = auditor
 }
 
 // GenerateAuthState generates a cryptographic state parameter for OAuth CSRF protection.

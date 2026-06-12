@@ -271,7 +271,10 @@ func TestAssignRole(t *testing.T) {
 		WithArgs("account-001").
 		WillReturnRows(accountRows)
 
-	// Mock role FindByID — role exists and is not deleted
+	// Role lookup and assignment now both run inside the same transaction
+	mock.ExpectBegin()
+
+	// Mock role FindByIDTx — role exists and is not deleted (inside transaction)
 	roleRows := sqlmock.NewRows([]string{
 		"id", "name", "description", "permissions", "metadata", "created_at", "updated_at", "deleted_at",
 	}).AddRow(
@@ -281,7 +284,6 @@ func TestAssignRole(t *testing.T) {
 		WithArgs("role-001").
 		WillReturnRows(roleRows)
 
-	mock.ExpectBegin()
 	mock.ExpectExec("INSERT INTO account_roles").
 		WithArgs("account-001", "role-001").
 		WillReturnResult(sqlmock.NewResult(1, 1))

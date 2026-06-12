@@ -25,6 +25,9 @@ type RoleRepository interface {
 	// FindByID finds a role by ID
 	FindByID(ctx context.Context, roleID string) (*domain.Role, error)
 
+	// FindByIDTx finds a role by ID within a transaction
+	FindByIDTx(ctx context.Context, tx *sql.Tx, roleID string) (*domain.Role, error)
+
 	// FindByName finds a role by name
 	FindByName(ctx context.Context, name string) (*domain.Role, error)
 

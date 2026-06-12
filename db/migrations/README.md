@@ -129,3 +129,11 @@ DROP TABLE IF EXISTS users;
 | 0006 | `0006_fix_constraints` | 修复缺失的外键约束和 updated_at 触发器 |
 | 0007 | `0007_post_logout_redirect_uris` | 为 oauth2_clients 添加 post_logout_redirect_uris 列 |
 | 0008 | `0008_credentials_composite_index` | 为 account_credentials 添加复合索引 (account_id, credential_type) |
+| 0009 | `0009_oauth2_clients_cascade` | 为 oauth2_clients 添加 CASCADE 删除约束 |
+| 0010 | `0010_drop_groups` | 删除 groups 和 account_groups 表 |
+| 0011 | `0011_audit_record_created_at_index` | 为 audit_record.created_at 添加索引 |
+| 0012 | `0012_account_roles_partial_unique` | 为 account_roles 添加部分唯一约束 |
+| 0013 | `0013_oauth2_consents` | 创建 oauth2_consents 表 |
+| 0014 | `0014_oauth2_consents_soft_delete` | 为 oauth2_consents 添加 deleted_at 列 |
+| 0015 | `0015_credentials_updated_at` | 为 account_credentials 添加 updated_at 列和触发器 |
+| 0016 | `0016_webauthn_credentials_updated_at` | 为 webauthn_credentials 添加 updated_at 列和触发器 |

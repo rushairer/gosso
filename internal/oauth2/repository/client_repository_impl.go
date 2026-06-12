@@ -134,6 +134,23 @@ func (r *oauth2ClientRepositoryImpl) FindByClientID(ctx context.Context, clientI
 	return client, nil
 }
 
+func (r *oauth2ClientRepositoryImpl) FindByClientIDTx(ctx context.Context, tx *sql.Tx, clientID string) (*domain.OAuth2Client, error) {
+	query := `
+		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at
+		FROM oauth2_clients
+		WHERE client_id = $1 AND deleted_at IS NULL`
+
+	client, err := scanOAuth2Client(tx.QueryRowContext(ctx, query, clientID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w: %s", domain.ErrClientNotFound, clientID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find oauth2_client by client_id: %w", err)
+	}
+
+	return client, nil
+}
+
 func (r *oauth2ClientRepositoryImpl) FindByAccountID(ctx context.Context, accountID string) ([]*domain.OAuth2Client, error) {
 	query := `
 		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at

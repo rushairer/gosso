@@ -216,12 +216,12 @@ func TestGetAuthURL_ScopesJoined(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestNewSocialLoginService_NilLogger(t *testing.T) {
-	svc := NewSocialLoginService(nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil)
+	svc := NewSocialLoginService(nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil, nil, nil)
 	assert.NotNil(t, svc.logger)
 }
 
 func TestNewSocialLoginService_DefaultHTTPClient(t *testing.T) {
-	svc := NewSocialLoginService(nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil)
+	svc := NewSocialLoginService(nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil, nil, nil)
 	assert.NotNil(t, svc.httpClient)
 	assert.Equal(t, 10*time.Second, svc.httpClient.Timeout)
 }
@@ -242,36 +242,6 @@ func TestGenerateAuthState_Unique(t *testing.T) {
 	s2, err := GenerateAuthState()
 	require.NoError(t, err)
 	assert.NotEqual(t, s1, s2)
-}
-
-// ──────────────────────────────────────────────
-// SetAuditor
-// ──────────────────────────────────────────────
-
-func TestSocialLoginService_SetAuditor(t *testing.T) {
-	svc := newTestSocialLoginService()
-	assert.Nil(t, svc.auditor)
-
-	// SetAuditor panics on nil (consistent with SetMFAChecker)
-	assert.PanicsWithValue(t, "SetAuditor: auditor must not be nil", func() {
-		svc.SetAuditor(nil)
-	})
-}
-
-// ──────────────────────────────────────────────
-// SetMFAChecker
-// ──────────────────────────────────────────────
-
-func TestSetMFAChecker_SetsChecker(t *testing.T) {
-	svc := newTestSocialLoginService()
-	checker := &testMFAChecker{}
-	svc.SetMFAChecker(checker)
-	assert.Equal(t, checker, svc.mfaChecker)
-}
-
-func TestSetMFAChecker_NilPanics(t *testing.T) {
-	svc := newTestSocialLoginService()
-	assert.Panics(t, func() { svc.SetMFAChecker(nil) })
 }
 
 type testMFAChecker struct{}
