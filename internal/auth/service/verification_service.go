@@ -32,8 +32,11 @@ const (
 
 // Sentinel errors for verification service operations.
 var (
-	ErrCooldownActive  = errors.New("verification cooldown active")
-	ErrUnsupportedType = errors.New("unsupported verification type")
+	ErrCooldownActive            = errors.New("verification cooldown active")
+	ErrUnsupportedType           = errors.New("unsupported verification type")
+	ErrVerificationCodeExpired   = errors.New("verification code expired or not found")
+	ErrVerificationCodeExhausted = errors.New("verification code exhausted, please request a new one")
+	ErrVerificationCodeInvalid   = errors.New("invalid verification code")
 )
 
 // verifyAndIncrementScript atomically verifies a code hash and manages the attempt counter.
@@ -240,11 +243,11 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 	case "ok":
 		return result[1], nil
 	case "not_found":
-		return "", errors.New("verification code expired or not found")
+		return "", ErrVerificationCodeExpired
 	case "exhausted":
-		return "", errors.New("verification code exhausted, please request a new one")
+		return "", ErrVerificationCodeExhausted
 	case "mismatch":
-		return "", errors.New("invalid verification code")
+		return "", ErrVerificationCodeInvalid
 	default:
 		return "", fmt.Errorf("unknown verify status: %s", result[0])
 	}
