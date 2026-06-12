@@ -54,11 +54,6 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	loggerLevel := zap.NewAtomicLevelAt(zapcore.Level(globalConfig.LogConfig.Level))
 	logger := utility.NewLogger(loggerLevel, globalConfig.LogConfig.Format)
 
-	if err := globalConfig.Validate(); err != nil {
-		logger.Error("invalid configuration", zap.Error(err))
-		os.Exit(1)
-	}
-
 	logger.Info("starting web server",
 		zap.String("env", env),
 		zap.Bool("debug", globalConfig.WebServerConfig.Debug),

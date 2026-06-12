@@ -13,6 +13,7 @@ import (
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // TokenRequest is the token exchange request body.
@@ -167,7 +168,7 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 
 	// Verify IP binding — reject refresh from a different IP to prevent token theft.
 	// If the original token has no IP recorded (legacy), skip validation.
-	if oldRefreshToken.IP != "" && oldRefreshToken.IP != ctx.ClientIP() {
+	if oldRefreshToken.IP != "" && utility.NormalizeIP(oldRefreshToken.IP) != utility.NormalizeIP(ctx.ClientIP()) {
 		c.logger.Warn("Refresh token IP mismatch",
 			zap.String("original_ip", oldRefreshToken.IP),
 			zap.String("current_ip", ctx.ClientIP()),

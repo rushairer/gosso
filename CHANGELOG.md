@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 - Dead code: private `setSessionRevoker` / `setOAuth2ClientDeleter` methods replaced by public equivalents (`internal/account/service/account_service.go`).
+- Redundant `Validate()` call in `startWebServer` — already called inside `NewConfigManager()` (`cmd/gouno/web.go`).
+
+### Fixed
+- `account_credentials` table now has `updated_at` column with auto-update trigger — `SoftDeleteCredential` and `SoftDeleteCredentialsByAccount` previously referenced a non-existent column (`db/migrations/0015_credentials_updated_at.up.sql`).
+- OAuth2 refresh token IP comparison now uses `utility.NormalizeIP()` — prevents IPv4-mapped IPv6 format mismatch from bypassing IP binding check (`internal/oauth2/controller/oauth2_token.go`).
 
 ### Security
 - `ConfirmVerificationCredential` now uses transactional read (`FindByTypeAndIdentifierTx`) — eliminates TOCTOU race condition between credential lookup and update (`internal/auth/service/auth_service.go`).
