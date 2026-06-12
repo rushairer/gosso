@@ -1494,6 +1494,9 @@ func (m *mockAccountServiceForSocial) GetAccountRoles(_ context.Context, _ strin
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *mockAccountServiceForSocial) SetSessionRevoker(_ accountService.SessionRevoker)    {}
+func (m *mockAccountServiceForSocial) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter) {}
+
 type mockFederatedIdentityRepoForSocial struct {
 	findByProviderFn func(ctx context.Context, provider accountDomain.Provider, providerUserID string) (*accountDomain.FederatedIdentity, error)
 }
