@@ -133,12 +133,11 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, accountID, us
 		return nil, fmt.Errorf("unmarshal session data: %w", err)
 	}
 
-	// Find existing credentials
+	// Find existing credentials for exclusion list.
+	// This is a security property — fail closed if we can't verify existing credentials.
 	existingCreds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil {
-		s.logger.Warn("Failed to find existing credentials for passkey registration, proceeding without exclusion list",
-			zap.String("account_id", accountID), zap.Error(err))
-		existingCreds = nil
+		return nil, fmt.Errorf("find existing credentials for exclusion list: %w", err)
 	}
 
 	user := domain.NewWebAuthnUser(accountID, username, displayName, toCredentialSlice(existingCreds))
@@ -278,8 +277,12 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 		return "", nil, fmt.Errorf("finish login: %w", err)
 	}
 
-	// Update sign count
-	cred.SignCount = waCred.Authenticator.SignCount
+	// Update sign count for clone detection.
+	// Per WebAuthn spec: sign count of 0 means the authenticator does not support
+	// counters. Only update if the new count is non-zero (authenticator supports it).
+	if waCred.Authenticator.SignCount > 0 {
+		cred.SignCount = waCred.Authenticator.SignCount
+	}
 	cred.MarkUsed()
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {

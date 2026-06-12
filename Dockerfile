@@ -3,7 +3,7 @@ FROM golang:1.26-alpine AS builder
 
 ARG VERSION=dev
 
-RUN apk add --no-cache git ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /build
 

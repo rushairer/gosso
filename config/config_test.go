@@ -287,14 +287,14 @@ func TestValidate_Errors(t *testing.T) {
 			mutate: func(c *GoUnoConfig) {
 				c.WebServerConfig.RateLimits.Login = 0
 			},
-			wantErr: "web_server: rate_limits values must be positive",
+			wantErr: "rate_limits.login must be positive",
 		},
 		{
 			name: "negative API rate limit",
 			mutate: func(c *GoUnoConfig) {
 				c.WebServerConfig.RateLimits.API = -1
 			},
-			wantErr: "web_server: rate_limits values must be positive",
+			wantErr: "rate_limits.api must be positive",
 		},
 		{
 			name: "zero max_body_size",

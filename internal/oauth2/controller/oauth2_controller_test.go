@@ -571,8 +571,8 @@ func TestToken_ClientCredentials_PublicClientRejected(t *testing.T) {
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.Contains(t, w.Body.String(), "confidential client")
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "unauthorized_client")
 }
 
 func TestToken_ClientCredentials_WrongSecret(t *testing.T) {

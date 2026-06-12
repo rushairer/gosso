@@ -123,7 +123,11 @@ func (s *SocialLoginService) GetAuthURL(ctx context.Context, provider, state str
 	return p.AuthURL + "?" + params.Encode(), nil
 }
 
-// HandleCallback handles the third-party callback
+// HandleCallback handles the OAuth2 third-party callback after code exchange.
+// IMPORTANT: The caller MUST validate the OAuth2 `state` parameter before calling
+// this method to prevent CSRF attacks. State validation is intentionally the
+// caller's responsibility (typically the controller layer) because it involves
+// cookie-based CSRF protection that belongs in the HTTP handling layer.
 func (s *SocialLoginService) HandleCallback(ctx context.Context, provider, code, ip, userAgent string) (*LoginResult, error) {
 	p, ok := s.providers[provider]
 	if !ok {

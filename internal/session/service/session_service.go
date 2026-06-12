@@ -184,6 +184,7 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 	s.logger.Info("Session created",
 		zap.String("session_id", session.ID),
 		zap.String("account_id", session.AccountID),
+		zap.String("ip", session.IP),
 		zap.Duration("ttl", s.sessionTTL))
 
 	return nil

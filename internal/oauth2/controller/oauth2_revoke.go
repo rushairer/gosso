@@ -97,7 +97,7 @@ func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 		return
 	}
 	if err := c.clientAuth.AuthenticateClient(client, clientSecret); err != nil {
-		controllerutil.HandleClientAuthError(ctx, err,
+		controllerutil.HandleClientAuthError(ctx, c.logger, err,
 			oauth2Service.ErrClientSecretRequired, "client secret is required", "invalid client credentials")
 		return
 	} else if !client.IsConfidential {

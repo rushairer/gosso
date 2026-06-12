@@ -148,7 +148,7 @@ func TestHandleClientAuthError_SecretRequired(t *testing.T) {
 	secretRequired := errors.New("client secret required")
 	err := secretRequired
 
-	HandleClientAuthError(ctx, err, secretRequired, "client secret is required", "invalid client credentials")
+	HandleClientAuthError(ctx, zap.NewNop(), err, secretRequired, "client secret is required", "invalid client credentials")
 
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
 
@@ -164,7 +164,7 @@ func TestHandleClientAuthError_InvalidClient(t *testing.T) {
 	secretRequired := errors.New("client secret required")
 	err := errors.New("bad credentials")
 
-	HandleClientAuthError(ctx, err, secretRequired, "client secret is required", "invalid client credentials")
+	HandleClientAuthError(ctx, zap.NewNop(), err, secretRequired, "client secret is required", "invalid client credentials")
 
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
 
@@ -180,7 +180,7 @@ func TestHandleClientAuthError_WrappedSecretRequired(t *testing.T) {
 	secretRequired := errors.New("client secret required")
 	err := fmt.Errorf("auth failed: %w", secretRequired)
 
-	HandleClientAuthError(ctx, err, secretRequired, "secret required", "bad creds")
+	HandleClientAuthError(ctx, zap.NewNop(), err, secretRequired, "secret required", "bad creds")
 
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
 

@@ -295,14 +295,33 @@ func (c *GoUnoConfig) Validate() error {
 		return fmt.Errorf("auth: device_code_interval must be positive")
 	}
 	if c.AuthConfig.PrivateKeyPath != "" {
-		if _, err := os.Stat(c.AuthConfig.PrivateKeyPath); os.IsNotExist(err) {
-			return fmt.Errorf("auth: private_key_path file does not exist: %s", c.AuthConfig.PrivateKeyPath)
+		if stat, err := os.Stat(c.AuthConfig.PrivateKeyPath); err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("auth: private_key_path file does not exist: %s", c.AuthConfig.PrivateKeyPath)
+			}
+			return fmt.Errorf("auth: cannot access private_key_path: %w", err)
+		} else if stat.IsDir() {
+			return fmt.Errorf("auth: private_key_path is a directory, not a file: %s", c.AuthConfig.PrivateKeyPath)
 		}
 	}
-	if c.WebServerConfig.RateLimits.Login <= 0 || c.WebServerConfig.RateLimits.Token <= 0 ||
-		c.WebServerConfig.RateLimits.Passkey <= 0 || c.WebServerConfig.RateLimits.API <= 0 ||
-		c.WebServerConfig.RateLimits.Introspect <= 0 || c.WebServerConfig.RateLimits.DeviceCode <= 0 {
-		return fmt.Errorf("web_server: rate_limits values must be positive")
+	rl := c.WebServerConfig.RateLimits
+	if rl.Login <= 0 {
+		return fmt.Errorf("web_server: rate_limits.login must be positive (got %d)", rl.Login)
+	}
+	if rl.Token <= 0 {
+		return fmt.Errorf("web_server: rate_limits.token must be positive (got %d)", rl.Token)
+	}
+	if rl.Passkey <= 0 {
+		return fmt.Errorf("web_server: rate_limits.passkey must be positive (got %d)", rl.Passkey)
+	}
+	if rl.API <= 0 {
+		return fmt.Errorf("web_server: rate_limits.api must be positive (got %d)", rl.API)
+	}
+	if rl.Introspect <= 0 {
+		return fmt.Errorf("web_server: rate_limits.introspect must be positive (got %d)", rl.Introspect)
+	}
+	if rl.DeviceCode <= 0 {
+		return fmt.Errorf("web_server: rate_limits.device_code must be positive (got %d)", rl.DeviceCode)
 	}
 	if c.DatabaseConfig.ConnMaxLifetimeSec < 0 {
 		return fmt.Errorf("database: conn_max_lifetime_sec must not be negative (got %d)", c.DatabaseConfig.ConnMaxLifetimeSec)
@@ -349,8 +368,10 @@ func (c *GoUnoConfig) Validate() error {
 	if c.DatabaseConfig.MaxOpenConns <= 0 {
 		return fmt.Errorf("database: max_open_conns must be positive (got %d)", c.DatabaseConfig.MaxOpenConns)
 	}
-	if c.DatabaseConfig.MaxIdleConns > 0 && c.DatabaseConfig.MaxOpenConns > 0 &&
-		c.DatabaseConfig.MaxIdleConns > c.DatabaseConfig.MaxOpenConns {
+	if c.DatabaseConfig.MaxIdleConns <= 0 {
+		return fmt.Errorf("database: max_idle_conns must be positive (got %d); set to at least max_open_conns/4", c.DatabaseConfig.MaxIdleConns)
+	}
+	if c.DatabaseConfig.MaxIdleConns > c.DatabaseConfig.MaxOpenConns {
 		return fmt.Errorf("database: max_idle_conns (%d) must not exceed max_open_conns (%d)",
 			c.DatabaseConfig.MaxIdleConns, c.DatabaseConfig.MaxOpenConns)
 	}

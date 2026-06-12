@@ -62,7 +62,7 @@ func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
 
 	// Client authentication for confidential clients (RFC 8628 §3.1)
 	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-		controllerutil.HandleClientAuthError(ctx, err,
+		controllerutil.HandleClientAuthError(ctx, c.logger, err,
 			oauth2Service.ErrClientSecretRequired,
 			"client_secret required for confidential client", "invalid client_secret")
 		return
@@ -222,7 +222,7 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 
 	// Client authentication for confidential clients
 	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-		controllerutil.HandleClientAuthError(ctx, err,
+		controllerutil.HandleClientAuthError(ctx, c.logger, err,
 			oauth2Service.ErrClientSecretRequired,
 			"client_secret required", "invalid client_secret")
 		return

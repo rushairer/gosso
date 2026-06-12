@@ -46,12 +46,14 @@ func HandleServiceError(ctx *gin.Context, logger *zap.Logger, err error,
 // It distinguishes secretRequiredErr (e.g., ErrClientSecretRequired) from other auth errors
 // and returns a 401 with "invalid_client" error code per RFC 6749.
 // The caller passes the specific sentinel to check, avoiding import coupling.
-// Always calls ctx.Abort() after writing the response.
-func HandleClientAuthError(ctx *gin.Context, err error,
+// Always logs the error at Warn level and calls ctx.Abort() after writing the response.
+func HandleClientAuthError(ctx *gin.Context, logger *zap.Logger, err error,
 	secretRequiredErr error, secretRequiredDesc, invalidClientDesc string) {
 	if errors.Is(err, secretRequiredErr) {
+		logger.Warn(secretRequiredDesc, zap.Error(err))
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": secretRequiredDesc})
 	} else {
+		logger.Warn(invalidClientDesc, zap.Error(err))
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": invalidClientDesc})
 	}
 	ctx.Abort()

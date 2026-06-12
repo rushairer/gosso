@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- Password reset (`VerifyAndReset`) now verifies account is still active before changing password — prevents credential modification on suspended/deleted accounts (`internal/auth/service/password_reset_service.go`).
+- OAuth2 refresh token grant now exempts public clients from client authentication per RFC 6749 Section 6 — public clients are bound by the refresh token itself and PKCE (`internal/oauth2/controller/oauth2_token.go`).
+- OAuth2 token endpoint now enforces `Content-Type: application/x-www-form-urlencoded` header — previously allowed empty Content-Type per RFC 6749 Section 4.1.3 (`internal/oauth2/controller/oauth2_token.go`).
+- WebAuthn `CompleteRegistration` now fails closed when existing credentials cannot be loaded for exclusion list — previously proceeded without exclusion list on DB error (`internal/auth/service/passkey_service.go`).
+- Login timing side-channel mitigation: dummy Argon2id hash performed when account not found — prevents username enumeration via response time differences (`internal/auth/service/auth_login.go`).
+- OAuth2 `SubmitConsent` now verifies account is still active before generating authorization code — prevents code issuance for accounts suspended between GET and POST (`internal/oauth2/controller/oauth2_authorize.go`).
+
+### Changed
+- Password reset errors now use typed sentinel errors (`ErrPasswordResetInvalidToken`, `ErrPasswordResetExhausted`) instead of anonymous `errors.New()` — enables proper error matching in controller layer (`internal/auth/service/errors.go`, `internal/auth/service/password_reset_service.go`).
+- `HandleClientAuthError` now accepts a `*zap.Logger` parameter and logs client authentication failures at Warn level — provides audit trail for failed client auth attempts (`internal/controllerutil/error_handler.go`).
+- OAuth2 `client_credentials` grant now returns `unauthorized_client` (400) instead of `invalid_client` (401) for non-confidential clients — correct RFC 6749 error code for authorization vs authentication failures (`internal/oauth2/controller/oauth2_token.go`).
+- Config validation: `PrivateKeyPath` now catches all `os.Stat` errors (permissions, etc.) and rejects directories (`config/config.go`).
+- Config validation: `MaxIdleConns` must be positive — prevents Go's default of 2 idle connections in production (`config/config.go`).
+- Config validation: rate limit fields now have per-field error messages identifying which field is zero or negative (`config/config.go`).
+- Dockerfile: removed unnecessary `git` from builder stage — build uses `-buildvcs=false` (`Dockerfile`).
+- Session creation log now includes client IP for security diagnostics (`internal/session/service/session_service.go`).
+- WebAuthn sign count update now respects authenticators that don't support counters (sign count = 0) — prevents resetting clone detection state (`internal/auth/service/passkey_service.go`).
+- `SocialLoginService.HandleCallback` documentation now explicitly states that OAuth2 `state` validation is the caller's responsibility (`internal/auth/service/social_login_service.go`).
+
+### Fixed
+- Production Docker Compose: Redis now requires authentication (`REDIS_PASSWORD` is mandatory) — prevents unauthenticated Redis access on internal network (`docker-compose.yml`).
+- Production Docker Compose: gosso application port no longer exposed externally — traffic must go through Nginx reverse proxy (`docker-compose.yml`).
+- Production Docker Compose: all containers now drop all Linux capabilities (`cap_drop: ALL`) — follows container security best practices (`docker-compose.yml`).
+
 ### Changed
 - Replaced `log.Printf` with structured `zap.Logger` in transaction rollback logging — adds `db.SetLogger()` for package-level logger injection, called during server startup (`internal/db/transaction.go`, `cmd/gouno/web.go`).
 - Removed duplicate `setNoCacheHeaders` wrapper functions from `auth_controller.go` and `oauth2_controller.go` — all 12 call sites now use `controllerutil.SetNoCacheHeaders` directly.

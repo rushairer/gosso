@@ -98,6 +98,9 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	// 1. Find account
 	account, err := s.accountSvc.FindAccountByUsername(ctx, req.Username)
 	if err != nil {
+		// Mitigate timing side-channel: perform a dummy Argon2id hash so the response
+		// time is indistinguishable from "account found, wrong password."
+		_, _ = accountDomain.HashPassword(req.Password)
 		return nil, ErrInvalidCredentials
 	}
 

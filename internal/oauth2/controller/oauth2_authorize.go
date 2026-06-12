@@ -308,6 +308,13 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		return
 	}
 
+	// Verify account is still active before generating authorization code.
+	// The account may have been suspended between the GET (consent page) and POST (approval).
+	if !c.accountValidator.IsAccountActive(ctx, accountIDStr) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "account is not active"})
+		return
+	}
+
 	consent, err := oauth2Domain.NewConsent(accountIDStr, req.ClientID, scopes)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})

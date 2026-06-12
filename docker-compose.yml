@@ -6,8 +6,7 @@ services:
       dockerfile: Dockerfile
       args:
         VERSION: ${VERSION:-latest}
-    ports:
-      - "${APP_EXTERNAL_PORT:-8080}:${APP_PORT:-8080}"
+    # No external port exposure — access only via Nginx reverse proxy
     environment:
       - GIN_MODE=release
       - GOUNO_ENV=production
@@ -30,6 +29,8 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${APP_PORT:-8080}/readiness"]
       interval: 30s
@@ -70,6 +71,8 @@ services:
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     deploy:
       resources:
         limits:
@@ -83,6 +86,8 @@ services:
   redis:
     image: redis:7-alpine
     # No external port exposure in production — access only via internal network
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     volumes:
       - redis_prod_data:/data
       - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
@@ -90,21 +95,16 @@ services:
       - gosso-prod-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "if [ -n \"$REDIS_PASSWORD\" ]; then REDISCLI_AUTH=\"$REDIS_PASSWORD\" redis-cli ping; else redis-cli ping; fi"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$REDIS_PASSWORD\" redis-cli ping"]
       interval: 10s
       timeout: 3s
       retries: 3
       start_period: 10s
-    command: >
-      sh -c '
-        if [ -n "$REDIS_PASSWORD" ]; then
-          redis-server /usr/local/etc/redis/redis.conf --requirepass "$REDIS_PASSWORD"
-        else
-          redis-server /usr/local/etc/redis/redis.conf
-        fi
-      '
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD}"]
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     deploy:
       resources:
         limits:
@@ -136,6 +136,8 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s

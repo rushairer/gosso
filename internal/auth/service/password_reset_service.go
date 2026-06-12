@@ -241,13 +241,13 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	result, err := s.redis.RunScript(ctx, checkAndIncrementAttemptsScript, []string{tokenKey},
 		s.maxAttempts, int(s.tokenTTL.Seconds())).Result()
 	if err == redis.Nil || result == nil {
-		return errors.New("invalid or expired reset token")
+		return ErrPasswordResetInvalidToken
 	}
 	if err != nil {
 		return fmt.Errorf("check reset token: %w", err)
 	}
 	if v, ok := result.(int64); ok && v == -1 {
-		return errors.New("reset token exhausted, please request a new one")
+		return ErrPasswordResetExhausted
 	}
 
 	dataStr, ok := result.(string)
@@ -258,6 +258,17 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	var data passwordResetData
 	if err := json.Unmarshal([]byte(dataStr), &data); err != nil {
 		return fmt.Errorf("unmarshal reset data: %w", err)
+	}
+
+	// Verify account is still active before changing password.
+	// If the account was suspended or soft-deleted after the reset token was issued,
+	// reject the reset to prevent credential modification on inactive accounts.
+	account, err := s.accountSvc.FindAccountByID(ctx, data.AccountID)
+	if err != nil {
+		return fmt.Errorf("find account: %w", err)
+	}
+	if !account.IsActive() {
+		return errors.New("account is not active")
 	}
 
 	// Hash new password

@@ -33,15 +33,23 @@ type TokenRequest struct {
 func (c *OAuth2Controller) Token(ctx *gin.Context) {
 	// RFC 6749 §4.1.3 / §4.3.2: token endpoint MUST accept application/x-www-form-urlencoded.
 	// Reject JSON content type to prevent WAF bypass attacks.
-	if contentType := ctx.GetHeader("Content-Type"); contentType != "" {
-		mediaType, _, _ := mime.ParseMediaType(contentType)
-		if mediaType != "application/x-www-form-urlencoded" {
-			ctx.JSON(http.StatusUnsupportedMediaType, gin.H{
-				"error":             "invalid_request",
-				"error_description": "Content-Type must be application/x-www-form-urlencoded",
-			})
-			return
-		}
+	// RFC 6749 Section 4.1.3: the token endpoint MUST use application/x-www-form-urlencoded.
+	// Reject requests with missing or incorrect Content-Type.
+	contentType := ctx.GetHeader("Content-Type")
+	if contentType == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error":             "invalid_request",
+			"error_description": "Content-Type header is required",
+		})
+		return
+	}
+	mediaType, _, _ := mime.ParseMediaType(contentType)
+	if mediaType != "application/x-www-form-urlencoded" {
+		ctx.JSON(http.StatusUnsupportedMediaType, gin.H{
+			"error":             "invalid_request",
+			"error_description": "Content-Type must be application/x-www-form-urlencoded",
+		})
+		return
 	}
 
 	var req TokenRequest
@@ -83,7 +91,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 	}
 
 	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-		controllerutil.HandleClientAuthError(ctx, err,
+		controllerutil.HandleClientAuthError(ctx, c.logger, err,
 			oauth2Service.ErrClientSecretRequired,
 			"client_secret required", "invalid client_secret")
 		return
@@ -193,11 +201,15 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "client is not authorized for refresh_token grant"})
 		return
 	}
-	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-		controllerutil.HandleClientAuthError(ctx, err,
-			oauth2Service.ErrClientSecretRequired,
-			"client_secret required for confidential clients", "invalid client_secret")
-		return
+	// RFC 6749 Section 6: confidential clients MUST authenticate when using refresh token grant.
+	// Public clients are exempt — they are bound by the refresh token itself and optionally PKCE.
+	if client.IsConfidential {
+		if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
+			controllerutil.HandleClientAuthError(ctx, c.logger, err,
+				oauth2Service.ErrClientSecretRequired,
+				"client_secret required for confidential clients", "invalid client_secret")
+			return
+		}
 	}
 
 	// Verify account is still active BEFORE consuming the old refresh token.
@@ -267,7 +279,7 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 	}
 
 	if !client.IsConfidential {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client_credentials grant requires confidential client"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "client_credentials grant requires confidential client"})
 		return
 	}
 
