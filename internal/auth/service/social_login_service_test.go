@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
@@ -153,7 +154,7 @@ func newTestSocialLoginService() *SocialLoginService {
 		},
 		federatedIdentityRepo: &mockSocialFederatedIdentityRepo{
 			findByProvider: func(_ context.Context, _ accountDomain.Provider, _ string) (*accountDomain.FederatedIdentity, error) {
-				return nil, errors.New("not found")
+				return nil, accountRepo.ErrFederatedIdentityNotFound
 			},
 		},
 	}
@@ -746,7 +747,7 @@ func TestCreateNewUser_NewAccountSuccess(t *testing.T) {
 	h := setupCreateNewUserService(t)
 
 	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
-		return nil, errors.New("not found")
+		return nil, accountRepo.ErrCredentialNotFound
 	}
 	h.accountRepo.createAccount = func(_ context.Context, _ *sql.Tx, _ *accountDomain.Account) error {
 		return nil
@@ -800,7 +801,7 @@ func TestCreateNewUser_NewAccountEmailVerified(t *testing.T) {
 	h := setupCreateNewUserService(t)
 
 	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
-		return nil, errors.New("not found")
+		return nil, accountRepo.ErrCredentialNotFound
 	}
 	h.accountRepo.createAccount = func(_ context.Context, _ *sql.Tx, _ *accountDomain.Account) error {
 		return nil
@@ -970,7 +971,7 @@ func TestCreateNewUser_RaceCondition_RetryLinkSuccess(t *testing.T) {
 	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
 		findCall++
 		if findCall == 1 {
-			return nil, errors.New("not found")
+			return nil, accountRepo.ErrCredentialNotFound
 		}
 		return verifiedCred, nil
 	}
@@ -1014,7 +1015,7 @@ func TestCreateNewUser_RaceCondition_RetryLinkUniqueViolation(t *testing.T) {
 	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
 		findCall++
 		if findCall == 1 {
-			return nil, errors.New("not found")
+			return nil, accountRepo.ErrCredentialNotFound
 		}
 		return verifiedCred, nil
 	}
@@ -1047,7 +1048,7 @@ func TestCreateNewUser_RaceCondition_RetryFindFails(t *testing.T) {
 	h := setupCreateNewUserService(t)
 
 	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
-		return nil, errors.New("not found")
+		return nil, accountRepo.ErrCredentialNotFound
 	}
 	h.accountRepo.createAccount = func(_ context.Context, _ *sql.Tx, _ *accountDomain.Account) error {
 		return &pgconn.PgError{Code: "23505"}
@@ -1076,7 +1077,7 @@ func TestCreateNewUser_RaceCondition_RetryLinkError(t *testing.T) {
 	h.credentialRepo.findByTypeAndIdentifier = func(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
 		findCall++
 		if findCall == 1 {
-			return nil, errors.New("not found")
+			return nil, accountRepo.ErrCredentialNotFound
 		}
 		return verifiedCred, nil
 	}

@@ -150,7 +150,13 @@ func (s *SocialLoginService) HandleCallback(ctx context.Context, provider, code,
 
 	// 3. Find existing federated identity
 	identity, err := s.federatedIdentityRepo.FindByProvider(ctx, accountDomain.Provider(provider), providerUserID)
-	if err == nil && identity != nil {
+	if err != nil {
+		if !errors.Is(err, accountRepo.ErrFederatedIdentityNotFound) {
+			return nil, fmt.Errorf("find federated identity: %w", err)
+		}
+		// Not found — fall through to create new user below.
+	}
+	if identity != nil {
 		// Existing identity -> login directly
 		return s.loginExistingUser(ctx, identity.AccountID, ip, userAgent)
 	}
@@ -398,8 +404,14 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 // account creation. Handles concurrent linking via unique constraint deduplication.
 func (s *SocialLoginService) linkByEmailIfVerified(ctx context.Context, provider, providerUserID, email, ip, userAgent string) (*LoginResult, error) {
 	existingCred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, accountDomain.CredentialTypeEmail, email)
-	if err != nil || existingCred == nil || !existingCred.IsVerified() {
-		return nil, nil // No verified email found — caller should create a new account
+	if err != nil {
+		if errors.Is(err, accountRepo.ErrCredentialNotFound) {
+			return nil, nil // No credential found — caller should create a new account
+		}
+		return nil, fmt.Errorf("find credential by email: %w", err)
+	}
+	if existingCred == nil || !existingCred.IsVerified() {
+		return nil, nil // No verified email — caller should create a new account
 	}
 
 	// Link federated identity to existing account (only if email is verified,
