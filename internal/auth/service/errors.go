@@ -6,6 +6,7 @@ var (
 	// Authentication errors
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrAccountLocked      = errors.New("account locked, try again later")
+	ErrIPLocked           = errors.New("too many attempts from this IP, try again later")
 	ErrServiceUnavailable = errors.New("service temporarily unavailable")
 
 	// MFA errors

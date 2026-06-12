@@ -347,6 +347,10 @@ func (c *PasskeyController) DeleteCredential(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "credential id required"))
 		return
 	}
+	if _, err := uuid.Parse(credentialID); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid credential id"))
+		return
+	}
 
 	if err := c.passkeySvc.DeleteCredential(ctx, accountID, credentialID); err != nil {
 		controllerutil.HandleServiceError(ctx, c.logger, err, passkeyDeleteErrorMap,

@@ -78,8 +78,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `formatDuration` now shows hours+minutes (e.g., "1 hour 30 minutes") instead of truncating to hours (`internal/notification/service/email_service.go`).
 - `FindByCredentialID` now uses `LIMIT 1` for consistency with other single-result queries (`internal/auth/repository/webauthn_repository_impl.go`).
 - Consent `Upsert` error now wrapped with context (`internal/oauth2/repository/consent_repository_impl.go`).
+- Per-IP login rate limit now returns distinct `ErrIPLocked` error instead of reusing `ErrAccountLocked` — prevents confusing audit logs and enables IP-specific error handling (`internal/auth/service/auth_login.go`).
+- `DeleteCredential` (passkey) now validates `credentialID` as UUID format — returns 400 for invalid IDs instead of passing to database layer (`internal/auth/controller/passkey_controller.go`).
+- OAuth2 social callback `code` parameter now has max length check (4096) — prevents abuse via oversized parameters (`internal/auth/controller/auth_controller.go`).
+- Password reset token validation now uses explicit `int64` type assertion instead of implicit `interface{}` comparison — eliminates potential type mismatch on non-standard Redis configurations (`internal/auth/service/password_reset_service.go`).
+- `GenerateBackupCodes` now uses `FindByAccountAndTypeForUpdate` for old backup code lookup — consistent row-level locking with `DisableTOTP` and `VerifyBackupCode` (`internal/auth/service/mfa_service.go`).
 
 ### Changed
+- `checkIPRateLimit` error now correctly returns `ErrIPLocked` — previously misused `ErrAccountLocked` for IP-level rate limiting (`internal/auth/service/errors.go`, `internal/auth/service/auth_login.go`).
+- `DisableTOTP` error now wrapped with `fmt.Errorf("disable totp: %w", err)` — consistent error wrapping with other MFA operations (`internal/auth/service/mfa_service.go`).
+- `VerifyTOTP` decryption failure error message now uses `:` separator instead of `—` — consistent with codebase error style (`internal/auth/service/mfa_service.go`).
+- `CSRFMiddleware` now accepts `*zap.Logger` parameter — replaces `log.Printf` with structured zap logging for CSRF token rotation failures (`middleware/csrf.go`).
+- Passkey MFA verification logic extracted into `verifyPasskeyMFAFlag` helper — eliminates code duplication between `CompletePasskeyMFALogin` and `verifyMFACode` (`internal/auth/service/auth_login.go`).
+- `VerificationService` now has configurable `codeLength` field with `SetCodeLength` setter — previously hardcoded to `VerifyCodeLength` constant (`internal/auth/service/verification_service.go`).
+- `safeAuditReason` now handles `ErrIPLocked` → `"ip_rate_limited"` — accurate audit trail for IP-based rate limiting (`internal/auth/service/auth_login.go`).
 - Audit log `actor` field now consistently uses client IP address across all login flows — previously mixed username, account ID, and empty string (`internal/auth/service/auth_login.go`).
 - `SoftDeleteCredential` and `SoftDeleteCredentialsByAccount` now update `updated_at` alongside `deleted_at` — consistent with `SoftDeleteAccount` pattern (`internal/account/repository/credential_repository_impl.go`).
 - `PasswordResetService` constructor now accepts `AccountTokenRevoker` dependency — enables access token blacklisting on password reset (`internal/auth/service/password_reset_service.go`).

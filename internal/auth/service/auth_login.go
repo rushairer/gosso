@@ -31,6 +31,8 @@ func safeAuditReason(err error) string {
 		return "invalid_credentials"
 	case errors.Is(err, ErrAccountLocked):
 		return "account_locked"
+	case errors.Is(err, ErrIPLocked):
+		return "ip_rate_limited"
 	case errors.Is(err, accountService.ErrAccountNotActive):
 		return "account_inactive"
 	case errors.Is(err, ErrInvalidMFACode):
@@ -252,15 +254,8 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	mfaAccountID = &accountID
 
 	// 2. Verify passkey MFA flag (set by CompleteMFALogin in the passkey controller)
-	passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", claims.ID) // namespaced by MFA token JTI
-	verified, verr := s.redis.GetDel(ctx, passkeyKey)
-	if verr != nil {
-		s.logger.Error("Redis GetDel failed for passkey MFA verification",
-			zap.Error(verr), zap.String("account_id", accountID))
-		return nil, fmt.Errorf("verify passkey mfa: %w", verr)
-	}
-	if verified != "1" {
-		return nil, ErrPasskeyNotVerified
+	if err := s.verifyPasskeyMFAFlag(ctx, claims.ID, accountID); err != nil {
+		return nil, err
 	}
 
 	// 2.5. Blacklist MFA token to prevent reuse
@@ -441,6 +436,23 @@ func (s *AuthService) blacklistMFAToken(ctx context.Context, claims *tokenDomain
 	return nil
 }
 
+// verifyPasskeyMFAFlag checks and consumes the Redis flag set by the passkey controller
+// after a successful WebAuthn ceremony. The flag is namespaced by the MFA token JTI to
+// prevent concurrent login interference. Returns nil if verified, an error otherwise.
+func (s *AuthService) verifyPasskeyMFAFlag(ctx context.Context, mfaTokenJTI, accountID string) error {
+	passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", mfaTokenJTI)
+	verified, verr := s.redis.GetDel(ctx, passkeyKey)
+	if verr != nil {
+		s.logger.Error("Redis GetDel failed for passkey MFA verification",
+			zap.Error(verr), zap.String("account_id", accountID))
+		return fmt.Errorf("verify passkey mfa: %w", verr)
+	}
+	if verified != "1" {
+		return ErrPasskeyNotVerified
+	}
+	return nil
+}
+
 // verifyMFACode verifies MFA code based on the MFA type.
 func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfaCode, mfaTokenJTI string) error {
 	switch mfaType {
@@ -448,17 +460,7 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 		if s.passkeySvc == nil {
 			return ErrPasskeyNotAvailable
 		}
-		passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", mfaTokenJTI) // namespaced by MFA token JTI
-		verified, verr := s.redis.GetDel(ctx, passkeyKey)
-		if verr != nil {
-			s.logger.Error("Redis GetDel failed for passkey MFA verification",
-				zap.Error(verr), zap.String("account_id", accountID))
-			return ErrServiceUnavailable
-		}
-		if verified != "1" {
-			return ErrPasskeyNotVerified
-		}
-		return nil
+		return s.verifyPasskeyMFAFlag(ctx, mfaTokenJTI, accountID)
 	case "totp":
 		// TOTP / backup code
 		valid, verr := s.mfaSvc.VerifyTOTP(ctx, accountID, mfaCode)
@@ -483,7 +485,7 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 }
 
 // checkIPRateLimit checks and increments the per-IP login rate limit.
-// Returns ErrAccountLocked if the limit is exceeded. Returns ErrServiceUnavailable
+// Returns ErrIPLocked if the limit is exceeded. Returns ErrServiceUnavailable
 // if Redis is unavailable (fail-closed for rate limiting).
 func (s *AuthService) checkIPRateLimit(ctx context.Context, ip string) error {
 	normalizedIP := utility.NormalizeIP(ip)
@@ -494,7 +496,7 @@ func (s *AuthService) checkIPRateLimit(ctx context.Context, ip string) error {
 		return ErrServiceUnavailable
 	}
 	if ipCount >= int64(s.loginMaxAttemptsPerIP) {
-		return ErrAccountLocked
+		return ErrIPLocked
 	}
 	return nil
 }

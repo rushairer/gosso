@@ -246,7 +246,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	if err != nil {
 		return fmt.Errorf("check reset token: %w", err)
 	}
-	if result == int64(-1) {
+	if v, ok := result.(int64); ok && v == -1 {
 		return errors.New("reset token exhausted, please request a new one")
 	}
 

@@ -550,6 +550,10 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "missing code parameter"))
 		return
 	}
+	if len(code) > 4096 {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "code parameter too long"))
+		return
+	}
 
 	result, err := c.socialSvc.HandleCallback(ctx, provider, code, ctx.ClientIP(), ctx.Request.UserAgent())
 	if err != nil {

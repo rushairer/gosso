@@ -304,7 +304,7 @@ func TestPasskey_DeleteCredential_NotFound(t *testing.T) {
 	})
 	api.DELETE("/passkeys/:id", ctrl.DeleteCredential)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/auth/passkeys/cred-999", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/passkeys/00000000-0000-0000-0000-000000000999", nil)
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -334,7 +334,7 @@ func TestPasskey_DeleteCredential_OwnershipMismatch(t *testing.T) {
 	})
 	api.DELETE("/passkeys/:id", ctrl.DeleteCredential)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/auth/passkeys/cred-001", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/passkeys/00000000-0000-0000-0000-000000000001", nil)
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -367,7 +367,7 @@ func TestPasskey_DeleteCredential_Success(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectCommit()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/auth/passkeys/cred-001", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/passkeys/00000000-0000-0000-0000-000000000001", nil)
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -402,7 +402,7 @@ func TestPasskey_DeleteCredential_TxError(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectRollback()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/auth/passkeys/cred-001", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/passkeys/00000000-0000-0000-0000-000000000001", nil)
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -563,7 +563,7 @@ func TestPasskey_DeleteCredential_NoAuth(t *testing.T) {
 	}
 	engine.DELETE("/api/auth/passkeys/:id", ctrl.DeleteCredential)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/auth/passkeys/cred-001", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/passkeys/00000000-0000-0000-0000-000000000001", nil)
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -687,7 +687,7 @@ func TestPasskeyRegisterRoutes(t *testing.T) {
 		{"register/begin JWT missing", http.MethodPost, "/api/auth/passkey/register/begin", "", http.StatusUnauthorized},
 		{"register/complete JWT missing", http.MethodPost, "/api/auth/passkey/register/complete", "", http.StatusUnauthorized},
 		{"passkeys list JWT missing", http.MethodGet, "/api/auth/passkeys", "", http.StatusUnauthorized},
-		{"passkeys delete JWT missing", http.MethodDelete, "/api/auth/passkeys/some-id", "", http.StatusUnauthorized},
+		{"passkeys delete JWT missing", http.MethodDelete, "/api/auth/passkeys/00000000-0000-0000-0000-00000000abcd", "", http.StatusUnauthorized},
 		{"mfa/begin nil passkeySvc", http.MethodPost, "/api/auth/passkey/mfa/begin", `{"mfa_token":"tok"}`, http.StatusServiceUnavailable},
 		{"mfa/complete bad token", http.MethodPost, "/api/auth/passkey/mfa/complete", `{"mfa_token":"tok","request_id":"rid"}`, http.StatusUnauthorized},
 		{"login/begin bad uuid", http.MethodPost, "/api/auth/passkey/login/begin", `{"account_id":"bad"}`, http.StatusBadRequest},

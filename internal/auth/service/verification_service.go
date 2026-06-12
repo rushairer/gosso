@@ -85,6 +85,7 @@ type VerificationService struct {
 	codeTTL        time.Duration
 	cooldownTTL    time.Duration
 	maxAttempts    int
+	codeLength     int
 }
 
 // NewVerificationService creates a new verification service instance
@@ -105,6 +106,7 @@ func NewVerificationService(
 		codeTTL:        VerifyCodeTTL,
 		cooldownTTL:    VerifyCooldownTTL,
 		maxAttempts:    VerifyCodeAttempts,
+		codeLength:     VerifyCodeLength,
 	}
 }
 
@@ -126,6 +128,14 @@ func (s *VerificationService) SetCooldownTTL(d time.Duration) {
 func (s *VerificationService) SetMaxAttempts(n int) {
 	if n > 0 {
 		s.maxAttempts = n
+	}
+}
+
+// SetCodeLength overrides the default verification code length.
+// Must be called during initialization; not safe for concurrent use.
+func (s *VerificationService) SetCodeLength(n int) {
+	if n > 0 {
+		s.codeLength = n
 	}
 }
 
@@ -151,7 +161,7 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 	}
 
 	// Generate 6-digit random numeric code
-	code, err := generateNumericCode(VerifyCodeLength)
+	code, err := generateNumericCode(s.codeLength)
 	if err != nil {
 		return fmt.Errorf("generate code: %w", err)
 	}

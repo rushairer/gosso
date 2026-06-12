@@ -250,7 +250,7 @@ func (s *MFAService) VerifyTOTP(ctx context.Context, accountID, code string) (bo
 
 	// If all verified credentials failed to decrypt, this is a configuration problem
 	if totalVerified > 0 && decryptFailures == totalVerified {
-		return false, fmt.Errorf("all TOTP credentials failed to decrypt — check totp_encryption_key configuration")
+		return false, fmt.Errorf("all TOTP credentials failed to decrypt: check totp_encryption_key configuration")
 	}
 
 	return false, nil
@@ -314,7 +314,10 @@ func (s *MFAService) DisableTOTP(ctx context.Context, accountID string) error {
 		}
 		return nil
 	})
-	return err
+	if err != nil {
+		return fmt.Errorf("disable totp: %w", err)
+	}
+	return nil
 }
 
 // GenerateBackupCodes generates backup codes
@@ -347,7 +350,7 @@ func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) 
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		// Delete old backup codes in the same transaction
-		oldCreds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeBackupCode)
+		oldCreds, err := s.credentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, accountDomain.CredentialTypeBackupCode)
 		if err != nil {
 			return fmt.Errorf("find old backup codes: %w", err)
 		}

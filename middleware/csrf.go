@@ -6,13 +6,13 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
+	"go.uber.org/zap"
 )
 
 const (
@@ -32,7 +32,7 @@ const (
 // The Bearer skip relies on the raw Authorization header — if JWTAuthMiddleware
 // runs first and strips/rewrites the header, CSRF would be enforced on API calls
 // that should be exempt.
-func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
+func CSRFMiddleware(secure bool, logger *zap.Logger, skipPaths ...string) gin.HandlerFunc {
 	cookieName := csrfCookieName
 	if secure {
 		cookieName = csrfSecureCookieName
@@ -87,7 +87,7 @@ func CSRFMiddleware(secure bool, skipPaths ...string) gin.HandlerFunc {
 			return
 		}
 
-		rotateCSRFCookie(ctx, cookieName, secure)
+		rotateCSRFCookie(ctx, cookieName, secure, logger)
 		ctx.Next()
 	}
 }
@@ -122,10 +122,10 @@ func setCSRFCookie(ctx *gin.Context, cookieName string, secure bool) {
 // rotateCSRFCookie generates a new CSRF token and replaces the existing cookie.
 // Called after successful validation to prevent token fixation attacks.
 // Falls back to keeping the old token if generation fails.
-func rotateCSRFCookie(ctx *gin.Context, cookieName string, secure bool) {
+func rotateCSRFCookie(ctx *gin.Context, cookieName string, secure bool, logger *zap.Logger) {
 	newToken, err := generateCSRFToken()
 	if err != nil {
-		log.Printf("WARN: CSRF token rotation failed, keeping old token: %v", err)
+		logger.Warn("CSRF token rotation failed, keeping old token", zap.Error(err))
 		return
 	}
 

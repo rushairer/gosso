@@ -7,12 +7,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 )
 
 func setupCSRFTestRouter(secure bool, skipPaths ...string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(CSRFMiddleware(secure, skipPaths...))
+	r.Use(CSRFMiddleware(secure, zap.NewNop(), skipPaths...))
 	return r
 }
 
