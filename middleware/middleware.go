@@ -3,6 +3,7 @@ package middleware
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"runtime/debug"
 	"time"
@@ -85,9 +86,8 @@ func generateCSPNonce() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		// crypto/rand.Read failure is practically impossible.
-		// Return a fallback nonce to avoid crashing; the CSP header will still
-		// be set but with a predictable nonce — better than no header at all.
-		return base64.StdEncoding.EncodeToString([]byte("fallback-nonce-err"))
+		// Return a time-based fallback nonce so each request gets a different value.
+		return base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("fallback-%d", time.Now().UnixNano())))
 	}
 	return base64.StdEncoding.EncodeToString(b)
 }
