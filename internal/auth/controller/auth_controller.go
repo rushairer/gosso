@@ -57,10 +57,9 @@ type AuthController struct {
 	logger           *zap.Logger
 }
 
-// setNoCacheHeaders sets HTTP headers to prevent caching of responses containing tokens.
+// setNoCacheHeaders delegates to the shared controllerutil helper.
 func setNoCacheHeaders(ctx *gin.Context) {
-	ctx.Header("Cache-Control", "no-store")
-	ctx.Header("Pragma", "no-cache")
+	controllerutil.SetNoCacheHeaders(ctx)
 }
 
 // getClaimsFromContext extracts and validates JWT claims from gin.Context

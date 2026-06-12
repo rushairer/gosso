@@ -17,6 +17,7 @@ import (
 
 	authMiddleware "github.com/rushairer/gosso/internal/auth/middleware"
 	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/controllerutil"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
@@ -228,8 +229,7 @@ func csrfTokenFromCookie(ctx *gin.Context) string {
 	return cookie
 }
 
-// setNoCacheHeaders sets HTTP headers to prevent caching of responses containing tokens.
+// setNoCacheHeaders delegates to the shared controllerutil helper.
 func setNoCacheHeaders(ctx *gin.Context) {
-	ctx.Header("Cache-Control", "no-store")
-	ctx.Header("Pragma", "no-cache")
+	controllerutil.SetNoCacheHeaders(ctx)
 }
