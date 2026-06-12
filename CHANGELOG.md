@@ -83,6 +83,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - OAuth2 social callback `code` parameter now has max length check (4096) — prevents abuse via oversized parameters (`internal/auth/controller/auth_controller.go`).
 - Password reset token validation now uses explicit `int64` type assertion instead of implicit `interface{}` comparison — eliminates potential type mismatch on non-standard Redis configurations (`internal/auth/service/password_reset_service.go`).
 - `GenerateBackupCodes` now uses `FindByAccountAndTypeForUpdate` for old backup code lookup — consistent row-level locking with `DisableTOTP` and `VerifyBackupCode` (`internal/auth/service/mfa_service.go`).
+- Social login `HandleCallback` now distinguishes `ErrFederatedIdentityNotFound` from infrastructure errors — prevents silent duplicate account creation on database/Redis failures (`internal/auth/service/social_login_service.go`).
+- Social login `linkByEmailIfVerified` now distinguishes `ErrCredentialNotFound` from infrastructure errors — prevents duplicate accounts on transient DB errors (`internal/auth/service/social_login_service.go`).
 
 ### Changed
 - `checkIPRateLimit` error now correctly returns `ErrIPLocked` — previously misused `ErrAccountLocked` for IP-level rate limiting (`internal/auth/service/errors.go`, `internal/auth/service/auth_login.go`).
@@ -167,6 +169,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Production YAML config files now document `GOUNO_` environment variable override mechanism (`config/production.yaml`).
 - `DisableTOTP` now uses `SELECT FOR UPDATE` inside transaction for credential lookup — eliminates TOCTOU (`internal/auth/service/mfa_service.go`).
 - Architecture trade-offs documented: exported repositories in `AccountModule`, late-binding type assertions (`internal/account/module.go`, `internal/account/service/late_bind.go`).
+- `BindSessionRevoker`/`BindOAuth2ClientDeleter` late-bind functions replaced with `SetSessionRevoker`/`SetOAuth2ClientDeleter` interface methods on `AccountService` — eliminates fragile runtime type assertions (`internal/account/service/account_service.go`, `internal/account/service/late_bind.go`).
+- `setNoCacheHeaders` extracted from auth and oauth2 controllers to shared `controllerutil.SetNoCacheHeaders` — eliminates code duplication (`internal/controllerutil/response_helpers.go`).
+- `VerificationService` sentinel errors `ErrVerificationCodeExpired`, `ErrVerificationCodeExhausted`, `ErrVerificationCodeInvalid` replace ad-hoc `errors.New()` calls — enables programmatic error matching (`internal/auth/service/verification_service.go`).
+- `RedisClient` methods now use `any` instead of `interface{}` — consistent with Go 1.18+ style (`internal/cache/redis_client.go`).
+- CSP nonce fallback now uses `time.Now().UnixNano()` instead of static string — each degraded request gets a unique nonce (`middleware/middleware.go`).
 
 ### Added
 - Architecture Invariants document (`doc/ARCHITECTURE_INVARIANTS.md`) — 8 categories of non-negotiable rules with CI enforcement levels.
@@ -182,12 +189,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `StringPtr` shared utility helper (`internal/utility/ptr.go`).
 - `FindByIDTx` transactional read method on `AccountRepository` (`internal/account/repository/account_repository.go`).
 - `ErrCooldownActive`, `ErrUnsupportedType`, `ErrUnsupportedMFAType`, `ErrConsentNotFound` sentinel errors.
+- `ErrVerificationCodeExpired`, `ErrVerificationCodeExhausted`, `ErrVerificationCodeInvalid` sentinel errors for verification code failures (`internal/auth/service/verification_service.go`).
+- `SetNoCacheHeaders` shared utility in `controllerutil` package (`internal/controllerutil/response_helpers.go`).
+- `SetSessionRevoker` and `SetOAuth2ClientDeleter` interface methods on `AccountService` (`internal/account/service/account_service.go`).
 - `SetupTestEnvT` test helper with automatic cleanup registration (`internal/testutil/testutil.go`).
 - SMS service stub test (`internal/notification/service/sms_service_test.go`).
 - Configurable `shutdown_timeout` in `WebServerConfig` (`config/config.go`).
 
 ### Fixed
 - `ErrCredentialOwnership` latent bug: inline `errors.New("credential does not belong to this account")` in `auth_service.go` would never match the sentinel `ErrCredentialOwnership` (`"credential does not belong to account"`) — now correctly returns the sentinel (`internal/auth/service/auth_service.go`).
+- `EnrollTOTP` now checks `FindByAccountAndTypeTx` and `SoftDeleteCredential` errors inside transaction — previously silently ignored, allowing unverified TOTP credentials to accumulate on failures (`internal/auth/service/mfa_service.go`).
+- OAuth2 controllers (`oauth2_token.go`, `client_controller.go`, `oauth2_device.go`) now log errors at appropriate levels (Error/Warn/Debug) before returning HTTP error responses — previously ~20 error paths returned responses without logging the underlying cause.
 
 ### Security
 - CSRF skipPaths now uses path-boundary match (`/path` + `/path/`) instead of prefix match — prevents `/begin` from matching `/beginners` (`middleware/csrf.go`).
