@@ -111,6 +111,7 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 		IsConfidential:         req.IsConfidential,
 	})
 	if err != nil {
+		c.logger.Error("Failed to register client", zap.Error(err), zap.String("account_id", accountID))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to register client"))
 		return
 	}
@@ -131,6 +132,7 @@ func (c *ClientController) ListClients(ctx *gin.Context) {
 
 	clients, err := c.clientSvc.FindByAccountID(ctx, accountID)
 	if err != nil {
+		c.logger.Error("Failed to list clients", zap.Error(err), zap.String("account_id", accountID))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to list clients"))
 		return
 	}
@@ -153,6 +155,7 @@ func (c *ClientController) GetClient(ctx *gin.Context) {
 
 	client, err := c.clientSvc.FindByClientID(ctx, clientID)
 	if err != nil {
+		c.logger.Debug("Client lookup failed in GetClient", zap.Error(err), zap.String("client_id", clientID))
 		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "access denied"))
 		return
 	}
@@ -176,6 +179,7 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 
 	client, err := c.clientSvc.FindByClientID(ctx, clientID)
 	if err != nil {
+		c.logger.Debug("Client lookup failed in UpdateClient", zap.Error(err), zap.String("client_id", clientID))
 		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "access denied"))
 		return
 	}
@@ -234,6 +238,7 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 	client.UpdatedAt = time.Now()
 
 	if err := c.clientSvc.UpdateClient(ctx, client); err != nil {
+		c.logger.Error("Failed to update client", zap.Error(err), zap.String("client_id", client.ClientID))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to update client"))
 		return
 	}

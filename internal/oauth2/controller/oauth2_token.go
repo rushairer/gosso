@@ -115,12 +115,14 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		ClientID:  authCode.ClientID,
 	})
 	if err != nil {
+		c.logger.Error("Failed to generate access token for authorization code", zap.Error(err), zap.String("client_id", req.ClientID))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
 	}
 
 	refreshToken, err := c.tokenSvc.GenerateRefreshToken(ctx, authCode.AccountID, authCode.ClientID, "", strings.Join(authCode.Scopes, " "))
 	if err != nil {
+		c.logger.Error("Failed to generate refresh token for authorization code", zap.Error(err), zap.String("client_id", req.ClientID))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
 	}
@@ -158,6 +160,7 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 	// Non-destructive read first to validate client before consuming the token
 	oldRefreshToken, err := c.tokenSvc.ValidateRefreshToken(ctx, req.RefreshToken)
 	if err != nil {
+		c.logger.Debug("Refresh token validation failed", zap.Error(err))
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "invalid refresh token"})
 		return
 	}
@@ -218,6 +221,7 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 	// All validations passed — now atomically rotate the token
 	newRefreshToken, err := c.tokenSvc.RotateRefreshToken(ctx, req.RefreshToken)
 	if err != nil {
+		c.logger.Warn("Refresh token rotation failed", zap.Error(err))
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "invalid refresh token"})
 		return
 	}
@@ -233,6 +237,7 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		SessionID: newRefreshToken.SessionID,
 	})
 	if err != nil {
+		c.logger.Error("Failed to generate access token for refresh", zap.Error(err), zap.String("client_id", newRefreshToken.ClientID))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
 	}
@@ -255,6 +260,7 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 
 	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
 	if err != nil {
+		c.logger.Warn("Client lookup failed for client_credentials", zap.Error(err), zap.String("client_id", req.ClientID))
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}
@@ -295,6 +301,7 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 		AccountID: client.AccountID,
 	})
 	if err != nil {
+		c.logger.Error("Failed to generate access token for client_credentials", zap.Error(err), zap.String("client_id", req.ClientID))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
 	}

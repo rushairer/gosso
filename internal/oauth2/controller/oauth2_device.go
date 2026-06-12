@@ -50,6 +50,7 @@ func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
 
 	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
 	if err != nil {
+		c.logger.Warn("Client lookup failed for device code request", zap.Error(err), zap.String("client_id", req.ClientID))
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
 		return
 	}
@@ -130,6 +131,7 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 
 	client, err := c.clientSvc.FindByClientID(ctx, dc.ClientID)
 	if err != nil {
+		c.logger.Debug("Client lookup failed for device user page", zap.Error(err), zap.String("client_id", dc.ClientID))
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
 		return
 	}
@@ -183,11 +185,13 @@ func (c *OAuth2Controller) DeviceUserSubmit(ctx *gin.Context) {
 
 	if req.Approved == "true" {
 		if err := c.deviceCodeSvc.AuthorizeDeviceCode(ctx, req.DeviceCode, accountIDStr); err != nil {
+			c.logger.Warn("Device code authorization failed", zap.Error(err), zap.String("device_code", req.DeviceCode))
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "device code authorization failed"})
 			return
 		}
 	} else {
 		if err := c.deviceCodeSvc.DenyDeviceCode(ctx, req.DeviceCode); err != nil {
+			c.logger.Warn("Device code denial failed", zap.Error(err), zap.String("device_code", req.DeviceCode))
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "device code denial failed"})
 			return
 		}
@@ -206,6 +210,7 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 
 	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
 	if err != nil {
+		c.logger.Warn("Client lookup failed for device code grant", zap.Error(err), zap.String("client_id", req.ClientID))
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
 		return
 	}
@@ -225,6 +230,7 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 
 	dc, err := c.deviceCodeSvc.GetDeviceCode(ctx, req.DeviceCode)
 	if err != nil {
+		c.logger.Debug("Device code lookup failed", zap.Error(err), zap.String("device_code", req.DeviceCode))
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "device code not found"})
 		return
 	}
@@ -257,6 +263,7 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 	// status check is needed before this call.
 	claimedDC, err := c.deviceCodeSvc.ClaimAuthorizedDeviceCode(ctx, req.DeviceCode, req.ClientID)
 	if err != nil {
+		c.logger.Warn("Device code claim failed", zap.Error(err), zap.String("device_code", req.DeviceCode), zap.String("client_id", req.ClientID))
 		// Distinguish expired vs consumed per RFC 8628 §3.5
 		errorDesc := "device code already consumed"
 		if lookupDC, lookupErr := c.deviceCodeSvc.GetDeviceCode(ctx, req.DeviceCode); lookupErr == nil && lookupDC.IsExpired() {
@@ -275,12 +282,14 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		ClientID:  dc.ClientID,
 	})
 	if err != nil {
+		c.logger.Error("Failed to generate access token for device code", zap.Error(err), zap.String("client_id", dc.ClientID))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
 	}
 
 	refreshToken, err := c.tokenSvc.GenerateRefreshToken(ctx, dc.AccountID, dc.ClientID, "", strings.Join(dc.Scopes, " "))
 	if err != nil {
+		c.logger.Error("Failed to generate refresh token for device code", zap.Error(err), zap.String("client_id", dc.ClientID))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
 	}
