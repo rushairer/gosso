@@ -1,37 +1,21 @@
 package service
 
-import "fmt"
-
 // late_bind.go provides late-binding functions for cross-module dependencies.
 //
-// These functions are needed because AccountService must be created before
-// AuthModule (which needs AccountService), but AccountService's cascade
-// operations (e.g. SoftDeleteAccount) depend on SessionService and
-// OAuth2ClientDeleter which are only available after AuthModule/OAuth2Module
-// initialization.
-//
-// NOTE: Late-binding uses runtime type assertions on the service implementation.
-// This means test doubles that implement AccountService but aren't *accountServiceImpl
-// will fail to bind. Consider refactoring to functional options at construction time.
+// Deprecated: Use AccountService.SetSessionRevoker and
+// AccountService.SetOAuth2ClientDeleter interface methods instead.
+// These functions are kept for backward compatibility.
 
 // BindSessionRevoker sets the session revoker on an AccountService after construction.
-// Returns an error if svc is not an *accountServiceImpl.
-func BindSessionRevoker(svc AccountService, revoker SessionRevoker) error {
-	impl, ok := svc.(*accountServiceImpl)
-	if !ok {
-		return fmt.Errorf("BindSessionRevoker: svc is not *accountServiceImpl")
-	}
-	impl.setSessionRevoker(revoker)
-	return nil
+//
+// Deprecated: Use svc.SetSessionRevoker(revoker) directly.
+func BindSessionRevoker(svc AccountService, revoker SessionRevoker) {
+	svc.SetSessionRevoker(revoker)
 }
 
 // BindOAuth2ClientDeleter sets the OAuth2 client deleter on an AccountService after construction.
-// Returns an error if svc is not an *accountServiceImpl.
-func BindOAuth2ClientDeleter(svc AccountService, deleter OAuth2ClientDeleter) error {
-	impl, ok := svc.(*accountServiceImpl)
-	if !ok {
-		return fmt.Errorf("BindOAuth2ClientDeleter: svc is not *accountServiceImpl")
-	}
-	impl.setOAuth2ClientDeleter(deleter)
-	return nil
+//
+// Deprecated: Use svc.SetOAuth2ClientDeleter(deleter) directly.
+func BindOAuth2ClientDeleter(svc AccountService, deleter OAuth2ClientDeleter) {
+	svc.SetOAuth2ClientDeleter(deleter)
 }

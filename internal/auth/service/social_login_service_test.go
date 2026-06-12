@@ -78,6 +78,8 @@ func (m *mockSocialAccountService) ActivateAccount(_ context.Context, _ string) 
 func (m *mockSocialAccountService) GetAccountRoles(_ context.Context, _ string) ([]*accountDomain.Role, error) {
 	panic("not implemented")
 }
+func (m *mockSocialAccountService) SetSessionRevoker(_ accountService.SessionRevoker)    {}
+func (m *mockSocialAccountService) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter) {}
 
 // mockSocialFederatedIdentityRepo implements accountRepo.FederatedIdentityRepository.
 type mockSocialFederatedIdentityRepo struct {

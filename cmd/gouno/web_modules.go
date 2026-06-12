@@ -94,17 +94,13 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	}
 
 	// Wire session revoker into account service (for account deletion -> session revocation)
-	if err := accountService.BindSessionRevoker(accountMod.Service, authMod.SessionService); err != nil {
-		return nil, fmt.Errorf("failed to bind session revoker: %w", err)
-	}
+	accountMod.Service.SetSessionRevoker(authMod.SessionService)
 
 	oauth2Mod := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig)
 	oidcMod := oidc.InitializeOIDCModule(tokenSvc, accountMod.Service, cfg.AuthConfig, authMod.SessionService, accountMod.CredentialRepo, logger)
 
 	// Wire OAuth2 client deleter into account service (for account deletion -> OAuth2 client cascade)
-	if err := accountService.BindOAuth2ClientDeleter(accountMod.Service, &oauth2ClientDeleterAdapter{clientRepo: oauth2Mod.ClientRepo}); err != nil {
-		return nil, fmt.Errorf("failed to bind OAuth2 client deleter: %w", err)
-	}
+	accountMod.Service.SetOAuth2ClientDeleter(&oauth2ClientDeleterAdapter{clientRepo: oauth2Mod.ClientRepo})
 
 	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, !cfg.WebServerConfig.Debug, logger)
 	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &accountValidatorAdapter{accountSvc: accountMod.Service}, authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)

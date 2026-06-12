@@ -68,6 +68,12 @@ type AccountService interface {
 
 	// GetAccountRoles returns the roles assigned to the account.
 	GetAccountRoles(ctx context.Context, accountID string) ([]*domain.Role, error)
+
+	// SetSessionRevoker sets the session revoker dependency (initialization-time only).
+	SetSessionRevoker(revoker SessionRevoker)
+
+	// SetOAuth2ClientDeleter sets the OAuth2 client deleter dependency (initialization-time only).
+	SetOAuth2ClientDeleter(deleter OAuth2ClientDeleter)
 }
 
 // RegisterAccountRequest is the request payload for account registration.
@@ -159,6 +165,16 @@ func (s *accountServiceImpl) setSessionRevoker(revoker SessionRevoker) {
 }
 
 func (s *accountServiceImpl) setOAuth2ClientDeleter(deleter OAuth2ClientDeleter) {
+	s.oauth2ClientDeleter = deleter
+}
+
+// SetSessionRevoker sets the session revoker dependency.
+func (s *accountServiceImpl) SetSessionRevoker(revoker SessionRevoker) {
+	s.sessionRevoker = revoker
+}
+
+// SetOAuth2ClientDeleter sets the OAuth2 client deleter dependency.
+func (s *accountServiceImpl) SetOAuth2ClientDeleter(deleter OAuth2ClientDeleter) {
 	s.oauth2ClientDeleter = deleter
 }
 

@@ -1086,7 +1086,7 @@ func TestUnbindFederatedIdentity_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TestBindSessionRevoker tests late-binding session revoker
+// TestBindSessionRevoker tests late-binding session revoker via interface method
 func TestBindSessionRevoker(t *testing.T) {
 	db, _, err := sqlmock.New()
 	require.NoError(t, err)
@@ -1099,8 +1099,7 @@ func TestBindSessionRevoker(t *testing.T) {
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 
-	err = BindSessionRevoker(accountService, &stubSessionRevoker{})
-	assert.NoError(t, err)
+	BindSessionRevoker(accountService, &stubSessionRevoker{})
 
 	// Verify it was bound by calling a function that checks for it
 	// SuspendAccount requires session revoker
@@ -1108,15 +1107,33 @@ func TestBindSessionRevoker(t *testing.T) {
 	assert.NotNil(t, impl.sessionRevoker)
 }
 
-// TestBindSessionRevoker_InvalidType tests binding with wrong type
-func TestBindSessionRevoker_InvalidType(t *testing.T) {
-	// Create a minimal implementation that satisfies AccountService but is not *accountServiceImpl
-	err := BindSessionRevoker(&fakeAccountService{}, &stubSessionRevoker{})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not *accountServiceImpl")
+// TestSetSessionRevoker tests the interface method directly
+func TestSetSessionRevoker(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	svc := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	svc.SetSessionRevoker(&stubSessionRevoker{})
+
+	impl := svc.(*accountServiceImpl)
+	assert.NotNil(t, impl.sessionRevoker)
 }
 
-// TestBindOAuth2ClientDeleter tests late-binding OAuth2 client deleter
+// TestSetSessionRevoker_FakeImplementation tests that the interface method works with non-impl types
+func TestSetSessionRevoker_FakeImplementation(t *testing.T) {
+	// This test verifies that the interface method can be called on any AccountService implementation
+	// (unlike the old BindSessionRevoker which used type assertions)
+	fake := &fakeAccountService{}
+	fake.SetSessionRevoker(&stubSessionRevoker{}) // should not panic
+}
+
+// TestBindOAuth2ClientDeleter tests late-binding OAuth2 client deleter via interface method
 func TestBindOAuth2ClientDeleter(t *testing.T) {
 	db, _, err := sqlmock.New()
 	require.NoError(t, err)
@@ -1129,21 +1146,31 @@ func TestBindOAuth2ClientDeleter(t *testing.T) {
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 
-	err = BindOAuth2ClientDeleter(accountService, &stubOAuth2ClientDeleter{})
-	assert.NoError(t, err)
+	BindOAuth2ClientDeleter(accountService, &stubOAuth2ClientDeleter{})
 
 	impl := accountService.(*accountServiceImpl)
 	assert.NotNil(t, impl.oauth2ClientDeleter)
 }
 
-// TestBindOAuth2ClientDeleter_InvalidType tests binding with wrong type
-func TestBindOAuth2ClientDeleter_InvalidType(t *testing.T) {
-	err := BindOAuth2ClientDeleter(&fakeAccountService{}, &stubOAuth2ClientDeleter{})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not *accountServiceImpl")
+// TestSetOAuth2ClientDeleter tests the interface method directly
+func TestSetOAuth2ClientDeleter(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	svc := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	svc.SetOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
+
+	impl := svc.(*accountServiceImpl)
+	assert.NotNil(t, impl.oauth2ClientDeleter)
 }
 
-// fakeAccountService is a non-pointer-type AccountService used to test late-bind type assertions.
+// fakeAccountService is a non-pointer-type AccountService used to test interface methods.
 type fakeAccountService struct{}
 
 func (f *fakeAccountService) RegisterAccount(_ context.Context, _ *RegisterAccountRequest) (*domain.Account, error) {
@@ -1175,3 +1202,5 @@ func (f *fakeAccountService) ActivateAccount(_ context.Context, _ string) error 
 func (f *fakeAccountService) GetAccountRoles(_ context.Context, _ string) ([]*domain.Role, error) {
 	return nil, nil
 }
+func (f *fakeAccountService) SetSessionRevoker(_ SessionRevoker)          {}
+func (f *fakeAccountService) SetOAuth2ClientDeleter(_ OAuth2ClientDeleter) {}
