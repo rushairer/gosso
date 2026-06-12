@@ -102,6 +102,9 @@ type SessionService struct {
 
 // NewSessionService creates a new session service instance.
 func NewSessionService(redis *cache.RedisClient, logger *zap.Logger) *SessionService {
+	if redis == nil {
+		panic("NewSessionService: redis must not be nil")
+	}
 	logger = utility.EnsureLogger(logger)
 
 	return &SessionService{
@@ -345,7 +348,10 @@ func (s *SessionService) expireSession(ctx context.Context, sessionID string) {
 				zap.String("session_id", sessionID), zap.Error(err))
 		}
 	}
-	_ = s.DeleteSession(ctx, sessionID)
+	if err := s.DeleteSession(ctx, sessionID); err != nil {
+		s.logger.Warn("Failed to delete expired session",
+			zap.String("session_id", sessionID), zap.Error(err))
+	}
 }
 
 // buildSessionKey builds the Redis key for a session.

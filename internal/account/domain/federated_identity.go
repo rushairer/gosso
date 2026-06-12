@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,6 +29,15 @@ type FederatedIdentity struct {
 	DeletedAt      *time.Time     `json:"deleted_at,omitempty"`
 }
 
+// IsValidProvider reports whether p is a recognized identity provider.
+func IsValidProvider(p Provider) bool {
+	switch p {
+	case ProviderGoogle, ProviderGitHub, ProviderWeChat:
+		return true
+	}
+	return false
+}
+
 // NewFederatedIdentity creates a new federated identity.
 // Returns an error if accountID or providerUserID is empty.
 func NewFederatedIdentity(accountID string, provider Provider, providerUserID string, profile map[string]any) (*FederatedIdentity, error) {
@@ -36,6 +46,9 @@ func NewFederatedIdentity(accountID string, provider Provider, providerUserID st
 	}
 	if provider == "" {
 		return nil, errors.New("provider is required")
+	}
+	if !IsValidProvider(provider) {
+		return nil, fmt.Errorf("unsupported provider: %s", provider)
 	}
 	if providerUserID == "" {
 		return nil, errors.New("provider user ID is required")
@@ -73,6 +86,9 @@ func (fi *FederatedIdentity) SoftDelete() error {
 
 // UpdateProfile updates the profile data.
 func (fi *FederatedIdentity) UpdateProfile(profile map[string]any) {
+	if profile == nil {
+		profile = make(map[string]any)
+	}
 	fi.Profile = profile
 	fi.UpdatedAt = time.Now()
 }

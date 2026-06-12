@@ -65,9 +65,15 @@ func (a *AuthorizationCode) VerifyPKCE(verifier string) bool {
 		return true // No PKCE requirement, pass through
 	}
 
-	// RFC 7636 §4.1: code_verifier must be 43-128 characters
+	// RFC 7636 §4.1: code_verifier must be 43-128 characters of unreserved characters
 	if len(verifier) < 43 || len(verifier) > 128 {
 		return false
+	}
+	for _, c := range verifier {
+		if !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+			(c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' || c == '~') {
+			return false
+		}
 	}
 
 	switch a.CodeChallengeMethod {

@@ -30,6 +30,9 @@ func NewRole(name string, description *string) (*Role, error) {
 	if len(name) > 255 {
 		return nil, errors.New("role name must not exceed 255 characters")
 	}
+	if description != nil && len(*description) > 1024 {
+		return nil, errors.New("role description must not exceed 1024 characters")
+	}
 	return &Role{
 		ID:          uuid.New().String(),
 		Name:        name,
@@ -58,7 +61,12 @@ func (r *Role) SoftDelete() error {
 }
 
 // AddPermission adds a permission to the role.
+// Empty or whitespace-only permissions are silently ignored.
 func (r *Role) AddPermission(permission string) {
+	permission = strings.TrimSpace(permission)
+	if permission == "" {
+		return
+	}
 	// check if already present
 	for _, p := range r.Permissions {
 		if p == permission {

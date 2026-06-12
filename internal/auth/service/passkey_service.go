@@ -378,7 +378,11 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, requestID string,
 		return fmt.Errorf("finish mfa login: %w", err)
 	}
 
-	cred.SignCount = waCred.Authenticator.SignCount
+	// Per WebAuthn spec: sign count of 0 means the authenticator does not support
+	// counters. Only update if the new count is non-zero (authenticator supports it).
+	if waCred.Authenticator.SignCount > 0 {
+		cred.SignCount = waCred.Authenticator.SignCount
+	}
 	cred.MarkUsed()
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {

@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- `SuspendAccount` now returns session revocation errors instead of swallowing them — previously suspended users could retain active sessions if Redis revocation failed (`internal/account/service/account_service.go`).
+- `NewPasswordCredential` now validates password length (1-1024 bytes) before Argon2id hashing — prevents memory exhaustion DoS via oversized passwords (`internal/account/domain/credential.go`).
+- `RotateRefreshToken` now correctly distinguishes Redis network errors from missing keys — previously all errors were masked as `ErrKeyNotFound` (`internal/token/service/token_service.go`).
+- `CompleteMFALogin` now guards sign count updates with `> 0` check — prevents resetting sign count for authenticators that don't support counters, matching `CompleteLogin` behavior (`internal/auth/service/passkey_service.go`).
+- `IsMFAEnabled` now fails closed when passkey service is unreachable — previously returned `(false, nil)` allowing MFA bypass (`internal/auth/service/mfa_service.go`).
+- Auth middleware error messages unified to generic "unauthorized" — prevents authentication state enumeration (`internal/auth/middleware/auth_middleware.go`).
+- RSA key loading now enforces minimum 2048-bit key size — previously accepted any key size for loaded PEM files (`internal/token/service/key_service.go`).
+- `NewFederatedIdentity` now validates provider against known values (google/github/wechat) — previously accepted arbitrary strings (`internal/account/domain/federated_identity.go`).
+- `FederatedIdentity.UpdateProfile` now handles nil map input — prevents nil map panic (`internal/account/domain/federated_identity.go`).
+- `NewEmailCredential` / `NewPhoneCredential` now validate accountID and identifier non-empty and return errors — previously silently created credentials with empty values (`internal/account/domain/credential.go`).
+- OAuth2 revocation endpoint now supports access token revocation per RFC 7009 — previously only revoked refresh tokens (`internal/oauth2/controller/oauth2_revoke.go`).
+- PKCE `code_verifier` now validates character set per RFC 7636 §4.1 — previously only checked length (`internal/oauth2/domain/authorization_code.go`).
+- PKCE `code_challenge_method` without `code_challenge` now rejected per RFC 7636 §4.3 (`internal/oauth2/controller/oauth2_authorize.go`).
+- ID token generation now propagates credential lookup errors — previously silently omitted email/phone claims on database failures (`internal/oidc/service/id_token_service.go`).
+- `NewSessionService` now panics on nil Redis client — previously would panic later at runtime (`internal/session/service/session_service.go`).
 - Password reset (`VerifyAndReset`) now verifies account is still active before changing password — prevents credential modification on suspended/deleted accounts (`internal/auth/service/password_reset_service.go`).
 - OAuth2 refresh token grant now exempts public clients from client authentication per RFC 6749 Section 6 — public clients are bound by the refresh token itself and PKCE (`internal/oauth2/controller/oauth2_token.go`).
 - OAuth2 token endpoint now enforces `Content-Type: application/x-www-form-urlencoded` header — previously allowed empty Content-Type per RFC 6749 Section 4.1.3 (`internal/oauth2/controller/oauth2_token.go`).
@@ -25,6 +40,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Dockerfile: removed unnecessary `git` from builder stage — build uses `-buildvcs=false` (`Dockerfile`).
 - Session creation log now includes client IP for security diagnostics (`internal/session/service/session_service.go`).
 - WebAuthn sign count update now respects authenticators that don't support counters (sign count = 0) — prevents resetting clone detection state (`internal/auth/service/passkey_service.go`).
+- `NewAccount` now trims whitespace from DisplayName before storing (`internal/account/domain/account.go`).
+- `NewRole` now validates Description length (max 1024 characters) (`internal/account/domain/role.go`).
+- `Role.AddPermission` now trims whitespace and rejects empty permissions (`internal/account/domain/role.go`).
+- `BindFederatedIdentity` now uses `domain.NewFederatedIdentity()` constructor instead of bypassing validation (`internal/account/service/account_service.go`).
+- `JWTAuthMiddleware` now accepts `TokenValidator` interface instead of concrete `*TokenService` — improves testability (`internal/auth/middleware/auth_middleware.go`).
+- Duplicate Lua GET+DEL script removed from OAuth2 authorize controller — uses `RedisClient.GetDel()` instead (`internal/oauth2/controller/oauth2_authorize.go`).
+- Discovery document removed misleading `token_endpoint_auth_signing_alg_values_supported: ["none"]` (`internal/oidc/service/discovery_service.go`).
+- `rsaKeyBits` global variable now uses `sync/atomic` for thread safety (`internal/token/service/key_service.go`).
+- `db.SetLogger` now uses `atomic.Pointer` for thread safety (`internal/db/transaction.go`).
+- `SAddWithTTL` now uses `math.Ceil` for TTL rounding — prevents sub-second TTLs from becoming 0 (`internal/cache/redis_client.go`).
+- `expireSession` now logs `DeleteSession` errors instead of silently discarding (`internal/session/service/session_service.go`).
+- Password reset internal constants (Redis key prefixes, TTL, max attempts) now unexported (`internal/auth/service/password_reset_service.go`).
 - `SocialLoginService.HandleCallback` documentation now explicitly states that OAuth2 `state` validation is the caller's responsibility (`internal/auth/service/social_login_service.go`).
 
 ### Fixed

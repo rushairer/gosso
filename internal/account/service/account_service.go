@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/account/domain"
@@ -228,13 +227,19 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		credentials = append(credentials, passwordCred)
 
 		if req.Email != "" {
-			emailCred := domain.NewEmailCredential(account.ID, req.Email)
+			emailCred, err := domain.NewEmailCredential(account.ID, req.Email)
+			if err != nil {
+				return fmt.Errorf("create email credential: %w", err)
+			}
 			emailCred.PrimaryCredential = true
 			credentials = append(credentials, emailCred)
 		}
 
 		if req.Phone != "" {
-			phoneCred := domain.NewPhoneCredential(account.ID, req.Phone)
+			phoneCred, err := domain.NewPhoneCredential(account.ID, req.Phone)
+			if err != nil {
+				return fmt.Errorf("create phone credential: %w", err)
+			}
 			phoneCred.PrimaryCredential = req.Email == ""
 			credentials = append(credentials, phoneCred)
 		}
@@ -484,18 +489,12 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
 		return err
 	}
-	now := time.Now()
-	identity := &domain.FederatedIdentity{
-		ID:             uuid.New().String(),
-		AccountID:      accountID,
-		Provider:       provider,
-		ProviderUserID: providerUserID,
-		Profile:        profile,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+	identity, err := domain.NewFederatedIdentity(accountID, provider, providerUserID, profile)
+	if err != nil {
+		return fmt.Errorf("create federated identity: %w", err)
 	}
 
-	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		// Check inside the transaction to avoid TOCTOU: a concurrent request
 		// could bind the same identity between our check and the insert.
 		existing, err := s.federatedIdentityRepo.FindByProviderTx(ctx, tx, provider, providerUserID)
@@ -635,6 +634,7 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 	if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
 		s.logger.Error("Failed to revoke sessions after account suspension",
 			zap.String("account_id", accountID), zap.Error(revokeErr))
+		return fmt.Errorf("suspend succeeded but session revocation failed: %w", revokeErr)
 	}
 
 	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(

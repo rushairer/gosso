@@ -31,6 +31,7 @@ type TokenManager interface {
 	ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*tokenDomain.AccessTokenClaims, error)
 	RotateRefreshToken(ctx context.Context, oldToken string) (*tokenDomain.RefreshToken, error)
 	RevokeRefreshToken(ctx context.Context, token string) error
+	RevokeAccessToken(ctx context.Context, jti string, expiresAt time.Time) error
 	IntrospectToken(ctx context.Context, tokenString string) (map[string]any, error)
 	AccessExpiry() time.Duration
 }

@@ -313,7 +313,10 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	//    This enables the session index update to happen atomically inside the script.
 	oldData, err := s.redis.Get(ctx, oldKey)
 	if err != nil {
-		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
+		if errors.Is(err, cache.ErrKeyNotFound) {
+			return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
+		}
+		return nil, fmt.Errorf("refresh token lookup failed: %w", err)
 	}
 	var oldRT domain.RefreshToken
 	if err := json.Unmarshal([]byte(oldData), &oldRT); err != nil {

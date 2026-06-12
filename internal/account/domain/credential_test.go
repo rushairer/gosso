@@ -107,14 +107,16 @@ func TestCredential_SoftDelete(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestNewEmailCredential(t *testing.T) {
-	cred := NewEmailCredential("acc-1", "test@example.com")
+	cred, err := NewEmailCredential("acc-1", "test@example.com")
+	require.NoError(t, err)
 	assert.Equal(t, CredentialTypeEmail, cred.Type)
 	assert.Equal(t, "test@example.com", *cred.Identifier)
 	assert.False(t, cred.Verified)
 }
 
 func TestNewPhoneCredential(t *testing.T) {
-	cred := NewPhoneCredential("acc-1", "+8613800138000")
+	cred, err := NewPhoneCredential("acc-1", "+8613800138000")
+	require.NoError(t, err)
 	assert.Equal(t, CredentialTypePhone, cred.Type)
 	assert.Equal(t, "+8613800138000", *cred.Identifier)
 }

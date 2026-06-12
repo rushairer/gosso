@@ -6,18 +6,19 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync/atomic"
 
 	"go.uber.org/zap"
 )
 
 // logger is an optional structured logger for the db package.
 // If nil, fallback to the standard log package.
-var logger *zap.Logger
+var atomicLogger atomic.Pointer[zap.Logger]
 
 // SetLogger configures a structured logger for the db package.
 // Call this during application startup before any transaction runs.
 func SetLogger(l *zap.Logger) {
-	logger = l
+	atomicLogger.Store(l)
 }
 
 // RunInTransaction executes fn within a database transaction with LevelReadCommitted isolation.
@@ -69,8 +70,8 @@ func RunInTransactionIsolation(ctx context.Context, db *sql.DB, isolation sql.Is
 // logRollbackError logs a rollback failure using the structured logger if available,
 // falling back to the standard log package otherwise.
 func logRollbackError(msg string, rerr error) {
-	if logger != nil {
-		logger.Warn(msg, zap.Error(rerr))
+	if l := atomicLogger.Load(); l != nil {
+		l.Warn(msg, zap.Error(rerr))
 	} else {
 		log.Printf("%s: %v", msg, rerr)
 	}

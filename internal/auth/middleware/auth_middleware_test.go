@@ -253,7 +253,7 @@ func TestValidateBearerToken_MissingToken(t *testing.T) {
 		claims, err := ValidateBearerToken(ctx, &mockTokenValidator{}, nil)
 		assert.Nil(t, claims)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "missing authorization")
+		assert.Contains(t, err.Error(), "unauthorized")
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -267,7 +267,7 @@ func TestValidateBearerToken_InvalidToken(t *testing.T) {
 		claims, err := ValidateBearerToken(ctx, &mockTokenValidator{err: fmt.Errorf("token expired")}, nil)
 		assert.Nil(t, claims)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid or expired token")
+		assert.Contains(t, err.Error(), "unauthorized")
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -305,7 +305,7 @@ func TestValidateBearerToken_ExpiredSession(t *testing.T) {
 		}, &mockSessionValidator{err: fmt.Errorf("session not found")})
 		assert.Nil(t, claims)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "session expired")
+		assert.Contains(t, err.Error(), "unauthorized")
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)

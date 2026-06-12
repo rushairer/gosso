@@ -225,7 +225,11 @@ func (r *RedisClient) SAddWithTTL(ctx context.Context, key string, member string
 		return fmt.Errorf("sadd_with_ttl: TTL must be positive, got %v", ttl)
 	}
 	script := redis.NewScript(`redis.call('SADD', KEYS[1], ARGV[1]); return redis.call('EXPIRE', KEYS[1], ARGV[2])`)
-	_, err := script.Run(ctx, r.client, []string{key}, member, int(ttl.Seconds())).Result()
+	secs := int(math.Ceil(ttl.Seconds()))
+	if secs < 1 {
+		secs = 1
+	}
+	_, err := script.Run(ctx, r.client, []string{key}, member, secs).Result()
 	if err != nil {
 		r.logger.Error("Redis SADD+EXPIRE failed", zap.String("key", key), zap.Error(err))
 		return fmt.Errorf("sadd_with_ttl key %s: %w", key, err)

@@ -697,9 +697,9 @@ func TestIsMFAEnabled_WithPasskeyError(t *testing.T) {
 	}
 	svc := newTestMFAServiceWithPasskeys(t, credRepo, waRepo)
 
-	// Passkey error is logged as warning, IsMFAEnabled falls through to false.
+	// Passkey error is now propagated as a fail-closed measure.
 	enabled, err := svc.IsMFAEnabled(context.Background(), "account-001")
-	require.NoError(t, err)
+	require.Error(t, err)
 	assert.False(t, enabled)
 }
 

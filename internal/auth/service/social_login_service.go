@@ -330,7 +330,10 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 		}
 
 		if email != "" {
-			emailCred := accountDomain.NewEmailCredential(account.ID, email)
+			emailCred, err := accountDomain.NewEmailCredential(account.ID, email)
+			if err != nil {
+				return fmt.Errorf("create email credential: %w", err)
+			}
 			emailCred.PrimaryCredential = true
 			if emailVerified {
 				emailCred.Verify()

@@ -12,39 +12,50 @@ import (
 	"github.com/rushairer/gosso/middleware"
 )
 
-// Revoke POST /oauth2/revoke
+// Revoke POST /oauth2/revoke (RFC 7009)
 func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 	var req struct {
-		Token string `json:"token" form:"token" binding:"required"`
+		Token     string `json:"token" form:"token" binding:"required"`
+		TokenHint string `json:"token_type_hint" form:"token_type_hint"`
 	}
 	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
 		return
 	}
 
-	// Verify the refresh token belongs to the authenticated user before revoking.
+	// Verify the token belongs to the authenticated user before revoking.
 	accountIDStr, ok := middleware.GetAccountID(ctx)
 	if !ok {
 		return
 	}
-	rt, err := c.tokenSvc.ValidateRefreshToken(ctx, req.Token)
-	if err != nil {
-		// RFC 7009 §2.1: always return 200 for invalid/unknown tokens
-		// to prevent token existence oracle.
-		ctx.Status(http.StatusOK)
-		return
-	}
-	if rt.AccountID != accountIDStr {
-		// Token belongs to a different user — silently skip revocation.
-		ctx.Status(http.StatusOK)
-		return
+
+	// Try refresh token first (unless hint says otherwise)
+	if req.TokenHint != "access_token" {
+		rt, err := c.tokenSvc.ValidateRefreshToken(ctx, req.Token)
+		if err == nil {
+			if rt.AccountID != accountIDStr {
+				ctx.Status(http.StatusOK)
+				return
+			}
+			if err := c.tokenSvc.RevokeRefreshToken(ctx, req.Token); err != nil {
+				c.logger.Error("Failed to revoke refresh token", zap.Error(err))
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+				return
+			}
+			ctx.Status(http.StatusOK)
+			return
+		}
 	}
 
-	if err := c.tokenSvc.RevokeRefreshToken(ctx, req.Token); err != nil {
-		c.logger.Error("Failed to revoke token", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-		return
+	// Try access token (RFC 7009 §2.1: revoke whatever type matches)
+	if req.TokenHint != "refresh_token" {
+		claims, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx, req.Token)
+		if err == nil && claims.AccountID == accountIDStr {
+			_ = c.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time)
+		}
 	}
+
+	// RFC 7009 §2.1: always return 200 for invalid/unknown tokens
 	ctx.Status(http.StatusOK)
 }
 

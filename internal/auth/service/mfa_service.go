@@ -126,7 +126,7 @@ func (s *MFAService) IsMFAEnabled(ctx context.Context, accountID string) (bool, 
 	if s.passkeySvc != nil {
 		has, err := s.passkeySvc.HasPasskeys(ctx, accountID)
 		if err != nil {
-			s.logger.Warn("Failed to check passkeys for MFA", zap.String("account_id", accountID), zap.Error(err))
+			return false, fmt.Errorf("check passkeys for MFA: %w", err)
 		} else if has {
 			return true, nil
 		}

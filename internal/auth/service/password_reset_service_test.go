@@ -70,7 +70,7 @@ func TestPasswordReset_Success(t *testing.T) {
 	tokenHash := tokenDomain.HashToken("test-token-123")
 	tokenKey := svc.buildTokenKey(tokenHash)
 	data := `{"account_id":"account-001","email":"test@example.com","attempts":0}`
-	err := redis.Set(ctx, tokenKey, []byte(data), PasswordResetTokenTTL)
+	err := redis.Set(ctx, tokenKey, []byte(data), passwordResetTokenTTL)
 	require.NoError(t, err)
 
 	// Verify token was stored successfully
@@ -97,7 +97,7 @@ func TestPasswordReset_Cooldown(t *testing.T) {
 
 	// Set cooldown key
 	cooldownKey := svc.buildCooldownKey(email)
-	err := redis.Set(ctx, cooldownKey, []byte("1"), PasswordResetCooldownTTL)
+	err := redis.Set(ctx, cooldownKey, []byte("1"), passwordResetCooldownTTL)
 	require.NoError(t, err)
 
 	// Check cooldown
@@ -131,7 +131,7 @@ func TestPasswordReset_ExpiredToken(t *testing.T) {
 	tokenHash := tokenDomain.HashToken("expired-token")
 	tokenKey := svc.buildTokenKey(tokenHash)
 	data := `{"account_id":"account-002","email":"expired@example.com","attempts":0}`
-	err := redis.Set(ctx, tokenKey, []byte(data), PasswordResetTokenTTL)
+	err := redis.Set(ctx, tokenKey, []byte(data), passwordResetTokenTTL)
 	require.NoError(t, err)
 
 	// Manually delete key
@@ -153,7 +153,7 @@ func TestPasswordReset_TokenExhausted(t *testing.T) {
 	tokenHash := tokenDomain.HashToken("exhausted-token")
 	tokenKey := svc.buildTokenKey(tokenHash)
 	data := `{"account_id":"account-003","email":"exhausted@example.com","attempts":5}`
-	err := redis.Set(ctx, tokenKey, []byte(data), PasswordResetTokenTTL)
+	err := redis.Set(ctx, tokenKey, []byte(data), passwordResetTokenTTL)
 	require.NoError(t, err)
 
 	// Verify attempts >= 5
@@ -176,7 +176,7 @@ func TestPasswordReset_TokenReuse(t *testing.T) {
 	tokenHash := tokenDomain.HashToken("reuse-token")
 	tokenKey := svc.buildTokenKey(tokenHash)
 	data := `{"account_id":"account-004","email":"reuse@example.com","attempts":0}`
-	err := redis.Set(ctx, tokenKey, []byte(data), PasswordResetTokenTTL)
+	err := redis.Set(ctx, tokenKey, []byte(data), passwordResetTokenTTL)
 	require.NoError(t, err)
 
 	// First fetch succeeds
@@ -432,7 +432,7 @@ func TestRequestReset_CooldownActive(t *testing.T) {
 
 	// Set cooldown key
 	cooldownKey := svc.buildCooldownKey(email)
-	err := redis.Set(ctx, cooldownKey, []byte("1"), PasswordResetCooldownTTL)
+	err := redis.Set(ctx, cooldownKey, []byte("1"), passwordResetCooldownTTL)
 	require.NoError(t, err)
 
 	err = svc.RequestReset(ctx, email)
@@ -543,7 +543,7 @@ func TestVerifyAndReset_TokenExhausted(t *testing.T) {
 	tokenHash := tokenDomain.HashToken("exhausted-token")
 	tokenKey := svc.buildTokenKey(tokenHash)
 	data := `{"account_id":"acct-001","email":"test@example.com","attempts":5}`
-	err := redis.Set(ctx, tokenKey, []byte(data), PasswordResetTokenTTL)
+	err := redis.Set(ctx, tokenKey, []byte(data), passwordResetTokenTTL)
 	require.NoError(t, err)
 
 	err = svc.VerifyAndReset(ctx, "exhausted-token", "NewPassword123")

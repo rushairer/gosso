@@ -27,14 +27,14 @@ import (
 )
 
 const (
-	PasswordResetTokenKeyPrefix    = "password_reset:token:"
-	PasswordResetCooldownPrefix    = "password_reset:cooldown:"
-	PasswordResetTokenLength       = 32
-	PasswordResetTokenTTL          = 30 * time.Minute
-	PasswordResetCooldownTTL       = 60 * time.Second
-	PasswordResetMaxAttempts       = 5
-	PasswordResetRevokeTimeout     = 30 * time.Second
-	PasswordResetSyncRevokeTimeout = 5 * time.Second
+	passwordResetTokenKeyPrefix    = "password_reset:token:"
+	passwordResetCooldownPrefix    = "password_reset:cooldown:"
+	passwordResetTokenLength       = 32
+	passwordResetTokenTTL          = 30 * time.Minute
+	passwordResetCooldownTTL       = 60 * time.Second
+	passwordResetMaxAttempts       = 5
+	passwordResetRevokeTimeout     = 30 * time.Second
+	passwordResetSyncRevokeTimeout = 5 * time.Second
 )
 
 // checkAndIncrementAttemptsScript atomically checks attempt count, increments, and returns the data.
@@ -118,9 +118,9 @@ func NewPasswordResetService(
 		logger:         logger,
 		revokeSem:      make(chan struct{}, 10),
 		waitTimeout:    60 * time.Second,
-		tokenTTL:       PasswordResetTokenTTL,
-		cooldownTTL:    PasswordResetCooldownTTL,
-		maxAttempts:    PasswordResetMaxAttempts,
+		tokenTTL:       passwordResetTokenTTL,
+		cooldownTTL:    passwordResetCooldownTTL,
+		maxAttempts:    passwordResetMaxAttempts,
 	}
 }
 
@@ -182,7 +182,7 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 	}
 
 	// Generate token
-	tokenBytes := make([]byte, PasswordResetTokenLength)
+	tokenBytes := make([]byte, passwordResetTokenLength)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return fmt.Errorf("generate token: %w", err)
 	}
@@ -310,7 +310,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	// This is a single Redis SET operation and is fast — doing it synchronously
 	// closes the window where a stolen access token could still be used.
 	if s.tokenRevoker != nil {
-		revokeCtx, revokeCancel := context.WithTimeout(ctx, PasswordResetSyncRevokeTimeout)
+		revokeCtx, revokeCancel := context.WithTimeout(ctx, passwordResetSyncRevokeTimeout)
 		defer revokeCancel()
 		if err := s.tokenRevoker.RevokeAccountTokens(revokeCtx, data.AccountID); err != nil {
 			s.logger.Error("Failed to revoke access tokens after password reset",
@@ -328,7 +328,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		go func() {
 			defer s.wg.Done()
 			defer func() { <-s.revokeSem }()
-			bgCtx, cancel := context.WithTimeout(context.Background(), PasswordResetRevokeTimeout)
+			bgCtx, cancel := context.WithTimeout(context.Background(), passwordResetRevokeTimeout)
 			defer cancel()
 			if err := s.sessionSvc.RevokeAllForAccount(bgCtx, data.AccountID); err != nil {
 				s.logger.Error("Failed to revoke sessions after password reset",
@@ -339,7 +339,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		s.wg.Done()
 		s.logger.Warn("Revoke goroutine limit reached, falling back to synchronous revocation",
 			zap.String("account_id", data.AccountID))
-		syncCtx, syncCancel := context.WithTimeout(context.Background(), PasswordResetSyncRevokeTimeout)
+		syncCtx, syncCancel := context.WithTimeout(context.Background(), passwordResetSyncRevokeTimeout)
 		defer syncCancel()
 		if err := s.sessionSvc.RevokeAllForAccount(syncCtx, data.AccountID); err != nil {
 			s.logger.Error("Failed to revoke sessions synchronously after password reset",
@@ -352,11 +352,11 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 }
 
 func (s *PasswordResetService) buildTokenKey(tokenHash string) string {
-	return fmt.Sprintf("%s%s", PasswordResetTokenKeyPrefix, tokenHash)
+	return fmt.Sprintf("%s%s", passwordResetTokenKeyPrefix, tokenHash)
 }
 
 func (s *PasswordResetService) buildCooldownKey(email string) string {
-	return fmt.Sprintf("%s%s", PasswordResetCooldownPrefix, strings.ToLower(email))
+	return fmt.Sprintf("%s%s", passwordResetCooldownPrefix, strings.ToLower(email))
 }
 
 // Wait blocks until all background goroutines (e.g., session revocation) complete.

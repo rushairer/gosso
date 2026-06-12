@@ -12,7 +12,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
@@ -21,17 +20,6 @@ import (
 
 const consentStateTTL = 10 * time.Minute
 const consentStateKeyPrefix = "consent_state:"
-
-// getAndDeleteConsentScript atomically retrieves and deletes consent state from Redis.
-// This prevents replay attacks where a concurrent request reads the same consent state
-// before it is deleted.
-var getAndDeleteConsentScript = redis.NewScript(`
-local data = redis.call('GET', KEYS[1])
-if data then
-    redis.call('DEL', KEYS[1])
-end
-return data
-`)
 
 // consentState stores the PKCE and authorization parameters from the GET /authorize request.
 // It is persisted in Redis to prevent tampering between the consent page render and the POST.
@@ -54,6 +42,10 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 
 	if codeChallenge != "" && codeChallengeMethod != "S256" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "code_challenge_method must be S256"})
+		return
+	}
+	if codeChallengeMethod != "" && codeChallenge == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "code_challenge is required when code_challenge_method is specified"})
 		return
 	}
 
@@ -263,12 +255,11 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		return
 	}
 	stateKey := consentStateKeyPrefix + req.ConsentID
-	stateDataRaw, err := c.redis.RunScript(ctx, getAndDeleteConsentScript, []string{stateKey}).Result()
-	if err != nil && err != redis.Nil {
+	stateData, err := c.redis.GetDel(ctx, stateKey)
+	if err != nil {
 		ctx.JSON(http.StatusServiceUnavailable, gin.H{"error": "server_error", "error_description": "consent state storage error"})
 		return
 	}
-	stateData, _ := stateDataRaw.(string)
 	if stateData == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid or expired consent session"})
 		return

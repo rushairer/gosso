@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 
 	"go.uber.org/zap"
 
@@ -18,7 +19,11 @@ import (
 
 // rsaKeyBits is the key size for new RSA key generation.
 // NOTE: Existing keys are not affected; rotate keys to upgrade.
-var rsaKeyBits = 3072
+var rsaKeyBits atomic.Int32
+
+func init() {
+	rsaKeyBits.Store(3072)
+}
 
 // SetRSAKeyBits overrides the default RSA key size for new key generation.
 // Must be called before NewKeyService. Panics if called with a value < 2048.
@@ -27,7 +32,7 @@ func SetRSAKeyBits(bits int) {
 		if bits < 2048 {
 			panic("rsa_key_bits must be at least 2048")
 		}
-		rsaKeyBits = bits
+		rsaKeyBits.Store(int32(bits))
 	}
 }
 
@@ -100,7 +105,7 @@ func (s *KeyService) KeyID() string {
 }
 
 func generateKey() (*rsa.PrivateKey, error) {
-	return rsa.GenerateKey(rand.Reader, rsaKeyBits)
+	return rsa.GenerateKey(rand.Reader, int(rsaKeyBits.Load()))
 }
 
 func generateAndSaveKey(path string) (*rsa.PrivateKey, error) {
@@ -180,6 +185,10 @@ func loadPrivateKeyFromPEM(path string) (*rsa.PrivateKey, error) {
 	rsaKey, ok := key.(*rsa.PrivateKey)
 	if !ok {
 		return nil, fmt.Errorf("key is not RSA (got %T)", key)
+	}
+
+	if rsaKey.N.BitLen() < 2048 {
+		return nil, fmt.Errorf("RSA key too small: %d bits (minimum 2048)", rsaKey.N.BitLen())
 	}
 
 	return rsaKey, nil

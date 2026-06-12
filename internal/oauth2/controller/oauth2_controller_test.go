@@ -104,6 +104,10 @@ func (m *mockTokenMgr) RevokeRefreshToken(_ context.Context, _ string) error {
 	return nil
 }
 
+func (m *mockTokenMgr) RevokeAccessToken(_ context.Context, _ string, _ time.Time) error {
+	return nil
+}
+
 func (m *mockTokenMgr) IntrospectToken(_ context.Context, _ string) (map[string]any, error) {
 	if m.introspectFn != nil {
 		return m.introspectFn()

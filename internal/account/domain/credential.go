@@ -71,9 +71,16 @@ func NewCredential(accountID string, credType CredentialType, identifier *string
 }
 
 // NewPasswordCredential creates a password credential (auto-hashed).
+// The plainPassword must be between 1 and 1024 bytes to prevent resource exhaustion.
 func NewPasswordCredential(accountID string, plainPassword string) (*Credential, error) {
 	if accountID == "" {
 		return nil, errors.New("account ID is required")
+	}
+	if len(plainPassword) == 0 {
+		return nil, errors.New("password must not be empty")
+	}
+	if len(plainPassword) > 1024 {
+		return nil, fmt.Errorf("password must not exceed 1024 bytes")
 	}
 	hashedPassword, err := HashPassword(plainPassword)
 	if err != nil {
@@ -92,7 +99,14 @@ func NewPasswordCredential(accountID string, plainPassword string) (*Credential,
 }
 
 // NewEmailCredential creates an email credential.
-func NewEmailCredential(accountID string, email string) *Credential {
+// Returns an error if accountID or email is empty.
+func NewEmailCredential(accountID string, email string) (*Credential, error) {
+	if accountID == "" {
+		return nil, errors.New("account ID is required")
+	}
+	if email == "" {
+		return nil, errors.New("email is required")
+	}
 	return &Credential{
 		ID:         uuid.New().String(),
 		AccountID:  accountID,
@@ -101,11 +115,18 @@ func NewEmailCredential(accountID string, email string) *Credential {
 		Verified:   false,
 		Metadata:   make(map[string]any),
 		CreatedAt:  time.Now(),
-	}
+	}, nil
 }
 
 // NewPhoneCredential creates a phone credential.
-func NewPhoneCredential(accountID string, phone string) *Credential {
+// Returns an error if accountID or phone is empty.
+func NewPhoneCredential(accountID string, phone string) (*Credential, error) {
+	if accountID == "" {
+		return nil, errors.New("account ID is required")
+	}
+	if phone == "" {
+		return nil, errors.New("phone is required")
+	}
 	return &Credential{
 		ID:         uuid.New().String(),
 		AccountID:  accountID,
@@ -114,7 +135,7 @@ func NewPhoneCredential(accountID string, phone string) *Credential {
 		Verified:   false,
 		Metadata:   make(map[string]any),
 		CreatedAt:  time.Now(),
-	}
+	}, nil
 }
 
 // IsDeleted reports whether the credential has been soft-deleted.

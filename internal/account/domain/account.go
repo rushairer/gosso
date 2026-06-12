@@ -52,7 +52,8 @@ type Account struct {
 // testability at this stage. If deterministic timestamps become needed (e.g. for
 // snapshot testing or reproducible time-based logic), introduce a Clock parameter here.
 func NewAccount(displayName string) (*Account, error) {
-	if strings.TrimSpace(displayName) == "" {
+	displayName = strings.TrimSpace(displayName)
+	if displayName == "" {
 		return nil, ErrDisplayNameRequired
 	}
 	if len(displayName) > 255 {

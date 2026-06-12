@@ -101,9 +101,13 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 			claims.Picture = safeString(account.AvatarURL)
 			claims.Locale = account.Locale
 		case "email":
-			s.addEmailClaims(ctx, accountID, claims)
+			if err := s.addEmailClaims(ctx, accountID, claims); err != nil {
+				return "", err
+			}
 		case "phone":
-			s.addPhoneClaims(ctx, accountID, claims)
+			if err := s.addPhoneClaims(ctx, accountID, claims); err != nil {
+				return "", err
+			}
 		}
 	}
 
@@ -124,30 +128,30 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 	return tokenString, nil
 }
 
-func (s *IDTokenService) addEmailClaims(ctx context.Context, accountID string, claims *IDTokenClaims) {
+func (s *IDTokenService) addEmailClaims(ctx context.Context, accountID string, claims *IDTokenClaims) error {
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeEmail)
 	if err != nil {
-		s.logger.Warn("Failed to query email credential for ID token", zap.String("account_id", accountID), zap.Error(err))
-		return
+		return fmt.Errorf("query email credential for ID token: %w", err)
 	}
 	if len(creds) > 0 && creds[0].Identifier != nil {
 		claims.Email = *creds[0].Identifier
 		verified := creds[0].IsVerified()
 		claims.EmailVerified = &verified
 	}
+	return nil
 }
 
-func (s *IDTokenService) addPhoneClaims(ctx context.Context, accountID string, claims *IDTokenClaims) {
+func (s *IDTokenService) addPhoneClaims(ctx context.Context, accountID string, claims *IDTokenClaims) error {
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypePhone)
 	if err != nil {
-		s.logger.Warn("Failed to query phone credential for ID token", zap.String("account_id", accountID), zap.Error(err))
-		return
+		return fmt.Errorf("query phone credential for ID token: %w", err)
 	}
 	if len(creds) > 0 && creds[0].Identifier != nil {
 		claims.PhoneNumber = *creds[0].Identifier
 		verified := creds[0].IsVerified()
 		claims.PhoneVerified = &verified
 	}
+	return nil
 }
 
 func ptrInt64(v int64) *int64 {

@@ -47,40 +47,59 @@ func (e *errorTokenRevoker) RevokeAllForSession(_ context.Context, _ string) err
 // ──────────────────────────────────────────────
 
 func TestNewSessionService_NilLogger(t *testing.T) {
-	svc := NewSessionService(nil, nil)
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+
+	svc := NewSessionService(redisClient, nil)
 	assert.NotNil(t, svc)
 	assert.NotNil(t, svc.logger)
 	assert.Equal(t, DefaultSessionTTL, svc.sessionTTL)
 	assert.Equal(t, DefaultMaxSessions, svc.maxSessions)
 }
 
+func TestNewSessionService_NilRedis(t *testing.T) {
+	assert.Panics(t, func() {
+		NewSessionService(nil, zap.NewNop())
+	})
+}
+
 func TestNewSessionService_WithLogger(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
 	logger := zap.NewNop()
-	svc := NewSessionService(nil, logger)
+	svc := NewSessionService(redisClient, logger)
 	assert.NotNil(t, svc)
 }
 
 func TestSessionService_SetMaxSessions(t *testing.T) {
-	svc := NewSessionService(nil, nil)
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	svc := NewSessionService(redisClient, zap.NewNop())
 	svc.SetMaxSessions(5)
 	assert.Equal(t, 5, svc.maxSessions)
 }
 
 func TestSessionService_SetSessionTTL(t *testing.T) {
-	svc := NewSessionService(nil, nil)
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	svc := NewSessionService(redisClient, zap.NewNop())
 	svc.SetSessionTTL(1 * time.Hour)
 	assert.Equal(t, 1*time.Hour, svc.sessionTTL)
 }
 
 func TestSessionService_BuildSessionKey(t *testing.T) {
-	svc := NewSessionService(nil, nil)
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	svc := NewSessionService(redisClient, zap.NewNop())
 	id := uuid.New().String()
 	key := svc.buildSessionKey(id)
 	assert.Equal(t, SessionKeyPrefix+id, key)
 }
 
 func TestSessionService_BuildAccountSessionsKey(t *testing.T) {
-	svc := NewSessionService(nil, nil)
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	svc := NewSessionService(redisClient, zap.NewNop())
 	key := svc.buildAccountSessionsKey("account-001")
 	assert.Equal(t, AccountSessionsPrefix+"account-001", key)
 }
@@ -276,13 +295,17 @@ func TestSessionService_ErrorDefinitions(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestSessionService_SetMaxSessionAge(t *testing.T) {
-	svc := NewSessionService(nil, nil)
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	svc := NewSessionService(redisClient, zap.NewNop())
 	svc.SetMaxSessionAge(2 * time.Hour)
 	assert.Equal(t, 2*time.Hour, svc.maxSessionAge)
 }
 
 func TestSessionService_SetMaxSessionAge_NoOp(t *testing.T) {
-	svc := NewSessionService(nil, nil)
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	svc := NewSessionService(redisClient, zap.NewNop())
 	original := svc.maxSessionAge
 	svc.SetMaxSessionAge(0)
 	assert.Equal(t, original, svc.maxSessionAge)
@@ -291,14 +314,18 @@ func TestSessionService_SetMaxSessionAge_NoOp(t *testing.T) {
 }
 
 func TestSessionService_SetMaxSessions_Negative(t *testing.T) {
-	svc := NewSessionService(nil, nil)
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	svc := NewSessionService(redisClient, zap.NewNop())
 	original := svc.maxSessions
 	svc.SetMaxSessions(-1)
 	assert.Equal(t, original, svc.maxSessions)
 }
 
 func TestSessionService_SetSessionTTL_NoOp(t *testing.T) {
-	svc := NewSessionService(nil, nil)
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	svc := NewSessionService(redisClient, zap.NewNop())
 	original := svc.sessionTTL
 	svc.SetSessionTTL(0)
 	assert.Equal(t, original, svc.sessionTTL)
@@ -543,16 +570,18 @@ func TestSessionService_EnforceSessionLimit(t *testing.T) {
 }
 
 func TestSessionService_EnforceSessionLimit_Disabled(t *testing.T) {
-	logger := zap.NewNop()
-	svc := NewSessionService(nil, logger)
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	svc := NewSessionService(redisClient, zap.NewNop())
 	svc.SetMaxSessions(0)
 	err := svc.EnforceSessionLimit(context.Background(), "any-account")
 	assert.NoError(t, err)
 }
 
 func TestSessionService_EnforceSessionLimit_NoRevoker(t *testing.T) {
-	logger := zap.NewNop()
-	svc := NewSessionService(nil, logger)
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	svc := NewSessionService(redisClient, zap.NewNop())
 	svc.SetMaxSessions(5)
 	err := svc.EnforceSessionLimit(context.Background(), "any-account")
 	assert.ErrorIs(t, err, ErrTokenRevokerNotConfigured)
