@@ -110,29 +110,6 @@ type accountServiceImpl struct {
 	logger                *zap.Logger
 }
 
-// AccountOption is a functional option for configuring AccountService.
-type AccountOption func(*accountServiceImpl)
-
-// WithSessionRevoker sets the session revoker dependency.
-func WithSessionRevoker(revoker SessionRevoker) AccountOption {
-	return func(s *accountServiceImpl) {
-		if revoker == nil {
-			panic("WithSessionRevoker: revoker must not be nil")
-		}
-		s.sessionRevoker = revoker
-	}
-}
-
-// WithOAuth2ClientDeleter sets the OAuth2 client deleter dependency.
-func WithOAuth2ClientDeleter(deleter OAuth2ClientDeleter) AccountOption {
-	return func(s *accountServiceImpl) {
-		if deleter == nil {
-			panic("WithOAuth2ClientDeleter: deleter must not be nil")
-		}
-		s.oauth2ClientDeleter = deleter
-	}
-}
-
 // NewAccountService creates the account service.
 func NewAccountService(
 	db *sql.DB,
@@ -142,7 +119,6 @@ func NewAccountService(
 	roleRepo repository.RoleRepository,
 	auditor *auditService.Auditor,
 	logger *zap.Logger,
-	opts ...AccountOption,
 ) AccountService {
 	logger = utility.EnsureLogger(logger)
 	svc := &accountServiceImpl{
@@ -154,27 +130,24 @@ func NewAccountService(
 		auditor:               auditor,
 		logger:                logger,
 	}
-	for _, opt := range opts {
-		opt(svc)
-	}
 	return svc
 }
 
-func (s *accountServiceImpl) setSessionRevoker(revoker SessionRevoker) {
-	s.sessionRevoker = revoker
-}
-
-func (s *accountServiceImpl) setOAuth2ClientDeleter(deleter OAuth2ClientDeleter) {
-	s.oauth2ClientDeleter = deleter
-}
-
 // SetSessionRevoker sets the session revoker dependency.
+// Must be called during initialization; panics on nil to fail fast.
 func (s *accountServiceImpl) SetSessionRevoker(revoker SessionRevoker) {
+	if revoker == nil {
+		panic("SetSessionRevoker: revoker must not be nil")
+	}
 	s.sessionRevoker = revoker
 }
 
 // SetOAuth2ClientDeleter sets the OAuth2 client deleter dependency.
+// Must be called during initialization; panics on nil to fail fast.
 func (s *accountServiceImpl) SetOAuth2ClientDeleter(deleter OAuth2ClientDeleter) {
+	if deleter == nil {
+		panic("SetOAuth2ClientDeleter: deleter must not be nil")
+	}
 	s.oauth2ClientDeleter = deleter
 }
 

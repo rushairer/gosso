@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- `SetSessionRevoker` / `SetOAuth2ClientDeleter` now panic on nil — consistent safety contract with constructor-time validation (`internal/account/service/account_service.go`).
+- Removed unused `AccountOption` functional options (`WithSessionRevoker`, `WithOAuth2ClientDeleter`) — setter injection is the only viable pattern due to circular dependency between account and auth modules (`internal/account/service/account_service.go`).
+- `Auditor.Do()` and `Auditor.submit()` now delegate to shared `buildBatchRequest()` — eliminates duplicated batchflow request construction (`internal/audit/service/audit.go`).
+- CSRF middleware now checks token length before `ConstantTimeCompare` — avoids leaking length mismatch information (`middleware/csrf.go`).
+- `accountValidatorAdapter.IsAccountActive` now logs database errors as warnings — fail-closed behavior preserved with improved diagnostics (`cmd/gouno/web_modules.go`).
+- `GenerateRefreshToken` now logs a warning when IP is empty — highlights cases where IP-based theft detection is unavailable (`internal/token/service/token_service.go`).
+- Improved comments on `RotateRefreshToken` TOCTOU limitation and `Auditor.Wait()` sleep heuristic (`internal/token/service/token_service.go`, `internal/audit/service/audit.go`).
+
+### Added
+- `max_session_age` configuration field in `auth` config — allows overriding the default 7-day absolute session lifetime (`config/config.go`).
+
+### Removed
+- Dead code: private `setSessionRevoker` / `setOAuth2ClientDeleter` methods replaced by public equivalents (`internal/account/service/account_service.go`).
+
 ### Security
 - `ConfirmVerificationCredential` now uses transactional read (`FindByTypeAndIdentifierTx`) — eliminates TOCTOU race condition between credential lookup and update (`internal/auth/service/auth_service.go`).
 - `EnrollTOTP` now uses transactional read (`FindByAccountAndTypeTx`) — eliminates TOCTOU race condition during TOTP credential cleanup (`internal/auth/service/mfa_service.go`).

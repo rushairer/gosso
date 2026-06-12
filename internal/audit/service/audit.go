@@ -106,10 +106,11 @@ func (a *Auditor) Close() {
 // The drain grace period must exceed batchflow's internal drain timeout (hardcoded
 // at 2s). It is configurable via SetDrainGracePeriod for testing or custom deployments.
 //
-// NOTE: This uses a time-based heuristic because batchflow v1.0.2 does not expose
-// a Done() channel. If the DB is very slow during shutdown, batches may still be
-// lost if they exceed the drain timeout. Consider upgrading batchflow to expose
-// PipelineImpl.Done() for deterministic shutdown.
+// NOTE: This uses a time.Sleep heuristic because batchflow v1.0.2 does not expose a
+// Done() channel. The grace period (default 2500ms) adds 500ms margin over batchflow's
+// 2s drain timeout. Under normal conditions this is sufficient, but if the DB is very
+// slow during shutdown, batches may still be lost. Consider upgrading batchflow to
+// expose PipelineImpl.Done() for deterministic shutdown in the future.
 func (a *Auditor) Wait() {
 	if a.cancel != nil {
 		a.cancel()
@@ -123,6 +124,27 @@ func (a *Auditor) SetDrainGracePeriod(d time.Duration) {
 	a.drainGracePeriod = d
 }
 
+// buildBatchRequest constructs a batchflow.Request from an audit record.
+func (a *Auditor) buildBatchRequest(record *domain.AuditRecord) *batchflow.Request {
+	request := batchflow.NewRequest(a.recordSchema).
+		Set("id", record.ID).
+		Set("tx_id", record.TxID).
+		SetString("action", record.Action).
+		SetString("actor", record.Actor).
+		Set("resource", record.Resource).
+		Set("old", record.Old).
+		Set("new", record.New).
+		Set("meta", record.Meta).
+		SetString("dd", record.CreatedAt.Format("20060102")).
+		SetTime("created_at", record.CreatedAt)
+
+	if record.AccountID != nil {
+		request.SetString("account_id", *record.AccountID)
+	}
+
+	return request
+}
+
 func (a *Auditor) Do(
 	ctx context.Context,
 	businessFunc func(innerCtx context.Context, db *sql.DB) (*domain.AuditRecord, error),
@@ -134,23 +156,7 @@ func (a *Auditor) Do(
 	}
 
 	if auditRecord != nil {
-		request := batchflow.NewRequest(a.recordSchema).
-			Set("id", auditRecord.ID).
-			Set("tx_id", auditRecord.TxID).
-			SetString("action", auditRecord.Action).
-			SetString("actor", auditRecord.Actor).
-			Set("resource", auditRecord.Resource).
-			Set("old", auditRecord.Old).
-			Set("new", auditRecord.New).
-			Set("meta", auditRecord.Meta).
-			SetString("dd", auditRecord.CreatedAt.Format("20060102")).
-			SetTime("created_at", auditRecord.CreatedAt)
-
-		if auditRecord.AccountID != nil {
-			request.SetString("account_id", *auditRecord.AccountID)
-		}
-
-		if err := a.batchflow.Submit(ctx, request); err != nil {
+		if err := a.batchflow.Submit(ctx, a.buildBatchRequest(auditRecord)); err != nil {
 			return err
 		}
 	}
@@ -200,23 +206,7 @@ func (a *Auditor) Log(ctx context.Context, record *domain.AuditRecord) error {
 
 // submit builds a batchflow request from an audit record and submits it.
 func (a *Auditor) submit(ctx context.Context, record *domain.AuditRecord) error {
-	request := batchflow.NewRequest(a.recordSchema).
-		Set("id", record.ID).
-		Set("tx_id", record.TxID).
-		SetString("action", record.Action).
-		SetString("actor", record.Actor).
-		Set("resource", record.Resource).
-		Set("old", record.Old).
-		Set("new", record.New).
-		Set("meta", record.Meta).
-		SetString("dd", record.CreatedAt.Format("20060102")).
-		SetTime("created_at", record.CreatedAt)
-
-	if record.AccountID != nil {
-		request.SetString("account_id", *record.AccountID)
-	}
-
-	return a.batchflow.Submit(ctx, request)
+	return a.batchflow.Submit(ctx, a.buildBatchRequest(record))
 }
 
 // LogSync writes an audit record directly to the database, bypassing the batch pipeline.

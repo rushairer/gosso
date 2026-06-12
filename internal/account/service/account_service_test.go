@@ -367,8 +367,8 @@ func TestRemoveRole_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TestWithSessionRevoker_NilPanics tests that setting a nil session revoker panics
-func TestWithSessionRevoker_NilPanics(t *testing.T) {
+// TestSetSessionRevoker_NilPanics tests that setting a nil session revoker panics
+func TestSetSessionRevoker_NilPanics(t *testing.T) {
 	db, _, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -376,15 +376,16 @@ func TestWithSessionRevoker_NilPanics(t *testing.T) {
 	accountRepo := repository.NewAccountRepository(db)
 	credentialRepo := repository.NewCredentialRepository(db)
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
-	roleRepo := repository.NewRoleRepository(db)
+	roleRepo := repository.RoleRepository(nil)
 
+	svc := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 	assert.Panics(t, func() {
-		NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, WithSessionRevoker(nil))
+		svc.SetSessionRevoker(nil)
 	})
 }
 
-// TestWithOAuth2ClientDeleter_NilPanics tests that setting a nil OAuth2 client deleter panics
-func TestWithOAuth2ClientDeleter_NilPanics(t *testing.T) {
+// TestSetOAuth2ClientDeleter_NilPanics tests that setting a nil OAuth2 client deleter panics
+func TestSetOAuth2ClientDeleter_NilPanics(t *testing.T) {
 	db, _, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -392,10 +393,11 @@ func TestWithOAuth2ClientDeleter_NilPanics(t *testing.T) {
 	accountRepo := repository.NewAccountRepository(db)
 	credentialRepo := repository.NewCredentialRepository(db)
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
-	roleRepo := repository.NewRoleRepository(db)
+	roleRepo := repository.RoleRepository(nil)
 
+	svc := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 	assert.Panics(t, func() {
-		NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, WithOAuth2ClientDeleter(nil))
+		svc.SetOAuth2ClientDeleter(nil)
 	})
 }
 
@@ -530,8 +532,8 @@ func TestChangePassword(t *testing.T) {
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 	impl := accountService.(*accountServiceImpl)
-	impl.setSessionRevoker(&stubSessionRevoker{})
-	impl.setOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
+	impl.SetSessionRevoker(&stubSessionRevoker{})
+	impl.SetOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
 
 	accountID := "test-account-id"
 	oldPassword := "OldPassword123!"
@@ -589,8 +591,8 @@ func TestSoftDeleteAccount(t *testing.T) {
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 	impl := accountService.(*accountServiceImpl)
-	impl.setSessionRevoker(&stubSessionRevoker{})
-	impl.setOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
+	impl.SetSessionRevoker(&stubSessionRevoker{})
+	impl.SetOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
 
 	accountID := "test-account-id"
 
@@ -657,8 +659,8 @@ func TestSuspendAccount(t *testing.T) {
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 	impl := accountService.(*accountServiceImpl)
-	impl.setSessionRevoker(&stubSessionRevoker{})
-	impl.setOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
+	impl.SetSessionRevoker(&stubSessionRevoker{})
+	impl.SetOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
 
 	accountID := "test-account-id"
 

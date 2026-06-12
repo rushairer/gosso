@@ -60,6 +60,9 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 	if cfg.AuthConfig.MaxSessions > 0 {
 		sessionSvc.SetMaxSessions(cfg.AuthConfig.MaxSessions)
 	}
+	if cfg.AuthConfig.MaxSessionAge > 0 {
+		sessionSvc.SetMaxSessionAge(cfg.AuthConfig.MaxSessionAge)
+	}
 
 	// PasskeyService (if WebAuthn is configured)
 	var passkeySvc *service.PasskeyService

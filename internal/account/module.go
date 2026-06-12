@@ -23,7 +23,7 @@ type AccountModule struct {
 }
 
 // InitializeAccountModule initializes the account module (dependency injection)
-func InitializeAccountModule(db *sql.DB, auditor *auditService.Auditor, logger *zap.Logger, opts ...service.AccountOption) *AccountModule {
+func InitializeAccountModule(db *sql.DB, auditor *auditService.Auditor, logger *zap.Logger) *AccountModule {
 	accountRepo := repository.NewAccountRepository(db)
 	credentialRepo := repository.NewCredentialRepository(db)
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
@@ -37,7 +37,6 @@ func InitializeAccountModule(db *sql.DB, auditor *auditService.Auditor, logger *
 		roleRepo,
 		auditor,
 		logger,
-		opts...,
 	)
 
 	return &AccountModule{

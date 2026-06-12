@@ -136,6 +136,7 @@ type AuthConfig struct {
 	RefreshTokenExpiry      time.Duration `mapstructure:"refresh_token_expiry"`
 	SessionTTL              time.Duration `mapstructure:"session_ttl"`
 	MaxSessions             int           `mapstructure:"max_sessions"`
+	MaxSessionAge           time.Duration `mapstructure:"max_session_age"`
 	AuthorizationCodeExpiry time.Duration `mapstructure:"authorization_code_expiry"`
 	DeviceCodeExpiry        time.Duration `mapstructure:"device_code_expiry"`
 	DeviceCodeInterval      time.Duration `mapstructure:"device_code_interval"`

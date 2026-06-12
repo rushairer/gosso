@@ -199,6 +199,11 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 		CreatedAt: time.Now(),
 	}
 
+	if rt.IP == "" {
+		s.logger.Warn("Generating refresh token without IP binding; IP-based theft detection will be unavailable",
+			zap.String("account_id", accountID), zap.String("session_id", sessionID))
+	}
+
 	data, err := json.Marshal(rt)
 	if err != nil {
 		return nil, fmt.Errorf("marshal refresh token: %w", err)
@@ -281,6 +286,13 @@ return oldData
 // RotateRefreshToken rotates refresh tokens atomically.
 // The old token is read, deleted, and replaced with a new token in a single Lua script,
 // eliminating TOCTOU race conditions between concurrent rotation requests.
+//
+// NOTE: The pre-read at step 3 retrieves the old token's SessionID before the Lua script
+// runs. If a concurrent rotation completes between the pre-read and the script, the
+// SessionID used in the script will be stale. This is acceptable because refresh tokens
+// are single-use — the Lua script's GET+DEL atomically prevents double-rotation, so the
+// concurrent request will fail. The worst case is that the session index update targets
+// the wrong session, which is cleaned up by the session expiry mechanism.
 func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) (*domain.RefreshToken, error) {
 	// 1. Generate new token
 	newBytes := make([]byte, RefreshTokenLength)

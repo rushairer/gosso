@@ -103,7 +103,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	accountMod.Service.SetOAuth2ClientDeleter(&oauth2ClientDeleterAdapter{clientRepo: oauth2Mod.ClientRepo})
 
 	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, !cfg.WebServerConfig.Debug, logger)
-	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &accountValidatorAdapter{accountSvc: accountMod.Service}, authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)
+	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &accountValidatorAdapter{accountSvc: accountMod.Service, logger: logger}, authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
 	}
@@ -172,11 +172,17 @@ func defaultIfEmpty(value, defaultValue string) string {
 // accountValidatorAdapter implements oauth2Controller.AccountValidator using the account service.
 type accountValidatorAdapter struct {
 	accountSvc accountService.AccountService
+	logger     *zap.Logger
 }
 
 func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID string) bool {
 	account, err := a.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
+		// Fail-closed: log the error for diagnostics rather than silently returning false.
+		if a.logger != nil {
+			a.logger.Warn("IsAccountActive: failed to look up account, treating as inactive",
+				zap.String("account_id", accountID), zap.Error(err))
+		}
 		return false
 	}
 	return account.IsActive()
