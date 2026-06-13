@@ -240,7 +240,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	// Atomically check attempts, increment counter, and get data
 	result, err := s.redis.RunScript(ctx, checkAndIncrementAttemptsScript, []string{tokenKey},
 		s.maxAttempts, int(s.tokenTTL.Seconds())).Result()
-	if err == redis.Nil || result == nil {
+	if errors.Is(err, redis.Nil) || result == nil {
 		return ErrPasswordResetInvalidToken
 	}
 	if err != nil {
@@ -268,7 +268,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		return fmt.Errorf("find account: %w", err)
 	}
 	if !account.IsActive() {
-		return errors.New("account is not active")
+		return accountService.ErrAccountNotActive
 	}
 
 	// Hash new password

@@ -91,7 +91,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	}
 
 	// Check overall IP-level rate limit to prevent username enumeration
-	if err = s.checkIPRateLimit(ctx, req.IP); err != nil {
+	if err := s.checkIPRateLimit(ctx, req.IP); err != nil {
 		return nil, err
 	}
 
@@ -516,4 +516,3 @@ func (s *AuthService) clearLoginRateLimits(ctx context.Context, ip string, usern
 		}
 	}
 }
-

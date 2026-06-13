@@ -93,7 +93,7 @@ func (s *BlacklistService) IsTokenRevoked(ctx context.Context, jti string) (bool
 func (s *BlacklistService) GetRevokeInfo(ctx context.Context, jti string) (*domain.TokenBlacklist, error) {
 	key := s.buildBlacklistKey(jti)
 	data, err := s.redis.Get(ctx, key)
-	if err == cache.ErrKeyNotFound {
+	if errors.Is(err, cache.ErrKeyNotFound) {
 		return nil, ErrTokenNotRevoked
 	}
 	if err != nil {
@@ -155,7 +155,7 @@ func (s *BlacklistService) SetAccountRevokedAfter(ctx context.Context, accountID
 func (s *BlacklistService) GetAccountRevokedAfter(ctx context.Context, accountID string) (time.Time, error) {
 	key := s.buildAccountRevokedAfterKey(accountID)
 	val, err := s.redis.Get(ctx, key)
-	if err == cache.ErrKeyNotFound {
+	if errors.Is(err, cache.ErrKeyNotFound) {
 		return time.Time{}, nil
 	}
 	if err != nil {

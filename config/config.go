@@ -34,7 +34,7 @@ type WebServerConfig struct {
 	ReadHeaderTimeout time.Duration    `mapstructure:"read_header_timeout"`
 	WriteTimeout      time.Duration    `mapstructure:"write_timeout"`
 	RequestTimeout    time.Duration    `mapstructure:"request_timeout"`
-	ShutdownTimeout  time.Duration    `mapstructure:"shutdown_timeout"`
+	ShutdownTimeout   time.Duration    `mapstructure:"shutdown_timeout"`
 	MaxBodySize       int64            `mapstructure:"max_body_size"`
 	TrustedProxies    []string         `mapstructure:"trusted_proxies"`
 	RateLimits        RateLimitsConfig `mapstructure:"rate_limits"`
@@ -118,12 +118,12 @@ type TaskPipelineConfig struct {
 // SMTPConfig holds outbound email (SMTP) settings used for password-reset
 // and verification emails. When Host is empty the email subsystem is disabled.
 type SMTPConfig struct {
-	Host        string        `mapstructure:"host"`
-	Port        int           `mapstructure:"port"`
-	Username    string        `mapstructure:"username"`
-	Password    string        `mapstructure:"password"`
-	From        string        `mapstructure:"from"`
-	TLSPolicy   string        `mapstructure:"tls_policy"`
+	Host          string        `mapstructure:"host"`
+	Port          int           `mapstructure:"port"`
+	Username      string        `mapstructure:"username"`
+	Password      string        `mapstructure:"password"`
+	From          string        `mapstructure:"from"`
+	TLSPolicy     string        `mapstructure:"tls_policy"`
 	SendRateLimit time.Duration `mapstructure:"send_rate_limit"` // minimum interval between sends (0 = 100ms default)
 }
 

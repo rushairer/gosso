@@ -58,7 +58,7 @@ func (s *ConsentService) GetConsent(ctx context.Context, accountID, clientID str
 			return &consent, nil
 		}
 		// Cache corrupt — fall through to DB
-	} else if err != cache.ErrKeyNotFound {
+	} else if !errors.Is(err, cache.ErrKeyNotFound) {
 		s.logger.Warn("Redis consent cache read failed, falling back to DB",
 			zap.String("account_id", accountID), zap.Error(err))
 	}

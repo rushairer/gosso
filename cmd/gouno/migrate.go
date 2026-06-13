@@ -2,6 +2,7 @@ package gouno
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -183,12 +184,12 @@ func runMigrateUp(cmd *cobra.Command, args []string) {
 			if err != nil {
 				return err
 			}
-			if err := m.Steps(steps); err != nil && err != migrate.ErrNoChange {
+			if err := m.Steps(steps); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 				return fmt.Errorf("migration up %d steps failed: %w", steps, err)
 			}
 			fmt.Printf("Migration up %d steps completed successfully\n", steps)
 		} else {
-			if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+			if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 				return fmt.Errorf("migration up failed: %w", err)
 			}
 			fmt.Println("Migration up completed successfully")
@@ -210,13 +211,13 @@ func runMigrateDown(cmd *cobra.Command, args []string) {
 			if err != nil {
 				return err
 			}
-			if err := m.Steps(-steps); err != nil && err != migrate.ErrNoChange {
+			if err := m.Steps(-steps); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 				return fmt.Errorf("migration down %d steps failed: %w", steps, err)
 			}
 			fmt.Printf("Migration down %d steps completed successfully\n", steps)
 		} else {
 			fmt.Println("WARNING: Rolling back ALL migrations")
-			if err := m.Down(); err != nil && err != migrate.ErrNoChange {
+			if err := m.Down(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 				return fmt.Errorf("migration down failed: %w", err)
 			}
 			fmt.Println("Migration down completed successfully")
@@ -275,7 +276,7 @@ func runMigrateStatus(cmd *cobra.Command, args []string) {
 	withMigrateResources(cmd, func(m *migrate.Migrate) error {
 		version, dirty, err := m.Version()
 		if err != nil {
-			if err == migrate.ErrNilVersion {
+			if errors.Is(err, migrate.ErrNilVersion) {
 				fmt.Println("No migrations have been applied yet")
 				return nil
 			}

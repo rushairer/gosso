@@ -91,7 +91,7 @@ func (m *testAccountService) ActivateAccount(_ context.Context, _ string) error 
 func (m *testAccountService) GetAccountRoles(_ context.Context, _ string) ([]*accountDomain.Role, error) {
 	return nil, fmt.Errorf("not implemented")
 }
-func (m *testAccountService) SetSessionRevoker(_ accountService.SessionRevoker)    {}
+func (m *testAccountService) SetSessionRevoker(_ accountService.SessionRevoker)           {}
 func (m *testAccountService) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter) {}
 
 // ──────────────────────────────────────────────
@@ -196,7 +196,7 @@ func (m *authTestCredentialRepo) FindByTypeAndIdentifierTx(ctx context.Context, 
 }
 
 func (m *authTestCredentialRepo) FindByAccountAndTypeTx(ctx context.Context, _ *sql.Tx, accountID string, credType accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
-	return m.mockCredentialRepo.FindByAccountAndType(ctx, accountID, credType)
+	return m.FindByAccountAndType(ctx, accountID, credType)
 }
 
 // ──────────────────────────────────────────────

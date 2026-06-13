@@ -198,7 +198,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 			return nil, fmt.Errorf("username must not exceed 50 characters")
 		}
 		for _, c := range username {
-			if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.') {
+			if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' && c != '-' && c != '.' {
 				return nil, fmt.Errorf("username may only contain lowercase letters, digits, hyphens, dots, and underscores")
 			}
 		}
@@ -304,7 +304,7 @@ func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.
 func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID string) error {
 	// 1. Validate request
 	if accountID == "" {
-		return errors.New("account ID is required")
+		return domain.ErrAccountIDRequired
 	}
 
 	// 2. Fail-fast: ensure dependencies are configured before starting the transaction
@@ -725,11 +725,12 @@ func (s *accountServiceImpl) checkCredentialExists(ctx context.Context, credType
 			return ErrEmailAlreadyRegistered
 		case domain.CredentialTypePhone:
 			return ErrPhoneAlreadyRegistered
+		case domain.CredentialTypePassword, domain.CredentialTypeTOTP, domain.CredentialTypeWebAuthn, domain.CredentialTypeBackupCode:
+			return fmt.Errorf("credential already exists: %s", credType)
 		}
 	}
 	return nil
 }
-
 
 // auditMetaFromContext extracts IP and user-agent from context for audit logging.
 func auditMetaFromContext(ctx context.Context) json.RawMessage {

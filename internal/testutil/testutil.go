@@ -3,6 +3,7 @@ package testutil
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"runtime"
@@ -241,7 +242,7 @@ func runMigrations(db *sql.DB, migrationsPath string) error {
 	// Don't defer m.Close() — the golang-migrate postgres driver closes
 	// the underlying *sql.DB on Close(), which kills the shared connection.
 
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("migrate up: %w", err)
 	}
 

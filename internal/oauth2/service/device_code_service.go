@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -106,7 +107,7 @@ func (s *DeviceCodeService) CreateDeviceCode(ctx context.Context, clientID strin
 func (s *DeviceCodeService) GetDeviceCode(ctx context.Context, deviceCode string) (*domain.DeviceCode, error) {
 	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
 	data, err := s.redis.Get(ctx, key)
-	if err == cache.ErrKeyNotFound {
+	if errors.Is(err, cache.ErrKeyNotFound) {
 		return nil, domain.ErrDeviceCodeNotFound
 	}
 	if err != nil {
@@ -132,7 +133,7 @@ func (s *DeviceCodeService) GetDeviceCodeByUserCode(ctx context.Context, userCod
 
 	ucKey := UserCodeKeyPrefix + formatted
 	dcHash, err := s.redis.Get(ctx, ucKey)
-	if err == cache.ErrKeyNotFound {
+	if errors.Is(err, cache.ErrKeyNotFound) {
 		return nil, domain.ErrDeviceCodeNotFound
 	}
 	if err != nil {
@@ -141,7 +142,7 @@ func (s *DeviceCodeService) GetDeviceCodeByUserCode(ctx context.Context, userCod
 
 	dcKey := DeviceCodeKeyPrefix + dcHash
 	data, err := s.redis.Get(ctx, dcKey)
-	if err == cache.ErrKeyNotFound {
+	if errors.Is(err, cache.ErrKeyNotFound) {
 		return nil, domain.ErrDeviceCodeNotFound
 	}
 	if err != nil {
@@ -171,7 +172,7 @@ func (s *DeviceCodeService) AuthorizeDeviceCode(ctx context.Context, deviceCode,
 	result, err := s.redis.RunScript(ctx, authorizeDeviceCodeScript, []string{key},
 		accountID, authorizedAt, fmt.Sprintf("%d", int(remaining.Seconds())),
 	).Result()
-	if err == redis.Nil || result == nil {
+	if errors.Is(err, redis.Nil) || result == nil {
 		return domain.ErrDeviceCodeNotFound
 	}
 	if err != nil {
@@ -198,7 +199,7 @@ func (s *DeviceCodeService) DenyDeviceCode(ctx context.Context, deviceCode strin
 	result, err := s.redis.RunScript(ctx, denyDeviceCodeScript, []string{key},
 		fmt.Sprintf("%d", int(remaining.Seconds())),
 	).Result()
-	if err == redis.Nil || result == nil {
+	if errors.Is(err, redis.Nil) || result == nil {
 		return domain.ErrDeviceCodeNotFound
 	}
 	if err != nil {
@@ -265,7 +266,7 @@ func (s *DeviceCodeService) CheckAndUpdatePollRate(ctx context.Context, deviceCo
 		fmt.Sprintf("%d", now),
 		fmt.Sprintf("%d", int(s.interval.Seconds())),
 	).Result()
-	if err == redis.Nil || result == nil {
+	if errors.Is(err, redis.Nil) || result == nil {
 		return domain.ErrDeviceCodeNotFound
 	}
 	if err != nil {
@@ -364,7 +365,7 @@ func (s *DeviceCodeService) ClaimAuthorizedDeviceCode(ctx context.Context, devic
 	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
 
 	result, err := s.redis.RunScript(ctx, claimAuthorizedScript, []string{key}, clientID).Result()
-	if err == redis.Nil || result == nil {
+	if errors.Is(err, redis.Nil) || result == nil {
 		return nil, domain.ErrDeviceCodeNotFound
 	}
 	if err != nil {

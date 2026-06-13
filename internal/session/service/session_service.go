@@ -197,7 +197,7 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 func (s *SessionService) GetSession(ctx context.Context, sessionID string) (*domain.Session, error) {
 	key := s.buildSessionKey(sessionID)
 	data, err := s.redis.Get(ctx, key)
-	if err == cache.ErrKeyNotFound {
+	if errors.Is(err, cache.ErrKeyNotFound) {
 		return nil, ErrSessionNotFound
 	}
 	if err != nil {
@@ -374,7 +374,7 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 	// Atomically read all session IDs and delete the index.
 	// Any sessions created after this point will produce a fresh index entry.
 	result, err := s.redis.RunScript(ctx, revokeAccountSessionsScript, []string{indexKey}).StringSlice()
-	if err != nil && err != redis.Nil {
+	if err != nil && !errors.Is(err, redis.Nil) {
 		s.logger.Error("Failed to atomically read and delete account sessions index",
 			zap.String("account_id", accountID), zap.Error(err))
 		return fmt.Errorf("revoke account sessions: %w", err)
@@ -453,7 +453,7 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 	// Pipeline batch GET — pipe.Exec returns the first per-command error,
 	// but individual command results are checked below. A non-redis.Nil error
 	// here typically means a network/connection problem affecting all commands.
-	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
+	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
 		s.logger.Error("Pipeline session fetch failed", zap.Error(err), zap.String("account_id", accountID))
 		return nil, fmt.Errorf("pipeline session fetch: %w", err)
 	}
@@ -550,7 +550,7 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 	rdb := s.redis.GetClient()
 
 	raw, err := evictOldestSessionsScript.Run(ctx, rdb, []string{indexKey}, s.maxSessions).Result()
-	if err != nil && err != redis.Nil {
+	if err != nil && !errors.Is(err, redis.Nil) {
 		return fmt.Errorf("evict oldest sessions: %w", err)
 	}
 

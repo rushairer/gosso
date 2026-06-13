@@ -232,7 +232,7 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 func (s *TokenService) ValidateRefreshToken(ctx context.Context, token string) (*domain.RefreshToken, error) {
 	key := s.buildRefreshTokenKey(token)
 	data, err := s.redis.Get(ctx, key)
-	if err == cache.ErrKeyNotFound {
+	if errors.Is(err, cache.ErrKeyNotFound) {
 		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
 	}
 	if err != nil {
@@ -351,7 +351,7 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 		[]string{oldKey, newKey, sessionKey},
 		newData, expirySeconds, oldHash, newHash,
 	).Result()
-	if err == redis.Nil || result == nil {
+	if errors.Is(err, redis.Nil) || result == nil {
 		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
 	}
 	if err != nil {
@@ -381,7 +381,7 @@ func (s *TokenService) RevokeRefreshToken(ctx context.Context, token string) err
 	key := s.buildRefreshTokenKey(token)
 
 	data, err := s.redis.RunScript(ctx, rotateAndDeleteScript, []string{key}).Result()
-	if err != nil && err != redis.Nil {
+	if err != nil && !errors.Is(err, redis.Nil) {
 		return fmt.Errorf("revoke refresh token: %w", err)
 	}
 
@@ -528,14 +528,14 @@ func (s *TokenService) buildSessionTokensKey(sessionID string) string {
 func (s *TokenService) IntrospectToken(ctx context.Context, tokenString string) (map[string]any, error) {
 	claims, err := s.ValidateAccessTokenWithContext(ctx, tokenString)
 	if err != nil {
-		if err == ErrBlacklistUnavailable {
+		if errors.Is(err, ErrBlacklistUnavailable) {
 			return nil, err
 		}
 		return map[string]any{"active": false}, nil
 	}
 
 	// Reject tokens with a not-before claim in the future
-	if claims.NotBefore != nil && claims.NotBefore.Time.After(time.Now()) {
+	if claims.NotBefore != nil && claims.NotBefore.After(time.Now()) {
 		return map[string]any{"active": false}, nil
 	}
 
@@ -571,4 +571,3 @@ func (s *TokenService) IntrospectToken(ctx context.Context, tokenString string) 
 func (s *TokenService) KeyService() *KeyService {
 	return s.keySvc
 }
-

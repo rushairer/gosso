@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -101,7 +102,7 @@ func (s *AuthCodeService) ValidateCode(ctx context.Context, code, clientID, redi
 
 	// Atomically GET + DELETE the authorization code
 	result, err := s.redis.RunScript(ctx, getAndDeleteScript, []string{key}).Result()
-	if err == redis.Nil || result == nil {
+	if errors.Is(err, redis.Nil) || result == nil {
 		return nil, domain.ErrCodeNotFound
 	}
 	if err != nil {

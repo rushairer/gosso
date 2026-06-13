@@ -94,7 +94,7 @@ func (r *RedisClient) Set(ctx context.Context, key string, value any, expiration
 // Get gets a key's value
 func (r *RedisClient) Get(ctx context.Context, key string) (string, error) {
 	val, err := r.client.Get(ctx, key).Result()
-	if err == redis.Nil {
+	if errors.Is(err, redis.Nil) {
 		return "", ErrKeyNotFound
 	}
 	if err != nil {
@@ -177,7 +177,7 @@ func (r *RedisClient) HSet(ctx context.Context, key string, values ...any) error
 // HGet gets a hash field
 func (r *RedisClient) HGet(ctx context.Context, key, field string) (string, error) {
 	val, err := r.client.HGet(ctx, key, field).Result()
-	if err == redis.Nil {
+	if errors.Is(err, redis.Nil) {
 		return "", ErrKeyNotFound
 	}
 	if err != nil {
@@ -355,7 +355,7 @@ func (r *RedisClient) SetIfExists(ctx context.Context, key string, value any, ex
 // Returns empty string and no error if the key does not exist.
 func (r *RedisClient) GetDel(ctx context.Context, key string) (string, error) {
 	result, err := r.client.GetDel(ctx, key).Result()
-	if err == redis.Nil {
+	if errors.Is(err, redis.Nil) {
 		return "", nil
 	}
 	if err != nil {

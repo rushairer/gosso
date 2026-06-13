@@ -240,7 +240,18 @@ func (m *dbMockCredentialRepo) CreateCredentials(_ context.Context, _ *sql.Tx, c
 
 func newTestMFAServiceWithDB(t *testing.T, credRepo *dbMockCredentialRepo, sqlDB *sql.DB) *MFAService {
 	t.Helper()
-	return NewMFAService(credRepo, sqlDB, "http://localhost:8080", nil)
+	svc := NewMFAService(credRepo, sqlDB, "http://localhost:8080", nil)
+	require.NoError(t, svc.SetTOTPEncryptionKey(testEncryptionKeyHex))
+	return svc
+}
+
+func encryptTestTOTPSecret(t *testing.T, secret string) string {
+	t.Helper()
+	key, err := hex.DecodeString(testEncryptionKeyHex)
+	require.NoError(t, err)
+	encrypted, err := encryptSecret(secret, key)
+	require.NoError(t, err)
+	return encrypted
 }
 
 // mockWebAuthnCredRepo implements repository.WebAuthnCredentialRepository for testing.
@@ -341,6 +352,7 @@ func TestActivateTOTP_Success(t *testing.T) {
 	key, err := totp.Generate(totp.GenerateOpts{Issuer: "http://localhost:8080", AccountName: "account-001"})
 	require.NoError(t, err)
 	secret := key.Secret()
+	storedSecret := encryptTestTOTPSecret(t, secret)
 	code, err := totp.GenerateCode(secret, time.Now())
 	require.NoError(t, err)
 
@@ -349,9 +361,9 @@ func TestActivateTOTP_Success(t *testing.T) {
 			credMap: map[string][]*accountDomain.Credential{
 				"account-001:totp": {
 					// Verified credential with the same secret — required for VerifyTOTP to pass.
-					{ID: "totp-verified", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: secret, Verified: true},
+					{ID: "totp-verified", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: storedSecret, Verified: true},
 					// Unverified credential to be activated.
-					{ID: "totp-unverified", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: secret, Verified: false},
+					{ID: "totp-unverified", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: storedSecret, Verified: false},
 				},
 			},
 		},
@@ -376,12 +388,13 @@ func TestActivateTOTP_InvalidCode(t *testing.T) {
 
 	key, err := totp.Generate(totp.GenerateOpts{Issuer: "http://localhost:8080", AccountName: "account-001"})
 	require.NoError(t, err)
+	storedSecret := encryptTestTOTPSecret(t, key.Secret())
 
 	credRepo := &dbMockCredentialRepo{
 		mockCredentialRepo: &mockCredentialRepo{
 			credMap: map[string][]*accountDomain.Credential{
 				"account-001:totp": {
-					{ID: "totp-1", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: key.Secret(), Verified: true},
+					{ID: "totp-1", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: storedSecret, Verified: true},
 				},
 			},
 		},
@@ -401,6 +414,7 @@ func TestActivateTOTP_NoPendingEnrollment(t *testing.T) {
 	key, err := totp.Generate(totp.GenerateOpts{Issuer: "http://localhost:8080", AccountName: "account-001"})
 	require.NoError(t, err)
 	secret := key.Secret()
+	storedSecret := encryptTestTOTPSecret(t, secret)
 	code, err := totp.GenerateCode(secret, time.Now())
 	require.NoError(t, err)
 
@@ -408,7 +422,7 @@ func TestActivateTOTP_NoPendingEnrollment(t *testing.T) {
 		mockCredentialRepo: &mockCredentialRepo{
 			credMap: map[string][]*accountDomain.Credential{
 				"account-001:totp": {
-					{ID: "totp-verified", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: secret, Verified: true},
+					{ID: "totp-verified", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: storedSecret, Verified: true},
 				},
 			},
 		},
@@ -811,6 +825,22 @@ func TestEnrollTOTP_CreateCredentialsError(t *testing.T) {
 	_, err = svc.EnrollTOTP(context.Background(), "account-001")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "save totp credential")
+}
+
+func TestEnrollTOTP_RequiresEncryptionKey(t *testing.T) {
+	sqlDB, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	credRepo := &dbMockCredentialRepo{
+		mockCredentialRepo: &mockCredentialRepo{credMap: map[string][]*accountDomain.Credential{}},
+	}
+	svc := NewMFAService(credRepo, sqlDB, "http://localhost:8080", nil)
+
+	_, err = svc.EnrollTOTP(context.Background(), "account-001")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "totp encryption key not configured")
+	assert.Empty(t, credRepo.createdCreds)
 }
 
 // ──────────────────────────────────────────────

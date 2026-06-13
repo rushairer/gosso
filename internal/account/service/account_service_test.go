@@ -1206,5 +1206,5 @@ func (f *fakeAccountService) ActivateAccount(_ context.Context, _ string) error 
 func (f *fakeAccountService) GetAccountRoles(_ context.Context, _ string) ([]*domain.Role, error) {
 	return nil, nil
 }
-func (f *fakeAccountService) SetSessionRevoker(_ SessionRevoker)          {}
+func (f *fakeAccountService) SetSessionRevoker(_ SessionRevoker)           {}
 func (f *fakeAccountService) SetOAuth2ClientDeleter(_ OAuth2ClientDeleter) {}

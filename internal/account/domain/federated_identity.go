@@ -42,7 +42,7 @@ func IsValidProvider(p Provider) bool {
 // Returns an error if accountID or providerUserID is empty.
 func NewFederatedIdentity(accountID string, provider Provider, providerUserID string, profile map[string]any) (*FederatedIdentity, error) {
 	if accountID == "" {
-		return nil, errors.New("account ID is required")
+		return nil, ErrAccountIDRequired
 	}
 	if provider == "" {
 		return nil, errors.New("provider is required")

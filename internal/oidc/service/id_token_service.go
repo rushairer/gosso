@@ -87,8 +87,8 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 			IssuedAt:  jwt.NewNumericDate(now),
 			ID:        uuid.New().String(),
 		},
-		AZP:     clientID, // Authorized Party per OIDC Core §2 — single aud value
-		Nonce:   nonce,
+		AZP:      clientID, // Authorized Party per OIDC Core §2 — single aud value
+		Nonce:    nonce,
 		AuthTime: ptrInt64(authTime.Unix()),
 	}
 

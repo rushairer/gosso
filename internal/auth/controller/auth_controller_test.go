@@ -3,7 +3,11 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -221,7 +225,22 @@ func newTestMFAService(t *testing.T, credRepo accountRepo.CredentialRepository) 
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	svc := service.NewMFAService(credRepo, db, "test-issuer", zap.NewNop())
+	require.NoError(t, svc.SetTOTPEncryptionKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
 	return svc, mock
+}
+
+func encryptControllerTestTOTPSecret(t *testing.T, secret string) string {
+	t.Helper()
+	key, err := hex.DecodeString("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	require.NoError(t, err)
+	block, err := aes.NewCipher(key)
+	require.NoError(t, err)
+	gcm, err := cipher.NewGCM(block)
+	require.NoError(t, err)
+	nonce := make([]byte, gcm.NonceSize())
+	_, err = rand.Read(nonce)
+	require.NoError(t, err)
+	return hex.EncodeToString(gcm.Seal(nonce, nonce, []byte(secret), nil))
 }
 
 // ──────────────────────────────────────────────
@@ -773,11 +792,12 @@ func TestMFAActivate_FindByAccountAndTypeError(t *testing.T) {
 func TestMFAActivate_InvalidCode(t *testing.T) {
 	key, err := totp.Generate(totp.GenerateOpts{Issuer: "test-issuer", AccountName: "account-001"})
 	require.NoError(t, err)
+	storedSecret := encryptControllerTestTOTPSecret(t, key.Secret())
 
 	credRepo := &mockCredentialRepoForController{
 		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
 			accountDomain.CredentialTypeTOTP: {
-				{ID: "totp-1", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: key.Secret(), Verified: true},
+				{ID: "totp-1", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: storedSecret, Verified: true},
 			},
 		},
 	}
@@ -804,13 +824,14 @@ func TestMFAActivate_NoPendingEnrollment(t *testing.T) {
 	key, err := totp.Generate(totp.GenerateOpts{Issuer: "test-issuer", AccountName: "account-001"})
 	require.NoError(t, err)
 	secret := key.Secret()
+	storedSecret := encryptControllerTestTOTPSecret(t, secret)
 	code, err := totp.GenerateCode(secret, time.Now())
 	require.NoError(t, err)
 
 	credRepo := &mockCredentialRepoForController{
 		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
 			accountDomain.CredentialTypeTOTP: {
-				{ID: "totp-1", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: secret, Verified: true},
+				{ID: "totp-1", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: storedSecret, Verified: true},
 			},
 		},
 		verifyFirstUnverifiedTOTPOK: false,
@@ -842,13 +863,14 @@ func TestMFAActivate_Success(t *testing.T) {
 	key, err := totp.Generate(totp.GenerateOpts{Issuer: "test-issuer", AccountName: "account-001"})
 	require.NoError(t, err)
 	secret := key.Secret()
+	storedSecret := encryptControllerTestTOTPSecret(t, secret)
 	code, err := totp.GenerateCode(secret, time.Now())
 	require.NoError(t, err)
 
 	credRepo := &mockCredentialRepoForController{
 		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
 			accountDomain.CredentialTypeTOTP: {
-				{ID: "totp-1", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: secret, Verified: true},
+				{ID: "totp-1", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: storedSecret, Verified: true},
 			},
 		},
 		verifyFirstUnverifiedTOTPOK: true,
@@ -880,13 +902,14 @@ func TestMFAActivate_VerifyFirstError(t *testing.T) {
 	key, err := totp.Generate(totp.GenerateOpts{Issuer: "test-issuer", AccountName: "account-001"})
 	require.NoError(t, err)
 	secret := key.Secret()
+	storedSecret := encryptControllerTestTOTPSecret(t, secret)
 	code, err := totp.GenerateCode(secret, time.Now())
 	require.NoError(t, err)
 
 	credRepo := &mockCredentialRepoForController{
 		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
 			accountDomain.CredentialTypeTOTP: {
-				{ID: "totp-1", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: secret, Verified: true},
+				{ID: "totp-1", AccountID: "account-001", Type: accountDomain.CredentialTypeTOTP, Value: storedSecret, Verified: true},
 			},
 		},
 		verifyFirstUnverifiedTOTPError: fmt.Errorf("transaction failed"),
@@ -1494,7 +1517,7 @@ func (m *mockAccountServiceForSocial) GetAccountRoles(_ context.Context, _ strin
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (m *mockAccountServiceForSocial) SetSessionRevoker(_ accountService.SessionRevoker)    {}
+func (m *mockAccountServiceForSocial) SetSessionRevoker(_ accountService.SessionRevoker)           {}
 func (m *mockAccountServiceForSocial) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter) {}
 
 type mockFederatedIdentityRepoForSocial struct {

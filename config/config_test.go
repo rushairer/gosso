@@ -14,8 +14,8 @@ import (
 func validConfig() GoUnoConfig {
 	return GoUnoConfig{
 		WebServerConfig: WebServerConfig{
-			Port:        "8080",
-			MaxBodySize: 10 * 1024 * 1024,
+			Port:              "8080",
+			MaxBodySize:       10 * 1024 * 1024,
 			ReadTimeout:       10 * time.Second,
 			WriteTimeout:      10 * time.Second,
 			ReadHeaderTimeout: 5 * time.Second,

@@ -78,7 +78,7 @@ func (m *mockSocialAccountService) ActivateAccount(_ context.Context, _ string) 
 func (m *mockSocialAccountService) GetAccountRoles(_ context.Context, _ string) ([]*accountDomain.Role, error) {
 	panic("not implemented")
 }
-func (m *mockSocialAccountService) SetSessionRevoker(_ accountService.SessionRevoker)    {}
+func (m *mockSocialAccountService) SetSessionRevoker(_ accountService.SessionRevoker)           {}
 func (m *mockSocialAccountService) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter) {}
 
 // mockSocialFederatedIdentityRepo implements accountRepo.FederatedIdentityRepository.
@@ -242,12 +242,6 @@ func TestGenerateAuthState_Unique(t *testing.T) {
 	s2, err := GenerateAuthState()
 	require.NoError(t, err)
 	assert.NotEqual(t, s1, s2)
-}
-
-type testMFAChecker struct{}
-
-func (t *testMFAChecker) CheckMFA(_ context.Context, _ *accountDomain.Account) (*LoginResult, error) {
-	return nil, nil
 }
 
 // ──────────────────────────────────────────────

@@ -228,4 +228,3 @@ func csrfTokenFromCookie(ctx *gin.Context) string {
 	}
 	return cookie
 }
-

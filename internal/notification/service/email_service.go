@@ -222,10 +222,7 @@ func isTransientError(err error) bool {
 	}
 	// Check for connection reset, broken pipe
 	var opErr *net.OpError
-	if errors.As(err, &opErr) {
-		return true
-	}
-	return false
+	return errors.As(err, &opErr)
 }
 
 // formatDuration returns a human-readable duration string (e.g. "10 minutes", "1 hour").

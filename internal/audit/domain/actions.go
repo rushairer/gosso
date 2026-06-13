@@ -9,13 +9,13 @@ const (
 	ActionLogout          = "auth.logout"
 
 	// Account actions
-	ActionAccountRegister = "account.register"
-	ActionAccountUpdate   = "account.update"
-	ActionAccountDelete   = "account.delete"
-	ActionAccountSuspend  = "account.suspend"
-	ActionAccountActivate = "account.activate"
-	ActionPasswordChange  = "account.password.change"
-	ActionPasswordReset   = "account.password.reset"
+	ActionAccountRegister  = "account.register"
+	ActionAccountUpdate    = "account.update"
+	ActionAccountDelete    = "account.delete"
+	ActionAccountSuspend   = "account.suspend"
+	ActionAccountActivate  = "account.activate"
+	ActionPasswordChange   = "account.password.change"
+	ActionPasswordReset    = "account.password.reset"
 	ActionCredentialVerify = "account.credential.verify"
 
 	// Federated identity actions

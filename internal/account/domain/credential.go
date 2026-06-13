@@ -13,6 +13,8 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
+var ErrAccountIDRequired = errors.New("account ID is required")
+
 // CredentialType represents the type of credential.
 type CredentialType string
 
@@ -53,7 +55,7 @@ type Credential struct {
 // returns an error if called with CredentialTypePassword to prevent accidental plaintext storage.
 func NewCredential(accountID string, credType CredentialType, identifier *string, value string) (*Credential, error) {
 	if accountID == "" {
-		return nil, errors.New("account ID is required")
+		return nil, ErrAccountIDRequired
 	}
 	if credType == CredentialTypePassword {
 		return nil, fmt.Errorf("NewCredential must not be used with CredentialTypePassword; use NewPasswordCredential instead")
@@ -74,7 +76,7 @@ func NewCredential(accountID string, credType CredentialType, identifier *string
 // The plainPassword must be between 1 and 1024 bytes to prevent resource exhaustion.
 func NewPasswordCredential(accountID string, plainPassword string) (*Credential, error) {
 	if accountID == "" {
-		return nil, errors.New("account ID is required")
+		return nil, ErrAccountIDRequired
 	}
 	if len(plainPassword) == 0 {
 		return nil, errors.New("password must not be empty")
@@ -102,7 +104,7 @@ func NewPasswordCredential(accountID string, plainPassword string) (*Credential,
 // Returns an error if accountID or email is empty.
 func NewEmailCredential(accountID string, email string) (*Credential, error) {
 	if accountID == "" {
-		return nil, errors.New("account ID is required")
+		return nil, ErrAccountIDRequired
 	}
 	if email == "" {
 		return nil, errors.New("email is required")
@@ -122,7 +124,7 @@ func NewEmailCredential(accountID string, email string) (*Credential, error) {
 // Returns an error if accountID or phone is empty.
 func NewPhoneCredential(accountID string, phone string) (*Credential, error) {
 	if accountID == "" {
-		return nil, errors.New("account ID is required")
+		return nil, ErrAccountIDRequired
 	}
 	if phone == "" {
 		return nil, errors.New("phone is required")
