@@ -1423,7 +1423,7 @@ func TestOAuth2RegisterRoutes_WithRateLimits(t *testing.T) {
 	engine := gin.New()
 	noop := func(ctx *gin.Context) { ctx.Next() }
 	rg := engine.Group("/oauth2")
-	ctrl.RegisterRoutes(rg, noop, noop, noop)
+	ctrl.RegisterRoutes(rg, noop, noop, noop, noop)
 
 	routes := engine.Routes()
 	pathSet := make(map[string]bool)
@@ -1439,6 +1439,44 @@ func TestOAuth2RegisterRoutes_WithRateLimits(t *testing.T) {
 	assert.True(t, pathSet["POST /oauth2/device/code"])
 	assert.True(t, pathSet["GET /oauth2/device"])
 	assert.True(t, pathSet["POST /oauth2/device"])
+}
+
+func TestOAuth2RegisterRoutes_TokenLimitOnlyAppliesToTokenEndpoint(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctrl, _ := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{},
+		nil, nil,
+		&mockTokenMgr{},
+		nil, nil,
+		&mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+
+	engine := gin.New()
+	auth := func(ctx *gin.Context) { ctx.Next() }
+	tokenLimitCalls := 0
+	tokenLimit := func(ctx *gin.Context) {
+		tokenLimitCalls++
+		ctx.AbortWithStatus(http.StatusTooManyRequests)
+	}
+
+	rg := engine.Group("/oauth2")
+	ctrl.RegisterRoutes(rg, auth, tokenLimit, nil, nil)
+
+	authorizeReq := httptest.NewRequest(http.MethodGet, "/oauth2/authorize", nil)
+	authorizeResp := httptest.NewRecorder()
+	engine.ServeHTTP(authorizeResp, authorizeReq)
+	assert.Equal(t, 0, tokenLimitCalls)
+
+	tokenReq := httptest.NewRequest(http.MethodPost, "/oauth2/token", strings.NewReader("grant_type=client_credentials"))
+	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	tokenResp := httptest.NewRecorder()
+	engine.ServeHTTP(tokenResp, tokenReq)
+
+	assert.Equal(t, http.StatusTooManyRequests, tokenResp.Code)
+	assert.Equal(t, 1, tokenLimitCalls)
 }
 
 // ──────────────────────────────────────────────

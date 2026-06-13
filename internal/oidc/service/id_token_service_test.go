@@ -40,8 +40,8 @@ func (m *mockAccountService) FindAccountByUsername(_ context.Context, _ string) 
 func (m *mockAccountService) UpdateAccount(_ context.Context, _ *accountDomain.Account) error {
 	return nil
 }
-func (m *mockAccountService) SoftDeleteAccount(_ context.Context, _ string) error { return nil }
-func (m *mockAccountService) VerifyCredential(_ context.Context, _ string) error  { return nil }
+func (m *mockAccountService) SoftDeleteAccount(_ context.Context, _ string) error       { return nil }
+func (m *mockAccountService) VerifyContactCredential(_ context.Context, _ string) error { return nil }
 func (m *mockAccountService) ChangePassword(_ context.Context, _, _, _ string) error {
 	return nil
 }

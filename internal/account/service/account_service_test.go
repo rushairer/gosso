@@ -784,8 +784,8 @@ func TestUpdateAccount_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TestVerifyCredential_Email tests verifying an email credential
-func TestVerifyCredential_Email(t *testing.T) {
+// TestVerifyContactCredential_Email tests verifying an email credential
+func TestVerifyContactCredential_Email(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -821,14 +821,14 @@ func TestVerifyCredential_Email(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
-	err = accountService.VerifyCredential(context.Background(), accountID)
+	err = accountService.VerifyContactCredential(context.Background(), accountID)
 
 	assert.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TestVerifyCredential_PhoneFallback tests that VerifyCredential falls back to phone when no email credential exists
-func TestVerifyCredential_PhoneFallback(t *testing.T) {
+// TestVerifyContactCredential_PhoneFallback tests that VerifyContactCredential falls back to phone when no email credential exists
+func TestVerifyContactCredential_PhoneFallback(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -869,14 +869,14 @@ func TestVerifyCredential_PhoneFallback(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
-	err = accountService.VerifyCredential(context.Background(), accountID)
+	err = accountService.VerifyContactCredential(context.Background(), accountID)
 
 	assert.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TestVerifyCredential_NoCredentialFound tests VerifyCredential when neither email nor phone exists
-func TestVerifyCredential_NoCredentialFound(t *testing.T) {
+// TestVerifyContactCredential_NoCredentialFound tests VerifyContactCredential when neither email nor phone exists
+func TestVerifyContactCredential_NoCredentialFound(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -900,7 +900,7 @@ func TestVerifyCredential_NoCredentialFound(t *testing.T) {
 		WithArgs(accountID, domain.CredentialTypePhone).
 		WillReturnError(repository.ErrCredentialNotFound)
 
-	err = accountService.VerifyCredential(context.Background(), accountID)
+	err = accountService.VerifyContactCredential(context.Background(), accountID)
 
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, repository.ErrCredentialNotFound)
@@ -1186,10 +1186,10 @@ func (f *fakeAccountService) FindAccountByID(_ context.Context, _ string) (*doma
 func (f *fakeAccountService) FindAccountByUsername(_ context.Context, _ string) (*domain.Account, error) {
 	return nil, nil
 }
-func (f *fakeAccountService) UpdateAccount(_ context.Context, _ *domain.Account) error { return nil }
-func (f *fakeAccountService) SoftDeleteAccount(_ context.Context, _ string) error      { return nil }
-func (f *fakeAccountService) VerifyCredential(_ context.Context, _ string) error       { return nil }
-func (f *fakeAccountService) ChangePassword(_ context.Context, _, _, _ string) error   { return nil }
+func (f *fakeAccountService) UpdateAccount(_ context.Context, _ *domain.Account) error  { return nil }
+func (f *fakeAccountService) SoftDeleteAccount(_ context.Context, _ string) error       { return nil }
+func (f *fakeAccountService) VerifyContactCredential(_ context.Context, _ string) error { return nil }
+func (f *fakeAccountService) ChangePassword(_ context.Context, _, _, _ string) error    { return nil }
 func (f *fakeAccountService) BindFederatedIdentity(_ context.Context, _ string, _ domain.Provider, _ string, _ map[string]interface{}) error {
 	return nil
 }

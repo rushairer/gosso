@@ -308,7 +308,7 @@ func (m *mockAccountSvcForReset) SoftDeleteAccount(_ context.Context, _ string) 
 	return fmt.Errorf("not implemented")
 }
 
-func (m *mockAccountSvcForReset) VerifyCredential(_ context.Context, _ string) error {
+func (m *mockAccountSvcForReset) VerifyContactCredential(_ context.Context, _ string) error {
 	return fmt.Errorf("not implemented")
 }
 

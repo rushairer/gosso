@@ -38,8 +38,8 @@ type AccountService interface {
 	// SoftDeleteAccount soft-deletes an account (cascades to all related data).
 	SoftDeleteAccount(ctx context.Context, accountID string) error
 
-	// VerifyCredential verifies a credential (email/phone).
-	VerifyCredential(ctx context.Context, accountID string) error
+	// VerifyContactCredential verifies the account's primary contact credential (email first, phone fallback).
+	VerifyContactCredential(ctx context.Context, accountID string) error
 
 	// ChangePassword changes the account password.
 	ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error
@@ -381,8 +381,8 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	return nil
 }
 
-// VerifyCredential verifies a credential.
-func (s *accountServiceImpl) VerifyCredential(ctx context.Context, accountID string) error {
+// VerifyContactCredential verifies the account's primary contact credential.
+func (s *accountServiceImpl) VerifyContactCredential(ctx context.Context, accountID string) error {
 	// 1. Find credential
 	credentials, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, domain.CredentialTypeEmail)
 	if err != nil {
@@ -424,6 +424,13 @@ func (s *accountServiceImpl) VerifyCredential(ctx context.Context, accountID str
 	))
 
 	return nil
+}
+
+// VerifyCredential is kept for compatibility with older internal callers.
+//
+// Deprecated: use VerifyContactCredential.
+func (s *accountServiceImpl) VerifyCredential(ctx context.Context, accountID string) error {
+	return s.VerifyContactCredential(ctx, accountID)
 }
 
 // ChangePassword changes the account password.

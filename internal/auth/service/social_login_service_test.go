@@ -48,7 +48,7 @@ func (m *mockSocialAccountService) UpdateAccount(_ context.Context, _ *accountDo
 func (m *mockSocialAccountService) SoftDeleteAccount(_ context.Context, _ string) error {
 	panic("not implemented")
 }
-func (m *mockSocialAccountService) VerifyCredential(_ context.Context, _ string) error {
+func (m *mockSocialAccountService) VerifyContactCredential(_ context.Context, _ string) error {
 	panic("not implemented")
 }
 func (m *mockSocialAccountService) ChangePassword(_ context.Context, _, _, _ string) error {

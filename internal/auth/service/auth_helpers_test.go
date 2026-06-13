@@ -52,7 +52,7 @@ func (m *testAccountService) SoftDeleteAccount(_ context.Context, _ string) erro
 	return fmt.Errorf("not implemented")
 }
 
-func (m *testAccountService) VerifyCredential(_ context.Context, _ string) error {
+func (m *testAccountService) VerifyContactCredential(_ context.Context, _ string) error {
 	return fmt.Errorf("not implemented")
 }
 

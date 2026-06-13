@@ -111,8 +111,8 @@ func RegisterWebRouter(deps RouterDeps) {
 	introspectLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "introspect", middleware.IPKeyFunc, deps.RateLimits.Introspect, time.Minute, false, deps.Logger)
 	deviceCodeLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "device-code", middleware.IPKeyFunc, deps.RateLimits.DeviceCode, time.Minute, false, deps.Logger)
 	oauth2 := deps.Server.Group("/oauth2")
-	oauth2.Use(tokenLimit, authMiddleware.AuditMetadataMiddleware())
-	deps.OAuth2Ctrl.RegisterRoutes(oauth2, jwtAuth, introspectLimit, deviceCodeLimit)
+	oauth2.Use(authMiddleware.AuditMetadataMiddleware())
+	deps.OAuth2Ctrl.RegisterRoutes(oauth2, jwtAuth, tokenLimit, introspectLimit, deviceCodeLimit)
 
 	// OIDC routes
 	// .well-known endpoints (Discovery + JWKS) — rate-limited, fail-closed
