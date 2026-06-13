@@ -69,9 +69,9 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	}()
 
 	// Prevent brute-force attacks via extremely long inputs.
-	// bcrypt internally truncates to 72 bytes, but still hashes the full input.
+	// Argon2id allows longer passwords than bcrypt, but we still cap it at utility.MaxPasswordLength.
 	const maxUsernameLen = 254
-	const maxPasswordLen = 128
+	const maxPasswordLen = utility.MaxPasswordLength
 	if len(req.Username) > maxUsernameLen || len(req.Password) > maxPasswordLen || req.Username == "" || req.Password == "" {
 		return nil, ErrInvalidCredentials
 	}
@@ -80,7 +80,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	// Fail-closed: if Redis is unavailable, deny login to prevent brute-force attacks.
 	normalizedUsername := strings.ToLower(req.Username)
 	normalizedIP := utility.NormalizeIP(req.IP)
-	attemptsKey := fmt.Sprintf("login_attempts/%s/%s", normalizedIP, normalizedUsername)
+	attemptsKey := fmt.Sprintf("login_attempts:%s:%s", normalizedIP, normalizedUsername)
 	count, incrErr := s.redis.CheckAndIncr(ctx, attemptsKey, s.loginMaxAttempts, s.loginRateLimitWindow)
 	if incrErr != nil {
 		s.logger.Error("Failed to check login rate limit, denying login", zap.Error(incrErr))
@@ -355,11 +355,13 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 	// 1. Revoke session (removes from both session store and account index)
 	if err := s.sessionSvc.RevokeSession(ctx, accountID, sessionID); err != nil {
 		s.logger.Warn("Failed to revoke session during logout", zap.Error(err))
+		errs = append(errs, fmt.Errorf("revoke session: %w", err))
 	}
 
 	// 2. Revoke refresh tokens for this session (always, regardless of accessTokenJTI)
 	if err := s.tokenSvc.RevokeAllForSession(ctx, sessionID); err != nil {
 		s.logger.Warn("Failed to revoke refresh tokens", zap.Error(err))
+		errs = append(errs, fmt.Errorf("revoke refresh tokens: %w", err))
 	}
 
 	// 3. Blacklist the access token so it cannot be used after logout (fail-closed)
@@ -510,7 +512,7 @@ func (s *AuthService) checkIPRateLimit(ctx context.Context, ip string) error {
 func (s *AuthService) clearLoginRateLimits(ctx context.Context, ip string, username *string) {
 	if username != nil {
 		normalizedIP := utility.NormalizeIP(ip)
-		key := fmt.Sprintf("login_attempts/%s/%s", normalizedIP, strings.ToLower(*username))
+		key := fmt.Sprintf("login_attempts:%s:%s", normalizedIP, strings.ToLower(*username))
 		if err := s.redis.Del(ctx, key); err != nil {
 			s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key", key), zap.Error(err))
 		}

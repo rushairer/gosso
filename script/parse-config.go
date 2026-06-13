@@ -4,13 +4,32 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
-	// Reference the project's config package
-	"github.com/rushairer/gosso/deploy" // Reference the project's deploy package
-	"github.com/rushairer/gosso/tests"
+	"github.com/rushairer/gosso/config"
+	"github.com/rushairer/gosso/deploy"
 )
+
+func findConfigDir() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "config"
+	}
+	for {
+		configDir := filepath.Join(dir, "config")
+		if _, err := os.Stat(filepath.Join(configDir, "development.yaml")); err == nil {
+			return configDir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "config"
+}
 
 func parsePostgresDSN(dsn string) (user, password, host string, port int, database string) {
 	// host=x user=x password=x dbname=x port=x ...
@@ -116,10 +135,11 @@ func main() {
 		log.Fatalf("❌ Failed to initialize deployment configuration: %v", err)
 	}
 
-	// Use GlobalConfig directly
-	configManager, err := tests.NewTestConfigManager()
+	// Load configuration using the standard config manager
+	configDir := findConfigDir()
+	configManager, err := config.NewConfigManager(nil, configDir, env)
 	if err != nil {
-		log.Fatalf("❌ Failed to load test config: %v", err)
+		log.Fatalf("❌ Failed to load config: %v", err)
 	}
 	cfg := configManager.Config()
 

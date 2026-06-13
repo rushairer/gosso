@@ -3,6 +3,7 @@
 # Example:
 #   GOUNO_DATABASE_DRIVERS_POSTGRES_DSN="host=127.0.0.1 user=gosso password=<password> dbname=gosso_test port=5434 sslmode=disable TimeZone=Asia/Shanghai"
 web_server:
+    debug: true
     address: 0.0.0.0
     port: 8080
     idle_timeout: 60s

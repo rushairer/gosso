@@ -16,7 +16,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/pquerna/otp v1.5.0
 	github.com/redis/go-redis/v9 v9.14.0
-	github.com/rushairer/batchflow v1.0.2
+	github.com/rushairer/batchflow v1.1.1
 	github.com/rushairer/gouno v1.0.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
@@ -64,7 +64,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.0 // indirect
-	github.com/rushairer/go-pipeline/v2 v2.2.3 // indirect
+	github.com/rushairer/go-pipeline/v2 v2.2.4 // indirect
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.12.0 // indirect

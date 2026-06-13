@@ -49,6 +49,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	keySvc, err := tokenService.NewKeyService(
 		cfg.AuthConfig.PrivateKeyPath,
 		cfg.AuthConfig.KeyID,
+		!cfg.WebServerConfig.Debug,
 		logger,
 	)
 	if err != nil {
@@ -56,7 +57,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	}
 
 	blacklistSvc := tokenService.NewBlacklistService(redis, logger)
-	tokenSvc := tokenService.NewTokenService(
+	tokenSvc, err := tokenService.NewTokenService(
 		keySvc,
 		cfg.AuthConfig.Issuer,
 		cfg.AuthConfig.AccessTokenExpiry,
@@ -66,6 +67,9 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		auditor,
 		logger,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize token service: %w", err)
+	}
 
 	providers := buildOAuthProviders(cfg)
 
@@ -88,12 +92,6 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize auth module: %w", err)
-	}
-
-	// In production (non-debug), enforce TOTP encryption key to prevent
-	// plaintext TOTP secret storage in the database.
-	if !cfg.WebServerConfig.Debug && cfg.AuthConfig.TOTPEncryptionKey == "" {
-		return nil, fmt.Errorf("auth.totp_encryption_key is required in production (set GOUNO_AUTH_TOTP_ENCRYPTION_KEY)")
 	}
 
 	// Wire session revoker into account service (for account deletion -> session revocation)

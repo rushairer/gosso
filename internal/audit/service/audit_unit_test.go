@@ -404,8 +404,8 @@ func TestDo_SubmitAfterClose(t *testing.T) {
 	err := auditor.Do(context.Background(), func(_ context.Context, _ *sql.DB) (*domain.AuditRecord, error) {
 		return record, nil
 	})
-	// batchflow.Submit after context cancellation recovers panics internally and returns nil.
-	assert.NoError(t, err)
+	// batchflow.Submit after close returns an error
+	assert.Error(t, err)
 }
 
 // ──────────────────────────────────────────────

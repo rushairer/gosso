@@ -3,7 +3,6 @@ package middleware
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"fmt"
 	"net/http"
 	"runtime/debug"
 	"time"
@@ -51,7 +50,11 @@ func RecoveryMiddleware(logger *zap.Logger) gin.HandlerFunc {
 // A per-request CSP nonce is generated and stored in the Gin context for use in templates.
 func SecurityHeadersMiddleware(isProduction bool) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		nonce := generateCSPNonce()
+		nonce, err := generateCSPNonce()
+		if err != nil {
+			ctx.AbortWithStatusJSON(http.StatusInternalServerError, gouno.InternalServerErrorResponse)
+			return
+		}
 		ctx.Set(cspNonceKey, nonce)
 
 		ctx.Header("X-Content-Type-Options", "nosniff")
@@ -82,14 +85,12 @@ func GetCSPNonce(ctx *gin.Context) string {
 	return ""
 }
 
-func generateCSPNonce() string {
+func generateCSPNonce() (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		// crypto/rand.Read failure is practically impossible.
-		// Return a time-based fallback nonce so each request gets a different value.
-		return base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("fallback-%d", time.Now().UnixNano())))
+		return "", err
 	}
-	return base64.StdEncoding.EncodeToString(b)
+	return base64.StdEncoding.EncodeToString(b), nil
 }
 
 // MaxBodySizeMiddleware limits the request body to the given number of bytes.

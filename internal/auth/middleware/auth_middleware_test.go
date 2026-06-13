@@ -39,10 +39,10 @@ func setupRealTokenService(t *testing.T) (*tokenService.TokenService, func()) {
 	t.Helper()
 	logger := zap.NewNop()
 	redisClient, mr := testutil.SetupTestRedis(t)
-	keySvc, err := tokenService.NewKeyService("", "", logger)
+	keySvc, err := tokenService.NewKeyService("", "", false, logger)
 	require.NoError(t, err)
 	blacklist := tokenService.NewBlacklistService(redisClient, logger)
-	svc := tokenService.NewTokenService(
+	svc, err := tokenService.NewTokenService(
 		keySvc,
 		"http://localhost:8080",
 		15*time.Minute,
@@ -52,6 +52,7 @@ func setupRealTokenService(t *testing.T) (*tokenService.TokenService, func()) {
 		nil,
 		logger,
 	)
+	require.NoError(t, err)
 	return svc, mr.Close
 }
 

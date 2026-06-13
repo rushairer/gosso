@@ -48,10 +48,11 @@ func initAuthService(t *testing.T, e *testutil.TestEnv) *service.AuthService {
 	ctx := context.Background()
 	auditor := auditService.NewAuditor(ctx, e.DB, nil, e.Logger)
 	accountMod := accountModule.InitializeAccountModule(e.DB, auditor, e.Logger)
-	keySvc, err := tokenService.NewKeyService("", "test-key", e.Logger)
+	keySvc, err := tokenService.NewKeyService("", "test-key", false, e.Logger)
 	require.NoError(t, err)
 	blacklistSvc := tokenService.NewBlacklistService(e.Redis, e.Logger)
-	tokenSvc := tokenService.NewTokenService(keySvc, "http://localhost:8080", 15*time.Minute, 720*time.Hour, e.Redis, blacklistSvc, nil, e.Logger)
+	tokenSvc, err := tokenService.NewTokenService(keySvc, "http://localhost:8080", 15*time.Minute, 720*time.Hour, e.Redis, blacklistSvc, nil, e.Logger)
+	require.NoError(t, err)
 	authMod, err := authModule.InitializeAuthModule(authModule.AuthModuleConfig{
 		DB:                    e.DB,
 		Redis:                 e.Redis,

@@ -45,9 +45,11 @@ type KeyService struct {
 
 // NewKeyService creates a KeyService. Loading/generation strategy:
 //  1. privateKeyPath non-empty and file exists → load from PEM
-//  2. privateKeyPath non-empty and file missing → generate and write PEM
+//  2. privateKeyPath non-empty and file missing:
+//     - isProduction = true → return error (do not auto-generate new key)
+//     - isProduction = false → generate and write PEM
 //  3. privateKeyPath empty → generate in-memory (dev mode, keys lost on restart)
-func NewKeyService(privateKeyPath string, keyID string, logger *zap.Logger) (*KeyService, error) {
+func NewKeyService(privateKeyPath string, keyID string, isProduction bool, logger *zap.Logger) (*KeyService, error) {
 	logger = utility.EnsureLogger(logger)
 
 	var privateKey *rsa.PrivateKey
@@ -61,6 +63,9 @@ func NewKeyService(privateKeyPath string, keyID string, logger *zap.Logger) (*Ke
 			}
 			logger.Info("RSA private key loaded from file", zap.String("path", privateKeyPath))
 		} else {
+			if isProduction {
+				return nil, fmt.Errorf("RSA private key file not found at %s in production mode", privateKeyPath)
+			}
 			privateKey, err = generateAndSaveKey(privateKeyPath)
 			if err != nil {
 				return nil, fmt.Errorf("generate and save key: %w", err)

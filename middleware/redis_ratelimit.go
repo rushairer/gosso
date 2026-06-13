@@ -73,7 +73,7 @@ return {allowed, remaining, reset_at, retry_after}
 // if false, rejects requests with 503 when Redis is unavailable (fail-closed).
 func RedisRateLimitMiddleware(rds *cache.RedisClient, endpoint string, keyFunc func(*gin.Context) string, limit int, window time.Duration, failOpen bool, logger *zap.Logger) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		key := fmt.Sprintf("rate_limit|%s|%s", endpoint, keyFunc(ctx))
+		key := fmt.Sprintf("rate_limit:%s:%s", endpoint, keyFunc(ctx))
 
 		result, err := rds.RunScript(ctx, slidingWindowScript,
 			[]string{key},

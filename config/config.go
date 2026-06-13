@@ -222,7 +222,31 @@ type OAuthProvidersConfig struct {
 
 // Validate checks that critical configuration values are present and valid.
 func (c *GoUnoConfig) Validate() error {
-	// Web server validation
+	if err := c.validateWebServer(); err != nil {
+		return err
+	}
+	if err := c.validateLog(); err != nil {
+		return err
+	}
+	if err := c.validateDatabase(); err != nil {
+		return err
+	}
+	if err := c.validateRedis(); err != nil {
+		return err
+	}
+	if err := c.validateAuth(); err != nil {
+		return err
+	}
+	if err := c.validateSMTP(); err != nil {
+		return err
+	}
+	if err := c.validateCORS(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *GoUnoConfig) validateWebServer() error {
 	if c.WebServerConfig.Port == "" {
 		return fmt.Errorf("web_server: port is required")
 	}
@@ -230,29 +254,102 @@ func (c *GoUnoConfig) Validate() error {
 	if _, err := fmt.Sscanf(c.WebServerConfig.Port, "%d", &port); err != nil || port < 1 || port > 65535 {
 		return fmt.Errorf("web_server: port must be a valid port number (1-65535), got %q", c.WebServerConfig.Port)
 	}
+	if c.WebServerConfig.MaxBodySize <= 0 {
+		return fmt.Errorf("web_server: max_body_size must be positive (got %d)", c.WebServerConfig.MaxBodySize)
+	}
+	if c.WebServerConfig.ReadTimeout <= 0 {
+		return fmt.Errorf("web_server: read_timeout must be positive")
+	}
+	if c.WebServerConfig.WriteTimeout <= 0 {
+		return fmt.Errorf("web_server: write_timeout must be positive")
+	}
+	if c.WebServerConfig.ReadHeaderTimeout <= 0 {
+		return fmt.Errorf("web_server: read_header_timeout must be positive")
+	}
+	if c.WebServerConfig.IdleTimeout <= 0 {
+		return fmt.Errorf("web_server: idle_timeout must be positive")
+	}
+	if c.WebServerConfig.RequestTimeout <= 0 {
+		return fmt.Errorf("web_server: request_timeout must be positive")
+	}
+	if c.WebServerConfig.ShutdownTimeout <= 0 {
+		return fmt.Errorf("web_server: shutdown_timeout must be positive")
+	}
+	rl := c.WebServerConfig.RateLimits
+	if rl.Login <= 0 {
+		return fmt.Errorf("web_server: rate_limits.login must be positive (got %d)", rl.Login)
+	}
+	if rl.Token <= 0 {
+		return fmt.Errorf("web_server: rate_limits.token must be positive (got %d)", rl.Token)
+	}
+	if rl.Passkey <= 0 {
+		return fmt.Errorf("web_server: rate_limits.passkey must be positive (got %d)", rl.Passkey)
+	}
+	if rl.API <= 0 {
+		return fmt.Errorf("web_server: rate_limits.api must be positive (got %d)", rl.API)
+	}
+	if rl.Introspect <= 0 {
+		return fmt.Errorf("web_server: rate_limits.introspect must be positive (got %d)", rl.Introspect)
+	}
+	if rl.DeviceCode <= 0 {
+		return fmt.Errorf("web_server: rate_limits.device_code must be positive (got %d)", rl.DeviceCode)
+	}
+	return nil
+}
+
+func (c *GoUnoConfig) validateLog() error {
 	if c.LogConfig.Level < -1 || c.LogConfig.Level > 5 {
 		return fmt.Errorf("log: level must be between -1 (debug) and 5 (fatal), got %d", c.LogConfig.Level)
 	}
 	if c.LogConfig.Format != "" && c.LogConfig.Format != "console" && c.LogConfig.Format != "json" {
 		return fmt.Errorf("log: format must be \"console\" or \"json\", got %q", c.LogConfig.Format)
 	}
+	return nil
+}
 
+func (c *GoUnoConfig) validateDatabase() error {
 	if c.DatabaseConfig.GetDefaultDriver() == nil {
 		return fmt.Errorf("database: no default driver configured")
 	}
 	if c.DatabaseConfig.GetDefaultDriver().DSN == "" {
 		return fmt.Errorf("database: default driver DSN is empty")
 	}
-	// Reject the built-in development DSN to prevent accidentally running with
-	// default credentials. This is a compile-time constant comparison (not a
-	// pattern match), so it only catches the exact default string — any real
-	// DSN configured via env vars or YAML will differ.
-	if c.DatabaseConfig.GetDefaultDriver().DSN == defaultPostgresDSN {
-		return fmt.Errorf("database: default driver DSN must be explicitly configured (the development default is not allowed)")
+	if !c.WebServerConfig.Debug && c.DatabaseConfig.GetDefaultDriver().DSN == defaultPostgresDSN {
+		return fmt.Errorf("database: default driver DSN must be explicitly configured in production (the development default is not allowed)")
 	}
+	if c.DatabaseConfig.ConnMaxLifetimeSec < 0 {
+		return fmt.Errorf("database: conn_max_lifetime_sec must not be negative (got %d)", c.DatabaseConfig.ConnMaxLifetimeSec)
+	}
+	if c.DatabaseConfig.ConnMaxIdleTimeSec < 0 {
+		return fmt.Errorf("database: conn_max_idle_time_sec must not be negative (got %d)", c.DatabaseConfig.ConnMaxIdleTimeSec)
+	}
+	if c.DatabaseConfig.MaxOpenConns <= 0 {
+		return fmt.Errorf("database: max_open_conns must be positive (got %d)", c.DatabaseConfig.MaxOpenConns)
+	}
+	if c.DatabaseConfig.MaxIdleConns <= 0 {
+		return fmt.Errorf("database: max_idle_conns must be positive (got %d); set to at least max_open_conns/4", c.DatabaseConfig.MaxIdleConns)
+	}
+	if c.DatabaseConfig.MaxIdleConns > c.DatabaseConfig.MaxOpenConns {
+		return fmt.Errorf("database: max_idle_conns (%d) must not exceed max_open_conns (%d)",
+			c.DatabaseConfig.MaxIdleConns, c.DatabaseConfig.MaxOpenConns)
+	}
+	return nil
+}
+
+func (c *GoUnoConfig) validateRedis() error {
 	if c.RedisConfig.DSN == "" {
 		return fmt.Errorf("redis: DSN is empty")
 	}
+	if c.RedisConfig.MaxActiveConns <= 0 {
+		return fmt.Errorf("redis: max_active_conns must be positive (got %d)", c.RedisConfig.MaxActiveConns)
+	}
+	if c.RedisConfig.PoolTimeoutSeconds <= 0 {
+		return fmt.Errorf("redis: pool_timeout_seconds must be positive (got %d)", c.RedisConfig.PoolTimeoutSeconds)
+	}
+	return nil
+}
+
+func (c *GoUnoConfig) validateAuth() error {
 	if c.AuthConfig.Issuer == "" {
 		return fmt.Errorf("auth: issuer is empty")
 	}
@@ -270,8 +367,8 @@ func (c *GoUnoConfig) Validate() error {
 	if len(key) != 32 {
 		return fmt.Errorf("auth: totp_encryption_key must decode to exactly 32 bytes (got %d)", len(key))
 	}
-	if c.AuthConfig.TOTPEncryptionKey == defaultTOTPEncryptionKey {
-		return fmt.Errorf("auth: totp_encryption_key must be explicitly configured (the development default is not allowed)")
+	if !c.WebServerConfig.Debug && c.AuthConfig.TOTPEncryptionKey == defaultTOTPEncryptionKey {
+		return fmt.Errorf("auth: totp_encryption_key must be explicitly configured in production (the development default is not allowed)")
 	}
 	if c.AuthConfig.AccessTokenExpiry <= 0 {
 		return fmt.Errorf("auth: access_token_expiry must be positive")
@@ -297,38 +394,38 @@ func (c *GoUnoConfig) Validate() error {
 	if c.AuthConfig.PrivateKeyPath != "" {
 		if stat, err := os.Stat(c.AuthConfig.PrivateKeyPath); err != nil {
 			if os.IsNotExist(err) {
-				return fmt.Errorf("auth: private_key_path file does not exist: %s", c.AuthConfig.PrivateKeyPath)
+				if !c.WebServerConfig.Debug {
+					return fmt.Errorf("auth: private_key_path file does not exist: %s", c.AuthConfig.PrivateKeyPath)
+				}
+			} else {
+				return fmt.Errorf("auth: cannot access private_key_path: %w", err)
 			}
-			return fmt.Errorf("auth: cannot access private_key_path: %w", err)
 		} else if stat.IsDir() {
 			return fmt.Errorf("auth: private_key_path is a directory, not a file: %s", c.AuthConfig.PrivateKeyPath)
 		}
 	}
-	rl := c.WebServerConfig.RateLimits
-	if rl.Login <= 0 {
-		return fmt.Errorf("web_server: rate_limits.login must be positive (got %d)", rl.Login)
+	if c.AuthConfig.MaxSessions <= 0 {
+		return fmt.Errorf("auth: max_sessions must be positive")
 	}
-	if rl.Token <= 0 {
-		return fmt.Errorf("web_server: rate_limits.token must be positive (got %d)", rl.Token)
+	if c.AuthConfig.WebAuthnRPID != "" {
+		if c.AuthConfig.WebAuthnRPName == "" {
+			return fmt.Errorf("auth: webauthn_rp_name is required when webauthn_rp_id is set")
+		}
+		if c.AuthConfig.WebAuthnRPOrigin == "" {
+			return fmt.Errorf("auth: webauthn_rp_origin is required when webauthn_rp_id is set")
+		}
+		origin, err := url.Parse(c.AuthConfig.WebAuthnRPOrigin)
+		if err != nil || (origin.Scheme != "http" && origin.Scheme != "https") {
+			return fmt.Errorf("auth: webauthn_rp_origin must be a valid URL with http or https scheme")
+		}
+		if origin.Scheme == "http" && origin.Hostname() != "localhost" && origin.Hostname() != "127.0.0.1" {
+			return fmt.Errorf("auth: webauthn_rp_origin with http scheme is only allowed for localhost or 127.0.0.1")
+		}
 	}
-	if rl.Passkey <= 0 {
-		return fmt.Errorf("web_server: rate_limits.passkey must be positive (got %d)", rl.Passkey)
-	}
-	if rl.API <= 0 {
-		return fmt.Errorf("web_server: rate_limits.api must be positive (got %d)", rl.API)
-	}
-	if rl.Introspect <= 0 {
-		return fmt.Errorf("web_server: rate_limits.introspect must be positive (got %d)", rl.Introspect)
-	}
-	if rl.DeviceCode <= 0 {
-		return fmt.Errorf("web_server: rate_limits.device_code must be positive (got %d)", rl.DeviceCode)
-	}
-	if c.DatabaseConfig.ConnMaxLifetimeSec < 0 {
-		return fmt.Errorf("database: conn_max_lifetime_sec must not be negative (got %d)", c.DatabaseConfig.ConnMaxLifetimeSec)
-	}
-	if c.DatabaseConfig.ConnMaxIdleTimeSec < 0 {
-		return fmt.Errorf("database: conn_max_idle_time_sec must not be negative (got %d)", c.DatabaseConfig.ConnMaxIdleTimeSec)
-	}
+	return nil
+}
+
+func (c *GoUnoConfig) validateSMTP() error {
 	if c.SMTPConfig.Host != "" {
 		if c.SMTPConfig.Port <= 0 {
 			return fmt.Errorf("smtp: port must be positive when host is configured (check GOUNO_SMTP_PORT environment variable)")
@@ -350,66 +447,13 @@ func (c *GoUnoConfig) Validate() error {
 			return fmt.Errorf("auth: password_reset_base_url must be a valid URL with http or https scheme")
 		}
 	}
-	if c.AuthConfig.WebAuthnRPID != "" {
-		if c.AuthConfig.WebAuthnRPName == "" {
-			return fmt.Errorf("auth: webauthn_rp_name is required when webauthn_rp_id is set")
-		}
-		if c.AuthConfig.WebAuthnRPOrigin == "" {
-			return fmt.Errorf("auth: webauthn_rp_origin is required when webauthn_rp_id is set")
-		}
-		origin, err := url.Parse(c.AuthConfig.WebAuthnRPOrigin)
-		if err != nil || (origin.Scheme != "http" && origin.Scheme != "https") {
-			return fmt.Errorf("auth: webauthn_rp_origin must be a valid URL with http or https scheme")
-		}
-		if origin.Scheme == "http" && origin.Hostname() != "localhost" && origin.Hostname() != "127.0.0.1" {
-			return fmt.Errorf("auth: webauthn_rp_origin with http scheme is only allowed for localhost or 127.0.0.1")
-		}
-	}
-	if c.DatabaseConfig.MaxOpenConns <= 0 {
-		return fmt.Errorf("database: max_open_conns must be positive (got %d)", c.DatabaseConfig.MaxOpenConns)
-	}
-	if c.DatabaseConfig.MaxIdleConns <= 0 {
-		return fmt.Errorf("database: max_idle_conns must be positive (got %d); set to at least max_open_conns/4", c.DatabaseConfig.MaxIdleConns)
-	}
-	if c.DatabaseConfig.MaxIdleConns > c.DatabaseConfig.MaxOpenConns {
-		return fmt.Errorf("database: max_idle_conns (%d) must not exceed max_open_conns (%d)",
-			c.DatabaseConfig.MaxIdleConns, c.DatabaseConfig.MaxOpenConns)
-	}
-	if c.AuthConfig.MaxSessions <= 0 {
-		return fmt.Errorf("auth: max_sessions must be positive")
-	}
-	if c.WebServerConfig.MaxBodySize <= 0 {
-		return fmt.Errorf("web_server: max_body_size must be positive (got %d)", c.WebServerConfig.MaxBodySize)
-	}
-	if c.RedisConfig.MaxActiveConns <= 0 {
-		return fmt.Errorf("redis: max_active_conns must be positive (got %d)", c.RedisConfig.MaxActiveConns)
-	}
-	if c.RedisConfig.PoolTimeoutSeconds <= 0 {
-		return fmt.Errorf("redis: pool_timeout_seconds must be positive (got %d)", c.RedisConfig.PoolTimeoutSeconds)
-	}
-	// Server timeouts must be positive
-	if c.WebServerConfig.ReadTimeout <= 0 {
-		return fmt.Errorf("web_server: read_timeout must be positive")
-	}
-	if c.WebServerConfig.WriteTimeout <= 0 {
-		return fmt.Errorf("web_server: write_timeout must be positive")
-	}
-	if c.WebServerConfig.ReadHeaderTimeout <= 0 {
-		return fmt.Errorf("web_server: read_header_timeout must be positive")
-	}
-	if c.WebServerConfig.IdleTimeout <= 0 {
-		return fmt.Errorf("web_server: idle_timeout must be positive")
-	}
-	if c.WebServerConfig.RequestTimeout <= 0 {
-		return fmt.Errorf("web_server: request_timeout must be positive")
-	}
-	if c.WebServerConfig.ShutdownTimeout <= 0 {
-		return fmt.Errorf("web_server: shutdown_timeout must be positive")
-	}
+	return nil
+}
+
+func (c *GoUnoConfig) validateCORS() error {
 	if c.CORSConfig.MaxAge < 0 {
 		return fmt.Errorf("cors: max_age must not be negative (got %d)", c.CORSConfig.MaxAge)
 	}
-	// CORS: AllowCredentials + wildcard origin is a security misconfiguration
 	if c.CORSConfig.AllowCredentials {
 		for _, origin := range c.CORSConfig.AllowedOrigins {
 			if origin == "*" {

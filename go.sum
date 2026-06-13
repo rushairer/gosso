@@ -162,8 +162,12 @@ github.com/rogpeppe/go-internal v1.10.0 h1:TMyTOH3F/DB16zRVcYyreMH6GnZZrwQVAoYjR
 github.com/rogpeppe/go-internal v1.10.0/go.mod h1:UQnix2H7Ngw/k4C5ijL5+65zddjncjaFoBhdsK/akog=
 github.com/rushairer/batchflow v1.0.2 h1:sTQMdxErotDNZiI3zg8n30FR9TLbC9RtbeVC2vqTpaM=
 github.com/rushairer/batchflow v1.0.2/go.mod h1:xOX/GX+F5746Sl272ky1+WXnuVW/Y03CZ+G9Iu6W5Es=
+github.com/rushairer/batchflow v1.1.1 h1:iPJ/xSlB7x7cSWzqmsYtOoyoySRkg3Ss6YG19v/YsVw=
+github.com/rushairer/batchflow v1.1.1/go.mod h1:uuZfI3x82sSjH2JfyAS9ALy4DWcyksZFUxf1TMNGY38=
 github.com/rushairer/go-pipeline/v2 v2.2.3 h1:yqG3Xw7nJ4VhqGUKW5NMIqjR1VUOeJnC+PUU/dpC/pg=
 github.com/rushairer/go-pipeline/v2 v2.2.3/go.mod h1:iry0n8BldFMGT5OygmXPIunUi13IxUWrNdANXdRX/Fo=
+github.com/rushairer/go-pipeline/v2 v2.2.4 h1:IlKpa6UTb3biL3mpTDUicCnQ+XYvlzjWCxkoYajo+UY=
+github.com/rushairer/go-pipeline/v2 v2.2.4/go.mod h1:iry0n8BldFMGT5OygmXPIunUi13IxUWrNdANXdRX/Fo=
 github.com/rushairer/gouno v1.0.0 h1:hggjiV655R5W1BtR8Qy0ZfRWCLdzn90iHDh+hKK8Ndc=
 github.com/rushairer/gouno v1.0.0/go.mod h1:uRfJbIFLTG4aVFnH6zlvrifgF7U9HHALtj+A6egvewM=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=

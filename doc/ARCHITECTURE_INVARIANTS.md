@@ -254,7 +254,7 @@ Every `InitializeXxxModule` function in `internal/*/module.go` must have at leas
 
 ### T1: New public functions have tests
 
-Every new exported function or method must have at least one test. This is enforced by the existing 50% overall coverage threshold, but reviewers should check at the function level.
+Every new exported function or method must have at least one test. This is enforced by the existing 60% overall coverage threshold, but reviewers should check at the function level.
 
 **Exception**: Thin wrapper functions that delegate directly (e.g., `func (s *svc) Foo(ctx context.Context) error { return s.inner.Foo(ctx) }`).
 
@@ -280,7 +280,7 @@ func TestLogin(t *testing.T) {
 
 ### T3: Module-level coverage awareness
 
-The CI reports per-module coverage. While the overall 50% threshold is the hard gate, per-module coverage below 40% triggers a warning in the PR. Contributors should aim to increase (not decrease) module coverage with each PR.
+The CI reports per-module coverage. While the overall 60% threshold is the hard gate, per-module coverage below 40% triggers a warning in the PR. Contributors should aim to increase (not decrease) module coverage with each PR.
 
 ---
 

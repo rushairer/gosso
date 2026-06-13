@@ -114,32 +114,29 @@ func (a *Auditor) ErrorChan() <-chan error {
 // Close stops the batchflow pipeline, allowing in-flight batches to complete.
 // Call this during application shutdown after the HTTP server has stopped.
 func (a *Auditor) Close() {
+	if a.batchflow != nil {
+		_ = a.batchflow.Close()
+	}
 	if a.cancel != nil {
 		a.cancel()
 	}
 }
 
-// Wait cancels the batchflow context and waits for the drain grace period to
-// elapse, ensuring all in-flight audit batches are flushed. Call this during
-// graceful shutdown instead of Close() when you need to guarantee writes complete.
-//
-// The drain grace period must exceed batchflow's internal drain timeout (hardcoded
-// at 2s). It is configurable via SetDrainGracePeriod for testing or custom deployments.
-//
-// NOTE: This uses a time.Sleep heuristic because batchflow v1.0.2 does not expose a
-// Done() channel. The grace period (default 2500ms) adds 500ms margin over batchflow's
-// 2s drain timeout. Under normal conditions this is sufficient, but if the DB is very
-// slow during shutdown, batches may still be lost. Consider upgrading batchflow to
-// expose PipelineImpl.Done() for deterministic shutdown in the future.
+// Wait stops the batchflow pipeline and waits for all in-flight audit batches
+// to be flushed to the database. Call this during graceful shutdown.
 func (a *Auditor) Wait() {
+	if a.batchflow != nil {
+		_ = a.batchflow.Close()
+	}
 	if a.cancel != nil {
 		a.cancel()
 	}
-	time.Sleep(a.drainGracePeriod)
 }
 
 // SetDrainGracePeriod overrides the default drain grace period. Must be called
 // before Wait(). Useful for testing with shorter timeouts.
+//
+// Deprecated: Wait() now uses deterministic drain via batchflow.Close().
 func (a *Auditor) SetDrainGracePeriod(d time.Duration) {
 	a.drainGracePeriod = d
 }

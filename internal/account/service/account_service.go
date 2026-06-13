@@ -279,6 +279,10 @@ func (s *accountServiceImpl) FindAccountByUsername(ctx context.Context, username
 
 // UpdateAccount updates account information.
 func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.Account) error {
+	if err := account.Validate(); err != nil {
+		return fmt.Errorf("invalid account: %w", err)
+	}
+
 	account.UpdatedAt = time.Now()
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {

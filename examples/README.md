@@ -151,11 +151,6 @@ go clean -modcache
 - 检查 `go.mod` 中的 module 名称
 - 运行 `go mod tidy`
 
-## 📖 相关文档
-
-- [任务 2 快速开始](../doc/task-02-quickstart.md) - 账号模块详细说明
-- [任务 3 快速开始](../doc/task-03-quickstart.md) - Redis 缓存详细说明
-
 ## 🎯 最佳实践
 
 1. **环境隔离**：开发环境使用 Docker Compose 管理依赖服务

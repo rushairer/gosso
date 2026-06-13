@@ -41,7 +41,8 @@ type TokenService struct {
 	logger        *zap.Logger
 }
 
-// NewTokenService creates a new token service instance
+// NewTokenService creates a new token service instance.
+// Returns an error if keySvc or redis is nil.
 func NewTokenService(
 	keySvc *KeyService,
 	issuer string,
@@ -51,13 +52,13 @@ func NewTokenService(
 	blacklist *BlacklistService,
 	auditor *auditService.Auditor,
 	logger *zap.Logger,
-) *TokenService {
+) (*TokenService, error) {
 	logger = utility.EnsureLogger(logger)
 	if keySvc == nil {
-		panic("token service: keySvc is required")
+		return nil, errors.New("token service: keySvc is required")
 	}
 	if redis == nil {
-		panic("token service: redis client is required")
+		return nil, errors.New("token service: redis client is required")
 	}
 	return &TokenService{
 		keySvc:        keySvc,
@@ -68,7 +69,7 @@ func NewTokenService(
 		blacklist:     blacklist,
 		auditor:       auditor,
 		logger:        logger,
-	}
+	}, nil
 }
 
 // GenerateAccessToken generates a JWT access token (RS256)

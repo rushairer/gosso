@@ -326,8 +326,10 @@ func TestGetCSPNonce_NotSet(t *testing.T) {
 }
 
 func TestGenerateCSPNonce_Unique(t *testing.T) {
-	n1 := generateCSPNonce()
-	n2 := generateCSPNonce()
+	n1, err := generateCSPNonce()
+	require.NoError(t, err)
+	n2, err := generateCSPNonce()
+	require.NoError(t, err)
 	assert.NotEqual(t, n1, n2)
 	assert.NotEmpty(t, n1)
 	assert.NotEmpty(t, n2)

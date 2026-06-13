@@ -53,7 +53,7 @@ func NewLogger(level zap.AtomicLevel, format ...string) *zap.Logger {
 		// Console encoder with optional color output
 		encoder = zapcore.NewConsoleEncoder(encoderConfig)
 		if supportsColor() {
-			writeSyncer = &ColorWriteSyncer{Writer: os.Stdout}
+			writeSyncer = &ColorWriteSyncer{Writer: os.Stdout, color: true}
 		} else {
 			writeSyncer = zapcore.AddSync(os.Stdout)
 		}
@@ -93,12 +93,13 @@ func encodeLevel(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
 // ColorWriteSyncer color write syncer
 type ColorWriteSyncer struct {
 	Writer *os.File
+	color  bool
 }
 
 // Write writes data and adds color
 func (w *ColorWriteSyncer) Write(p []byte) (n int, err error) {
 	// If it is a log output and color is supported, add color to the entire line
-	if supportsColor() && len(p) > 0 {
+	if w.color && len(p) > 0 {
 		line := string(p)
 		coloredLine := colorizeLine(line)
 		return w.Writer.Write([]byte(coloredLine))

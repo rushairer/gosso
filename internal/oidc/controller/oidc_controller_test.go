@@ -21,6 +21,7 @@ import (
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountService "github.com/rushairer/gosso/internal/account/service"
+	"github.com/rushairer/gosso/internal/cache"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Repo "github.com/rushairer/gosso/internal/oauth2/repository"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
@@ -384,9 +385,16 @@ func TestUserInfo_PhoneScope(t *testing.T) {
 
 func setupTestKeyService(t *testing.T) *tokenService.KeyService {
 	t.Helper()
-	keySvc, err := tokenService.NewKeyService("", "", zap.NewNop())
+	keySvc, err := tokenService.NewKeyService("", "", false, zap.NewNop())
 	require.NoError(t, err)
 	return keySvc
+}
+
+func setupTestTokenService(t *testing.T, keySvc *tokenService.KeyService, issuer string, redisClient *cache.RedisClient, blacklistSvc *tokenService.BlacklistService) *tokenService.TokenService {
+	t.Helper()
+	tokenSvc, err := tokenService.NewTokenService(keySvc, issuer, 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, nil, zap.NewNop())
+	require.NoError(t, err)
+	return tokenSvc
 }
 
 func signIDToken(t *testing.T, keySvc *tokenService.KeyService, issuer string, accountID string, audience []string, expired bool) string {
@@ -433,7 +441,7 @@ func setupLogoutEngine(t *testing.T, clientRepo *mockClientRepo) (*gin.Engine, *
 
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, nil, zap.NewNop())
+	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
@@ -474,7 +482,7 @@ func TestLogout_ExpiredIDTokenHint(t *testing.T) {
 	// gracefully handles missing session service (warns and continues).
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, nil, zap.NewNop())
+	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
@@ -507,7 +515,7 @@ func TestLogout_IDTokenHint_WrongIssuer(t *testing.T) {
 	// Sign with a different issuer
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://other-issuer.com", 15*time.Minute, 720*time.Hour, redisClient, nil, nil, zap.NewNop())
+	tokenSvc := setupTestTokenService(t, keySvc, "https://other-issuer.com", redisClient, nil)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
@@ -536,7 +544,7 @@ func TestLogout_IDTokenHint_WrongIssuer(t *testing.T) {
 func TestLogout_IDTokenHint_NoAudience(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, nil, zap.NewNop())
+	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
@@ -564,11 +572,11 @@ func TestLogout_IDTokenHint_NoAudience(t *testing.T) {
 func TestLogout_IDTokenHint_WrongSignature(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, nil, zap.NewNop())
+	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	// Sign with a DIFFERENT key service
-	otherKeySvc, err := tokenService.NewKeyService("", "", zap.NewNop())
+	otherKeySvc, err := tokenService.NewKeyService("", "", false, zap.NewNop())
 	require.NoError(t, err)
 
 	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
@@ -599,10 +607,10 @@ func TestLogout_IDTokenHint_WrongSignature(t *testing.T) {
 func TestLogout_BearerToken_InvalidSignature(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, nil, zap.NewNop())
+	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
-	otherKeySvc, err := tokenService.NewKeyService("", "", zap.NewNop())
+	otherKeySvc, err := tokenService.NewKeyService("", "", false, zap.NewNop())
 	require.NoError(t, err)
 
 	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
@@ -636,7 +644,7 @@ func TestLogout_BearerToken_InvalidSignature(t *testing.T) {
 func TestLogout_PostLogoutRedirect_InvalidURI(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, nil, zap.NewNop())
+	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
@@ -677,7 +685,7 @@ func TestLogout_PostLogoutRedirect_InvalidURI(t *testing.T) {
 func TestLogout_PostLogoutRedirect_ValidURI(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, nil, zap.NewNop())
+	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
@@ -721,7 +729,7 @@ func TestLogout_PostLogoutRedirect_ValidURI(t *testing.T) {
 func TestLogout_PostLogoutRedirect_ClientNotFound(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, nil, zap.NewNop())
+	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	clientRepo := &mockClientRepo{
@@ -762,7 +770,7 @@ func TestLogout_PostLogoutRedirect_ClientNotFound(t *testing.T) {
 func TestLogout_ClientIDMismatch(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, nil, nil, zap.NewNop())
+	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
@@ -911,7 +919,7 @@ func setupLogoutEngineWithBlacklist(t *testing.T, clientRepo *mockClientRepo) (*
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
 	blacklistSvc := tokenService.NewBlacklistService(redisClient, zap.NewNop())
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, nil, zap.NewNop())
+	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, blacklistSvc)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
@@ -1026,7 +1034,7 @@ func TestLogout_BearerToken_WithIDTokenHint_SameAccount(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
 	blacklistSvc := tokenService.NewBlacklistService(redisClient, zap.NewNop())
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, nil, zap.NewNop())
+	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, blacklistSvc)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
@@ -1060,7 +1068,7 @@ func TestLogout_BearerToken_WithIDTokenHint_AccountMismatch(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
 	blacklistSvc := tokenService.NewBlacklistService(redisClient, zap.NewNop())
-	tokenSvc := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, nil, zap.NewNop())
+	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, blacklistSvc)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
 	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())

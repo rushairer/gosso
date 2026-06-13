@@ -52,15 +52,8 @@ type Account struct {
 // testability at this stage. If deterministic timestamps become needed (e.g. for
 // snapshot testing or reproducible time-based logic), introduce a Clock parameter here.
 func NewAccount(displayName string) (*Account, error) {
-	displayName = strings.TrimSpace(displayName)
-	if displayName == "" {
-		return nil, ErrDisplayNameRequired
-	}
-	if len(displayName) > 255 {
-		return nil, ErrDisplayNameTooLong
-	}
 	now := time.Now()
-	return &Account{
+	a := &Account{
 		ID:          uuid.New().String(),
 		DisplayName: displayName,
 		Status:      AccountStatusActive,
@@ -69,7 +62,34 @@ func NewAccount(displayName string) (*Account, error) {
 		Metadata:    make(map[string]any),
 		CreatedAt:   now,
 		UpdatedAt:   now,
-	}, nil
+	}
+	if err := a.Validate(); err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
+// Validate checks if the account fields are correct.
+func (a *Account) Validate() error {
+	a.DisplayName = strings.TrimSpace(a.DisplayName)
+	if a.DisplayName == "" {
+		return ErrDisplayNameRequired
+	}
+	if len(a.DisplayName) > 255 {
+		return ErrDisplayNameTooLong
+	}
+	a.Locale = strings.TrimSpace(a.Locale)
+	if a.Locale == "" {
+		return errors.New("locale is required")
+	}
+	if len(a.Locale) > 10 {
+		return errors.New("locale must not exceed 10 characters")
+	}
+	a.Timezone = strings.TrimSpace(a.Timezone)
+	if a.Timezone == "" {
+		return errors.New("timezone is required")
+	}
+	return nil
 }
 
 // IsDeleted reports whether the account has been soft-deleted.

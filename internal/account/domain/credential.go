@@ -6,11 +6,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/mail"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/argon2"
+
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 var ErrAccountIDRequired = errors.New("account ID is required")
@@ -101,13 +104,17 @@ func NewPasswordCredential(accountID string, plainPassword string) (*Credential,
 }
 
 // NewEmailCredential creates an email credential.
-// Returns an error if accountID or email is empty.
+// Returns an error if accountID or email is empty or email format is invalid.
 func NewEmailCredential(accountID string, email string) (*Credential, error) {
 	if accountID == "" {
 		return nil, ErrAccountIDRequired
 	}
+	email = strings.TrimSpace(email)
 	if email == "" {
 		return nil, errors.New("email is required")
+	}
+	if _, err := mail.ParseAddress(email); err != nil {
+		return nil, fmt.Errorf("invalid email format: %w", err)
 	}
 	return &Credential{
 		ID:         uuid.New().String(),
@@ -121,13 +128,17 @@ func NewEmailCredential(accountID string, email string) (*Credential, error) {
 }
 
 // NewPhoneCredential creates a phone credential.
-// Returns an error if accountID or phone is empty.
+// Returns an error if accountID or phone is empty or phone format is invalid.
 func NewPhoneCredential(accountID string, phone string) (*Credential, error) {
 	if accountID == "" {
 		return nil, ErrAccountIDRequired
 	}
+	phone = strings.TrimSpace(phone)
 	if phone == "" {
 		return nil, errors.New("phone is required")
+	}
+	if !utility.ValidatePhoneFormat(phone) {
+		return nil, errors.New("invalid phone format")
 	}
 	return &Credential{
 		ID:         uuid.New().String(),

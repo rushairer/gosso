@@ -23,11 +23,11 @@ func setupTestTokenService(t *testing.T) (*TokenService, func()) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	cleanup := mr.Close
 
-	keySvc, err := NewKeyService("", "", logger)
+	keySvc, err := NewKeyService("", "", false, logger)
 	require.NoError(t, err)
 
 	blacklist := NewBlacklistService(redisClient, logger)
-	svc := NewTokenService(
+	svc, err := NewTokenService(
 		keySvc,
 		"http://localhost:8080",
 		15*time.Minute,
@@ -37,8 +37,15 @@ func setupTestTokenService(t *testing.T) (*TokenService, func()) {
 		nil,
 		logger,
 	)
+	require.NoError(t, err)
 
 	return svc, cleanup
+}
+
+func TestNewTokenService_NilInputs(t *testing.T) {
+	logger := zap.NewNop()
+	_, err := NewTokenService(nil, "http://localhost:8080", 15*time.Minute, 7*24*time.Hour, nil, nil, nil, logger)
+	assert.Error(t, err)
 }
 
 func TestGenerateAccessToken_RS256(t *testing.T) {

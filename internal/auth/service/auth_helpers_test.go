@@ -243,14 +243,14 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 	sessSvc := sessionService.NewSessionService(redisClient, logger)
 
 	// Real TokenService backed by miniredis + in-memory RSA key
-	keySvc, err := tokenService.NewKeyService("", "test-key", logger)
+	keySvc, err := tokenService.NewKeyService("", "test-key", false, logger)
 	if err != nil {
 		mr.Close()
 		sqlDB.Close()
 		t.Fatalf("failed to create key service: %v", err)
 	}
 	blacklistSvc := tokenService.NewBlacklistService(redisClient, logger)
-	tokSvc := tokenService.NewTokenService(
+	tokSvc, err := tokenService.NewTokenService(
 		keySvc,
 		"http://localhost:8080",
 		15*60*1e9,      // 15m as time.Duration
@@ -260,6 +260,13 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 		nil,
 		logger,
 	)
+	if err != nil {
+		mr.Close()
+		sqlDB.Close()
+		t.Fatalf("failed to create token service: %v", err)
+	}
+
+	sessSvc.SetTokenRevoker(tokSvc)
 
 	// Mock services
 	accountSvc := &testAccountService{

@@ -129,9 +129,9 @@ func setupTestIDTokenService(t *testing.T) (*IDTokenService, func()) {
 	cleanup := mr.Close
 
 	blacklist := tokenService.NewBlacklistService(redisClient, logger)
-	keySvc, err := tokenService.NewKeyService("", "", logger)
+	keySvc, err := tokenService.NewKeyService("", "", false, logger)
 	require.NoError(t, err)
-	tokenSvc := tokenService.NewTokenService(
+	tokenSvc, err := tokenService.NewTokenService(
 		keySvc,
 		"http://localhost:8080",
 		15*time.Minute,
@@ -141,6 +141,7 @@ func setupTestIDTokenService(t *testing.T) (*IDTokenService, func()) {
 		nil,
 		logger,
 	)
+	require.NoError(t, err)
 
 	username := "testuser"
 	avatarURL := "https://example.com/avatar.png"

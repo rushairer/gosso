@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # Runtime stage
 FROM alpine:3.22.0
 
-RUN apk add --no-cache ca-certificates tzdata wget
+RUN apk add --no-cache ca-certificates tzdata
 
 RUN addgroup -S gosso && adduser -S gosso -G gosso
 
@@ -39,7 +39,7 @@ USER gosso
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/readiness || exit 1
+    CMD wget -qO- http://localhost:8080/readiness || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["web", "-e", "production"]
