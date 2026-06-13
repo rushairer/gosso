@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- TOTP encryption now enforced in `EnrollTOTP` — refuses to store secrets in plaintext when encryption key is not configured (`internal/auth/service/mfa_service.go`).
+- `ChangePassword` now returns session revocation errors to caller — previously swallowed errors left stolen sessions active after password change (`internal/account/service/account_service.go`).
+- OAuth2 revoke endpoint now logs access token revocation failures instead of silently discarding (`internal/oauth2/controller/oauth2_revoke.go`).
 - `SuspendAccount` now returns session revocation errors instead of swallowing them — previously suspended users could retain active sessions if Redis revocation failed (`internal/account/service/account_service.go`).
 - `NewPasswordCredential` now validates password length (1-1024 bytes) before Argon2id hashing — prevents memory exhaustion DoS via oversized passwords (`internal/account/domain/credential.go`).
 - `RotateRefreshToken` now correctly distinguishes Redis network errors from missing keys — previously all errors were masked as `ErrKeyNotFound` (`internal/token/service/token_service.go`).
@@ -31,6 +34,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - OAuth2 `SubmitConsent` now verifies account is still active before generating authorization code — prevents code issuance for accounts suspended between GET and POST (`internal/oauth2/controller/oauth2_authorize.go`).
 
 ### Changed
+- `.env.production.example` now includes `GOUNO_AUTH_TOTP_ENCRYPTION_KEY` with generation instructions.
+- `.env.production.example` DSN now uses `sslmode=require` instead of `sslmode=disable`.
+- `config/production.yaml` now explicitly sets database connection pool tuning parameters (`max_open_conns: 25`, `max_idle_conns: 15`, `conn_max_lifetime_sec: 300`, `conn_max_idle_time_sec: 180`).
+- `config/production.yaml` TOTP encryption key now enabled via environment variable (was commented out).
+- `config/test.yaml` now includes `session_ttl` and `max_sessions` settings.
+- `config/development.yaml` now explicitly sets `max_body_size: 10485760`.
+- `config/config_manager.go`: increased `database.max_idle_conns` default from 5 to 15; added `auth.max_sessions` default of 5.
+- Makefile: default `build` target now produces optimized binary (`-ldflags="-s -w"`); added `build-debug` target for development.
+- Makefile: unified `docker-compose` to `docker compose` (plugin form) across all targets.
+- Federated identity repository `FindByProvider` / `FindByProviderTx` now share query constant — eliminates duplicated SQL (`internal/account/repository/federated_identity_repository_impl.go`).
+- Role repository `FindByID` / `FindByIDTx` now share query constant — eliminates duplicated SQL (`internal/account/repository/role_repository_impl.go`).
+- Docker Compose: PostgreSQL image upgraded from `postgres:15-alpine` to `postgres:16-alpine`.
 - Password reset errors now use typed sentinel errors (`ErrPasswordResetInvalidToken`, `ErrPasswordResetExhausted`) instead of anonymous `errors.New()` — enables proper error matching in controller layer (`internal/auth/service/errors.go`, `internal/auth/service/password_reset_service.go`).
 - `HandleClientAuthError` now accepts a `*zap.Logger` parameter and logs client authentication failures at Warn level — provides audit trail for failed client auth attempts (`internal/controllerutil/error_handler.go`).
 - OAuth2 `client_credentials` grant now returns `unauthorized_client` (400) instead of `invalid_client` (401) for non-confidential clients — correct RFC 6749 error code for authorization vs authentication failures (`internal/oauth2/controller/oauth2_token.go`).
@@ -55,6 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `SocialLoginService.HandleCallback` documentation now explicitly states that OAuth2 `state` validation is the caller's responsibility (`internal/auth/service/social_login_service.go`).
 
 ### Fixed
+- Removed redundant `stop()` call in graceful shutdown — `defer stop()` already handles cleanup (`cmd/gouno/web.go`).
 - Production Docker Compose: Redis now requires authentication (`REDIS_PASSWORD` is mandatory) — prevents unauthenticated Redis access on internal network (`docker-compose.yml`).
 - Production Docker Compose: gosso application port no longer exposed externally — traffic must go through Nginx reverse proxy (`docker-compose.yml`).
 - Production Docker Compose: all containers now drop all Linux capabilities (`cap_drop: ALL`) — follows container security best practices (`docker-compose.yml`).

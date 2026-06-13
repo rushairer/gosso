@@ -183,7 +183,9 @@ func (s *MFAService) EnrollTOTP(ctx context.Context, accountID string) (*TOTPEnr
 		}
 		storedSecret = enc
 	} else {
-		s.logger.Warn("TOTP encryption key not configured; storing secret in plaintext")
+		s.logger.Error("TOTP encryption key not configured; refusing to store secret in plaintext. " +
+			"Set auth.totp_encryption_key (env GOUNO_AUTH_TOTP_ENCRYPTION_KEY).")
+		return nil, fmt.Errorf("totp encryption key not configured")
 	}
 
 	// Delete existing unverified TOTP credentials and save the new one atomically.

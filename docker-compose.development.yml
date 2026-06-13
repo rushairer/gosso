@@ -43,7 +43,7 @@ services:
       
   # PostgreSQL 数据库
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-gosso_dev}
       POSTGRES_USER: ${POSTGRES_USER:-gosso}

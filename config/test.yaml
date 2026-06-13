@@ -51,6 +51,8 @@ auth:
     refresh_token_expiry: 24h
     authorization_code_expiry: 10m
     id_token_expiry: 15m
+    session_ttl: 24h
+    max_sessions: 5
     default_scopes:
         - openid
         - profile

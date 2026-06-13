@@ -15,6 +15,13 @@ type roleRepositoryImpl struct {
 	db *sql.DB
 }
 
+const roleByIDQuery = `
+	SELECT id, name, description, permissions, metadata, created_at, updated_at, deleted_at
+	FROM roles
+	WHERE id = $1 AND deleted_at IS NULL
+	LIMIT 1
+`
+
 // NewRoleRepository creates a new role repository
 func NewRoleRepository(db *sql.DB) RoleRepository {
 	return &roleRepositoryImpl{db: db}
@@ -96,14 +103,7 @@ func (r *roleRepositoryImpl) UpdateRole(ctx context.Context, tx *sql.Tx, role *d
 
 // FindByID finds a role by ID
 func (r *roleRepositoryImpl) FindByID(ctx context.Context, roleID string) (*domain.Role, error) {
-	query := `
-		SELECT id, name, description, permissions, metadata, created_at, updated_at, deleted_at
-		FROM roles
-		WHERE id = $1 AND deleted_at IS NULL
-		LIMIT 1
-	`
-
-	role, err := scanRole(r.db.QueryRowContext(ctx, query, roleID))
+	role, err := scanRole(r.db.QueryRowContext(ctx, roleByIDQuery, roleID))
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", ErrRoleNotFound, roleID)
@@ -117,14 +117,7 @@ func (r *roleRepositoryImpl) FindByID(ctx context.Context, roleID string) (*doma
 
 // FindByIDTx finds a role by ID within a transaction
 func (r *roleRepositoryImpl) FindByIDTx(ctx context.Context, tx *sql.Tx, roleID string) (*domain.Role, error) {
-	query := `
-		SELECT id, name, description, permissions, metadata, created_at, updated_at, deleted_at
-		FROM roles
-		WHERE id = $1 AND deleted_at IS NULL
-		LIMIT 1
-	`
-
-	role, err := scanRole(tx.QueryRowContext(ctx, query, roleID))
+	role, err := scanRole(tx.QueryRowContext(ctx, roleByIDQuery, roleID))
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", ErrRoleNotFound, roleID)

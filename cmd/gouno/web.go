@@ -112,7 +112,6 @@ func startWebServer(cmd *cobra.Command, args []string) {
 
 	<-ctx.Done()
 
-	stop()
 	logger.Info("shutting down gracefully, waiting for active requests to finish",
 		zap.Duration("timeout", globalConfig.WebServerConfig.ShutdownTimeout))
 

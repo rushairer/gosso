@@ -117,7 +117,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("database.drivers.postgres.dsn", defaultPostgresDSN)
 	v.SetDefault("database.drivers.postgres.log_level", 1)
 	v.SetDefault("database.max_open_conns", 25)
-	v.SetDefault("database.max_idle_conns", 5)
+	v.SetDefault("database.max_idle_conns", 15)
 	v.SetDefault("database.conn_max_lifetime_sec", 300)  // 5 minutes
 	v.SetDefault("database.conn_max_idle_time_sec", 180) // 3 minutes
 
@@ -130,6 +130,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("auth.device_code_expiry", "10m")
 	v.SetDefault("auth.device_code_interval", "5s")
 	v.SetDefault("auth.id_token_expiry", "15m")
+	v.SetDefault("auth.max_sessions", 5)
 
 	// Redis configuration
 	v.SetDefault("redis.max_active_conns", 10)

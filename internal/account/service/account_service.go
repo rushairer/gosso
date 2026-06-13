@@ -470,6 +470,9 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
 		s.logger.Error("Failed to revoke sessions after password change",
 			zap.String("account_id", accountID), zap.Error(revokeErr))
+		// Password was already changed successfully, but caller should know session revocation failed
+		// so they can take additional action (e.g., notify the user).
+		return fmt.Errorf("password changed but session revocation failed: %w", revokeErr)
 	}
 
 	// 8. Audit log (sync — critical security event)

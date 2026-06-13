@@ -51,7 +51,9 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 	if req.TokenHint != "refresh_token" {
 		claims, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx, req.Token)
 		if err == nil && claims.AccountID == accountIDStr {
-			_ = c.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time)
+			if revokeErr := c.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); revokeErr != nil {
+				c.logger.Error("Failed to revoke access token", zap.Error(revokeErr))
+			}
 		}
 	}
 

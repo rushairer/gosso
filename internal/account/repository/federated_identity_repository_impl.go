@@ -15,6 +15,13 @@ type federatedIdentityRepositoryImpl struct {
 	db *sql.DB
 }
 
+const federatedIdentityByProviderQuery = `
+	SELECT id, account_id, provider, provider_user_id, profile, created_at, updated_at, deleted_at
+	FROM federated_identities
+	WHERE provider = $1 AND provider_user_id = $2 AND deleted_at IS NULL
+	LIMIT 1
+`
+
 // NewFederatedIdentityRepository creates a new federated identity repository
 func NewFederatedIdentityRepository(db *sql.DB) FederatedIdentityRepository {
 	return &federatedIdentityRepositoryImpl{db: db}
@@ -50,14 +57,7 @@ func (r *federatedIdentityRepositoryImpl) CreateFederatedIdentity(ctx context.Co
 
 // FindByProvider finds a federated identity by provider and provider user ID
 func (r *federatedIdentityRepositoryImpl) FindByProvider(ctx context.Context, provider domain.Provider, providerUserID string) (*domain.FederatedIdentity, error) {
-	query := `
-		SELECT id, account_id, provider, provider_user_id, profile, created_at, updated_at, deleted_at
-		FROM federated_identities
-		WHERE provider = $1 AND provider_user_id = $2 AND deleted_at IS NULL
-		LIMIT 1
-	`
-
-	identity, err := scanFederatedIdentity(r.db.QueryRowContext(ctx, query, provider, providerUserID))
+	identity, err := scanFederatedIdentity(r.db.QueryRowContext(ctx, federatedIdentityByProviderQuery, provider, providerUserID))
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s/%s", ErrFederatedIdentityNotFound, provider, providerUserID)
@@ -71,14 +71,7 @@ func (r *federatedIdentityRepositoryImpl) FindByProvider(ctx context.Context, pr
 
 // FindByProviderTx finds a federated identity by provider and provider user ID within a transaction.
 func (r *federatedIdentityRepositoryImpl) FindByProviderTx(ctx context.Context, tx *sql.Tx, provider domain.Provider, providerUserID string) (*domain.FederatedIdentity, error) {
-	query := `
-		SELECT id, account_id, provider, provider_user_id, profile, created_at, updated_at, deleted_at
-		FROM federated_identities
-		WHERE provider = $1 AND provider_user_id = $2 AND deleted_at IS NULL
-		LIMIT 1
-	`
-
-	identity, err := scanFederatedIdentity(tx.QueryRowContext(ctx, query, provider, providerUserID))
+	identity, err := scanFederatedIdentity(tx.QueryRowContext(ctx, federatedIdentityByProviderQuery, provider, providerUserID))
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s/%s", ErrFederatedIdentityNotFound, provider, providerUserID)

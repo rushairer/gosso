@@ -23,6 +23,10 @@ web_server:
         device_code: 10
 database:
     default: postgres
+    max_open_conns: 25
+    max_idle_conns: 15
+    conn_max_lifetime_sec: 300
+    conn_max_idle_time_sec: 180
     drivers:
         postgres:
             name: postgres
@@ -64,8 +68,8 @@ auth:
     private_key_path: "/app/keys/private.pem"
     password_reset_base_url: "${GOUNO_PASSWORD_RESET_BASE_URL}"
     # REQUIRED: 64-char hex string (32 bytes) for encrypting TOTP secrets at rest.
-    # Set via environment variable GOUNO_AUTH_TOTP_ENCRYPTION_KEY.
-    # totp_encryption_key: "${GOUNO_AUTH_TOTP_ENCRYPTION_KEY}"
+    # Generate with: openssl rand -hex 32
+    totp_encryption_key: "${GOUNO_AUTH_TOTP_ENCRYPTION_KEY}"
 cors:
     allowed_origins:
         - "${GOUNO_CORS_ORIGIN}"

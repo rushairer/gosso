@@ -3,6 +3,10 @@ OUTPUT:=./bin/gosso
 default: build
 
 build:
+	go build -buildvcs=false -ldflags="-s -w" -o $(OUTPUT) $(DEFAULT)
+	chmod +x $(OUTPUT)
+
+build-debug:
 	go build -buildvcs=false -gcflags "-N -l" -o $(OUTPUT) $(DEFAULT)
 	chmod +x $(OUTPUT)
 
@@ -55,52 +59,52 @@ coverage:
 
 docker-dev-up:
 	@echo "🚀 启动开发环境..."
-	@eval $$(go run script/parse-config.go development) && docker-compose -f docker-compose.development.yml up -d
+	@eval $$(go run script/parse-config.go development) && docker compose -f docker-compose.development.yml up -d
 	@echo "✅ 开发环境已启动"
 	@echo "🌐 应用地址: http://localhost:$${APP_PORT:-8081}"
 	@echo "📧 Mailpit Web UI: http://localhost:$${MAILPIT_WEB_EXTERNAL_PORT:-8026}"
 
 docker-dev-down:
 	@echo "🛑 停止开发环境..."
-	@eval $$(go run script/parse-config.go development) && docker-compose -f docker-compose.development.yml down
+	@eval $$(go run script/parse-config.go development) && docker compose -f docker-compose.development.yml down
 	@echo "✅ 开发环境已停止"
 
 docker-dev-logs:
 	@echo "📋 查看开发环境日志..."
-	@eval $$(go run script/parse-config.go development) && docker-compose -f docker-compose.development.yml logs -f
+	@eval $$(go run script/parse-config.go development) && docker compose -f docker-compose.development.yml logs -f
 
 docker-dev:
 	docker compose exec gosso sh
 
 docker-test-up:
 	@echo "🧪 启动测试环境..."
-	@eval $$(go run script/parse-config.go test) && docker-compose -f docker-compose.test.yml up -d
+	@eval $$(go run script/parse-config.go test) && docker compose -f docker-compose.test.yml up -d
 	@echo "✅ 测试环境已启动"
 	@echo "🌐 应用地址: http://localhost:$${APP_EXTERNAL_PORT:-8082}"
 	@echo "📧 Mailpit Web UI: http://localhost:$${MAILPIT_WEB_EXTERNAL_PORT:-8027}"
 
 docker-test-down:
 	@echo "🛑 停止测试环境..."
-	@eval $$(go run script/parse-config.go test) && docker-compose -f docker-compose.test.yml down
+	@eval $$(go run script/parse-config.go test) && docker compose -f docker-compose.test.yml down
 	@echo "✅ 测试环境已停止"
 
 docker-test-logs:
 	@echo "📋 查看测试环境日志..."
-	@eval $$(go run script/parse-config.go test) && docker-compose -f docker-compose.test.yml logs -f
+	@eval $$(go run script/parse-config.go test) && docker compose -f docker-compose.test.yml logs -f
 
 docker-prod-up:
 	@echo "🚀 启动生产环境..."
-	@eval $$(go run script/parse-config.go production) && docker-compose -f docker-compose.yml up -d --build
+	@eval $$(go run script/parse-config.go production) && docker compose -f docker-compose.yml up -d --build
 	@echo "✅ 生产环境已启动"
 
 docker-prod-down:
 	@echo "🛑 停止生产环境..."
-	@eval $$(go run script/parse-config.go production) && docker-compose -f docker-compose.yml down
+	@eval $$(go run script/parse-config.go production) && docker compose -f docker-compose.yml down
 	@echo "✅ 生产环境已停止"
 
 docker-prod-logs:
 	@echo "📋 查看生产环境日志..."
-	@eval $$(go run script/parse-config.go production) && docker-compose -f docker-compose.yml logs -f
+	@eval $$(go run script/parse-config.go production) && docker compose -f docker-compose.yml logs -f
 
 # 环境配置生成命令
 env-dev:
@@ -161,7 +165,7 @@ help:
 	@echo "🆘 Help Commands:"
 	@echo "  help                 - Show this help message"
 
-.PHONY: default build run dev lint lint-fix test test-ui test-integration check coverage docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs docker-prod-up docker-prod-down docker-prod-logs env-dev env-test env-prod env-all help
+.PHONY: default build build-debug run dev lint lint-fix test test-ui test-integration check coverage docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs docker-prod-up docker-prod-down docker-prod-logs env-dev env-test env-prod env-all help
 # Examples - 示例程序
 .PHONY: examples example-account example-redis example-metadata
 
