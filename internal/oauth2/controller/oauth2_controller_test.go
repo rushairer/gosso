@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 
+	authService "github.com/rushairer/gosso/internal/auth/service"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
@@ -1355,7 +1356,7 @@ func TestAuthenticateRequest_ScopedToken(t *testing.T) {
 
 	tokenSvc := &mockTokenMgr{
 		validateAccessFn: func() (*tokenDomain.AccessTokenClaims, error) {
-			return &tokenDomain.AccessTokenClaims{AccountID: "account-001", Scope: "mfa:verify"}, nil
+			return &tokenDomain.AccessTokenClaims{AccountID: "account-001", Scope: authService.ScopeMFA}, nil
 		},
 	}
 	ctrl, _ := NewOAuth2Controller(

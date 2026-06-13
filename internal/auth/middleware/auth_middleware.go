@@ -44,8 +44,10 @@ func ValidateBearerToken(ctx *gin.Context, tokenSvc TokenValidator, sessionValid
 		return nil, errUnauthorized
 	}
 
-	// Reject tokens with non-empty scope (e.g. MFA tokens) from accessing general endpoints
-	if claims.Scope != "" {
+	// Reject internal MFA tokens from accessing general endpoints. OAuth/OIDC
+	// access tokens use normal scope strings such as "openid profile" and must
+	// remain valid for resource endpoints like /oidc/userinfo.
+	if claims.Scope == authService.ScopeMFA {
 		return nil, ErrTokenScopeNotAllowed
 	}
 

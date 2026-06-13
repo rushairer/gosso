@@ -16,7 +16,10 @@ import (
 	"github.com/rushairer/gosso/internal/utility"
 )
 
-var ErrAccountIDRequired = errors.New("account ID is required")
+var (
+	ErrAccountIDRequired  = errors.New("account ID is required")
+	ErrInvalidPhoneFormat = errors.New("invalid phone format")
+)
 
 // CredentialType represents the type of credential.
 type CredentialType string
@@ -138,7 +141,7 @@ func NewPhoneCredential(accountID string, phone string) (*Credential, error) {
 		return nil, errors.New("phone is required")
 	}
 	if !utility.ValidatePhoneFormat(phone) {
-		return nil, errors.New("invalid phone format")
+		return nil, ErrInvalidPhoneFormat
 	}
 	return &Credential{
 		ID:         uuid.New().String(),

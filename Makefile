@@ -53,7 +53,7 @@ check: lint test build
 
 coverage:
 	@echo "📊 Generating coverage report..."
-	go test -coverprofile=coverage.out -covermode=atomic ./...
+	go test -p 1 -coverprofile=coverage.out -covermode=atomic $$(go list ./... | grep -Ev '/(cmd|deploy|docs|examples|script|tests)(/|$$)')
 	go tool cover -func=coverage.out | tail -1
 	@echo "📄 Full report: go tool cover -html=coverage.out"
 

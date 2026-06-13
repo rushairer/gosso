@@ -337,6 +337,8 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 		ClientID:  oldRT.ClientID,
 		SessionID: oldRT.SessionID,
 		Scope:     oldRT.Scope,
+		IP:        oldRT.IP,
+		UserAgent: oldRT.UserAgent,
 		ExpiresAt: time.Now().Add(s.refreshExpiry),
 		CreatedAt: time.Now(),
 	}

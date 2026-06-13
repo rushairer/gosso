@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/rushairer/gosso/internal/audit"
 	"github.com/rushairer/gosso/internal/testutil"
 	"github.com/rushairer/gosso/internal/token/domain"
 )
@@ -191,7 +192,7 @@ func TestRotateRefreshToken(t *testing.T) {
 	svc, cleanup := setupTestTokenService(t)
 	defer cleanup()
 
-	ctx := context.Background()
+	ctx := audit.SetMetadata(context.Background(), "192.0.2.10", "test-agent", "req-001")
 
 	// Generate initial token
 	rt, err := svc.GenerateRefreshToken(ctx, "account-003", "client-003", "session-003", "openid")
@@ -203,14 +204,18 @@ func TestRotateRefreshToken(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, oldToken, newRT.Token)
 	assert.Equal(t, "account-003", newRT.AccountID)
+	assert.Equal(t, "192.0.2.10", newRT.IP)
+	assert.Equal(t, "test-agent", newRT.UserAgent)
 
 	// Old token should be invalid
 	_, err = svc.ValidateRefreshToken(ctx, oldToken)
 	assert.Error(t, err)
 
 	// New token should be valid
-	_, err = svc.ValidateRefreshToken(ctx, newRT.Token)
+	validated, err := svc.ValidateRefreshToken(ctx, newRT.Token)
 	assert.NoError(t, err)
+	assert.Equal(t, "192.0.2.10", validated.IP)
+	assert.Equal(t, "test-agent", validated.UserAgent)
 
 	// Clean up
 	_ = svc.RevokeRefreshToken(ctx, newRT.Token)

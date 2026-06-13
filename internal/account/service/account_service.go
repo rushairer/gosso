@@ -714,7 +714,7 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 	// Validate phone format
 	if req.Phone != "" {
 		if !utility.ValidatePhoneFormat(req.Phone) {
-			return errors.New("invalid phone format")
+			return domain.ErrInvalidPhoneFormat
 		}
 	}
 

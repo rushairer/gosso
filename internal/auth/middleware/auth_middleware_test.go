@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	authService "github.com/rushairer/gosso/internal/auth/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	"github.com/rushairer/gosso/internal/testutil"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
@@ -277,12 +278,12 @@ func TestValidateBearerToken_InvalidToken(t *testing.T) {
 	engine.ServeHTTP(w, req)
 }
 
-func TestValidateBearerToken_ScopedToken_Rejected(t *testing.T) {
+func TestValidateBearerToken_MFATokenRejected(t *testing.T) {
 	engine := setupGin()
 	engine.GET("/test", func(ctx *gin.Context) {
 		claims, err := ValidateBearerToken(ctx, &mockTokenValidator{
 			claims: &tokenDomain.AccessTokenClaims{
-				Scope: "mfa:verify",
+				Scope: authService.ScopeMFA,
 			},
 		}, nil)
 		assert.Nil(t, claims)
@@ -291,6 +292,26 @@ func TestValidateBearerToken_ScopedToken_Rejected(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Bearer mfa-token")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+}
+
+func TestValidateBearerToken_OAuthScopedTokenAllowed(t *testing.T) {
+	engine := setupGin()
+	engine.GET("/test", func(ctx *gin.Context) {
+		claims, err := ValidateBearerToken(ctx, &mockTokenValidator{
+			claims: &tokenDomain.AccessTokenClaims{
+				AccountID: "acct-001",
+				Scope:     "openid profile",
+			},
+		}, nil)
+		assert.NoError(t, err)
+		require.NotNil(t, claims)
+		assert.Equal(t, "openid profile", claims.Scope)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Authorization", "Bearer oauth-token")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 }
@@ -435,14 +456,14 @@ func TestJWTAuthMiddleware_InvalidToken(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
-func TestJWTAuthMiddleware_ScopedToken_Returns403(t *testing.T) {
+func TestJWTAuthMiddleware_MFAToken_Returns403(t *testing.T) {
 	tokenSvc, cleanup := setupRealTokenService(t)
 	defer cleanup()
 
 	tokenString, err := tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		AccountID: "acct-001",
 		SessionID: "sess-001",
-		Scope:     "mfa:verify",
+		Scope:     authService.ScopeMFA,
 	})
 	require.NoError(t, err)
 
