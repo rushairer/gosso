@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -72,6 +74,28 @@ func validConfig() GoUnoConfig {
 func TestValidate_ValidConfig(t *testing.T) {
 	cfg := validConfig()
 	assert.NoError(t, cfg.Validate())
+}
+
+func TestConfigManager_ProductionConfigLoadsFromEnv(t *testing.T) {
+	keyPath := filepath.Join(t.TempDir(), "private.pem")
+	require.NoError(t, os.WriteFile(keyPath, []byte("placeholder"), 0o600))
+
+	t.Setenv("GOUNO_DATABASE_DRIVERS_POSTGRES_DSN", "host=postgres user=gosso password=strong dbname=gosso port=5432 sslmode=require")
+	t.Setenv("GOUNO_REDIS_DSN", "redis://:strong@redis:6379/0")
+	t.Setenv("GOUNO_AUTH_ISSUER", "https://sso.example.com")
+	t.Setenv("GOUNO_AUTH_PRIVATE_KEY_PATH", keyPath)
+	t.Setenv("GOUNO_AUTH_PASSWORD_RESET_BASE_URL", "https://sso.example.com/reset-password")
+	t.Setenv("GOUNO_AUTH_TOTP_ENCRYPTION_KEY", "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899")
+
+	cm, err := NewConfigManager(nil, "../config", "production")
+	require.NoError(t, err)
+
+	cfg := cm.Config()
+	assert.Equal(t, "https://sso.example.com", cfg.AuthConfig.Issuer)
+	assert.Equal(t, keyPath, cfg.AuthConfig.PrivateKeyPath)
+	assert.Equal(t, "https://sso.example.com/reset-password", cfg.AuthConfig.PasswordResetBaseURL)
+	assert.Equal(t, "redis://:strong@redis:6379/0", cfg.RedisConfig.DSN)
+	assert.Equal(t, "host=postgres user=gosso password=strong dbname=gosso port=5432 sslmode=require", cfg.DatabaseConfig.GetDefaultDriver().DSN)
 }
 
 // ──────────────────────────────────────────────

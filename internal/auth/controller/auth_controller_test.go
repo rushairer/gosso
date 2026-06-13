@@ -1579,6 +1579,7 @@ func setupAuthControllerWithSocial(socialSvc *service.SocialLoginService) *gin.E
 
 func newSocialTestServer(t *testing.T, tokenStatus int, tokenBody string, userinfoStatus int, userinfoBody string) *httptest.Server {
 	t.Helper()
+	testutil.RequireLocalHTTPServer(t)
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/token":

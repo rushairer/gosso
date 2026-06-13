@@ -31,10 +31,10 @@ database:
         postgres:
             name: postgres
             driver: pgx
-            dsn: "${GOUNO_DATABASE_DRIVERS_POSTGRES_DSN}"
+            dsn: ""
             log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
 redis:
-    dsn: "${GOUNO_REDIS_DSN}"
+    dsn: ""
     max_active_conns: 100
     pool_timeout_seconds: 60
 task_pipeline:
@@ -42,17 +42,17 @@ task_pipeline:
     buffer_size: 64
     flush_interval: 1s
 smtp:
-    host: "${GOUNO_SMTP_HOST}"
-    port: "${GOUNO_SMTP_PORT}"
-    username: "${GOUNO_SMTP_USERNAME}"
-    password: "${GOUNO_SMTP_PASSWORD}"
-    from: "${GOUNO_SMTP_FROM}"
-    tls_policy: "${GOUNO_SMTP_TLS_POLICY}"
+    host: ""
+    port: 0
+    username: ""
+    password: ""
+    from: ""
+    tls_policy: "opportunistic"
 log:
     level: 0 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
     format: json
 auth:
-    issuer: "${GOUNO_AUTH_ISSUER}"
+    issuer: ""
     session_ttl: 24h
     max_sessions: 10
     access_token_expiry: 15m
@@ -66,13 +66,12 @@ auth:
         - profile
         - email
     private_key_path: "/app/keys/private.pem"
-    password_reset_base_url: "${GOUNO_PASSWORD_RESET_BASE_URL}"
+    password_reset_base_url: ""
     # REQUIRED: 64-char hex string (32 bytes) for encrypting TOTP secrets at rest.
     # Generate with: openssl rand -hex 32
-    totp_encryption_key: "${GOUNO_AUTH_TOTP_ENCRYPTION_KEY}"
+    totp_encryption_key: ""
 cors:
-    allowed_origins:
-        - "${GOUNO_CORS_ORIGIN}"
+    allowed_origins: []
     allowed_methods:
         - GET
         - POST
@@ -89,21 +88,21 @@ cors:
     max_age: 86400
 oauth_providers:
     google:
-        client_id: "${GOUNO_GOOGLE_CLIENT_ID}"
-        client_secret: "${GOUNO_GOOGLE_CLIENT_SECRET}"
-        redirect_uri: "${GOUNO_GOOGLE_REDIRECT_URI}"
+        client_id: ""
+        client_secret: ""
+        redirect_uri: ""
         scopes:
             - openid
             - email
             - profile
     github:
-        client_id: "${GOUNO_GITHUB_CLIENT_ID}"
-        client_secret: "${GOUNO_GITHUB_CLIENT_SECRET}"
-        redirect_uri: "${GOUNO_GITHUB_REDIRECT_URI}"
+        client_id: ""
+        client_secret: ""
+        redirect_uri: ""
         scopes:
             - user:email
     wechat:
-        client_id: "${GOUNO_WECHAT_CLIENT_ID}"
-        client_secret: "${GOUNO_WECHAT_CLIENT_SECRET}"
-        redirect_uri: "${GOUNO_WECHAT_REDIRECT_URI}"
+        client_id: ""
+        client_secret: ""
+        redirect_uri: ""
         scopes: []

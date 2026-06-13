@@ -142,6 +142,14 @@ check_C1() {
     local found=0
     # Find all route registrations (GET, POST, PUT, DELETE, PATCH)
     while IFS=: read -r file lineno content; do
+        # Explicit exceptions: health/readiness are intentionally unthrottled,
+        # index/test/swagger are local/debug surfaces, and wellKnown routes use
+        # a group-level limiter in router/web.go.
+        case "$content" in
+            *'server.GET("/",'*|*'server.GET("/health"'*|*'server.GET("/readiness"'*|*'testGroup.GET'*|*'swagger.GET'*|*'wellKnown.GET'*)
+                continue
+                ;;
+        esac
         # Check if the line contains a rate limiter reference
         if ! echo "$content" | grep -qiE 'rate|limit|throttle|RateLimiter|rateLimiter'; then
             warning "C1" "$file" "$lineno" "Route may be missing rate limiting: $(echo "$content" | sed 's/^[[:space:]]*//')"

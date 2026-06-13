@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 
 func setupTestRedisClient(t *testing.T) (*RedisClient, *miniredis.Miniredis) {
 	t.Helper()
+	requireLocalTCPListen(t, "tcp4", "127.0.0.1:0")
 	logger := zap.NewNop()
 
 	mr := miniredis.RunT(t)
@@ -24,6 +26,15 @@ func setupTestRedisClient(t *testing.T) (*RedisClient, *miniredis.Miniredis) {
 	}
 
 	return client, mr
+}
+
+func requireLocalTCPListen(t *testing.T, network, address string) {
+	t.Helper()
+	ln, err := net.Listen(network, address)
+	if err != nil {
+		t.Skipf("skipping: local TCP listen unavailable (%s %s): %v", network, address, err)
+	}
+	require.NoError(t, ln.Close())
 }
 
 func TestRedisClient_SetGet(t *testing.T) {
@@ -565,6 +576,7 @@ func TestRedisClient_ClosedClient_Errors(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestNewRedisClient_NilLogger(t *testing.T) {
+	requireLocalTCPListen(t, "tcp4", "127.0.0.1:0")
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
@@ -575,6 +587,7 @@ func TestNewRedisClient_NilLogger(t *testing.T) {
 }
 
 func TestNewRedisClient_PingFailure(t *testing.T) {
+	requireLocalTCPListen(t, "tcp4", "127.0.0.1:0")
 	mr := miniredis.RunT(t)
 	addr := mr.Addr()
 	// Close server before client connects → immediate "connection refused"

@@ -148,6 +148,10 @@ make docker-test-up
 make docker-prod-up
 ```
 
+Before starting production Docker, copy `.env.production.example` to `.env.production`,
+fill in real values, and place the RSA private key at `./keys/private.pem`
+so it is mounted into the container at `/app/keys/private.pem`.
+
 Stop with the corresponding `make docker-*-down` commands.
 
 ## API Endpoints

@@ -21,12 +21,19 @@ import (
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
+	"github.com/rushairer/gosso/internal/testutil"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
 // ──────────────────────────────────────────────
 // Mock helpers for social login tests
 // ──────────────────────────────────────────────
+
+func newHTTPTestServer(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+	testutil.RequireLocalHTTPServer(t)
+	return httptest.NewServer(handler)
+}
 
 // mockSocialAccountService implements accountService.AccountService for social login tests.
 type mockSocialAccountService struct {
@@ -382,7 +389,7 @@ var (
 // ──────────────────────────────────────────────
 
 func TestExchangeCode_Success(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	ts := newHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"access_token":"test-token-123","token_type":"bearer"}`)
 	}))
@@ -398,7 +405,7 @@ func TestExchangeCode_Success(t *testing.T) {
 }
 
 func TestExchangeCode_ErrorStatus(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	ts := newHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprint(w, `{"error":"invalid_grant"}`)
 	}))
@@ -414,7 +421,7 @@ func TestExchangeCode_ErrorStatus(t *testing.T) {
 }
 
 func TestExchangeCode_MissingAccessToken(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	ts := newHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"token_type":"bearer"}`)
 	}))
@@ -430,7 +437,7 @@ func TestExchangeCode_MissingAccessToken(t *testing.T) {
 }
 
 func TestExchangeCode_MalformedJSON(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	ts := newHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `not json`)
 	}))
@@ -464,7 +471,7 @@ func TestExchangeCode_ConnectionError(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestFetchUserInfo_Google_Float64ID(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	ts := newHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"id":123456789,"email":"user@gmail.com","name":"Test User","email_verified":true}`)
 	}))
@@ -482,7 +489,7 @@ func TestFetchUserInfo_Google_Float64ID(t *testing.T) {
 }
 
 func TestFetchUserInfo_GitHub_StringID(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	ts := newHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"id":"gh-42","email":"dev@github.com","name":"GH Dev"}`)
 	}))
@@ -499,7 +506,7 @@ func TestFetchUserInfo_GitHub_StringID(t *testing.T) {
 }
 
 func TestFetchUserInfo_WeChat_OpenID(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	ts := newHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"openid":"wx-openid-123","nickname":"微信用户"}`)
 	}))
@@ -517,7 +524,7 @@ func TestFetchUserInfo_WeChat_OpenID(t *testing.T) {
 }
 
 func TestFetchUserInfo_WeChat_MissingOpenID(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	ts := newHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"nickname":"User"}`)
 	}))
@@ -532,7 +539,7 @@ func TestFetchUserInfo_WeChat_MissingOpenID(t *testing.T) {
 }
 
 func TestFetchUserInfo_MissingID(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	ts := newHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"email":"user@example.com","name":"User"}`)
 	}))
@@ -547,7 +554,7 @@ func TestFetchUserInfo_MissingID(t *testing.T) {
 }
 
 func TestFetchUserInfo_ErrorStatus(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	ts := newHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer ts.Close()
@@ -561,7 +568,7 @@ func TestFetchUserInfo_ErrorStatus(t *testing.T) {
 }
 
 func TestFetchUserInfo_UnsupportedProvider(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	ts := newHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"id":"1","name":"User"}`)
 	}))
@@ -587,7 +594,7 @@ func TestHandleCallback_UnsupportedProvider(t *testing.T) {
 }
 
 func TestHandleCallback_ExchangeFailure(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	ts := newHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprint(w, `{"error":"invalid_code"}`)
 	}))
@@ -602,13 +609,13 @@ func TestHandleCallback_ExchangeFailure(t *testing.T) {
 }
 
 func TestHandleCallback_FetchUserFailure(t *testing.T) {
-	tokenTS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	tokenTS := newHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"access_token":"tok-123"}`)
 	}))
 	defer tokenTS.Close()
 
-	userInfoTS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	userInfoTS := newHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 	}))
 	defer userInfoTS.Close()

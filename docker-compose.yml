@@ -14,6 +14,7 @@ services:
       - .env.production
     volumes:
       - ./config:/app/config:ro
+      - ./keys:/app/keys:ro
       - ./log:/app/log
     depends_on:
       postgres:

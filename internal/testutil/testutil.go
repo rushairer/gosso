@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -27,6 +28,7 @@ import (
 // The caller must defer mr.Close() to clean up the miniredis server.
 func SetupTestRedis(t *testing.T) (*cache.RedisClient, *miniredis.Miniredis) {
 	t.Helper()
+	RequireLocalTCPListen(t, "tcp4", "127.0.0.1:0")
 	logger := zap.NewNop()
 
 	mr := miniredis.RunT(t)
@@ -38,6 +40,27 @@ func SetupTestRedis(t *testing.T) (*cache.RedisClient, *miniredis.Miniredis) {
 	}
 
 	return redisClient, mr
+}
+
+// RequireLocalTCPListen skips the test when the current execution environment
+// forbids local TCP listeners. This keeps tests runnable in restricted
+// sandboxes while preserving full coverage on normal developer machines and CI.
+func RequireLocalTCPListen(t *testing.T, network, address string) {
+	t.Helper()
+	ln, err := net.Listen(network, address)
+	if err != nil {
+		t.Skipf("skipping: local TCP listen unavailable (%s %s): %v", network, address, err)
+	}
+	if err := ln.Close(); err != nil {
+		t.Fatalf("close local TCP probe listener: %v", err)
+	}
+}
+
+// RequireLocalHTTPServer skips tests that use httptest.NewServer. Go's
+// httptest package opens a loopback listener, often on IPv6 first.
+func RequireLocalHTTPServer(t *testing.T) {
+	t.Helper()
+	RequireLocalTCPListen(t, "tcp6", "[::1]:0")
 }
 
 // SkipIfNoCJSON probes whether the Redis instance supports the Lua cjson module.

@@ -24,12 +24,14 @@ import (
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 
 	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/testutil"
 	"github.com/rushairer/gosso/middleware"
 )
 
 // setupTestRedis creates a miniredis-backed Redis client for testing.
 func setupTestRedis(t *testing.T) *cache.RedisClient {
 	t.Helper()
+	testutil.RequireLocalTCPListen(t, "tcp4", "127.0.0.1:0")
 	mr := miniredis.RunT(t)
 	client, err := cache.NewRedisClient("redis://"+mr.Addr(), 10, 5*time.Second, zap.NewNop())
 	require.NoError(t, err)

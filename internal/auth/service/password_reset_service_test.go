@@ -48,6 +48,7 @@ func setupTestPasswordResetServiceBase(t *testing.T) (*PasswordResetService, *ca
 
 func setupTestMiniredis(t *testing.T) (*cache.RedisClient, *miniredis.Miniredis) {
 	t.Helper()
+	testutil.RequireLocalTCPListen(t, "tcp4", "127.0.0.1:0")
 	logger := zap.NewNop()
 
 	mr := miniredis.RunT(t)
