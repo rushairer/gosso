@@ -133,6 +133,9 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 	}
 	smsSvc := notificationService.NewStubSMSService(cfg.Logger)
 	verificationSvc := service.NewVerificationService(cfg.Redis, emailSvc, smsSvc, cfg.CredentialRepo, cfg.Logger)
+	if cfg.AuthConfig.TOTPEncryptionKey != "" {
+		verificationSvc.SetHashPepper(cfg.AuthConfig.TOTPEncryptionKey)
+	}
 	if cfg.AuthConfig.VerifyCodeTTL > 0 {
 		verificationSvc.SetCodeTTL(cfg.AuthConfig.VerifyCodeTTL)
 	}

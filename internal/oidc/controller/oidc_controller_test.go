@@ -471,9 +471,9 @@ func TestLogout_InvalidIDTokenHint(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	// Invalid id_token_hint is silently skipped per OIDC RP-Initiated Logout spec
-	// (id_token_hint is optional). Without a Bearer token, this falls through
-	// to the anonymous success path.
-	assert.Equal(t, http.StatusOK, w.Code)
+	// (id_token_hint is optional). Without a Bearer token, no user can be identified,
+	// so the server returns 401 Unauthorized.
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestLogout_ExpiredIDTokenHint(t *testing.T) {
@@ -538,8 +538,8 @@ func TestLogout_IDTokenHint_WrongIssuer(t *testing.T) {
 
 	engine.ServeHTTP(w, req)
 
-	// Wrong issuer → validation fails → falls through to anonymous success
-	assert.Equal(t, http.StatusOK, w.Code)
+	// Wrong issuer → validation fails → no logout performed → 401
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestLogout_IDTokenHint_NoAudience(t *testing.T) {
@@ -566,8 +566,8 @@ func TestLogout_IDTokenHint_NoAudience(t *testing.T) {
 
 	engine.ServeHTTP(w, req)
 
-	// No audience → validation fails → falls through to anonymous success
-	assert.Equal(t, http.StatusOK, w.Code)
+	// No audience → validation fails → no logout performed → 401
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestLogout_IDTokenHint_WrongSignature(t *testing.T) {
@@ -597,8 +597,8 @@ func TestLogout_IDTokenHint_WrongSignature(t *testing.T) {
 
 	engine.ServeHTTP(w, req)
 
-	// Wrong signature → validation fails → falls through to anonymous success
-	assert.Equal(t, http.StatusOK, w.Code)
+	// Wrong signature → validation fails → no logout performed → 401
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 // ──────────────────────────────────────────────
@@ -810,11 +810,8 @@ func TestLogout_NoSession(t *testing.T) {
 
 	engine.ServeHTTP(w, req)
 
-	// No id_token_hint, no Bearer → anonymous logout succeeds
-	assert.Equal(t, http.StatusOK, w.Code)
-	var resp map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.Equal(t, float64(http.StatusOK), resp["code"])
+	// No id_token_hint, no Bearer → cannot identify user → 401 Unauthorized
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 // ──────────────────────────────────────────────

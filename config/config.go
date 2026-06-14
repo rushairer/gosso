@@ -49,6 +49,8 @@ type RateLimitsConfig struct {
 	API        int `mapstructure:"api"`         // General API, default 60
 	Introspect int `mapstructure:"introspect"`  // Introspect endpoint, default 20
 	DeviceCode int `mapstructure:"device_code"` // Device code endpoint, default 10
+	Password   int `mapstructure:"password"`    // Password reset endpoint, default 3
+	Verify     int `mapstructure:"verify"`      // Verification code endpoint, default 3
 }
 
 // DatabaseConfigDriverName is a named key for a database driver
@@ -435,6 +437,12 @@ func (c *GoUnoConfig) validateAuth() error {
 		}
 		if origin.Scheme == "http" && origin.Hostname() != "localhost" && origin.Hostname() != "127.0.0.1" {
 			return fmt.Errorf("auth: webauthn_rp_origin with http scheme is only allowed for localhost or 127.0.0.1")
+		}
+		if origin.Path != "" && origin.Path != "/" {
+			return fmt.Errorf("auth: webauthn_rp_origin must not contain a path component (got %q)", origin.Path)
+		}
+		if origin.Fragment != "" {
+			return fmt.Errorf("auth: webauthn_rp_origin must not contain a fragment")
 		}
 	}
 	return nil

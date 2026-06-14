@@ -21,6 +21,8 @@ web_server:
         api: 60
         introspect: 20
         device_code: 10
+        password: 3
+        verify: 3
 database:
     default: postgres
     max_open_conns: 25

@@ -37,12 +37,15 @@ if count < limit then
     redis.call('ZADD', key, now_ms, now_ms .. ':' .. timeArr[2])
     allowed = 1
     remaining = limit - count - 1
+    -- Only set EXPIRE when the request is allowed.
+    -- When denied, the key will expire naturally based on the window,
+    -- preventing an attacker from extending the block window indefinitely
+    -- by continuing to send requests.
+    redis.call('EXPIRE', key, window_sec)
 else
     allowed = 0
     remaining = 0
 end
-
-redis.call('EXPIRE', key, window_sec)
 
 local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
 local reset_at = now_sec + window_sec

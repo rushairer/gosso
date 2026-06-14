@@ -60,7 +60,7 @@ func RunInTransactionIsolation(ctx context.Context, db *sql.DB, isolation sql.Is
 		return err
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 

@@ -89,6 +89,7 @@ type VerificationService struct {
 	cooldownTTL    time.Duration
 	maxAttempts    int
 	codeLength     int
+	hashPepper     string // optional secret prepended to code before hashing (prevents rainbow tables if Redis is compromised)
 }
 
 // NewVerificationService creates a new verification service instance
@@ -142,6 +143,14 @@ func (s *VerificationService) SetCodeLength(n int) {
 	}
 }
 
+// SetHashPepper sets a secret pepper that is prepended to verification codes
+// before hashing. This prevents rainbow table attacks if Redis is compromised,
+// because the attacker would also need the pepper to compute matching hashes.
+// Use the same value as the TOTP encryption key (already required in production).
+func (s *VerificationService) SetHashPepper(pepper string) {
+	s.hashPepper = pepper
+}
+
 type verifyCodeData struct {
 	CodeHash  string `json:"code"`
 	Attempts  int    `json:"attempts"`
@@ -184,9 +193,11 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 	}
 
 	// Store in Redis (only after successful send).
-	// The code is stored as its SHA-256 hash so that a Redis compromise
-	// does not expose active verification codes.
-	codeHash := sha256Hex(code)
+	// The code is stored as its HMAC hash (using the application pepper as key)
+	// so that a Redis compromise does not expose active verification codes.
+	// Without the pepper, an attacker cannot precompute a rainbow table even
+	// for the small 6-digit numeric keyspace.
+	codeHash := s.pepperHash(code)
 	data := verifyCodeData{
 		CodeHash:  codeHash,
 		Attempts:  0,
@@ -219,8 +230,8 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 	identifier = strings.ToLower(strings.TrimSpace(identifier))
 	codeKey := s.buildCodeKey(credType, identifier)
 
-	// Hash the input code to compare against the stored hash
-	codeHash := sha256Hex(code)
+	// Hash the input code with the application pepper before comparison
+	codeHash := s.pepperHash(code)
 
 	// Atomically verify code hash and increment attempts
 	resultJSON, err := s.redis.RunScript(ctx, verifyAndIncrementScript, []string{codeKey},
@@ -276,21 +287,25 @@ func maskIdentifier(credType, identifier string) string {
 	return utility.MaskIdentifier(credType, identifier)
 }
 
-// sha256Hex returns the hex-encoded SHA-256 hash of the input string.
-func sha256Hex(s string) string {
-	h := sha256.Sum256([]byte(s))
+// pepperHash returns the hex-encoded SHA-256 hash of the input string,
+// prepended with the application pepper if configured. The pepper prevents
+// precomputation attacks (rainbow tables) against the stored hashes.
+func (s *VerificationService) pepperHash(code string) string {
+	h := sha256.Sum256([]byte(s.hashPepper + code))
 	return hex.EncodeToString(h[:])
 }
 
 // ValidateCredentialOwnership checks that the given identifier belongs to the specified account.
 // Returns nil if ownership is confirmed, an error otherwise.
 func (s *VerificationService) ValidateCredentialOwnership(ctx context.Context, accountID, credType, identifier string) error {
+	// Normalize identifier to match SendCode's normalization
+	identifier = strings.ToLower(strings.TrimSpace(identifier))
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialType(credType))
 	if err != nil {
 		return fmt.Errorf("lookup credentials: %w", err)
 	}
 	for _, cred := range creds {
-		if cred.Identifier != nil && *cred.Identifier == identifier {
+		if cred.Identifier != nil && strings.EqualFold(*cred.Identifier, identifier) {
 			return nil
 		}
 	}

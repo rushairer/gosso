@@ -96,7 +96,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	}
 
 	// 2. Find account
-	account, err := s.accountSvc.FindAccountByUsername(ctx, req.Username)
+	account, err := s.accountSvc.FindAccountByUsername(ctx, normalizedUsername)
 	if err != nil {
 		// Mitigate timing side-channel: perform a dummy Argon2id hash so the response
 		// time is indistinguishable from "account found, wrong password."
@@ -106,12 +106,18 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 
 	// 3. Check account status
 	if !account.IsActive() {
+		// Mitigate timing side-channel: inactive accounts must perform the same
+		// dummy work as the not-found path to prevent account existence enumeration.
+		_, _ = accountDomain.HashPassword(req.Password)
 		return nil, ErrInvalidCredentials
 	}
 
 	// 4. Find password credential
 	cred, err := s.credentialRepo.FindPasswordCredential(ctx, account.ID)
 	if err != nil {
+		// Mitigate timing side-channel: passkey-only accounts (no password credential)
+		// must perform dummy work to prevent leaking account type via response timing.
+		_, _ = accountDomain.HashPassword(req.Password)
 		return nil, ErrInvalidCredentials
 	}
 

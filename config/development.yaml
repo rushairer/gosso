@@ -18,6 +18,8 @@ web_server:
         api: 120
         introspect: 20
         device_code: 10
+        password: 5
+        verify: 5
 database:
     default: postgres
     drivers:

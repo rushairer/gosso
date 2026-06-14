@@ -57,6 +57,13 @@ func NewKeyService(privateKeyPath string, keyID string, isProduction bool, logge
 
 	if privateKeyPath != "" {
 		if _, statErr := os.Stat(privateKeyPath); statErr == nil {
+			// Warn if key file has overly permissive permissions
+			if info, _ := os.Stat(privateKeyPath); info != nil && info.Mode().Perm()&0077 != 0 {
+				logger.Warn("RSA private key file has overly permissive permissions",
+					zap.String("path", privateKeyPath),
+					zap.String("mode", info.Mode().Perm().String()),
+					zap.String("hint", "chmod 600 "+privateKeyPath))
+			}
 			privateKey, err = loadPrivateKeyFromPEM(privateKeyPath)
 			if err != nil {
 				return nil, fmt.Errorf("load private key: %w", err)

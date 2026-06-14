@@ -141,10 +141,12 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 
 	// Try logout paths in order: id_token_hint → Bearer token → anonymous
 	var clientID string
+	logoutPerformed := false
 
 	if req.IDTokenHint != "" {
 		if cid, ok := c.tryLogoutByIDTokenHint(ctx, req, bearerClaims); ok {
 			clientID = cid
+			logoutPerformed = true
 		}
 		if ctx.IsAborted() {
 			return
@@ -153,6 +155,9 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 
 	if clientID == "" && bearerClaims != nil {
 		clientID = c.tryLogoutByBearerToken(ctx, bearerClaims)
+		// If we had a Bearer token, a logout was performed (or attempted).
+		// Even if clientID is empty (no client_id in claims), the user was identified.
+		logoutPerformed = true
 		if ctx.IsAborted() {
 			return
 		}
@@ -161,6 +166,14 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 	// Post-logout redirect
 	if req.PostLogoutRedirectURI != "" && clientID != "" {
 		c.handlePostLogoutRedirect(ctx, req, clientID)
+		return
+	}
+
+	if !logoutPerformed {
+		// No id_token_hint, no Bearer token — unable to identify the user.
+		// Per OIDC RP-Initiated Logout, return 401 rather than a misleading 200.
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized,
+			"unable to identify user for logout; provide id_token_hint or Bearer token"))
 		return
 	}
 

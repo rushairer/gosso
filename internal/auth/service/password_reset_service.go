@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
@@ -158,11 +158,12 @@ func (s *PasswordResetService) SetMaxAttempts(n int) {
 func (s *PasswordResetService) RequestReset(ctx context.Context, email string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
 
-	// Check cooldown (fail-open: if Redis is down, we still allow the request)
+	// Check cooldown (fail-closed: if Redis is down, deny the request to prevent email flooding)
 	cooldownKey := s.buildCooldownKey(email)
 	exists, err := s.redis.Exists(ctx, cooldownKey)
 	if err != nil {
-		s.logger.Warn("Failed to check reset cooldown, proceeding anyway", zap.Error(err))
+		s.logger.Error("Failed to check reset cooldown, denying request", zap.Error(err))
+		return errors.New("service temporarily unavailable")
 	}
 	if exists {
 		return errors.New("please wait before requesting another reset")
@@ -360,15 +361,13 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	return nil
 }
 
-// dummyWork performs lightweight CPU-bound work to pad the response time of
-// early-return paths in RequestReset. This mitigates timing side-channel
-// attacks that could distinguish "email not found" from "email found" based on
-// response latency. The cost (~5-10ms) is small but sufficient to overlap with
-// the DB + Redis + SMTP overhead on the real path.
+// dummyWork performs a bcrypt hash to pad the response time of early-return
+// paths in RequestReset. This mitigates timing side-channel attacks that could
+// distinguish "email not found" from "email found" based on response latency.
+// bcrypt at DefaultCost (~100ms) overlaps with the DB + Redis + SMTP overhead
+// on the real path, making the two indistinguishable.
 func (s *PasswordResetService) dummyWork() {
-	var buf [32]byte
-	_, _ = rand.Read(buf[:])
-	_ = sha256.Sum256(buf[:])
+	_, _ = bcrypt.GenerateFromPassword([]byte("dummy-work-padding"), bcrypt.DefaultCost)
 }
 
 func (s *PasswordResetService) buildTokenKey(tokenHash string) string {

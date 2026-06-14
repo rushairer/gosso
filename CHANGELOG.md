@@ -10,12 +10,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 - `middleware.go` now uses `gouno.NewRequestTimeoutResponse()` and `gouno.NewInternalServerErrorResponse()` instead of shared mutable preset variables — eliminates shared state risk (`middleware/middleware.go`).
 - `config.Validate()` now accumulates all validation errors across sections (web server, database, redis, auth, SMTP, CORS) and returns them joined via `errors.Join` — users can fix all config issues in one pass instead of one at a time (`config/config.go`).
+- Password reset cooldown check is now fail-closed — previously allowed unlimited reset emails when Redis was unavailable (`internal/auth/service/password_reset_service.go`).
+- Password reset and verification code endpoints now have independent rate limit config (`password: 3/min`, `verify: 3/min`) instead of sharing the general API limit of 60/min (`config/config.go`, `router/web.go`).
+- OIDC logout now returns 401 when no user can be identified (no `id_token_hint` and no Bearer token) instead of a misleading 200 OK (`internal/oidc/controller/oidc_controller.go`).
+- `ValidateSession` now refreshes the session TTL on successful validation (sliding window) — previously sessions expired even while actively used (`internal/session/service/session_service.go`).
+- ZapLogger middleware now truncates User-Agent strings to 512 characters to prevent log inflation attacks (`middleware/zaplogger.go`).
 
 ### Fixed
 - Password reset Lua script (`checkAndIncrementAttemptsScript`) now deletes the key on attempt exhaustion — previously left exhausted token data in Redis until TTL expiry (`internal/auth/service/password_reset_service.go`).
+- Login rate limit key now uses the same normalized (lowercased) username as the account lookup — previously varying username casing could bypass per-user rate limiting (`internal/auth/service/auth_login.go`).
+- Rate limit Lua script no longer resets EXPIRE on denied requests — previously an attacker could keep the block window alive indefinitely by continuing to send requests (`middleware/redis_ratelimit.go`).
+- `RunInTransactionIsolation` no longer shadows the `err` variable on `tx.Commit()` — classic Go variable shadowing pitfall (`internal/db/transaction.go`).
+- WebAuthn RP Origin validation now rejects URLs with path or fragment components — previously a trailing slash could cause passkey authentication to silently fail (`config/config.go`).
 
 ### Security
 - Password reset `RequestReset` now performs dummy crypto work on email-not-found and account-inactive paths — mitigates timing side-channel that could reveal whether an email is registered (`internal/auth/service/password_reset_service.go`).
+- Login flow now performs dummy Argon2id hash on inactive-account and passkey-only-account paths — previously these returned instantly, leaking account existence/type via timing (`internal/auth/service/auth_login.go`).
+- Password reset `dummyWork()` now uses bcrypt (~100ms) instead of SHA-256 (~1μs) — previous implementation was too fast to mask timing differences (`internal/auth/service/password_reset_service.go`).
+- Verification codes now use HMAC-SHA256 with application-level pepper instead of plain SHA-256 — prevents precomputed rainbow table attacks if Redis is compromised (6-digit code keyspace = 1M values) (`internal/auth/service/verification_service.go`).
+- `ValidateCredentialOwnership` now normalizes identifiers to lowercase before comparison — previously mixed-case input could cause false negatives for legitimate owners (`internal/auth/service/verification_service.go`).
+- RSA private key file loading now warns if file permissions are overly permissive (not 0600) (`internal/token/service/key_service.go`).
 - Account deletion now clears OAuth2 consent cache entries (previously stale entries persisted until 90-day TTL expiry) — added `ConsentCacheInvalidator` interface wired into `SoftDeleteAccount` (`internal/account/service/account_service.go`, `internal/oauth2/service/consent_service.go`, `cmd/gouno/web_modules.go`).
 
 ### Changed

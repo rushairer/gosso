@@ -403,6 +403,15 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 		return nil, ErrSessionExpired
 	}
 
+	// Refresh session TTL on successful validation (sliding window).
+	// This ensures active sessions are not expired while the user is still making requests.
+	// Non-fatal: if this fails, the session is still valid for this request.
+	sessionKey := s.buildSessionKey(sessionID)
+	if err := s.redis.Expire(ctx, sessionKey, s.sessionTTL); err != nil {
+		s.logger.Warn("Failed to refresh session TTL",
+			zap.String("session_id", maskSessionID(sessionID)), zap.Error(err))
+	}
+
 	return session, nil
 }
 

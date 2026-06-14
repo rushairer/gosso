@@ -21,6 +21,18 @@ var sensitiveQueryParams = map[string]bool{
 	"id_token":      true,
 }
 
+// maxUserAgentLen is the maximum length of the User-Agent string logged.
+// Prevents log inflation attacks where an attacker sends very long User-Agent headers.
+const maxUserAgentLen = 512
+
+// truncateString truncates a string to maxLen characters, appending "..." if truncated.
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "...(truncated)"
+}
+
 // sanitizeQuery replaces sensitive query parameter values with [REDACTED].
 func sanitizeQuery(raw string) string {
 	if raw == "" {
@@ -59,7 +71,7 @@ func ZapLoggerMiddleware(logger *zap.Logger) gin.HandlerFunc {
 			zap.String("path", path),
 			zap.String("query", sanitizeQuery(query)),
 			zap.String("ip", ctx.ClientIP()),
-			zap.String("user_agent", ctx.Request.UserAgent()),
+			zap.String("user_agent", truncateString(ctx.Request.UserAgent(), maxUserAgentLen)),
 			zap.Duration("latency", latency),
 			zap.Int("body_size", ctx.Writer.Size()),
 		}
