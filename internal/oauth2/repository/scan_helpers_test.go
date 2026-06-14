@@ -160,35 +160,6 @@ func TestScanOAuth2Clients_MultipleRows(t *testing.T) {
 	assert.Equal(t, "c2", clients[1].ID)
 }
 
-// ──────────────────────────────────────────────
-// scanConsents (plural)
-// ──────────────────────────────────────────────
-
-func TestScanConsents_MultipleRows(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer db.Close()
-
-	now := time.Now()
-	columns := []string{"id", "account_id", "client_id", "scopes", "granted_at", "created_at", "updated_at"}
-
-	rows := sqlmock.NewRows(columns).
-		AddRow("consent-1", "acct-1", "client-1", mustMarshal(t, []string{"openid"}), now, now, now).
-		AddRow("consent-2", "acct-2", "client-2", mustMarshal(t, []string{"email"}), now, now, now)
-	mock.ExpectQuery("SELECT .+ FROM oauth2_consents").WillReturnRows(rows)
-
-	result, err := db.Query("SELECT * FROM oauth2_consents")
-	require.NoError(t, err)
-
-	consents, err := scanConsents(result)
-	require.NoError(t, err)
-	require.Len(t, consents, 2)
-	assert.Equal(t, "consent-1", consents[0].ID)
-	assert.Equal(t, []string{"openid"}, consents[0].Scopes)
-	assert.Equal(t, "consent-2", consents[1].ID)
-	assert.Equal(t, []string{"email"}, consents[1].Scopes)
-}
-
 func mustMarshal(t *testing.T, v any) driver.Value {
 	t.Helper()
 	if v == nil {

@@ -20,6 +20,7 @@ import (
 	"github.com/rushairer/gosso/internal/oauth2"
 	oauth2Controller "github.com/rushairer/gosso/internal/oauth2/controller"
 	oauth2Repository "github.com/rushairer/gosso/internal/oauth2/repository"
+	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	"github.com/rushairer/gosso/internal/oidc"
 	oidcController "github.com/rushairer/gosso/internal/oidc/controller"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
@@ -104,7 +105,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	accountMod.Service.SetOAuth2ClientDeleter(&oauth2ClientDeleterAdapter{clientRepo: oauth2Mod.ClientRepo})
 
 	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, !cfg.WebServerConfig.Debug, logger)
-	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &accountValidatorAdapter{accountSvc: accountMod.Service, logger: logger}, authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)
+	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &oauth2Service.ClientAuthenticator{}, &accountValidatorAdapter{accountSvc: accountMod.Service, logger: logger}, authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
 	}

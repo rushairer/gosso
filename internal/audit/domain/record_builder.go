@@ -20,3 +20,15 @@ func NewRecord(action, actor string, accountID *string, resource, meta json.RawM
 		CreatedAt: time.Now(),
 	}
 }
+
+// WithOld sets the before-change snapshot on the audit record and returns it for chaining.
+func (r *AuditRecord) WithOld(old json.RawMessage) *AuditRecord {
+	r.Old = old
+	return r
+}
+
+// WithNew sets the after-change snapshot on the audit record and returns it for chaining.
+func (r *AuditRecord) WithNew(newData json.RawMessage) *AuditRecord {
+	r.New = newData
+	return r
+}

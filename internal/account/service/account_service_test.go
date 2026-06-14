@@ -1090,8 +1090,8 @@ func TestUnbindFederatedIdentity_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TestBindSessionRevoker tests late-binding session revoker via interface method
-func TestBindSessionRevoker(t *testing.T) {
+// TestSetSessionRevoker_LateBind tests late-binding session revoker via interface method
+func TestSetSessionRevoker_LateBind(t *testing.T) {
 	db, _, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -1103,7 +1103,7 @@ func TestBindSessionRevoker(t *testing.T) {
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 
-	BindSessionRevoker(accountService, &stubSessionRevoker{})
+	accountService.SetSessionRevoker(&stubSessionRevoker{})
 
 	// Verify it was bound by calling a function that checks for it
 	// SuspendAccount requires session revoker
@@ -1137,8 +1137,8 @@ func TestSetSessionRevoker_FakeImplementation(t *testing.T) {
 	fake.SetSessionRevoker(&stubSessionRevoker{}) // should not panic
 }
 
-// TestBindOAuth2ClientDeleter tests late-binding OAuth2 client deleter via interface method
-func TestBindOAuth2ClientDeleter(t *testing.T) {
+// TestSetOAuth2ClientDeleter_LateBind tests late-binding OAuth2 client deleter via interface method
+func TestSetOAuth2ClientDeleter_LateBind(t *testing.T) {
 	db, _, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -1150,7 +1150,7 @@ func TestBindOAuth2ClientDeleter(t *testing.T) {
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 
-	BindOAuth2ClientDeleter(accountService, &stubOAuth2ClientDeleter{})
+	accountService.SetOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
 
 	impl := accountService.(*accountServiceImpl)
 	assert.NotNil(t, impl.oauth2ClientDeleter)

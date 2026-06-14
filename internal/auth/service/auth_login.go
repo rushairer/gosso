@@ -76,7 +76,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		return nil, ErrInvalidCredentials
 	}
 
-	// 0. Check rate limit for login failures (keyed on IP + normalized username).
+	// 1. Check rate limit for login failures (keyed on IP + normalized username).
 	// Fail-closed: if Redis is unavailable, deny login to prevent brute-force attacks.
 	normalizedUsername := strings.ToLower(req.Username)
 	normalizedIP := utility.NormalizeIP(req.IP)
@@ -95,7 +95,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		return nil, err
 	}
 
-	// 1. Find account
+	// 2. Find account
 	account, err := s.accountSvc.FindAccountByUsername(ctx, req.Username)
 	if err != nil {
 		// Mitigate timing side-channel: perform a dummy Argon2id hash so the response
@@ -104,23 +104,23 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		return nil, ErrInvalidCredentials
 	}
 
-	// 2. Check account status
+	// 3. Check account status
 	if !account.IsActive() {
 		return nil, ErrInvalidCredentials
 	}
 
-	// 3. Find password credential
+	// 4. Find password credential
 	cred, err := s.credentialRepo.FindPasswordCredential(ctx, account.ID)
 	if err != nil {
 		return nil, ErrInvalidCredentials
 	}
 
-	// 4. Verify password
+	// 5. Verify password
 	if !cred.VerifyPassword(req.Password) {
 		return nil, ErrInvalidCredentials
 	}
 
-	// 5. Check if MFA is required
+	// 6. Check if MFA is required
 	mfaResult, mfaErr := s.handleMFARequirement(ctx, account)
 	if mfaResult != nil || mfaErr != nil {
 		// Password was correct but MFA is required — do NOT clear rate limit yet.
@@ -129,13 +129,13 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 		return mfaResult, mfaErr
 	}
 
-	// 6. Create session and tokens
+	// 7. Create session and tokens
 	session, accessToken, refreshToken, err := s.createSessionAndTokens(ctx, account, req.IP, req.UserAgent)
 	if err != nil {
 		return nil, err
 	}
 
-	// 7. Update credential last used time
+	// 8. Update credential last used time
 	cred.MarkUsed()
 	if txErr := s.updateCredentialLastUsed(ctx, cred); txErr != nil {
 		s.logger.Warn("Failed to update credential last_used_at", zap.Error(txErr))
@@ -148,7 +148,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	// Clear login failures count
 	s.clearLoginRateLimits(ctx, req.IP, account.Username)
 
-	// 8. Audit log
+	// 9. Audit log
 	s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, req.IP, &account.ID,
 		map[string]any{"account_id": account.ID, "session_id": session.ID},
 		map[string]any{"ip": req.IP, "user_agent": req.UserAgent},
@@ -209,7 +209,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 		return nil, ErrInvalidCredentials
 	}
 
-	// 4. Create session and tokens
+	// 5. Create session and tokens
 	session, accessToken, refreshToken, err := s.createSessionAndTokens(ctx, account, ip, userAgent)
 	if err != nil {
 		return nil, err
@@ -220,7 +220,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	// Clear login rate limit counters on successful MFA verification
 	s.clearLoginRateLimits(ctx, ip, account.Username)
 
-	// 5. Audit log
+	// 6. Audit log
 	s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, ip, &account.ID,
 		map[string]any{"account_id": account.ID, "session_id": session.ID},
 		map[string]any{"ip": ip, "user_agent": userAgent},
@@ -261,12 +261,12 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 		return nil, err
 	}
 
-	// 2.5. Blacklist MFA token to prevent reuse
+	// 3. Blacklist MFA token to prevent reuse
 	if err := s.blacklistMFAToken(ctx, claims); err != nil {
 		return nil, err
 	}
 
-	// 3. Find account
+	// 4. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
 		return nil, ErrInvalidCredentials
@@ -275,7 +275,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 		return nil, ErrInvalidCredentials
 	}
 
-	// 4. Create session and tokens
+	// 5. Create session and tokens
 	session, accessToken, refreshToken, err := s.createSessionAndTokens(ctx, account, ip, userAgent)
 	if err != nil {
 		return nil, err
@@ -286,7 +286,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	// Clear login rate limit counters on successful MFA verification
 	s.clearLoginRateLimits(ctx, ip, account.Username)
 
-	// 5. Audit log
+	// 6. Audit log
 	s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, ip, &account.ID,
 		map[string]any{"account_id": account.ID, "session_id": session.ID},
 		map[string]any{"ip": ip, "user_agent": userAgent},
