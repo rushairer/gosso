@@ -29,6 +29,11 @@ type FederatedIdentity struct {
 	DeletedAt      *time.Time     `json:"deleted_at,omitempty"`
 }
 
+// FederatedIdentity domain sentinel errors.
+var (
+	ErrFederatedIdentityAlreadyDeleted = errors.New("federated identity is already deleted")
+)
+
 // IsValidProvider reports whether p is a recognized identity provider.
 func IsValidProvider(p Provider) bool {
 	switch p {
@@ -76,7 +81,7 @@ func (fi *FederatedIdentity) IsDeleted() bool {
 // SoftDelete soft-deletes the federated identity.
 func (fi *FederatedIdentity) SoftDelete() error {
 	if fi.IsDeleted() {
-		return errors.New("federated identity is already deleted")
+		return ErrFederatedIdentityAlreadyDeleted
 	}
 	now := time.Now()
 	fi.DeletedAt = &now

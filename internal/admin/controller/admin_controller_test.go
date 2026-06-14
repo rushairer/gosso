@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -679,4 +680,30 @@ func TestRemoveRole_Error(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAddRole_SelfAccount(t *testing.T) {
+	engine := setupAdminControllerWithAdminID(&mockAccountService{}, validUUID)
+
+	roleUUID := "660e8400-e29b-41d4-a716-446655440001"
+	body := fmt.Sprintf(`{"role_id": "%s"}`, roleUUID)
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/roles", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestRemoveRole_SelfAccount(t *testing.T) {
+	engine := setupAdminControllerWithAdminID(&mockAccountService{}, validUUID)
+
+	roleUUID := "660e8400-e29b-41d4-a716-446655440001"
+	req := httptest.NewRequest(http.MethodDelete, "/api/admin/accounts/"+validUUID+"/roles/"+roleUUID, nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
 }

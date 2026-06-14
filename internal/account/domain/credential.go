@@ -17,8 +17,9 @@ import (
 )
 
 var (
-	ErrAccountIDRequired  = errors.New("account ID is required")
-	ErrInvalidPhoneFormat = errors.New("invalid phone format")
+	ErrAccountIDRequired         = errors.New("account ID is required")
+	ErrInvalidPhoneFormat        = errors.New("invalid phone format")
+	ErrCredentialAlreadyDeleted  = errors.New("credential is already deleted")
 )
 
 // CredentialType represents the type of credential.
@@ -181,7 +182,7 @@ func (c *Credential) MarkUsed() {
 // SoftDelete soft-deletes the credential. Returns an error if already deleted.
 func (c *Credential) SoftDelete() error {
 	if c.IsDeleted() {
-		return errors.New("credential is already deleted")
+		return ErrCredentialAlreadyDeleted
 	}
 	now := time.Now()
 	c.DeletedAt = &now

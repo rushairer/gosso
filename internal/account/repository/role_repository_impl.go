@@ -278,7 +278,8 @@ func (r *roleRepositoryImpl) FindRolesByAccountID(ctx context.Context, accountID
 	return roles, nil
 }
 
-// SoftDeleteRolesByAccountID soft deletes all role associations for an account
+// SoftDeleteRolesByAccountID soft deletes all role associations for an account.
+// Returns nil even if zero rows are affected (idempotent for bulk delete).
 func (r *roleRepositoryImpl) SoftDeleteRolesByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `
 		UPDATE account_roles

@@ -93,19 +93,18 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 		scopes = []string{"openid"}
 	}
 
-	client := &domain.OAuth2Client{
-		AccountID:              req.AccountID,
-		ClientID:               clientID,
-		ClientSecretHash:       secretHash,
-		Name:                   req.Name,
-		Description:            req.Description,
-		RedirectURIs:           req.RedirectURIs,
-		PostLogoutRedirectURIs: req.PostLogoutRedirectURIs,
-		GrantTypes:             grantTypes,
-		Scopes:                 scopes,
-		IsConfidential:         req.IsConfidential,
-		Metadata:               req.Metadata,
+	client, err := domain.NewOAuth2Client(req.Name, clientID, grantTypes)
+	if err != nil {
+		return nil, "", fmt.Errorf("create oauth2 client: %w", err)
 	}
+	client.AccountID = req.AccountID
+	client.ClientSecretHash = secretHash
+	client.Description = req.Description
+	client.RedirectURIs = req.RedirectURIs
+	client.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
+	client.Scopes = scopes
+	client.IsConfidential = req.IsConfidential
+	client.Metadata = req.Metadata
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		return s.clientRepo.Create(ctx, tx, client)

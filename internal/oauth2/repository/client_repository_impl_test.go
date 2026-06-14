@@ -32,7 +32,7 @@ func newTestOAuth2Client() *domain.OAuth2Client {
 
 func clientColumns() []string {
 	return []string{"id", "account_id", "client_id", "client_secret_hash", "name", "description",
-		"redirect_uris", "post_logout_redirect_uris", "grant_types", "scopes", "is_confidential", "metadata", "created_at", "updated_at"}
+		"redirect_uris", "post_logout_redirect_uris", "grant_types", "scopes", "is_confidential", "metadata", "created_at", "updated_at", "deleted_at"}
 }
 
 func clientRowValues(c *domain.OAuth2Client) []driver.Value {
@@ -45,7 +45,7 @@ func clientRowValues(c *domain.OAuth2Client) []driver.Value {
 		md, _ = json.Marshal(c.Metadata)
 	}
 	return []driver.Value{c.ID, c.AccountID, c.ClientID, c.ClientSecretHash, c.Name, c.Description,
-		ru, plu, gt, sc, c.IsConfidential, md, time.Now(), time.Now()}
+		ru, plu, gt, sc, c.IsConfidential, md, time.Now(), time.Now(), nil}
 }
 
 // ──────────────────────────────────────────────

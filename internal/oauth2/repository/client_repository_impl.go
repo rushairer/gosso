@@ -119,7 +119,7 @@ func (r *oauth2ClientRepositoryImpl) Create(ctx context.Context, tx *sql.Tx, cli
 
 func (r *oauth2ClientRepositoryImpl) FindByClientID(ctx context.Context, clientID string) (*domain.OAuth2Client, error) {
 	query := `
-		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at
+		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at, deleted_at
 		FROM oauth2_clients
 		WHERE client_id = $1 AND deleted_at IS NULL`
 
@@ -136,7 +136,7 @@ func (r *oauth2ClientRepositoryImpl) FindByClientID(ctx context.Context, clientI
 
 func (r *oauth2ClientRepositoryImpl) FindByClientIDTx(ctx context.Context, tx *sql.Tx, clientID string) (*domain.OAuth2Client, error) {
 	query := `
-		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at
+		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at, deleted_at
 		FROM oauth2_clients
 		WHERE client_id = $1 AND deleted_at IS NULL`
 
@@ -153,7 +153,7 @@ func (r *oauth2ClientRepositoryImpl) FindByClientIDTx(ctx context.Context, tx *s
 
 func (r *oauth2ClientRepositoryImpl) FindByAccountID(ctx context.Context, accountID string) ([]*domain.OAuth2Client, error) {
 	query := `
-		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at
+		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at, deleted_at
 		FROM oauth2_clients
 		WHERE account_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC`
@@ -209,6 +209,8 @@ func (r *oauth2ClientRepositoryImpl) SoftDelete(ctx context.Context, tx *sql.Tx,
 	return nil
 }
 
+// SoftDeleteByAccountID soft deletes all OAuth2 clients of an account.
+// Returns nil even if zero rows are affected (idempotent for bulk delete).
 func (r *oauth2ClientRepositoryImpl) SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `UPDATE oauth2_clients SET deleted_at = $1, updated_at = $1 WHERE account_id = $2 AND deleted_at IS NULL`
 	_, err := tx.ExecContext(ctx, query, deletedAt, accountID)

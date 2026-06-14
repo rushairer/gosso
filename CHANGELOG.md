@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 - Database connection pool stats logging — background goroutine logs `db.Stats()` (open, in_use, idle, wait_count, wait_duration, max_idle_closed, max_lifetime_closed) every 60 seconds, respects graceful shutdown via context cancellation (`cmd/gouno/web_infra.go`).
+- `NewOAuth2Client` constructor with required field validation (clientID, name, grantTypes) — prevents creation of invalid client instances (`internal/oauth2/domain/client.go`).
+- `TestBigEndianBytes` and `TestStringPtr` unit tests for utility functions (`internal/utility/bigendian_test.go`, `internal/utility/ptr_test.go`).
+
+### Changed
+- `AdminController.AddRole` and `RemoveRole` now prevent admins from modifying their own role assignments — consistent with `DeleteAccount`/`DisableAccount`/`EnableAccount` self-operation protection (`internal/admin/controller/admin_controller.go`).
+- `NewAuthorizationCode` constructor now accepts `authTime` parameter — previously required manual post-construction assignment (`internal/oauth2/domain/authorization_code.go`).
+- `WebAuthnCredential` struct now has `json` tags on all fields — consistent with all other domain entities (`internal/auth/domain/webauthn.go`).
+- `Credential.SoftDelete` and `FederatedIdentity.SoftDelete` now return sentinel errors (`ErrCredentialAlreadyDeleted`, `ErrFederatedIdentityAlreadyDeleted`) — enables reliable `errors.Is()` matching (`internal/account/domain/credential.go`, `internal/account/domain/federated_identity.go`).
+- Bulk soft-delete methods (`SoftDeleteCredentialsByAccount`, `SoftDeleteByAccountID`, `SoftDeleteRolesByAccountID`) now document idempotent semantics explicitly (`internal/account/repository/`, `internal/oauth2/repository/`).
+- `scanOAuth2Client` and `scanConsent` now include `deleted_at` column — previously loaded structs always had `DeletedAt == nil` (`internal/oauth2/repository/scan_helpers.go`).
+- `webauthn_repository_test.go`, `auth/scan_helpers_test.go`, and `oauth2/scan_helpers_test.go` now call `ExpectationsWereMet()` — unmet SQL mock expectations are now detected (`internal/auth/repository/`, `internal/oauth2/repository/`).
+- OAuth2 client and consent repository tests updated with `deleted_at` column in mock rows (`internal/oauth2/repository/`, `internal/oauth2/service/`).
+
+### Fixed
+- `accounts.display_name` database column expanded from `VARCHAR(100)` to `VARCHAR(255)` — previously domain validation allowed 255 chars but database would truncate at 100 (`db/migrations/0017_display_name_length.up.sql`).
+- `AdminController.AddRole` and `RemoveRole` lacked self-operation protection — an admin could assign or remove roles from their own account (`internal/admin/controller/admin_controller.go`).
+- `Credential.SoftDelete` and `FederatedIdentity.SoftDelete` used inline `errors.New()` instead of sentinel errors — callers could not reliably check for duplicate-delete via `errors.Is()` (`internal/account/domain/`).
+- `scanOAuth2Client` did not scan `deleted_at` column — loaded `OAuth2Client` structs always had `DeletedAt == nil` (`internal/oauth2/repository/scan_helpers.go`).
+- `scanConsent` did not scan `deleted_at` column — same issue as above (`internal/oauth2/repository/scan_helpers.go`).
 
 ### Changed
 - CI lint job now uploads gosec SARIF results to GitHub Security tab via `github/codeql-action/upload-sarif` (`.github/workflows/ci.yml`).

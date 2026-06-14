@@ -180,7 +180,8 @@ func (r *credentialRepositoryImpl) UpdateCredential(ctx context.Context, tx *sql
 	return nil
 }
 
-// SoftDeleteCredentialsByAccount soft deletes all credentials of an account
+// SoftDeleteCredentialsByAccount soft deletes all credentials of an account.
+// Returns nil even if zero rows are affected (idempotent for bulk delete).
 func (r *credentialRepositoryImpl) SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `
 		UPDATE account_credentials

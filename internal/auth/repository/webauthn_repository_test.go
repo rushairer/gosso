@@ -65,6 +65,7 @@ func TestWebAuthn_CreateCredential_Success(t *testing.T) {
 	err = repo.CreateCredential(context.Background(), tx, c)
 
 	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // ──────────────────────────────────────────────
@@ -89,6 +90,7 @@ func TestWebAuthn_FindByCredentialID_Success(t *testing.T) {
 	assert.Equal(t, uint32(5), result.SignCount)
 	assert.Equal(t, "My Passkey", result.Name)
 	assert.Len(t, result.Transports, 2)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestWebAuthn_FindByCredentialID_NotFound(t *testing.T) {
@@ -102,6 +104,7 @@ func TestWebAuthn_FindByCredentialID_NotFound(t *testing.T) {
 	_, err = repo.FindByCredentialID(context.Background(), "nonexistent")
 
 	assert.Error(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // ──────────────────────────────────────────────
@@ -130,6 +133,7 @@ func TestWebAuthn_FindByAccountID_Success(t *testing.T) {
 	assert.Len(t, results, 2)
 	assert.Equal(t, "cred-001", results[0].ID)
 	assert.Equal(t, "cred-002", results[1].ID)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestWebAuthn_FindByAccountID_Empty(t *testing.T) {
@@ -144,6 +148,7 @@ func TestWebAuthn_FindByAccountID_Empty(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Empty(t, results)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // ──────────────────────────────────────────────
@@ -170,6 +175,7 @@ func TestWebAuthn_UpdateCredential_Success(t *testing.T) {
 	err = repo.UpdateCredential(context.Background(), tx, c)
 
 	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // ──────────────────────────────────────────────
@@ -193,6 +199,7 @@ func TestWebAuthn_SoftDeleteCredential_Success(t *testing.T) {
 	err = repo.SoftDeleteCredential(context.Background(), tx, "cred-001", deletedAt)
 
 	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // ──────────────────────────────────────────────
@@ -216,4 +223,5 @@ func TestWebAuthn_SoftDeleteByAccountID_Success(t *testing.T) {
 	err = repo.SoftDeleteByAccountID(context.Background(), tx, "account-001", deletedAt)
 
 	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }

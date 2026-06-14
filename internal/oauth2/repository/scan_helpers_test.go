@@ -40,7 +40,7 @@ func TestScanOAuth2Client_Success(t *testing.T) {
 		"client-uuid-001", "account-001", "cid-abc123", "$2a$10$hash",
 		"Test App", "A test app",
 		ruJSON, pluJSON, gtJSON, scJSON,
-		true, mdJSON, now, now,
+		true, mdJSON, now, now, nil,
 	)
 	mock.ExpectQuery("SELECT .+ FROM oauth2_clients").WillReturnRows(rows)
 
@@ -69,6 +69,7 @@ func TestScanOAuth2Client_Success(t *testing.T) {
 
 	assert.False(t, client.CreatedAt.IsZero())
 	assert.False(t, client.UpdatedAt.IsZero())
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestScanOAuth2Client_ScanError(t *testing.T) {
@@ -87,6 +88,7 @@ func TestScanOAuth2Client_ScanError(t *testing.T) {
 	client, err := scanOAuth2Client(result)
 	assert.Error(t, err)
 	assert.Nil(t, client)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // ──────────────────────────────────────────────
@@ -102,10 +104,10 @@ func TestScanConsent_Success(t *testing.T) {
 	scopes := []string{"openid", "email"}
 	scJSON, _ := json.Marshal(scopes)
 
-	columns := []string{"id", "account_id", "client_id", "scopes", "granted_at", "created_at", "updated_at"}
+	columns := []string{"id", "account_id", "client_id", "scopes", "granted_at", "created_at", "updated_at", "deleted_at"}
 	rows := sqlmock.NewRows(columns).AddRow(
 		"consent-001", "account-001", "client-001",
-		scJSON, now, now, now,
+		scJSON, now, now, now, nil,
 	)
 	mock.ExpectQuery("SELECT .+ FROM oauth2_consents").WillReturnRows(rows)
 
@@ -124,6 +126,7 @@ func TestScanConsent_Success(t *testing.T) {
 	assert.False(t, consent.GrantedAt.IsZero())
 	assert.False(t, consent.CreatedAt.IsZero())
 	assert.False(t, consent.UpdatedAt.IsZero())
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // ──────────────────────────────────────────────
@@ -143,11 +146,11 @@ func TestScanOAuth2Clients_MultipleRows(t *testing.T) {
 		AddRow(c1.ID, c1.AccountID, c1.ClientID, "", c1.Name, "",
 			mustMarshal(t, c1.RedirectURIs), mustMarshal(t, c1.PostLogoutRedirectURIs),
 			mustMarshal(t, c1.GrantTypes), mustMarshal(t, c1.Scopes),
-			false, nil, now, now).
+			false, nil, now, now, nil).
 		AddRow(c2.ID, c2.AccountID, c2.ClientID, "", c2.Name, "",
 			mustMarshal(t, c2.RedirectURIs), mustMarshal(t, c2.PostLogoutRedirectURIs),
 			mustMarshal(t, c2.GrantTypes), mustMarshal(t, c2.Scopes),
-			false, nil, now, now)
+			false, nil, now, now, nil)
 	mock.ExpectQuery("SELECT .+ FROM oauth2_clients").WillReturnRows(rows)
 
 	result, err := db.Query("SELECT * FROM oauth2_clients")
@@ -158,6 +161,7 @@ func TestScanOAuth2Clients_MultipleRows(t *testing.T) {
 	require.Len(t, clients, 2)
 	assert.Equal(t, "c1", clients[0].ID)
 	assert.Equal(t, "c2", clients[1].ID)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func mustMarshal(t *testing.T, v any) driver.Value {

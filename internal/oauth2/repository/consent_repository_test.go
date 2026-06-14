@@ -92,8 +92,8 @@ func TestConsentRepo_FindByAccountAndClient_CorruptScopes(t *testing.T) {
 	mock.ExpectQuery("SELECT (.+) FROM oauth2_consents").
 		WithArgs("account-001", "client-001").
 		WillReturnRows(sqlmock.NewRows(
-			[]string{"id", "account_id", "client_id", "scopes", "granted_at", "created_at", "updated_at"},
-		).AddRow("consent-001", "account-001", "client-001", []byte("{invalid"), now, now, now))
+			[]string{"id", "account_id", "client_id", "scopes", "granted_at", "created_at", "updated_at", "deleted_at"},
+		).AddRow("consent-001", "account-001", "client-001", []byte("{invalid"), now, now, now, nil))
 
 	repo := NewConsentRepository(db)
 	result, err := repo.FindByAccountAndClient(context.Background(), "account-001", "client-001")
@@ -178,8 +178,8 @@ func TestConsentRepo_FindByAccountAndClient_Success(t *testing.T) {
 	mock.ExpectQuery("SELECT (.+) FROM oauth2_consents").
 		WithArgs("account-001", "client-001").
 		WillReturnRows(sqlmock.NewRows(
-			[]string{"id", "account_id", "client_id", "scopes", "granted_at", "created_at", "updated_at"},
-		).AddRow("consent-001", "account-001", "client-001", scopesJSON, now, now, now))
+			[]string{"id", "account_id", "client_id", "scopes", "granted_at", "created_at", "updated_at", "deleted_at"},
+		).AddRow("consent-001", "account-001", "client-001", scopesJSON, now, now, now, nil))
 
 	repo := NewConsentRepository(db)
 	result, err := repo.FindByAccountAndClient(context.Background(), "account-001", "client-001")

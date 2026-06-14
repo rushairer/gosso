@@ -75,6 +75,7 @@ func TestScanWebAuthnCredential_Success(t *testing.T) {
 
 	// deletedAt is nil when NULL in DB
 	assert.Nil(t, got.DeletedAt)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestScanWebAuthnCredential_NilTransports(t *testing.T) {
@@ -102,6 +103,7 @@ func TestScanWebAuthnCredential_NilTransports(t *testing.T) {
 	assert.Nil(t, got.Transports)
 	assert.Nil(t, got.LastUsedAt)
 	assert.Nil(t, got.DeletedAt)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestScanWebAuthnCredential_NullableTimestamps(t *testing.T) {
@@ -134,4 +136,5 @@ func TestScanWebAuthnCredential_NullableTimestamps(t *testing.T) {
 
 	require.NotNil(t, got.DeletedAt)
 	assert.Equal(t, deletedAt, *got.DeletedAt)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }

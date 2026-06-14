@@ -229,6 +229,11 @@ func (c *AdminController) AddRole(ctx *gin.Context) {
 		return
 	}
 
+	if isSelfAccount(ctx, accountID) {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "cannot perform this operation on your own account"))
+		return
+	}
+
 	var req AddRoleRequestBody
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
@@ -253,6 +258,12 @@ func (c *AdminController) RemoveRole(ctx *gin.Context) {
 	if !ok {
 		return
 	}
+
+	if isSelfAccount(ctx, accountID) {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "cannot perform this operation on your own account"))
+		return
+	}
+
 	roleID, ok := validateUUID(ctx, ctx.Param("role_id"), "role_id")
 	if !ok {
 		return

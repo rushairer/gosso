@@ -49,7 +49,7 @@ func (r *consentRepositoryImpl) Upsert(ctx context.Context, tx *sql.Tx, consent 
 // Only returns non-deleted records.
 func (r *consentRepositoryImpl) FindByAccountAndClient(ctx context.Context, accountID, clientID string) (*domain.Consent, error) {
 	query := `
-		SELECT id, account_id, client_id, scopes, granted_at, created_at, updated_at
+		SELECT id, account_id, client_id, scopes, granted_at, created_at, updated_at, deleted_at
 		FROM oauth2_consents
 		WHERE account_id = $1 AND client_id = $2 AND deleted_at IS NULL`
 

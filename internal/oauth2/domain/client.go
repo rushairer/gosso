@@ -102,5 +102,28 @@ const (
 
 // Error definitions
 var (
-	ErrClientNotFound = errors.New("oauth2 client not found")
+	ErrClientNotFound           = errors.New("oauth2 client not found")
+	ErrClientIDRequired         = errors.New("oauth2 client: client_id is required")
+	ErrClientNameRequired       = errors.New("oauth2 client: name is required")
+	ErrClientGrantTypesRequired = errors.New("oauth2 client: grant_types must not be empty")
 )
+
+// NewOAuth2Client creates a new OAuth2Client with the required fields validated.
+// ClientSecretHash is optional (only set for confidential clients).
+// Additional fields (RedirectURIs, Scopes, etc.) should be set after construction.
+func NewOAuth2Client(name, clientID string, grantTypes []string) (*OAuth2Client, error) {
+	if clientID == "" {
+		return nil, ErrClientIDRequired
+	}
+	if name == "" {
+		return nil, ErrClientNameRequired
+	}
+	if len(grantTypes) == 0 {
+		return nil, ErrClientGrantTypesRequired
+	}
+	return &OAuth2Client{
+		Name:       name,
+		ClientID:   clientID,
+		GrantTypes: grantTypes,
+	}, nil
+}

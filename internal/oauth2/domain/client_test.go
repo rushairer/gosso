@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newTestClient() *OAuth2Client {
@@ -114,4 +115,36 @@ func TestValidatePostLogoutRedirectURI_EmptyList(t *testing.T) {
 func TestValidateRedirectURI_WithFragment(t *testing.T) {
 	c := newTestClient()
 	assert.False(t, c.ValidateRedirectURI("https://app.example.com/callback#fragment"))
+}
+
+// ──────────────────────────────────────────────
+// NewOAuth2Client
+// ──────────────────────────────────────────────
+
+func TestNewOAuth2Client_Success(t *testing.T) {
+	c, err := NewOAuth2Client("Test App", "client-123", []string{"authorization_code"})
+	require.NoError(t, err)
+	assert.Equal(t, "Test App", c.Name)
+	assert.Equal(t, "client-123", c.ClientID)
+	assert.Equal(t, []string{"authorization_code"}, c.GrantTypes)
+}
+
+func TestNewOAuth2Client_MissingClientID(t *testing.T) {
+	_, err := NewOAuth2Client("Test App", "", []string{"authorization_code"})
+	assert.ErrorIs(t, err, ErrClientIDRequired)
+}
+
+func TestNewOAuth2Client_MissingName(t *testing.T) {
+	_, err := NewOAuth2Client("", "client-123", []string{"authorization_code"})
+	assert.ErrorIs(t, err, ErrClientNameRequired)
+}
+
+func TestNewOAuth2Client_MissingGrantTypes(t *testing.T) {
+	_, err := NewOAuth2Client("Test App", "client-123", nil)
+	assert.ErrorIs(t, err, ErrClientGrantTypesRequired)
+}
+
+func TestNewOAuth2Client_EmptyGrantTypes(t *testing.T) {
+	_, err := NewOAuth2Client("Test App", "client-123", []string{})
+	assert.ErrorIs(t, err, ErrClientGrantTypesRequired)
 }

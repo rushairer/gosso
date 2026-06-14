@@ -9,20 +9,20 @@ import (
 
 // WebAuthnCredential represents a stored WebAuthn passkey credential.
 type WebAuthnCredential struct {
-	ID              string
-	AccountID       string
-	CredentialID    []byte
-	PublicKey       []byte
-	SignCount       uint32
-	AAGUID          []byte
-	Transports      []string
-	AttestationType string
-	Name            string
-	Verified        bool
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	LastUsedAt      *time.Time
-	DeletedAt       *time.Time
+	ID              string     `json:"id"`
+	AccountID       string     `json:"account_id"`
+	CredentialID    []byte     `json:"credential_id,omitempty"`
+	PublicKey       []byte     `json:"public_key,omitempty"`
+	SignCount       uint32     `json:"sign_count"`
+	AAGUID          []byte     `json:"aaguid,omitempty"`
+	Transports      []string   `json:"transports,omitempty"`
+	AttestationType string     `json:"attestation_type"`
+	Name            string     `json:"name"`
+	Verified        bool       `json:"verified"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	LastUsedAt      *time.Time `json:"last_used_at,omitempty"`
+	DeletedAt       *time.Time `json:"deleted_at,omitempty"`
 }
 
 // MarkUsed updates LastUsedAt to now.

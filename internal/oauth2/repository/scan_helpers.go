@@ -9,7 +9,7 @@ import (
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 )
 
-// scanOAuth2Client scans a single oauth2_clients row (14 columns) into an OAuth2Client.
+// scanOAuth2Client scans a single oauth2_clients row (15 columns) into an OAuth2Client.
 func scanOAuth2Client(s dbPkg.Scannable) (*domain.OAuth2Client, error) {
 	client := &domain.OAuth2Client{}
 	var redirectURIs, postLogoutURIs, grantTypes, scopes, metadata []byte
@@ -17,7 +17,7 @@ func scanOAuth2Client(s dbPkg.Scannable) (*domain.OAuth2Client, error) {
 	if err := s.Scan(
 		&client.ID, &client.AccountID, &client.ClientID, &client.ClientSecretHash,
 		&client.Name, &client.Description, &redirectURIs, &postLogoutURIs, &grantTypes, &scopes,
-		&client.IsConfidential, &metadata, &client.CreatedAt, &client.UpdatedAt,
+		&client.IsConfidential, &metadata, &client.CreatedAt, &client.UpdatedAt, &client.DeletedAt,
 	); err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func scanOAuth2Clients(rows *sql.Rows) ([]*domain.OAuth2Client, error) {
 	return clients, nil
 }
 
-// scanConsent scans a single oauth2_consents row (7 columns) into a Consent.
+// scanConsent scans a single oauth2_consents row (8 columns) into a Consent.
 func scanConsent(s dbPkg.Scannable) (*domain.Consent, error) {
 	var consent domain.Consent
 	var scopesJSON []byte
@@ -61,6 +61,7 @@ func scanConsent(s dbPkg.Scannable) (*domain.Consent, error) {
 		&consent.GrantedAt,
 		&consent.CreatedAt,
 		&consent.UpdatedAt,
+		&consent.DeletedAt,
 	); err != nil {
 		return nil, err
 	}

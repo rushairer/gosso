@@ -41,8 +41,7 @@ func TestFederatedIdentity_SoftDelete_DoubleDelete(t *testing.T) {
 	err := fi.SoftDelete()
 	assert.NoError(t, err)
 	err = fi.SoftDelete()
-	assert.Error(t, err)
-	assert.Equal(t, "federated identity is already deleted", err.Error())
+	assert.ErrorIs(t, err, ErrFederatedIdentityAlreadyDeleted)
 }
 
 func TestFederatedIdentity_UpdateProfile(t *testing.T) {

@@ -25,7 +25,8 @@ type AuthorizationCode struct {
 
 // NewAuthorizationCode creates a new AuthorizationCode with the required fields.
 // Validates that code, clientID, accountID, and redirectURI are non-empty and expiresAt is not zero.
-func NewAuthorizationCode(code, clientID, accountID, redirectURI string, scopes []string, expiresAt time.Time) (*AuthorizationCode, error) {
+// authTime is the time the user authenticated; it is set but not validated (may be zero).
+func NewAuthorizationCode(code, clientID, accountID, redirectURI string, scopes []string, expiresAt time.Time, authTime time.Time) (*AuthorizationCode, error) {
 	if code == "" {
 		return nil, ErrAuthCodeRequired
 	}
@@ -51,6 +52,7 @@ func NewAuthorizationCode(code, clientID, accountID, redirectURI string, scopes 
 		RedirectURI: redirectURI,
 		Scopes:      scopes,
 		ExpiresAt:   expiresAt,
+		AuthTime:    authTime,
 	}, nil
 }
 

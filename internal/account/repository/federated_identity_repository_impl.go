@@ -106,7 +106,8 @@ func (r *federatedIdentityRepositoryImpl) FindByAccountID(ctx context.Context, a
 	return identities, nil
 }
 
-// SoftDeleteByAccountID soft deletes all federated identities of an account
+// SoftDeleteByAccountID soft deletes all federated identities of an account.
+// Returns nil even if zero rows are affected (idempotent for bulk delete).
 func (r *federatedIdentityRepositoryImpl) SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `
 		UPDATE federated_identities
