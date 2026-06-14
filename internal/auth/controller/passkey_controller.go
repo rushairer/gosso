@@ -94,24 +94,33 @@ func (c *PasskeyController) RegisterBegin(ctx *gin.Context) {
 		return
 	}
 
-	options, err := c.passkeySvc.BeginRegistration(ctx, accountID, username, displayName)
+	options, requestID, err := c.passkeySvc.BeginRegistration(ctx, accountID, username, displayName)
 	if err != nil {
 		c.logger.Error("Failed to begin passkey registration", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to begin registration"))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(options))
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
+		"options":    options,
+		"request_id": requestID,
+	}))
 }
 
 // RegisterComplete POST /api/auth/passkey/register/complete
 func (c *PasskeyController) RegisterComplete(ctx *gin.Context) {
+	requestID := ctx.Query("request_id")
+	if requestID == "" {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "request_id is required"))
+		return
+	}
+
 	accountID, username, displayName, ok := c.resolveAccountForPasskey(ctx)
 	if !ok {
 		return
 	}
 
-	cred, err := c.passkeySvc.CompleteRegistration(ctx, accountID, username, displayName, ctx.Request)
+	cred, err := c.passkeySvc.CompleteRegistration(ctx, requestID, accountID, username, displayName, ctx.Request)
 	if err != nil {
 		c.logger.Error("Failed to complete passkey registration", zap.Error(err))
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "registration failed"))

@@ -313,7 +313,7 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		for _, s := range dc.Scopes {
 			if s == "openid" {
 				var idErr error
-				idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", dc.AuthorizedAt, accessToken)
+				idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", dc.AuthorizedAt, accessToken, nil)
 				if idErr != nil {
 					c.logger.Error("Failed to generate ID token for device code", zap.Error(idErr))
 					ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})

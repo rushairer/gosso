@@ -433,7 +433,7 @@ func TestCompleteRegistration_MissingChallenge(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{}"))
-	_, err := svc.CompleteRegistration(context.Background(), "acct-1", "alice", "Alice", req)
+	_, err := svc.CompleteRegistration(context.Background(), "test-request-id", "acct-1", "alice", "Alice", req)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unmarshal session data")
 }
@@ -552,14 +552,15 @@ func TestBeginRegistration_Success(t *testing.T) {
 	svc, mr := newTestPasskeyServiceWithRedis(t, credRepo)
 	defer mr.Close()
 
-	cc, err := svc.BeginRegistration(context.Background(), "acct-1", "alice", "Alice Smith")
+	cc, requestID, err := svc.BeginRegistration(context.Background(), "acct-1", "alice", "Alice Smith")
 	require.NoError(t, err)
 	require.NotNil(t, cc)
 	assert.NotNil(t, cc.Response)
+	assert.NotEmpty(t, requestID, "requestID should be returned")
 
-	exists, err := svc.redis.Exists(context.Background(), "webauthn:reg:acct-1")
+	exists, err := svc.redis.Exists(context.Background(), "webauthn:reg:"+requestID)
 	require.NoError(t, err)
-	assert.True(t, exists, "challenge should be stored in Redis")
+	assert.True(t, exists, "challenge should be stored in Redis keyed by requestID")
 }
 
 func TestBeginRegistration_WithExistingCreds(t *testing.T) {
@@ -573,9 +574,10 @@ func TestBeginRegistration_WithExistingCreds(t *testing.T) {
 	svc, mr := newTestPasskeyServiceWithRedis(t, credRepo)
 	defer mr.Close()
 
-	cc, err := svc.BeginRegistration(context.Background(), "acct-1", "alice", "Alice Smith")
+	cc, requestID, err := svc.BeginRegistration(context.Background(), "acct-1", "alice", "Alice Smith")
 	require.NoError(t, err)
 	require.NotNil(t, cc)
+	assert.NotEmpty(t, requestID)
 }
 
 func TestBeginLogin_Success(t *testing.T) {

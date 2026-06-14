@@ -37,13 +37,14 @@ func TestMaskEmail(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestSend_InvalidTo(t *testing.T) {
-	svc := NewEmailService(config.SMTPConfig{
+	svc, err := NewEmailService(config.SMTPConfig{
 		Host: "smtp.example.com",
 		Port: 587,
 		From: "noreply@example.com",
 	}, nil)
+	require.NoError(t, err)
 
-	err := svc.send(context.Background(), "", "Subject", "<p>body</p>")
+	err = svc.send(context.Background(), "", "Subject", "<p>body</p>")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "set to address")
 }
@@ -53,17 +54,18 @@ func TestSend_InvalidTo(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestSend_ConnectionError(t *testing.T) {
-	svc := NewEmailService(config.SMTPConfig{
+	svc, err := NewEmailService(config.SMTPConfig{
 		Host: "127.0.0.1",
 		Port: 1, // unlikely to be listening
 		From: "noreply@example.com",
 	}, nil)
+	require.NoError(t, err)
 	require.NotNil(t, svc.client)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := svc.send(ctx, "user@example.com", "Subject", "<p>body</p>")
+	err = svc.send(ctx, "user@example.com", "Subject", "<p>body</p>")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "send email")
 }
@@ -73,32 +75,34 @@ func TestSend_ConnectionError(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestSendVerificationCode_ConnectionError(t *testing.T) {
-	svc := NewEmailService(config.SMTPConfig{
+	svc, err := NewEmailService(config.SMTPConfig{
 		Host: "127.0.0.1",
 		Port: 1,
 		From: "noreply@example.com",
 	}, nil)
+	require.NoError(t, err)
 	require.NotNil(t, svc.client)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := svc.SendVerificationCode(ctx, "user@example.com", "123456")
+	err = svc.SendVerificationCode(ctx, "user@example.com", "123456")
 	assert.Error(t, err)
 }
 
 func TestSendPasswordResetLink_ConnectionError(t *testing.T) {
-	svc := NewEmailService(config.SMTPConfig{
+	svc, err := NewEmailService(config.SMTPConfig{
 		Host: "127.0.0.1",
 		Port: 1,
 		From: "noreply@example.com",
 	}, nil)
+	require.NoError(t, err)
 	require.NotNil(t, svc.client)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := svc.SendPasswordResetLink(ctx, "user@example.com", "https://example.com/reset")
+	err = svc.SendPasswordResetLink(ctx, "user@example.com", "https://example.com/reset")
 	assert.Error(t, err)
 }
 
@@ -113,7 +117,8 @@ func TestNewEmailService_WithoutAuth(t *testing.T) {
 		From: "noreply@example.com",
 		// Username is empty → no SMTP auth
 	}
-	svc := NewEmailService(cfg, nil)
+	svc, err := NewEmailService(cfg, nil)
+	require.NoError(t, err)
 	assert.NotNil(t, svc.client)
 	assert.Equal(t, "noreply@example.com", svc.from)
 }

@@ -21,18 +21,19 @@ import (
 // IDTokenClaims OIDC ID Token claims
 type IDTokenClaims struct {
 	jwt.RegisteredClaims
-	AZP               string `json:"azp,omitempty"` // Authorized Party — present when aud has a single value
-	Name              string `json:"name,omitempty"`
-	PreferredUsername string `json:"preferred_username,omitempty"`
-	Picture           string `json:"picture,omitempty"`
-	Email             string `json:"email,omitempty"`
-	EmailVerified     *bool  `json:"email_verified,omitempty"`
-	PhoneNumber       string `json:"phone_number,omitempty"`
-	PhoneVerified     *bool  `json:"phone_number_verified,omitempty"`
-	Locale            string `json:"locale,omitempty"`
-	Nonce             string `json:"nonce,omitempty"`
-	AuthTime          *int64 `json:"auth_time,omitempty"`
-	ATHash            string `json:"at_hash,omitempty"`
+	AZP               string   `json:"azp,omitempty"` // Authorized Party — present when aud has a single value
+	Name              string   `json:"name,omitempty"`
+	PreferredUsername string   `json:"preferred_username,omitempty"`
+	Picture           string   `json:"picture,omitempty"`
+	Email             string   `json:"email,omitempty"`
+	EmailVerified     *bool    `json:"email_verified,omitempty"`
+	PhoneNumber       string   `json:"phone_number,omitempty"`
+	PhoneVerified     *bool    `json:"phone_number_verified,omitempty"`
+	Locale            string   `json:"locale,omitempty"`
+	Nonce             string   `json:"nonce,omitempty"`
+	AuthTime          *int64   `json:"auth_time,omitempty"`
+	AMR               []string `json:"amr,omitempty"` // Authentication Methods References (e.g. ["pwd"], ["pwd","otp"], ["swk"])
+	ATHash            string   `json:"at_hash,omitempty"`
 }
 
 // IDTokenService OIDC ID Token service
@@ -70,8 +71,10 @@ func NewIDTokenService(
 	}
 }
 
-// GenerateIDToken generates an OIDC ID Token
-func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time, accessToken string) (string, error) {
+// GenerateIDToken generates an OIDC ID Token.
+// authMethods contains AMR values per RFC 8176 (e.g. "pwd", "otp", "swk").
+// Pass nil to omit the amr claim.
+func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time, accessToken string, authMethods []string) (string, error) {
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
 		return "", fmt.Errorf("find account: %w", err)
@@ -90,6 +93,7 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 		AZP:      clientID, // Authorized Party per OIDC Core §2 — single aud value
 		Nonce:    nonce,
 		AuthTime: ptrInt64(authTime.Unix()),
+		AMR:      authMethods,
 	}
 
 	// Add claims based on scope

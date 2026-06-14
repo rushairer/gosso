@@ -275,7 +275,7 @@ type mockIDTokenMgr struct {
 	generateIDTokenFn func() (string, error)
 }
 
-func (m *mockIDTokenMgr) GenerateIDToken(_ context.Context, _, _ string, _ []string, _ string, _ time.Time, _ string) (string, error) {
+func (m *mockIDTokenMgr) GenerateIDToken(_ context.Context, _, _ string, _ []string, _ string, _ time.Time, _ string, _ []string) (string, error) {
 	if m.generateIDTokenFn != nil {
 		return m.generateIDTokenFn()
 	}

@@ -38,3 +38,10 @@ func (a *ClientAuthenticator) AuthenticateClient(client *domain.OAuth2Client, cl
 	}
 	return nil
 }
+
+// DummyAuthenticate performs a dummy bcrypt comparison to mitigate timing side-channels.
+// Call this when client lookup fails to make the response time indistinguishable
+// from "client found, wrong secret."
+func (a *ClientAuthenticator) DummyAuthenticate() {
+	_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$0000000000000000000000000000000000000000000000000000000"), []byte("dummy"))
+}

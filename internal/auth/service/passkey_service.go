@@ -90,39 +90,44 @@ func (s *PasskeyService) SetChallengeTTL(d time.Duration) {
 }
 
 // BeginRegistration starts Passkey registration, returning CredentialCreation options
-func (s *PasskeyService) BeginRegistration(ctx context.Context, accountID, username, displayName string) (*protocol.CredentialCreation, error) {
+// and a requestID that must be passed to CompleteRegistration.
+// The requestID is used as the Redis challenge key (instead of accountID) to prevent
+// concurrent registration flows from overwriting each other's challenges.
+func (s *PasskeyService) BeginRegistration(ctx context.Context, accountID, username, displayName string) (*protocol.CredentialCreation, string, error) {
 	// Find existing credentials for exclusion
 	existingCreds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil {
 		s.logger.Error("Failed to find existing credentials during registration", zap.Error(err), zap.String("account_id", accountID))
-		return nil, fmt.Errorf("find existing credentials: %w", err)
+		return nil, "", fmt.Errorf("find existing credentials: %w", err)
 	}
 
 	user := domain.NewWebAuthnUser(accountID, username, displayName, toCredentialSlice(existingCreds))
 
 	options, sessionData, err := s.web.BeginRegistration(user)
 	if err != nil {
-		return nil, fmt.Errorf("begin registration: %w", err)
+		return nil, "", fmt.Errorf("begin registration: %w", err)
 	}
 
-	// Store challenge to Redis
+	// Store challenge to Redis keyed by random requestID
 	data, err := json.Marshal(sessionData)
 	if err != nil {
-		return nil, fmt.Errorf("marshal session data: %w", err)
+		return nil, "", fmt.Errorf("marshal session data: %w", err)
 	}
 
-	key := fmt.Sprintf(redisKeyRegChallenge, accountID)
+	requestID := uuid.New().String()
+	key := fmt.Sprintf(redisKeyRegChallenge, requestID)
 	if err := s.redis.Set(ctx, key, data, s.challengeTTL); err != nil {
-		return nil, fmt.Errorf("store challenge: %w", err)
+		return nil, "", fmt.Errorf("store challenge: %w", err)
 	}
 
-	return options, nil
+	return options, requestID, nil
 }
 
-// CompleteRegistration completes Passkey registration
-func (s *PasskeyService) CompleteRegistration(ctx context.Context, accountID, username, displayName string, request *http.Request) (*domain.WebAuthnCredential, error) {
-	// Get challenge from Redis
-	key := fmt.Sprintf(redisKeyRegChallenge, accountID)
+// CompleteRegistration completes Passkey registration.
+// requestID must match the one returned by BeginRegistration.
+func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, accountID, username, displayName string, request *http.Request) (*domain.WebAuthnCredential, error) {
+	// Get challenge from Redis using the requestID
+	key := fmt.Sprintf(redisKeyRegChallenge, requestID)
 	data, err := s.redis.GetDel(ctx, key)
 	if err != nil {
 		return nil, ErrChallengeNotFound
@@ -289,11 +294,12 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 		return s.credRepo.UpdateCredential(ctx, tx, cred)
 	})
 	if err != nil {
-		s.logger.Error("Failed to update credential sign count — clone detection may be compromised",
+		// Per WebAuthn spec, sign count is a best-effort clone detection mechanism.
+		// A database failure should not block a legitimate login.
+		s.logger.Error("Failed to update credential sign count — clone detection may be compromised (login allowed to proceed)",
 			zap.Error(err),
 			zap.String("account_id", cred.AccountID),
 			zap.String("credential_id", cred.ID))
-		return "", nil, fmt.Errorf("update credential sign count: %w", err)
 	}
 
 	return cred.AccountID, cred, nil
@@ -389,11 +395,12 @@ func (s *PasskeyService) CompleteMFALogin(ctx context.Context, requestID string,
 		return s.credRepo.UpdateCredential(ctx, tx, cred)
 	})
 	if err != nil {
-		s.logger.Error("Failed to update credential sign count — clone detection may be compromised",
+		// Per WebAuthn spec, sign count is a best-effort clone detection mechanism.
+		// A database failure should not block a legitimate MFA login.
+		s.logger.Error("Failed to update credential sign count — clone detection may be compromised (MFA login allowed to proceed)",
 			zap.Error(err),
 			zap.String("account_id", cred.AccountID),
 			zap.String("credential_id", cred.ID))
-		return fmt.Errorf("update credential sign count: %w", err)
 	}
 
 	return nil

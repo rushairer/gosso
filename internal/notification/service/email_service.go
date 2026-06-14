@@ -56,7 +56,8 @@ type EmailService struct {
 }
 
 // NewEmailService creates a new email service instance.
-func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) *EmailService {
+// Returns an error if the SMTP client cannot be created (e.g. invalid host/port).
+func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) (*EmailService, error) {
 	logger = utility.EnsureLogger(logger)
 
 	opts := []mail.Option{
@@ -74,8 +75,7 @@ func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) *EmailService {
 
 	client, err := mail.NewClient(cfg.Host, opts...)
 	if err != nil {
-		logger.Error("Failed to create mail client, email sending will fail",
-			zap.String("host", cfg.Host), zap.Error(err))
+		return nil, fmt.Errorf("create mail client (host=%s): %w", cfg.Host, err)
 	}
 
 	return &EmailService{
@@ -85,7 +85,7 @@ func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) *EmailService {
 		verifyCodeTTL:    10 * time.Minute,
 		passwordResetTTL: 30 * time.Minute,
 		sendLimiter:      time.NewTicker(100 * time.Millisecond), // 10 emails/sec
-	}
+	}, nil
 }
 
 // Close stops the internal ticker and releases resources.
@@ -217,14 +217,10 @@ func smtpTLSPolicy(policy string) mail.TLSPolicy {
 }
 
 // isTransientError reports whether the error is likely transient (timeout, connection reset, broken pipe).
+// net.OpError implements net.Error, so a single check for net.Error covers all network errors.
 func isTransientError(err error) bool {
 	var netErr net.Error
-	if errors.As(err, &netErr) {
-		return true // covers timeout and other network errors
-	}
-	// Check for connection reset, broken pipe
-	var opErr *net.OpError
-	return errors.As(err, &opErr)
+	return errors.As(err, &netErr)
 }
 
 // formatDuration returns a human-readable duration string (e.g. "10 minutes", "1 hour").

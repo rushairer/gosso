@@ -38,6 +38,18 @@ func HandleServiceError(ctx *gin.Context, logger *zap.Logger, err error,
 		}
 	}
 	logger.Error(fallbackMsg, zap.Error(err))
+	// Include request ID in 500-class responses so clients can reference it in support tickets.
+	if fallbackStatus >= 500 {
+		if reqID, ok := ctx.Get("request_id"); ok {
+			ctx.JSON(fallbackStatus, gin.H{
+				"code":       fallbackStatus,
+				"message":    fallbackMsg,
+				"request_id": reqID,
+			})
+			ctx.Abort()
+			return
+		}
+	}
 	ctx.JSON(fallbackStatus, gouno.NewErrorResponse(fallbackStatus, fallbackMsg))
 	ctx.Abort()
 }

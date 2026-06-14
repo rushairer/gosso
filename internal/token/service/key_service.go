@@ -205,5 +205,6 @@ func computeKeyID(pubKey *rsa.PublicKey) (string, error) {
 		return "", fmt.Errorf("marshal public key: %w", err)
 	}
 	hash := sha256.Sum256(DER)
-	return base64.RawURLEncoding.EncodeToString(hash[:16]), nil
+	// Use full SHA-256 hash per RFC 7638 (JWK Thumbprint).
+	return base64.RawURLEncoding.EncodeToString(hash[:]), nil
 }

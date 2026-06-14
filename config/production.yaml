@@ -15,10 +15,10 @@ web_server:
     write_timeout: 30s
     request_timeout: 10s
     rate_limits:
-        login: 10
-        token: 30
+        login: 5
+        token: 10
         passkey: 10
-        api: 120
+        api: 60
         introspect: 20
         device_code: 10
 database:

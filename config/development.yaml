@@ -12,10 +12,10 @@ web_server:
     request_timeout: 10s
     max_body_size: 10485760  # 10MB
     rate_limits:
-        login: 5
-        token: 10
+        login: 10
+        token: 30
         passkey: 10
-        api: 60
+        api: 120
         introspect: 20
         device_code: 10
 database:

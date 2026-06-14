@@ -118,7 +118,10 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 		}
 	}
 
-	emailSvc := notificationService.NewEmailService(cfg.SMTPConfig, cfg.Logger)
+	emailSvc, err := notificationService.NewEmailService(cfg.SMTPConfig, cfg.Logger)
+	if err != nil {
+		return nil, fmt.Errorf("initialize email service: %w", err)
+	}
 	if cfg.SMTPConfig.SendRateLimit > 0 {
 		emailSvc.SetSendRateLimit(cfg.SMTPConfig.SendRateLimit)
 	}

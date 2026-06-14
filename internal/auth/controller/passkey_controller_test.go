@@ -206,7 +206,7 @@ func TestPasskey_RegisterComplete_NoAuth(t *testing.T) {
 	}
 	engine.POST("/api/auth/passkey/register/complete", ctrl.RegisterComplete)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/passkey/register/complete", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/passkey/register/complete?request_id=test-req-id", nil)
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -685,7 +685,7 @@ func TestPasskeyRegisterRoutes(t *testing.T) {
 		want   int
 	}{
 		{"register/begin JWT missing", http.MethodPost, "/api/auth/passkey/register/begin", "", http.StatusUnauthorized},
-		{"register/complete JWT missing", http.MethodPost, "/api/auth/passkey/register/complete", "", http.StatusUnauthorized},
+		{"register/complete JWT missing", http.MethodPost, "/api/auth/passkey/register/complete?request_id=test", "", http.StatusUnauthorized},
 		{"passkeys list JWT missing", http.MethodGet, "/api/auth/passkeys", "", http.StatusUnauthorized},
 		{"passkeys delete JWT missing", http.MethodDelete, "/api/auth/passkeys/00000000-0000-0000-0000-00000000abcd", "", http.StatusUnauthorized},
 		{"mfa/begin nil passkeySvc", http.MethodPost, "/api/auth/passkey/mfa/begin", `{"mfa_token":"tok"}`, http.StatusServiceUnavailable},

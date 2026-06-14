@@ -19,7 +19,8 @@ type AuthorizationCode struct {
 	CodeChallengeMethod string    `json:"code_challenge_method,omitempty"`
 	Nonce               string    `json:"nonce,omitempty"`
 	ExpiresAt           time.Time `json:"expires_at"`
-	AuthTime            time.Time `json:"auth_time"` // When the user authenticated (consent time)
+	AuthTime            time.Time `json:"auth_time"`                       // When the user authenticated (consent time)
+	AuthMethods         []string  `json:"auth_methods,omitempty"`          // AMR values (e.g. ["pwd"], ["pwd","otp"], ["swk"])
 }
 
 // NewAuthorizationCode creates a new AuthorizationCode with the required fields.

@@ -81,6 +81,8 @@ func (c *OAuth2Controller) Token(ctx *gin.Context) {
 func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *TokenRequest) {
 	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
 	if err != nil {
+		// Mitigate timing side-channel for client_id enumeration.
+		c.clientAuth.DummyAuthenticate()
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}
@@ -140,7 +142,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 	for _, s := range authCode.Scopes {
 		if s == "openid" {
 			var idErr error
-			idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, authCode.AccountID, authCode.ClientID, authCode.Scopes, authCode.Nonce, authCode.AuthTime, accessToken)
+			idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, authCode.AccountID, authCode.ClientID, authCode.Scopes, authCode.Nonce, authCode.AuthTime, accessToken, authCode.AuthMethods)
 			if idErr != nil {
 				c.logger.Error("Failed to generate ID token", zap.Error(idErr))
 				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "error_description": "failed to generate id_token"})
@@ -273,7 +275,9 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 
 	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
 	if err != nil {
-		c.logger.Warn("Client lookup failed for client_credentials", zap.Error(err), zap.String("client_id", req.ClientID))
+		// Mitigate timing side-channel: perform a dummy bcrypt comparison so the
+		// response time is indistinguishable from "client found, wrong secret."
+		c.clientAuth.DummyAuthenticate()
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}

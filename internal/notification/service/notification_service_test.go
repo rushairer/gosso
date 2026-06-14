@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wneessen/go-mail"
+	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/config"
 )
@@ -26,7 +27,8 @@ func TestNewEmailService(t *testing.T) {
 		Password: "pass",
 		From:     "noreply@example.com",
 	}
-	svc := NewEmailService(cfg, nil)
+	svc, err := NewEmailService(cfg, nil)
+	require.NoError(t, err)
 
 	assert.Equal(t, "noreply@example.com", svc.from)
 	assert.NotNil(t, svc.client)
@@ -34,10 +36,15 @@ func TestNewEmailService(t *testing.T) {
 }
 
 func TestNewEmailService_NilLogger(t *testing.T) {
-	cfg := config.SMTPConfig{}
-	svc := NewEmailService(cfg, nil)
+	cfg := config.SMTPConfig{Host: "localhost", Port: 587}
+	svc, err := NewEmailService(cfg, nil)
+	require.NoError(t, err)
 	assert.NotNil(t, svc.logger)
 }
+
+// ──────────────────────────────────────────────
+// Template rendering
+// ──────────────────────────────────────────────
 
 // ──────────────────────────────────────────────
 // Template rendering
@@ -150,7 +157,8 @@ func TestTemplatesInitialized(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestSetVerifyCodeTTL(t *testing.T) {
-	svc := NewEmailService(config.SMTPConfig{}, nil)
+	svc, err := NewEmailService(config.SMTPConfig{Host: "localhost", Port: 587}, nil)
+	require.NoError(t, err)
 
 	assert.Equal(t, 10*time.Minute, svc.verifyCodeTTL)
 
@@ -165,7 +173,8 @@ func TestSetVerifyCodeTTL(t *testing.T) {
 }
 
 func TestSetPasswordResetTTL(t *testing.T) {
-	svc := NewEmailService(config.SMTPConfig{}, nil)
+	svc, err := NewEmailService(config.SMTPConfig{Host: "localhost", Port: 587}, nil)
+	require.NoError(t, err)
 
 	assert.Equal(t, 30*time.Minute, svc.passwordResetTTL)
 
@@ -230,15 +239,31 @@ func TestFormatDuration(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestSendVerificationCode_NilClient(t *testing.T) {
-	svc := NewEmailService(config.SMTPConfig{}, nil)
-	// With empty config, client may still be created but from address is empty.
-	// Either "not initialized" or "set from address" error is expected.
+	svc := &EmailService{
+		client:        nil,
+		from:          "test@example.com",
+		logger:        zap.NewNop(),
+		verifyCodeTTL: 10 * time.Minute,
+		sendLimiter:   time.NewTicker(100 * time.Millisecond),
+	}
+	defer svc.Close()
+
 	err := svc.SendVerificationCode(context.Background(), "test@example.com", "123456")
 	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not initialized")
 }
 
 func TestSendPasswordResetLink_NilClient(t *testing.T) {
-	svc := NewEmailService(config.SMTPConfig{}, nil)
+	svc := &EmailService{
+		client:           nil,
+		from:             "test@example.com",
+		logger:           zap.NewNop(),
+		passwordResetTTL: 30 * time.Minute,
+		sendLimiter:      time.NewTicker(100 * time.Millisecond),
+	}
+	defer svc.Close()
+
 	err := svc.SendPasswordResetLink(context.Background(), "test@example.com", "https://example.com/reset")
 	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not initialized")
 }

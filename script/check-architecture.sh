@@ -192,13 +192,22 @@ check_L2() {
     echo "=== L2: No Sensitive Data in Logs ==="
 
     local found=0
-    # Check for common sensitive field names in zap.String/zap.Any etc.
+    # Always-flagged field names: these must NEVER appear in log calls.
     while IFS=: read -r file lineno content; do
-        # Skip test files
         [[ "$file" == *_test.go ]] && continue
         warning "L2" "$file" "$lineno" "Possible sensitive data in log: $(echo "$content" | sed 's/^[[:space:]]*//' | head -c 80)"
         found=1
     done < <(grep -rn --include='*.go' -iE 'zap\.(String|Any|Reflect)\([^)]*"(password|secret|token|totp|csrf|authorization)"' internal/ middleware/ 2>/dev/null | grep -v '_test\.go' || true)
+
+    # Conditionally-flagged fields: allowed only when value is masked (e.g. maskSessionID).
+    # Raw values are violations; masked values are accepted.
+    while IFS=: read -r file lineno content; do
+        [[ "$file" == *_test.go ]] && continue
+        # Skip lines where the value is masked (e.g. maskSessionID(...), maskAuthCode(...))
+        echo "$content" | grep -qE 'mask[A-Z][a-zA-Z]*\(' && continue
+        warning "L2" "$file" "$lineno" "Sensitive field logged with raw value (use mask helper): $(echo "$content" | sed 's/^[[:space:]]*//' | head -c 80)"
+        found=1
+    done < <(grep -rn --include='*.go' -iE 'zap\.(String|Any|Reflect)\([^)]*"(session_id|auth_code|code_verifier|refresh_token)"' internal/ middleware/ 2>/dev/null | grep -v '_test\.go' || true)
 
     if [ "$found" -eq 0 ]; then
         pass "L2" "No obvious sensitive data in log calls"

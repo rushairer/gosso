@@ -61,12 +61,15 @@ type ConsentManager interface {
 
 // IDTokenManager defines OIDC ID token generation operations.
 type IDTokenManager interface {
-	GenerateIDToken(ctx context.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time, accessToken string) (string, error)
+	GenerateIDToken(ctx context.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time, accessToken string, authMethods []string) (string, error)
 }
 
 // ClientAuthManager defines OAuth2 client credential verification operations.
 type ClientAuthManager interface {
 	AuthenticateClient(client *oauth2Domain.OAuth2Client, clientSecret string) error
+	// DummyAuthenticate performs a dummy bcrypt comparison to mitigate timing side-channels
+	// when client lookup fails, making the response time indistinguishable from a failed auth.
+	DummyAuthenticate()
 }
 
 // AccountValidator checks whether an account exists and is active.
