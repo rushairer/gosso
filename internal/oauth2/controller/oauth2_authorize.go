@@ -200,8 +200,9 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 
 	// Validate CSRF token (double-submit cookie pattern).
 	// Skip for Bearer-authenticated requests — JWT tokens are not affected by CSRF.
+	// Use IsPlausibleJWT to prevent bypass with garbage "Bearer " prefix (defense-in-depth).
 	authHeader := ctx.GetHeader("Authorization")
-	isBearerAuth := strings.HasPrefix(authHeader, "Bearer ") && len(authHeader) > 7
+	isBearerAuth := strings.HasPrefix(authHeader, "Bearer ") && middleware.IsPlausibleJWT(strings.TrimPrefix(authHeader, "Bearer "))
 	if !isBearerAuth {
 		cookieToken := csrfTokenFromCookie(ctx)
 		formToken := ctx.PostForm("csrf_token")

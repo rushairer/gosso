@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- OAuth2 `SubmitConsent` Bearer auth check now validates JWT format via `IsPlausibleJWT` (defense-in-depth) — previously only checked `len > 7`, which could be bypassed with a garbage `Authorization: Bearer x` header (`internal/oauth2/controller/oauth2_authorize.go`, `middleware/csrf.go`).
+
+### Changed
+- Removed deprecated `SetDrainGracePeriod` method and related dead code (`drainGracePeriod` field, `auditDrainGracePeriod` constant) from `Auditor` — `Wait()` uses deterministic drain via `batchflow.Close()` (`internal/audit/service/audit.go`).
+- Exported `IsPlausibleJWT` from `middleware` package for reuse by OAuth2 consent handler CSRF bypass check (`middleware/csrf.go`).
+
+### Security
 - TOTP encryption now enforced in `EnrollTOTP` — refuses to store secrets in plaintext when encryption key is not configured (`internal/auth/service/mfa_service.go`).
 - `ChangePassword` now returns session revocation errors to caller — previously swallowed errors left stolen sessions active after password change (`internal/account/service/account_service.go`).
 - OAuth2 revoke endpoint now logs access token revocation failures instead of silently discarding (`internal/oauth2/controller/oauth2_revoke.go`).

@@ -58,7 +58,7 @@ func CSRFMiddleware(secure bool, logger *zap.Logger, maxAge time.Duration, skipP
 		// Validate that the token has plausible JWT format (3 dot-separated segments)
 		// to prevent attackers from bypassing CSRF with a garbage "Bearer " prefix.
 		if auth := ctx.GetHeader("Authorization"); strings.HasPrefix(auth, "Bearer ") {
-			if isPlausibleJWT(strings.TrimPrefix(auth, "Bearer ")) {
+			if IsPlausibleJWT(strings.TrimPrefix(auth, "Bearer ")) {
 				ctx.Next()
 				return
 			}
@@ -157,9 +157,10 @@ func generateCSRFToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// isPlausibleJWT checks if a token has the basic JWT format (three non-empty dot-separated segments)
+// IsPlausibleJWT checks if a token has the basic JWT format (three non-empty dot-separated segments)
 // and validates that the header segment is valid base64url encoding.
-func isPlausibleJWT(token string) bool {
+// Export for use by other packages that need to validate Bearer token format (e.g. CSRF bypass checks).
+func IsPlausibleJWT(token string) bool {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 || len(parts[0]) == 0 || len(parts[1]) == 0 || len(parts[2]) == 0 {
 		return false

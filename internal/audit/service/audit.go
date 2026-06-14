@@ -25,20 +25,15 @@ const (
 	auditMaxBackoff    = 20 * time.Millisecond
 	auditConcurrency   = 100
 	auditErrorChanSize = 1024
-
-	// auditDrainGracePeriod is how long Wait() sleeps after canceling the context.
-	// batchflow uses a hardcoded 2s drain grace period; we add 500ms margin.
-	auditDrainGracePeriod = 2500 * time.Millisecond
 )
 
 // Auditor batches and asynchronously writes audit-log records to the database.
 type Auditor struct {
-	db               *sql.DB
-	batchflow        *batchflow.BatchFlow
-	recordSchema     *batchflow.SQLSchema
-	cancel           context.CancelFunc
-	logger           *zap.Logger
-	drainGracePeriod time.Duration
+	db           *sql.DB
+	batchflow    *batchflow.BatchFlow
+	recordSchema *batchflow.SQLSchema
+	cancel       context.CancelFunc
+	logger       *zap.Logger
 }
 
 // NewAuditor creates an Auditor backed by the given database. Call [Auditor.Wait]
@@ -48,7 +43,7 @@ type Auditor struct {
 func NewAuditor(ctx context.Context, db *sql.DB, pipelineCfg *config.TaskPipelineConfig, logger *zap.Logger) *Auditor {
 	logger = utility.EnsureLogger(logger)
 	auditorCtx, cancel := context.WithCancel(ctx)
-	auditor := Auditor{db: db, cancel: cancel, logger: logger, drainGracePeriod: auditDrainGracePeriod}
+	auditor := Auditor{db: db, cancel: cancel, logger: logger}
 
 	bufferSize := uint32(auditBufferSize)
 	flushSize := uint32(auditFlushSize)
@@ -131,14 +126,6 @@ func (a *Auditor) Wait() {
 	if a.cancel != nil {
 		a.cancel()
 	}
-}
-
-// SetDrainGracePeriod overrides the default drain grace period. Must be called
-// before Wait(). Useful for testing with shorter timeouts.
-//
-// Deprecated: Wait() now uses deterministic drain via batchflow.Close().
-func (a *Auditor) SetDrainGracePeriod(d time.Duration) {
-	a.drainGracePeriod = d
 }
 
 // buildBatchRequest constructs a batchflow.Request from an audit record.

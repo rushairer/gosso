@@ -29,7 +29,6 @@ func TestNewAuditor_NilLogger(t *testing.T) {
 	require.NotNil(t, auditor)
 	assert.NotNil(t, auditor.logger)
 	assert.NotNil(t, auditor.cancel)
-	assert.Equal(t, auditDrainGracePeriod, auditor.drainGracePeriod)
 	auditor.Close()
 }
 
@@ -51,11 +50,10 @@ func TestAuditor_Close(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────
-// Wait and SetDrainGracePeriod
+// Wait
 // ──────────────────────────────────────────────
-func TestAuditor_Wait_ShortDrain(t *testing.T) {
+func TestAuditor_Wait(t *testing.T) {
 	auditor := NewAuditor(context.Background(), nil, nil, nil)
-	auditor.SetDrainGracePeriod(1 * time.Millisecond)
 
 	start := time.Now()
 	auditor.Wait()
@@ -63,14 +61,6 @@ func TestAuditor_Wait_ShortDrain(t *testing.T) {
 
 	// Should return quickly (well under 1 second)
 	assert.Less(t, elapsed, 1*time.Second)
-}
-
-func TestAuditor_SetDrainGracePeriod(t *testing.T) {
-	auditor := NewAuditor(context.Background(), nil, nil, nil)
-	defer auditor.Close()
-
-	auditor.SetDrainGracePeriod(100 * time.Millisecond)
-	assert.Equal(t, 100*time.Millisecond, auditor.drainGracePeriod)
 }
 
 // ──────────────────────────────────────────────

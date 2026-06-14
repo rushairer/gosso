@@ -1813,7 +1813,7 @@ func TestDeviceUserSubmit_Approved(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/device",
 		strings.NewReader("device_code=dc-123&approved=true&csrf_token=test-csrf"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Authorization", "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature")
 	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: "test-csrf"})
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -1844,7 +1844,7 @@ func TestDeviceUserSubmit_Denied(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/device",
 		strings.NewReader("device_code=dc-123&approved=false&csrf_token=test-csrf"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Authorization", "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature")
 	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: "test-csrf"})
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -1916,7 +1916,7 @@ func TestSubmitConsent_NotApproved(t *testing.T) {
 	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid&state=abc&consent_id=test-consent"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Authorization", "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2577,7 +2577,7 @@ func TestSubmitConsent_Success(t *testing.T) {
 	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid+profile&state=abc&approved=true&consent_id=" + consentID
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Authorization", "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2623,7 +2623,7 @@ func TestSubmitConsent_ClientNotFound(t *testing.T) {
 	body := "client_id=bad&redirect_uri=https://app.example.com/callback&scope=openid&state=abc&approved=true&consent_id=" + consentID
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Authorization", "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2668,7 +2668,7 @@ func TestSubmitConsent_InvalidRedirectURI(t *testing.T) {
 	body := "client_id=cid-test&redirect_uri=https://evil.com/callback&scope=openid&state=abc&approved=true&consent_id=" + consentID
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Authorization", "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2714,7 +2714,7 @@ func TestSubmitConsent_InvalidScope(t *testing.T) {
 	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=invalid_scope&state=abc&approved=true&consent_id=" + consentID
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Authorization", "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2761,7 +2761,7 @@ func TestSubmitConsent_SaveConsentError(t *testing.T) {
 	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid&state=abc&approved=true&consent_id=" + consentID
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Authorization", "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2810,7 +2810,7 @@ func TestSubmitConsent_GenerateCodeError(t *testing.T) {
 	body := "client_id=cid-test&redirect_uri=https://app.example.com/callback&scope=openid&state=abc&approved=true&consent_id=" + consentID
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Authorization", "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
