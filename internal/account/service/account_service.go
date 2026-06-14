@@ -73,6 +73,9 @@ type AccountService interface {
 
 	// SetOAuth2ClientDeleter sets the OAuth2 client deleter dependency (initialization-time only).
 	SetOAuth2ClientDeleter(deleter OAuth2ClientDeleter)
+
+	// SetConsentCacheInvalidator sets the consent cache invalidator dependency (initialization-time only).
+	SetConsentCacheInvalidator(invalidator ConsentCacheInvalidator)
 }
 
 // RegisterAccountRequest is the request payload for account registration.
@@ -97,6 +100,11 @@ type OAuth2ClientDeleter interface {
 	SoftDeleteOAuth2ClientsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
 }
 
+// ConsentCacheInvalidator clears consent cache entries for an account.
+type ConsentCacheInvalidator interface {
+	DeleteConsentsByAccount(ctx context.Context, accountID string) error
+}
+
 type accountServiceImpl struct {
 	db                    *sql.DB
 	accountRepo           repository.AccountRepository
@@ -106,6 +114,7 @@ type accountServiceImpl struct {
 	auditor               *auditService.Auditor
 	sessionRevoker        SessionRevoker
 	oauth2ClientDeleter   OAuth2ClientDeleter
+	consentCacheInvalidator ConsentCacheInvalidator
 	logger                *zap.Logger
 }
 
@@ -152,6 +161,15 @@ func (s *accountServiceImpl) SetOAuth2ClientDeleter(deleter OAuth2ClientDeleter)
 		panic("SetOAuth2ClientDeleter: deleter must not be nil")
 	}
 	s.oauth2ClientDeleter = deleter
+}
+
+// SetConsentCacheInvalidator sets the consent cache invalidator dependency.
+// Must be called during initialization; panics on nil to fail fast.
+func (s *accountServiceImpl) SetConsentCacheInvalidator(invalidator ConsentCacheInvalidator) {
+	if invalidator == nil {
+		panic("SetConsentCacheInvalidator: invalidator must not be nil")
+	}
+	s.consentCacheInvalidator = invalidator
 }
 
 // requireActiveAccount looks up an account by ID and returns it only if it exists and is active.
@@ -369,6 +387,16 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	var revokeErr error
 	if revokeErr = s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
 		s.logger.Error("Failed to revoke sessions after account deletion", zap.String("account_id", accountID), zap.Error(revokeErr))
+	}
+
+	// 6. Clear consent cache entries for this account.
+	// This prevents stale cached consents from surviving after account deletion.
+	// Failure is non-critical since the consent TTL (90 days) will expire naturally.
+	if s.consentCacheInvalidator != nil {
+		if err := s.consentCacheInvalidator.DeleteConsentsByAccount(ctx, accountID); err != nil {
+			s.logger.Warn("Failed to clear consent cache after account deletion",
+				zap.String("account_id", accountID), zap.Error(err))
+		}
 	}
 
 	// 6. Audit log (sync — critical security event)

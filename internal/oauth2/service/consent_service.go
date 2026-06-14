@@ -131,3 +131,36 @@ func (s *ConsentService) DeleteConsent(ctx context.Context, accountID, clientID 
 func (s *ConsentService) buildConsentKey(accountID, clientID string) string {
 	return fmt.Sprintf("%s%s|%s", ConsentKeyPrefix, accountID, clientID)
 }
+
+// DeleteConsentsByAccount removes all consent cache entries for the given account.
+// Uses SCAN to iterate matching keys and deletes them in batches.
+// This is called when an account is deleted to prevent stale consent cache entries.
+func (s *ConsentService) DeleteConsentsByAccount(ctx context.Context, accountID string) error {
+	pattern := fmt.Sprintf("%s%s|*", ConsentKeyPrefix, accountID)
+	var cursor uint64
+	var totalDeleted int
+
+	for {
+		keys, nextCursor, err := s.redis.GetClient().Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			return fmt.Errorf("scan consent keys: %w", err)
+		}
+		if len(keys) > 0 {
+			if err := s.redis.Del(ctx, keys...); err != nil {
+				s.logger.Warn("Failed to delete consent cache keys", zap.Error(err), zap.Int("count", len(keys)))
+			}
+			totalDeleted += len(keys)
+		}
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+
+	if totalDeleted > 0 {
+		s.logger.Info("Cleared consent cache for account",
+			zap.String("account_id", accountID),
+			zap.Int("keys_deleted", totalDeleted))
+	}
+	return nil
+}

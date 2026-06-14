@@ -1819,7 +1819,7 @@ func TestDeviceUserSubmit_Approved(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "granted")
+	assert.Contains(t, w.Body.String(), "Authorization Granted")
 }
 
 func TestDeviceUserSubmit_Denied(t *testing.T) {
@@ -1850,7 +1850,7 @@ func TestDeviceUserSubmit_Denied(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "denied")
+	assert.Contains(t, w.Body.String(), "Authorization Denied")
 }
 
 // ──────────────────────────────────────────────

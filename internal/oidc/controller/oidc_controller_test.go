@@ -74,8 +74,9 @@ func (m *mockAccountService) GetAccountRoles(_ context.Context, _ string) ([]*ac
 	return nil, nil
 }
 
-func (m *mockAccountService) SetSessionRevoker(_ accountService.SessionRevoker)           {}
-func (m *mockAccountService) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter) {}
+func (m *mockAccountService) SetSessionRevoker(_ accountService.SessionRevoker)                {}
+func (m *mockAccountService) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter)      {}
+func (m *mockAccountService) SetConsentCacheInvalidator(_ accountService.ConsentCacheInvalidator) {}
 
 // ──────────────────────────────────────────────
 // Mock CredentialRepository

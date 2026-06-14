@@ -104,6 +104,9 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	// Wire OAuth2 client deleter into account service (for account deletion -> OAuth2 client cascade)
 	accountMod.Service.SetOAuth2ClientDeleter(&oauth2ClientDeleterAdapter{clientRepo: oauth2Mod.ClientRepo})
 
+	// Wire consent cache invalidator into account service (for account deletion -> consent cache cleanup)
+	accountMod.Service.SetConsentCacheInvalidator(oauth2Mod.ConsentService)
+
 	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, !cfg.WebServerConfig.Debug, logger)
 	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &oauth2Service.ClientAuthenticator{}, &accountValidatorAdapter{accountSvc: accountMod.Service, logger: logger}, authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)
 	if err != nil {

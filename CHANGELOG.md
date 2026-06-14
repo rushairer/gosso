@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Password reset Lua script (`checkAndIncrementAttemptsScript`) now deletes the key on attempt exhaustion — previously left exhausted token data in Redis until TTL expiry (`internal/auth/service/password_reset_service.go`).
+
+### Security
+- Password reset `RequestReset` now performs dummy crypto work on email-not-found and account-inactive paths — mitigates timing side-channel that could reveal whether an email is registered (`internal/auth/service/password_reset_service.go`).
+- Account deletion now clears OAuth2 consent cache entries (previously stale entries persisted until 90-day TTL expiry) — added `ConsentCacheInvalidator` interface wired into `SoftDeleteAccount` (`internal/account/service/account_service.go`, `internal/oauth2/service/consent_service.go`, `cmd/gouno/web_modules.go`).
+
+### Changed
+- Device code submission result page now uses a CSP-nonce-enabled HTML template (`template/result.html`) instead of inline HTML — consistent with consent and device authorization pages (`internal/oauth2/controller/oauth2_device.go`, `internal/oauth2/controller/template/result.html`).
+- JWKS service now supports key rotation via `Reload()` method with `sync.RWMutex` — previously required service restart for RSA key rotation (`internal/oidc/service/jwks_service.go`).
+- Password reset session revocation fallback logging now includes `synchronous_fallback` and `semaphore_cap` structured fields for monitoring (`internal/auth/service/password_reset_service.go`).
+
+### Fixed
 - `ConfigManager.Config()` now returns a true deep copy (JSON round-trip) to prevent shared slice/map mutation when callers modify the returned config (`config/config_manager.go`).
 
 ### Security

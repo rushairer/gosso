@@ -68,3 +68,22 @@ func TestGetJWKS_ExponentIsStandard(t *testing.T) {
 	// Standard RSA exponent 65537 = 0x010001
 	assert.Equal(t, []byte{1, 0, 1}, eBytes)
 }
+
+func TestReload_RebuildsJWKS(t *testing.T) {
+	svc := newTestJWKSService(t)
+	before := svc.GetJWKS()
+
+	// Capture the "n" value before reload
+	keysBefore := before["keys"].([]map[string]string)
+	nBefore := keysBefore[0]["n"]
+
+	svc.Reload()
+
+	after := svc.GetJWKS()
+	keysAfter := after["keys"].([]map[string]string)
+
+	// Key material is unchanged (same RSA key), but the map is rebuilt
+	assert.Equal(t, nBefore, keysAfter[0]["n"])
+	assert.Equal(t, "test-kid", keysAfter[0]["kid"])
+	assert.Equal(t, "RS256", keysAfter[0]["alg"])
+}

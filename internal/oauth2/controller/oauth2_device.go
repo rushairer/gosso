@@ -33,6 +33,19 @@ func (c *OAuth2Controller) renderDeviceTemplate(ctx *gin.Context, data gin.H) bo
 	return true
 }
 
+// renderResultTemplate executes the result template with the given data and writes the result to ctx.
+// Returns true if the template was rendered successfully, false if an error occurred.
+func (c *OAuth2Controller) renderResultTemplate(ctx *gin.Context, data gin.H) bool {
+	var buf bytes.Buffer
+	if err := c.resultTmpl.Execute(&buf, data); err != nil {
+		c.logger.Error("Failed to render result template", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return false
+	}
+	ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
+	return true
+}
+
 // DeviceCodeRequestRequest is the device code initiation request body.
 type DeviceCodeRequestRequest struct {
 	ClientID     string `form:"client_id" binding:"required"`
@@ -197,9 +210,18 @@ func (c *OAuth2Controller) DeviceUserSubmit(ctx *gin.Context) {
 		}
 	}
 
-	ctx.Header("Content-Type", "text/html; charset=utf-8")
-	ctx.String(http.StatusOK, "<!DOCTYPE html><html><body><p>Authorization %s. You may close this page.</p></body></html>",
-		map[bool]string{true: "granted", false: "denied"}[req.Approved == "true"])
+	isApproved := req.Approved == "true"
+	title := "Authorization Denied"
+	message := "The device has been denied access. You may close this page."
+	if isApproved {
+		title = "Authorization Granted"
+		message = "The device has been authorized. You may close this page."
+	}
+	c.renderResultTemplate(ctx, gin.H{
+		"CSPNonce": middleware.GetCSPNonce(ctx),
+		"Title":    title,
+		"Message":  message,
+	})
 }
 
 func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenRequest) {

@@ -83,6 +83,9 @@ var consentTemplateFS embed.FS
 //go:embed template/device.html
 var deviceTemplateFS embed.FS
 
+//go:embed template/result.html
+var resultTemplateFS embed.FS
+
 // OAuth2Controller handles OAuth2 protocol endpoints.
 type OAuth2Controller struct {
 	clientSvc        oauth2Service.OAuth2ClientService
@@ -98,6 +101,7 @@ type OAuth2Controller struct {
 	issuer           string
 	consentTmpl      *template.Template
 	deviceTmpl       *template.Template
+	resultTmpl       *template.Template
 	logger           *zap.Logger
 }
 
@@ -124,6 +128,10 @@ func NewOAuth2Controller(
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse device template: %w", err)
 	}
+	resultTmpl, err := template.ParseFS(resultTemplateFS, "template/result.html")
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse result template: %w", err)
+	}
 	return &OAuth2Controller{
 		clientSvc:        clientSvc,
 		authCodeSvc:      authCodeSvc,
@@ -138,6 +146,7 @@ func NewOAuth2Controller(
 		issuer:           issuer,
 		consentTmpl:      consentTmpl,
 		deviceTmpl:       deviceTmpl,
+		resultTmpl:       resultTmpl,
 		logger:           logger,
 	}, nil
 }

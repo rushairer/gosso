@@ -91,8 +91,9 @@ func (m *testAccountService) ActivateAccount(_ context.Context, _ string) error 
 func (m *testAccountService) GetAccountRoles(_ context.Context, _ string) ([]*accountDomain.Role, error) {
 	return nil, fmt.Errorf("not implemented")
 }
-func (m *testAccountService) SetSessionRevoker(_ accountService.SessionRevoker)           {}
-func (m *testAccountService) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter) {}
+func (m *testAccountService) SetSessionRevoker(_ accountService.SessionRevoker)                {}
+func (m *testAccountService) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter)      {}
+func (m *testAccountService) SetConsentCacheInvalidator(_ accountService.ConsentCacheInvalidator) {}
 
 // ──────────────────────────────────────────────
 // mock RoleRepository for auth tests
