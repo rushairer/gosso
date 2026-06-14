@@ -20,6 +20,9 @@ import (
 // ARGV[2] = max requests limit
 // Uses Redis server TIME instead of client-provided timestamp for consistency across instances.
 var slidingWindowScript = redis.NewScript(`
+-- 1. Resolve parameters and obtain server-side time.
+--    Using Redis TIME avoids clock-drift false positives when multiple
+--    app instances sit behind a load balancer with slightly different clocks.
 local key = KEYS[1]
 local window_sec = tonumber(ARGV[1])
 local window_ms = window_sec * 1000
@@ -28,12 +31,18 @@ local timeArr = redis.call('TIME')
 local now_sec = tonumber(timeArr[1])
 local now_ms = now_sec * 1000 + math.floor(tonumber(timeArr[2]) / 1000)
 
+-- 2. Evict entries older than the sliding window.
+--    Only requests within [now - window, now] remain in the sorted set.
 redis.call('ZREMRANGEBYSCORE', key, 0, now_ms - window_ms)
+
+-- 3. Count current entries and decide allow/deny.
 local count = redis.call('ZCARD', key)
 
 local allowed = 0
 local remaining = 0
 if count < limit then
+    -- Member value is "timestamp:unique_microseconds" to avoid ZADD score collisions
+    -- when two requests arrive in the same millisecond.
     redis.call('ZADD', key, now_ms, now_ms .. ':' .. timeArr[2])
     allowed = 1
     remaining = limit - count - 1
@@ -47,6 +56,8 @@ else
     remaining = 0
 end
 
+-- 4. Compute reset_at and retry_after from the oldest entry in the window.
+--    The oldest entry's expiry defines when the first slot frees up.
 local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
 local reset_at = now_sec + window_sec
 local retry_after = window_sec
@@ -59,6 +70,7 @@ if #oldest > 0 then
     else
         retry_after = 0
     end
+    -- Clamp to [0, window_sec] to prevent anomalous values.
     if retry_after > window_sec then
         retry_after = window_sec
     end

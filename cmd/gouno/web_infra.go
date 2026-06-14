@@ -14,7 +14,7 @@ import (
 )
 
 // initDatabase initializes the database connection
-func initDatabase(cfg config.GoUnoConfig, logger *zap.Logger) (*sql.DB, error) {
+func initDatabase(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger) (*sql.DB, error) {
 	defaultDriver := cfg.DatabaseConfig.GetDefaultDriver()
 	if defaultDriver == nil {
 		return nil, fmt.Errorf("default database driver not found")
@@ -30,14 +30,38 @@ func initDatabase(cfg config.GoUnoConfig, logger *zap.Logger) (*sql.DB, error) {
 	db.SetConnMaxLifetime(time.Duration(cfg.DatabaseConfig.ConnMaxLifetimeSec) * time.Second)
 	db.SetConnMaxIdleTime(time.Duration(cfg.DatabaseConfig.ConnMaxIdleTimeSec) * time.Second)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	pingCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := db.PingContext(ctx); err != nil {
+	if err := db.PingContext(pingCtx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
 	logger.Info("database connected")
+
+	// Start background goroutine to periodically log connection pool stats.
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				stats := db.Stats()
+				logger.Info("db pool stats",
+					zap.Int("open", stats.OpenConnections),
+					zap.Int("in_use", stats.InUse),
+					zap.Int("idle", stats.Idle),
+					zap.Int64("wait_count", stats.WaitCount),
+					zap.Duration("wait_duration", stats.WaitDuration),
+					zap.Int64("max_idle_closed", stats.MaxIdleClosed),
+					zap.Int64("max_lifetime_closed", stats.MaxLifetimeClosed),
+				)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	return db, nil
 }
 

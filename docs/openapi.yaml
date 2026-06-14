@@ -6,7 +6,7 @@ info:
 
     Supports:
     - Username/password login with MFA (TOTP + backup codes)
-    - OAuth 2.0 Authorization Server (authorization code, refresh token, client credentials)
+    - OAuth 2.0 Authorization Server (authorization code, refresh token, client credentials, device code)
     - OpenID Connect Provider (ID token, discovery, JWKS, userinfo)
     - Social login (Google, GitHub, WeChat)
     - Admin account management
@@ -29,7 +29,7 @@ tags:
   - name: OAuth2 Clients
     description: OAuth2 client registration and management (JWT required)
   - name: OAuth2 Protocol
-    description: OAuth 2.0 protocol endpoints (authorize, token, revoke, introspect)
+    description: OAuth 2.0 protocol endpoints (authorize, token, revoke, introspect, device code)
   - name: Admin
     description: Admin account management (JWT + admin role required)
   - name: OIDC
@@ -972,6 +972,97 @@ paths:
               schema:
                 $ref: "#/components/schemas/OAuth2Error"
 
+  # ── Device Code Flow (RFC 8628) ───────────────────
+
+  /oauth2/device/code:
+    post:
+      tags: [OAuth2 Protocol]
+      summary: Device authorization request (RFC 8628)
+      description: |
+        Initiates the device authorization grant. The client requests a device code and user code
+        that the end user enters on a separate device to authorize the client.
+        For confidential clients, `client_secret` is required.
+      operationId: oauth2DeviceCodeRequest
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/DeviceCodeRequest"
+      responses:
+        "200":
+          description: Device code issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceCodeResponse"
+        "400":
+          description: Invalid request or unauthorized client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2Error"
+
+  /oauth2/device:
+    get:
+      tags: [OAuth2 Protocol]
+      summary: Device verification page
+      description: |
+        Renders an HTML page where the user enters their user code to authorize a device.
+        Requires authentication. Pass `user_code` as a query parameter to pre-fill the code.
+      operationId: oauth2DeviceUserPage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: user_code
+          in: query
+          required: false
+          schema:
+            type: string
+            description: The user code displayed on the device
+      responses:
+        "200":
+          description: HTML verification page
+          content:
+            text/html:
+              schema:
+                type: string
+    post:
+      tags: [OAuth2 Protocol]
+      summary: Submit device authorization
+      description: |
+        Submits the user's approval or denial for a device authorization request.
+        Requires authentication and a valid CSRF token (double-submit cookie pattern).
+      operationId: oauth2DeviceUserSubmit
+      security:
+        - BearerAuth: []
+        - CSRFToken: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/DeviceUserSubmitRequest"
+      responses:
+        "200":
+          description: HTML result page (authorization granted or denied)
+          content:
+            text/html:
+              schema:
+                type: string
+        "400":
+          description: Invalid request or expired device code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2Error"
+        "403":
+          description: CSRF token mismatch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2Error"
+
   # ──────────────────────────────────────────────
   # OIDC
   # ──────────────────────────────────────────────
@@ -1720,6 +1811,9 @@ components:
             - invalid_scope
             - consent_denied
             - server_error
+            - authorization_pending
+            - slow_down
+            - expired_token
         error_description:
           type: string
 
@@ -2123,7 +2217,7 @@ components:
       properties:
         grant_type:
           type: string
-          enum: [authorization_code, refresh_token, client_credentials]
+          enum: [authorization_code, refresh_token, client_credentials, "urn:ietf:params:oauth:grant-type:device_code"]
         code:
           type: string
           description: Authorization code (for authorization_code grant)
@@ -2145,6 +2239,73 @@ components:
         scope:
           type: string
           description: Requested scopes (for client_credentials grant)
+        device_code:
+          type: string
+          description: Device code (for device_code grant, RFC 8628)
+
+    DeviceCodeRequest:
+      type: object
+      description: Device authorization request (RFC 8628 §3.1)
+      required: [client_id]
+      properties:
+        client_id:
+          type: string
+          description: The client identifier
+          maxLength: 128
+        client_secret:
+          type: string
+          description: Client secret (required for confidential clients)
+          maxLength: 256
+        scope:
+          type: string
+          description: Space-separated list of requested scopes
+          maxLength: 2048
+
+    DeviceCodeResponse:
+      type: object
+      description: Device authorization response (RFC 8628 §3.2)
+      properties:
+        device_code:
+          type: string
+          description: The device verification code
+        user_code:
+          type: string
+          description: The short code displayed to the user on the device
+        verification_uri:
+          type: string
+          format: uri
+          description: The URL where the user authorizes the device
+        verification_uri_complete:
+          type: string
+          format: uri
+          description: The verification URI with the user_code pre-filled as a query parameter
+        expires_in:
+          type: integer
+          description: Lifetime of the device code in seconds
+        interval:
+          type: integer
+          description: Minimum polling interval in seconds
+
+    DeviceUserSubmitRequest:
+      type: object
+      description: Device authorization form submission
+      required: [approved]
+      properties:
+        device_code:
+          type: string
+          description: The device code (optional if user_code is provided)
+          maxLength: 128
+        user_code:
+          type: string
+          description: The user code (used to look up device_code if not provided)
+          maxLength: 32
+        approved:
+          type: string
+          enum: ["true", "false"]
+          description: Whether the user approves or denies the device authorization
+        csrf_token:
+          type: string
+          description: CSRF token (double-submit cookie pattern)
 
     TokenResponse:
       type: object

@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Database connection pool stats logging — background goroutine logs `db.Stats()` (open, in_use, idle, wait_count, wait_duration, max_idle_closed, max_lifetime_closed) every 60 seconds, respects graceful shutdown via context cancellation (`cmd/gouno/web_infra.go`).
+
 ### Changed
+- CI lint job now uploads gosec SARIF results to GitHub Security tab via `github/codeql-action/upload-sarif` (`.github/workflows/ci.yml`).
+- Rate limiter Lua script now has step-by-step inline comments explaining the sliding window algorithm, sorted-set member format, and EXPIRE-on-allow strategy (`middleware/redis_ratelimit.go`).
+- OpenAPI spec now documents Device Code Flow endpoints (`POST /oauth2/device/code`, `GET/POST /oauth2/device`) and related schemas per RFC 8628 (`docs/openapi.yaml`).
 - `middleware.go` now uses `gouno.NewRequestTimeoutResponse()` and `gouno.NewInternalServerErrorResponse()` instead of shared mutable preset variables — eliminates shared state risk (`middleware/middleware.go`).
 - `config.Validate()` now accumulates all validation errors across sections (web server, database, redis, auth, SMTP, CORS) and returns them joined via `errors.Join` — users can fix all config issues in one pass instead of one at a time (`config/config.go`).
 - Password reset cooldown check is now fail-closed — previously allowed unlimited reset emails when Redis was unavailable (`internal/auth/service/password_reset_service.go`).
