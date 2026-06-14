@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 func TestNewKeyService_Generate(t *testing.T) {
@@ -104,7 +106,7 @@ func TestBigEndianBytes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := BigEndianBytes(tt.input)
+			got := utility.BigEndianBytes(tt.input)
 			assert.Equal(t, tt.expected, got)
 		})
 	}

@@ -180,9 +180,11 @@ func (s *EmailService) send(ctx context.Context, to, subject, htmlBody string) e
 	if err != nil && isTransientError(err) {
 		s.logger.Warn("Retrying email send after transient error",
 			zap.String("to", maskEmail(to)), zap.Error(err))
+		timer := time.NewTimer(time.Second)
 		select {
-		case <-time.After(time.Second):
+		case <-timer.C:
 		case <-ctx.Done():
+			timer.Stop()
 			return ctx.Err()
 		}
 		err = s.client.DialAndSendWithContext(ctx, msg)

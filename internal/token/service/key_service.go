@@ -207,15 +207,3 @@ func computeKeyID(pubKey *rsa.PublicKey) (string, error) {
 	hash := sha256.Sum256(DER)
 	return base64.RawURLEncoding.EncodeToString(hash[:16]), nil
 }
-
-// BigEndianBytes converts an int to its big-endian byte representation.
-func BigEndianBytes(e int) []byte {
-	if e == 0 {
-		return []byte{0}
-	}
-	var bytes []byte
-	for v := e; v > 0; v >>= 8 {
-		bytes = append([]byte{byte(v & 0xff)}, bytes...)
-	}
-	return bytes
-}

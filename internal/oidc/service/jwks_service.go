@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 
 	tokenService "github.com/rushairer/gosso/internal/token/service"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // JWKSService OIDC JWKS service
@@ -16,7 +17,7 @@ type JWKSService struct {
 func NewJWKSService(keySvc *tokenService.KeyService) *JWKSService {
 	pubKey := keySvc.PublicKey()
 	n := base64.RawURLEncoding.EncodeToString(pubKey.N.Bytes())
-	e := base64.RawURLEncoding.EncodeToString(tokenService.BigEndianBytes(pubKey.E))
+	e := base64.RawURLEncoding.EncodeToString(utility.BigEndianBytes(pubKey.E))
 
 	return &JWKSService{
 		jwks: map[string]any{
