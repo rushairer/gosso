@@ -485,11 +485,11 @@ func TestRegisterAccount_DuplicateEmail(t *testing.T) {
 	rows := sqlmock.NewRows([]string{
 		"id", "account_id", "credential_type", "identifier",
 		"credential_value", "verified", "primary_credential", "metadata",
-		"created_at", "verified_at", "last_used_at", "deleted_at",
+		"created_at", "updated_at", "verified_at", "last_used_at", "deleted_at",
 	}).AddRow(
 		"existing-id", "existing-account-id", domain.CredentialTypeEmail, "test@example.com",
 		"", true, true, []byte("{}"),
-		time.Now(), nil, nil, nil,
+		time.Now(), time.Now(), nil, nil, nil,
 	)
 
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
@@ -560,10 +560,11 @@ func TestChangePassword(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"id", "account_id", "credential_type", "identifier", "credential_value",
-		"verified", "primary_credential", "metadata", "created_at", "verified_at", "last_used_at", "deleted_at",
+		"verified", "primary_credential", "metadata", "created_at", "updated_at",
+		"verified_at", "last_used_at", "deleted_at",
 	}).AddRow(
 		"cred-id", accountID, domain.CredentialTypePassword, "test@example.com", oldHash,
-		true, true, []byte("{}"), time.Now(), nil, nil, nil,
+		true, true, []byte("{}"), time.Now(), time.Now(), nil, nil, nil,
 	)
 
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
@@ -804,11 +805,11 @@ func TestVerifyContactCredential_Email(t *testing.T) {
 	emailRows := sqlmock.NewRows([]string{
 		"id", "account_id", "credential_type", "identifier",
 		"credential_value", "verified", "primary_credential", "metadata",
-		"created_at", "verified_at", "last_used_at", "deleted_at",
+		"created_at", "updated_at", "verified_at", "last_used_at", "deleted_at",
 	}).AddRow(
 		"cred-email-001", accountID, domain.CredentialTypeEmail, "user@example.com",
 		"", false, true, []byte("{}"),
-		now, nil, nil, nil,
+		now, now, nil, nil, nil,
 	)
 
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
@@ -852,11 +853,11 @@ func TestVerifyContactCredential_PhoneFallback(t *testing.T) {
 	phoneRows := sqlmock.NewRows([]string{
 		"id", "account_id", "credential_type", "identifier",
 		"credential_value", "verified", "primary_credential", "metadata",
-		"created_at", "verified_at", "last_used_at", "deleted_at",
+		"created_at", "updated_at", "verified_at", "last_used_at", "deleted_at",
 	}).AddRow(
 		"cred-phone-001", accountID, domain.CredentialTypePhone, "+1234567890",
 		"", false, true, []byte("{}"),
-		now, nil, nil, nil,
+		now, now, nil, nil, nil,
 	)
 
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").

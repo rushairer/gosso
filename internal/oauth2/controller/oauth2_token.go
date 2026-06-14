@@ -19,14 +19,14 @@ import (
 // TokenRequest is the token exchange request body.
 type TokenRequest struct {
 	GrantType    string `json:"grant_type" form:"grant_type" binding:"required"`
-	Code         string `json:"code" form:"code"`
-	RedirectURI  string `json:"redirect_uri" form:"redirect_uri"`
-	ClientID     string `json:"client_id" form:"client_id"`
-	ClientSecret string `json:"client_secret" form:"client_secret"`
-	CodeVerifier string `json:"code_verifier" form:"code_verifier"`
-	RefreshToken string `json:"refresh_token" form:"refresh_token"`
-	Scope        string `json:"scope" form:"scope"`
-	DeviceCode   string `json:"device_code" form:"device_code"`
+	Code         string `json:"code" form:"code" binding:"max=128"`
+	RedirectURI  string `json:"redirect_uri" form:"redirect_uri" binding:"max=2048"`
+	ClientID     string `json:"client_id" form:"client_id" binding:"max=128"`
+	ClientSecret string `json:"client_secret" form:"client_secret" binding:"max=256"`
+	CodeVerifier string `json:"code_verifier" form:"code_verifier" binding:"max=256"`
+	RefreshToken string `json:"refresh_token" form:"refresh_token" binding:"max=2048"`
+	Scope        string `json:"scope" form:"scope" binding:"max=2048"`
+	DeviceCode   string `json:"device_code" form:"device_code" binding:"max=128"`
 }
 
 // Token POST /oauth2/token

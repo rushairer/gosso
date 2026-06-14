@@ -367,3 +367,15 @@ func (r *RedisClient) GetDel(ctx context.Context, key string) (string, error) {
 
 // ErrKeyNotFound is the error returned when a Redis key does not exist
 var ErrKeyNotFound = errors.New("redis: key not found")
+
+// ScanKeys iterates over keys matching the given pattern using the SCAN command.
+// Returns the matching keys and the next cursor position. When cursor returns 0, iteration is complete.
+// The count parameter is a hint for how many keys to scan per iteration.
+func (r *RedisClient) ScanKeys(ctx context.Context, cursor uint64, pattern string, count int64) ([]string, uint64, error) {
+	keys, nextCursor, err := r.client.Scan(ctx, cursor, pattern, count).Result()
+	if err != nil {
+		r.logger.Error("Redis SCAN failed", zap.String("pattern", pattern), zap.Error(err))
+		return nil, 0, fmt.Errorf("scan pattern %s: %w", pattern, err)
+	}
+	return keys, nextCursor, nil
+}

@@ -24,6 +24,7 @@ func validConfig() GoUnoConfig {
 			IdleTimeout:       120 * time.Second,
 			RequestTimeout:    30 * time.Second,
 			ShutdownTimeout:   30 * time.Second,
+			TrustedProxies:    []string{"172.22.0.0/16"},
 			RateLimits: RateLimitsConfig{
 				Login:      5,
 				Token:      10,

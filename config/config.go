@@ -283,6 +283,9 @@ func (c *GoUnoConfig) validateWebServer() error {
 	if c.WebServerConfig.ShutdownTimeout <= 0 {
 		return fmt.Errorf("web_server: shutdown_timeout must be positive")
 	}
+	if !c.WebServerConfig.Debug && len(c.WebServerConfig.TrustedProxies) == 0 {
+		return fmt.Errorf("web_server: trusted_proxies must not be empty in production (set to proxy CIDRs, e.g. [\"172.22.0.0/16\"])")
+	}
 	rl := c.WebServerConfig.RateLimits
 	if rl.Login <= 0 {
 		return fmt.Errorf("web_server: rate_limits.login must be positive (got %d)", rl.Login)

@@ -524,3 +524,29 @@ func (s *AuthService) clearLoginRateLimits(ctx context.Context, ip string, usern
 		}
 	}
 }
+
+// ClearLoginRateLimitsByUsername clears all per-user+IP login rate-limit counters
+// for the given username across all IPs. Used after password reset to unblock
+// accounts that were locked by brute-force attacks.
+// Uses SCAN with pattern matching since the IP component is unknown.
+func (s *AuthService) ClearLoginRateLimitsByUsername(ctx context.Context, username string) {
+	pattern := fmt.Sprintf("login_attempts:*:%s", strings.ToLower(username))
+	cursor := uint64(0)
+	for {
+		keys, nextCursor, err := s.redis.ScanKeys(ctx, cursor, pattern, 100)
+		if err != nil {
+			s.logger.Warn("Failed to scan login rate limit keys during cleanup",
+				zap.String("username", utility.MaskEmail(username)), zap.Error(err))
+			return
+		}
+		for _, key := range keys {
+			if delErr := s.redis.Del(ctx, key); delErr != nil {
+				s.logger.Warn("Failed to delete login rate limit key", zap.String("key", key), zap.Error(delErr))
+			}
+		}
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+}

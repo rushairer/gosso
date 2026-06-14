@@ -51,6 +51,7 @@ type Credential struct {
 	PrimaryCredential bool           `json:"primary_credential"`
 	Metadata          map[string]any `json:"metadata"`
 	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
 	VerifiedAt        *time.Time     `json:"verified_at,omitempty"`
 	LastUsedAt        *time.Time     `json:"last_used_at,omitempty"`
 	DeletedAt         *time.Time     `json:"deleted_at,omitempty"`
@@ -184,6 +185,7 @@ func (c *Credential) SoftDelete() error {
 	}
 	now := time.Now()
 	c.DeletedAt = &now
+	c.UpdatedAt = now
 	return nil
 }
 

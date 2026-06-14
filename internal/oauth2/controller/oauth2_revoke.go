@@ -14,10 +14,10 @@ import (
 // Revoke POST /oauth2/revoke (RFC 7009)
 func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 	var req struct {
-		Token        string `json:"token" form:"token" binding:"required"`
-		TokenHint    string `json:"token_type_hint" form:"token_type_hint"`
-		ClientID     string `json:"client_id" form:"client_id"`
-		ClientSecret string `json:"client_secret" form:"client_secret"`
+		Token        string `json:"token" form:"token" binding:"required,max=2048"`
+		TokenHint    string `json:"token_type_hint" form:"token_type_hint" binding:"max=64"`
+		ClientID     string `json:"client_id" form:"client_id" binding:"max=128"`
+		ClientSecret string `json:"client_secret" form:"client_secret" binding:"max=256"`
 	}
 	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
@@ -79,7 +79,7 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 
 // IntrospectRequest is the token introspection request body.
 type IntrospectRequest struct {
-	Token string `json:"token" form:"token" binding:"required"`
+	Token string `json:"token" form:"token" binding:"required,max=2048"`
 }
 
 // Introspect POST /oauth2/introspect (RFC 7662)

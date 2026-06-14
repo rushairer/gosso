@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -76,11 +77,14 @@ func NewSocialLoginService(
 		credentialRepo:        credentialRepo,
 		federatedIdentityRepo: federatedIdentityRepo,
 		providers:             providers,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-			// Uses Go's default TLS config which enforces TLS 1.2+ and verifies certificates.
-			// All configured OAuth provider URLs (Google, GitHub, WeChat) serve over HTTPS.
-		},
+		httpClient: func() *http.Client {
+			transport := http.DefaultTransport.(*http.Transport).Clone()
+			transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+			return &http.Client{
+				Timeout:   10 * time.Second,
+				Transport: transport,
+			}
+		}(),
 		auditor: auditor,
 		logger:  logger,
 	}

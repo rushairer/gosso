@@ -70,6 +70,12 @@ type AccountTokenRevoker interface {
 	RevokeAccountTokens(ctx context.Context, accountID string) error
 }
 
+// LoginRateLimitClearer clears login rate-limit counters for a given username.
+// Used after successful password reset to unblock accounts locked by brute-force attacks.
+type LoginRateLimitClearer interface {
+	ClearLoginRateLimitsByUsername(ctx context.Context, username string)
+}
+
 type passwordResetData struct {
 	AccountID string `json:"account_id"`
 	Email     string `json:"email"`
@@ -78,21 +84,22 @@ type passwordResetData struct {
 
 // PasswordResetService password reset service
 type PasswordResetService struct {
-	redis          *cache.RedisClient
-	credentialRepo accountRepo.CredentialRepository
-	emailSender    PasswordResetEmailSender
-	sessionSvc     *sessionService.SessionService
-	tokenRevoker   AccountTokenRevoker
-	accountSvc     accountService.AccountService
-	db             *sql.DB
-	baseURL        string
-	logger         *zap.Logger
-	wg             sync.WaitGroup
-	revokeSem      chan struct{} // limits concurrent session-revoke goroutines
-	waitTimeout    time.Duration // timeout for Wait() during graceful shutdown
-	tokenTTL       time.Duration
-	cooldownTTL    time.Duration
-	maxAttempts    int
+	redis                *cache.RedisClient
+	credentialRepo       accountRepo.CredentialRepository
+	emailSender          PasswordResetEmailSender
+	sessionSvc           *sessionService.SessionService
+	tokenRevoker         AccountTokenRevoker
+	accountSvc           accountService.AccountService
+	loginRateLimitClearer LoginRateLimitClearer
+	db                   *sql.DB
+	baseURL              string
+	logger               *zap.Logger
+	wg                   sync.WaitGroup
+	revokeSem            chan struct{} // limits concurrent session-revoke goroutines
+	waitTimeout          time.Duration // timeout for Wait() during graceful shutdown
+	tokenTTL             time.Duration
+	cooldownTTL          time.Duration
+	maxAttempts          int
 }
 
 // NewPasswordResetService creates a new password reset service instance
@@ -152,6 +159,12 @@ func (s *PasswordResetService) SetMaxAttempts(n int) {
 	if n > 0 {
 		s.maxAttempts = n
 	}
+}
+
+// SetLoginRateLimitClearer sets the service that clears login rate-limit counters.
+// Called after successful password reset to unblock accounts locked by brute-force attacks.
+func (s *PasswordResetService) SetLoginRateLimitClearer(c LoginRateLimitClearer) {
+	s.loginRateLimitClearer = c
 }
 
 // RequestReset requests password reset (sends password reset email)
@@ -312,6 +325,13 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 			s.logger.Warn("Failed to delete reset token from Redis after retry, token will expire via TTL",
 				zap.Error(retryErr), zap.String("token_hash", tokenHash))
 		}
+	}
+
+	// Clear login rate-limit counters so the account is not locked out
+	// after a legitimate password reset (e.g., after a brute-force attack
+	// triggered rate limiting on the victim's account).
+	if s.loginRateLimitClearer != nil {
+		s.loginRateLimitClearer.ClearLoginRateLimitsByUsername(ctx, data.Email)
 	}
 
 	// Synchronously revoke all access tokens issued before this password reset.

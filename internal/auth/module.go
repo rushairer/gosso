@@ -147,6 +147,7 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 	}
 
 	passwordResetSvc := service.NewPasswordResetService(cfg.Redis, cfg.CredentialRepo, emailSvc, sessionSvc, cfg.TokenSvc, cfg.AccountSvc, cfg.DB, cfg.BaseURL, cfg.Logger)
+	passwordResetSvc.SetLoginRateLimitClearer(authSvc)
 	if cfg.AuthConfig.PasswordResetWaitTimeout > 0 {
 		passwordResetSvc.SetWaitTimeout(cfg.AuthConfig.PasswordResetWaitTimeout)
 	}

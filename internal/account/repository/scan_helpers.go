@@ -122,6 +122,7 @@ func scanCredential(s dbPkg.Scannable) (*domain.Credential, error) {
 		&cred.PrimaryCredential,
 		&metadataJSON,
 		&cred.CreatedAt,
+		&cred.UpdatedAt,
 		&cred.VerifiedAt,
 		&cred.LastUsedAt,
 		&cred.DeletedAt,

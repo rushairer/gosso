@@ -159,6 +159,7 @@ func TestScanCredential(t *testing.T) {
 
 	identifier := "user@example.com"
 	createdAt := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	updatedAt := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	verifiedAt := time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
 	lastUsedAt := time.Date(2025, 1, 3, 0, 0, 0, 0, time.UTC)
 	metadataJSON := `{"source":"signup"}`
@@ -166,11 +167,11 @@ func TestScanCredential(t *testing.T) {
 	rows := sqlmock.NewRows([]string{
 		"id", "account_id", "type", "identifier", "value",
 		"verified", "primary_credential", "metadata",
-		"created_at", "verified_at", "last_used_at", "deleted_at",
+		"created_at", "updated_at", "verified_at", "last_used_at", "deleted_at",
 	}).AddRow(
 		"cred-001", "account-001", "email", identifier, "hashed-value",
 		true, true, metadataJSON,
-		createdAt, verifiedAt, lastUsedAt, nil,
+		createdAt, updatedAt, verifiedAt, lastUsedAt, nil,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -191,6 +192,7 @@ func TestScanCredential(t *testing.T) {
 	assert.True(t, cred.PrimaryCredential)
 	assert.Equal(t, map[string]any{"source": "signup"}, cred.Metadata)
 	assert.Equal(t, createdAt, cred.CreatedAt)
+	assert.Equal(t, updatedAt, cred.UpdatedAt)
 	assert.Equal(t, &verifiedAt, cred.VerifiedAt)
 	assert.Equal(t, &lastUsedAt, cred.LastUsedAt)
 	assert.Nil(t, cred.DeletedAt)

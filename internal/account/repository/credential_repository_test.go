@@ -26,6 +26,7 @@ func newTestCredential(accountID string, credType domain.CredentialType, identif
 		PrimaryCredential: true,
 		Metadata:          map[string]any{"key": "value"},
 		CreatedAt:         time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+		UpdatedAt:         time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 		VerifiedAt:        nil,
 		LastUsedAt:        nil,
 		DeletedAt:         nil,
@@ -35,8 +36,8 @@ func newTestCredential(accountID string, credType domain.CredentialType, identif
 func credentialColumns() []string {
 	return []string{
 		"id", "account_id", "credential_type", "identifier", "credential_value",
-		"verified", "primary_credential", "metadata", "created_at", "verified_at",
-		"last_used_at", "deleted_at",
+		"verified", "primary_credential", "metadata", "created_at", "updated_at",
+		"verified_at", "last_used_at", "deleted_at",
 	}
 }
 
@@ -44,8 +45,8 @@ func credentialRowValues(c *domain.Credential) []driver.Value {
 	md, _ := json.Marshal(c.Metadata)
 	return []driver.Value{
 		c.ID, c.AccountID, string(c.Type), c.Identifier, c.Value,
-		c.Verified, c.PrimaryCredential, md, c.CreatedAt, c.VerifiedAt,
-		c.LastUsedAt, c.DeletedAt,
+		c.Verified, c.PrimaryCredential, md, c.CreatedAt, c.UpdatedAt,
+		c.VerifiedAt, c.LastUsedAt, c.DeletedAt,
 	}
 }
 
@@ -128,6 +129,7 @@ func TestFindByTypeAndIdentifier_Success(t *testing.T) {
 		PrimaryCredential: false,
 		Metadata:          map[string]any{},
 		CreatedAt:         time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+		UpdatedAt:         time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 		VerifiedAt:        nil,
 		LastUsedAt:        nil,
 		DeletedAt:         nil,

@@ -48,9 +48,9 @@ func (c *OAuth2Controller) renderResultTemplate(ctx *gin.Context, data gin.H) bo
 
 // DeviceCodeRequestRequest is the device code initiation request body.
 type DeviceCodeRequestRequest struct {
-	ClientID     string `form:"client_id" binding:"required"`
-	ClientSecret string `form:"client_secret"`
-	Scope        string `form:"scope"`
+	ClientID     string `form:"client_id" binding:"required,max=128"`
+	ClientSecret string `form:"client_secret" binding:"max=256"`
+	Scope        string `form:"scope" binding:"max=2048"`
 }
 
 // DeviceCodeRequest POST /oauth2/device/code
@@ -160,8 +160,8 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 
 // DeviceUserSubmitRequest is the device authorization form submission.
 type DeviceUserSubmitRequest struct {
-	DeviceCode string `form:"device_code"`
-	UserCode   string `form:"user_code"`
+	DeviceCode string `form:"device_code" binding:"max=128"`
+	UserCode   string `form:"user_code" binding:"max=32"`
 	Approved   string `form:"approved" binding:"required"`
 }
 

@@ -77,8 +77,3 @@ FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 -- oauth2_clients（0003 缺失）
 CREATE TRIGGER update_oauth2_clients_updated_at BEFORE UPDATE ON oauth2_clients
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
--- ================================================
--- audit_record 补充索引：dd 列用于按日分区查询
--- ================================================
-CREATE INDEX IF NOT EXISTS idx_audit_record_dd ON audit_record(dd);

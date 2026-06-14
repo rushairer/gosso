@@ -26,9 +26,6 @@ var webCmd = &cobra.Command{
 
 func init() {
 	webCmd.Flags().StringP("config", "c", defaultConfigPath, "config directory path")
-	webCmd.Flags().String("config_path", defaultConfigPath, "config directory path (deprecated; use --config)")
-	_ = webCmd.Flags().MarkHidden("config_path")
-	_ = webCmd.Flags().MarkDeprecated("config_path", "use --config")
 	webCmd.Flags().StringP("address", "a", "0.0.0.0", "address to listen on")
 	webCmd.Flags().StringP("port", "p", "8080", "port to listen on")
 	webCmd.Flags().BoolP("debug", "d", false, "debug mode")
