@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -84,11 +85,24 @@ func (cm *ConfigManager) SetConfig(config *GoUnoConfig) {
 	cm.config = config
 }
 
+// Config returns a deep copy of the configuration.
+// Uses JSON round-trip to ensure all nested slices and maps are independently owned,
+// preventing accidental mutation of the internal config state.
 func (cm *ConfigManager) Config() GoUnoConfig {
 	if cm.config == nil {
 		return GoUnoConfig{}
 	}
-	return *cm.config
+	var copy GoUnoConfig
+	b, err := json.Marshal(cm.config)
+	if err != nil {
+		// Should never happen — marshal of a valid config always succeeds.
+		// Return a pointer-based shallow copy as a last resort.
+		return *cm.config
+	}
+	if err := json.Unmarshal(b, &copy); err != nil {
+		return *cm.config
+	}
+	return copy
 }
 
 func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {

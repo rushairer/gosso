@@ -284,27 +284,13 @@ func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, i
 		return nil, accountService.ErrAccountNotActive
 	}
 
-	// Check if MFA is required before issuing tokens
-	if s.mfaChecker != nil {
-		mfaResult, mfaErr := s.mfaChecker.CheckMFA(ctx, account)
-		if mfaResult != nil || mfaErr != nil {
-			return mfaResult, mfaErr
-		}
-	}
-
-	session, accessToken, refreshToken, err := s.sessionTokenCreator.CreateSessionAndTokens(ctx, account, ip, userAgent)
-	if err != nil {
-		return nil, err
-	}
-
-	return &LoginResult{
-		Account:      account,
-		Session:      session,
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken.Token,
-	}, nil
+	return s.issueSessionAndTokens(ctx, account, ip, userAgent)
 }
 
+// createNewUser creates a new account with a federated identity for a social login
+// user who has no existing account. If the social provider supplies a verified email,
+// it attempts to link to an existing account first (via linkByEmailIfVerified).
+// Handles race conditions when concurrent social logins share the same email.
 func (s *SocialLoginService) createNewUser(ctx context.Context, provider, providerUserID, email, name string, emailVerified bool, ip, userAgent string) (*LoginResult, error) {
 	// If email is provided, check if an account already exists with that email.
 	// This prevents duplicate accounts when a user registers via email/password first
@@ -324,7 +310,36 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 		return nil, fmt.Errorf("create account: %w", err)
 	}
 
-	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+	err = s.createAccountWithIdentity(ctx, account, provider, providerUserID, email, emailVerified)
+	if err != nil {
+		// Handle race condition: concurrent social logins with the same email.
+		// The pre-check above passed, but another request created the account
+		// between the check and the transaction. The DB unique constraint on
+		// (credential_type, identifier) caught it — fall back to linking.
+		if email != "" && dbutil.IsUniqueViolation(err) {
+			if result, linkErr := s.linkByEmailIfVerified(ctx, provider, providerUserID, email, ip, userAgent); result != nil || linkErr != nil {
+				return result, linkErr
+			}
+		}
+		return nil, err
+	}
+
+	// Audit log for social login account creation
+	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+		auditDomain.ActionAccountRegister,
+		audit.IPFromContext(ctx),
+		&account.ID,
+		utility.MustMarshalJSON(map[string]any{"account_id": account.ID, "provider": provider}),
+		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+	))
+
+	return s.issueSessionAndTokens(ctx, account, ip, userAgent)
+}
+
+// createAccountWithIdentity runs the transaction that creates an account, optional
+// email credential, and federated identity in one atomic operation.
+func (s *SocialLoginService) createAccountWithIdentity(ctx context.Context, account *accountDomain.Account, provider, providerUserID, email string, emailVerified bool) error {
+	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		if err := s.accountRepo.CreateAccount(ctx, tx, account); err != nil {
 			return fmt.Errorf("create account: %w", err)
 		}
@@ -353,32 +368,12 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 
 		return nil
 	})
-	if err != nil {
-		// Handle race condition: concurrent social logins with the same email.
-		// The pre-check above passed, but another request created the account
-		// between the check and the transaction. The DB unique constraint on
-		// (credential_type, identifier) caught it — fall back to linking.
-		if email != "" && dbutil.IsUniqueViolation(err) {
-			if result, linkErr := s.linkByEmailIfVerified(ctx, provider, providerUserID, email, ip, userAgent); result != nil || linkErr != nil {
-				return result, linkErr
-			}
-		}
-		return nil, err
-	}
+}
 
-	// Audit log for social login account creation
-	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
-		auditDomain.ActionAccountRegister,
-		audit.IPFromContext(ctx),
-		&account.ID,
-		utility.MustMarshalJSON(map[string]any{"account_id": account.ID, "provider": provider}),
-		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
-	))
-
-	// Check if MFA is required before issuing session tokens.
-	// For newly created accounts, MFA is never enrolled so CheckMFA returns nil, nil.
-	// If MFA becomes mandatory at registration time in the future, this check will
-	// correctly intercept and return an MFA challenge before any tokens are issued.
+// issueSessionAndTokens checks MFA requirements and creates a session with tokens.
+// Shared by loginExistingUser and createNewUser to avoid duplicating the MFA + session flow.
+func (s *SocialLoginService) issueSessionAndTokens(ctx context.Context, account *accountDomain.Account, ip, userAgent string) (*LoginResult, error) {
+	// Check if MFA is required before issuing tokens
 	if s.mfaChecker != nil {
 		mfaResult, mfaErr := s.mfaChecker.CheckMFA(ctx, account)
 		if mfaResult != nil || mfaErr != nil {

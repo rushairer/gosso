@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `ConfigManager.Config()` now returns a true deep copy (JSON round-trip) to prevent shared slice/map mutation when callers modify the returned config (`config/config_manager.go`).
+
 ### Security
+- Dockerfile now runs `go mod verify` after `go mod download` to detect tampered dependencies at build time (`Dockerfile`).
 - OAuth2 `SubmitConsent` Bearer auth check now validates JWT format via `IsPlausibleJWT` (defense-in-depth) — previously only checked `len > 7`, which could be bypassed with a garbage `Authorization: Bearer x` header (`internal/oauth2/controller/oauth2_authorize.go`, `middleware/csrf.go`).
 
 ### Changed
@@ -41,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - OAuth2 `SubmitConsent` now verifies account is still active before generating authorization code — prevents code issuance for accounts suspended between GET and POST (`internal/oauth2/controller/oauth2_authorize.go`).
 
 ### Changed
+- `SocialLoginService.createNewUser` refactored: extracted `createAccountWithIdentity` (transaction logic) and `issueSessionAndTokens` (MFA + session flow) — eliminates duplicated MFA check + token issuance between `loginExistingUser` and `createNewUser` (`internal/auth/service/social_login_service.go`).
+- `ListSessionsByAccount` pipeline fallback comment clarified: direct-GET retry handles both production key-expiry and test miniredis quirks (`internal/session/service/session_service.go`).
+- CSRF `SameSite=Lax` documented as intentional for OAuth2 redirect callback compatibility (`middleware/csrf.go`).
+- `migrate.go` uses `strconv.Atoi` instead of `fmt.Sscanf` for integer parsing — more idiomatic Go with clearer error handling (`cmd/gouno/migrate.go`).
+- `SetSessionRevoker` / `SetOAuth2ClientDeleter` panic pattern documented as intentional (fail-fast at init, similar to `regexp.MustCompile`) (`internal/account/service/account_service.go`).
+- `DatabaseConfig.GetDriver` / `GetDefaultDriver` documented map-value pointer safety; removed unnecessary `else` after `return` (`config/config.go`).
 - `.env.production.example` now includes `GOUNO_AUTH_TOTP_ENCRYPTION_KEY` with generation instructions.
 - `.env.production.example` DSN now uses `sslmode=require` instead of `sslmode=disable`.
 - `config/production.yaml` now explicitly sets database connection pool tuning parameters (`max_open_conns: 25`, `max_idle_conns: 15`, `conn_max_lifetime_sec: 300`, `conn_max_idle_time_sec: 180`).

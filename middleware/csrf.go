@@ -117,8 +117,13 @@ func setCSRFCookie(ctx *gin.Context, cookieName string, secure bool, maxAge time
 		Value:    cookie,
 		Path:     "/",
 		MaxAge:   int(maxAge.Seconds()),
-		HttpOnly: false, // JS needs to read it
+		HttpOnly: false, // JS needs to read it (required for double-submit cookie pattern)
 		Secure:   secure,
+		// SameSiteLaxMode is required for OAuth2 redirect callbacks (top-level
+		// navigations from external identity providers). Strict would block the
+		// CSRF cookie on those cross-site redirects, breaking the OAuth flow.
+		// Bearer-token API calls skip CSRF entirely (see CSRFMiddleware), so
+		// Lax provides sufficient protection for cookie-based form submissions.
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -143,7 +148,7 @@ func rotateCSRFCookie(ctx *gin.Context, cookieName string, secure bool, logger *
 		MaxAge:   int(maxAge.Seconds()),
 		HttpOnly: false,
 		Secure:   secure,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteLaxMode, // See setCSRFCookie for rationale
 	})
 	ctx.Header(csrfHeaderName, newToken)
 }

@@ -74,20 +74,22 @@ type DatabaseConfig struct {
 	ConnMaxIdleTimeSec int                                               `mapstructure:"conn_max_idle_time_sec"`
 }
 
+// GetDriver returns a pointer to the named database driver config, or nil if not found.
+// Note: the returned pointer targets a local copy of the map value (safe since Go 1.22+
+// gives each range iteration its own variable; the map value is not addressable directly).
 func (c DatabaseConfig) GetDriver(name DatabaseConfigDriverName) *DatabaseConfigDriver {
 	if driver, ok := c.Drivers[name]; ok {
 		return &driver
-	} else {
-		return nil
 	}
+	return nil
 }
 
+// GetDefaultDriver returns a pointer to the default database driver config, or nil if not found.
 func (c DatabaseConfig) GetDefaultDriver() *DatabaseConfigDriver {
 	if driver, ok := c.Drivers[c.Default]; ok {
 		return &driver
-	} else {
-		return nil
 	}
+	return nil
 }
 
 // RedisConfig holds the Redis connection DSN and pool parameters.

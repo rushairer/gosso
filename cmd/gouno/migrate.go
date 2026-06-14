@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/rushairer/gosso/config"
 
@@ -302,10 +303,10 @@ func runMigrateStatus(cmd *cobra.Command, args []string) {
 	})
 }
 
-// parseSteps parses a step count string, returning an error instead of calling log.Fatal.
+// parseSteps parses a step count string using strconv.Atoi for idiomatic Go parsing.
 func parseSteps(s string) (int, error) {
-	var steps int
-	if _, err := fmt.Sscanf(s, "%d", &steps); err != nil {
+	steps, err := strconv.Atoi(s)
+	if err != nil {
 		return 0, fmt.Errorf("invalid steps number: %s", s)
 	}
 	if steps <= 0 {
@@ -314,10 +315,10 @@ func parseSteps(s string) (int, error) {
 	return steps, nil
 }
 
-// parseVersion parses a version string, returning an error instead of calling log.Fatal.
+// parseVersion parses a version string using strconv.Atoi for idiomatic Go parsing.
 func parseVersion(s string) (int, error) {
-	var version int
-	if _, err := fmt.Sscanf(s, "%d", &version); err != nil {
+	version, err := strconv.Atoi(s)
+	if err != nil {
 		return 0, fmt.Errorf("invalid version number: %s", s)
 	}
 	if version < 0 {

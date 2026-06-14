@@ -134,6 +134,8 @@ func NewAccountService(
 
 // SetSessionRevoker sets the session revoker dependency.
 // Must be called during initialization; panics on nil to fail fast.
+// Uses panic (rather than returning error) because a nil revoker is always a
+// programming bug caught at startup, similar to regexp.MustCompile.
 func (s *accountServiceImpl) SetSessionRevoker(revoker SessionRevoker) {
 	if revoker == nil {
 		panic("SetSessionRevoker: revoker must not be nil")
@@ -143,6 +145,8 @@ func (s *accountServiceImpl) SetSessionRevoker(revoker SessionRevoker) {
 
 // SetOAuth2ClientDeleter sets the OAuth2 client deleter dependency.
 // Must be called during initialization; panics on nil to fail fast.
+// Uses panic (rather than returning error) because a nil deleter is always a
+// programming bug caught at startup, similar to regexp.MustCompile.
 func (s *accountServiceImpl) SetOAuth2ClientDeleter(deleter OAuth2ClientDeleter) {
 	if deleter == nil {
 		panic("SetOAuth2ClientDeleter: deleter must not be nil")
