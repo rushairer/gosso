@@ -92,7 +92,7 @@ func TestRole_SoftDelete_DoubleDelete(t *testing.T) {
 	assert.NoError(t, err)
 	err = r.SoftDelete()
 	assert.Error(t, err)
-	assert.Equal(t, "role is already deleted", err.Error())
+	assert.ErrorIs(t, err, ErrRoleAlreadyDeleted)
 }
 
 func TestNewRole_Initialization(t *testing.T) {

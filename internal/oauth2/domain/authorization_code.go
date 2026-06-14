@@ -5,7 +5,6 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"time"
 )
 
@@ -27,19 +26,19 @@ type AuthorizationCode struct {
 // Validates that code, clientID, accountID, and redirectURI are non-empty and expiresAt is not zero.
 func NewAuthorizationCode(code, clientID, accountID, redirectURI string, scopes []string, expiresAt time.Time) (*AuthorizationCode, error) {
 	if code == "" {
-		return nil, fmt.Errorf("authorization code: code is required")
+		return nil, ErrAuthCodeRequired
 	}
 	if clientID == "" {
-		return nil, fmt.Errorf("authorization code: client_id is required")
+		return nil, ErrAuthClientIDRequired
 	}
 	if accountID == "" {
-		return nil, fmt.Errorf("authorization code: account_id is required")
+		return nil, ErrAuthAccountIDRequired
 	}
 	if redirectURI == "" {
-		return nil, fmt.Errorf("authorization code: redirect_uri is required")
+		return nil, ErrAuthRedirectURIRequired
 	}
 	if expiresAt.IsZero() {
-		return nil, fmt.Errorf("authorization code: expires_at is required")
+		return nil, ErrAuthExpiresRequired
 	}
 	if scopes == nil {
 		scopes = []string{}
@@ -103,4 +102,9 @@ var (
 	ErrCodeClientMismatch     = errors.New("authorization code client mismatch")
 	ErrCodeURIMismatch        = errors.New("authorization code redirect_uri mismatch")
 	ErrPKCEVerificationFailed = errors.New("PKCE verification failed")
+	ErrAuthCodeRequired       = errors.New("authorization code: code is required")
+	ErrAuthClientIDRequired   = errors.New("authorization code: client_id is required")
+	ErrAuthAccountIDRequired  = errors.New("authorization code: account_id is required")
+	ErrAuthRedirectURIRequired = errors.New("authorization code: redirect_uri is required")
+	ErrAuthExpiresRequired    = errors.New("authorization code: expires_at is required")
 )

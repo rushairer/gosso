@@ -47,16 +47,6 @@
                 <button type="submit" name="approved" value="true" class="btn btn-approve">Allow</button>
             </div>
         </form>
-        <script nonce="{{.CSPNonce}}">
-            // Fallback: if server-side token is empty, read from cookie
-            (function() {
-                var el = document.getElementById('csrf_token');
-                if (!el.value) {
-                    el.value = document.cookie.match(/__Host-csrf_token=([^;]+)/)?.[1]
-                        || document.cookie.match(/csrf_token=([^;]+)/)?.[1] || '';
-                }
-            })();
-        </script>
     </div>
     {{else}}
     <!-- Entry state -->

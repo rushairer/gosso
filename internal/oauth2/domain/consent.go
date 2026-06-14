@@ -2,21 +2,26 @@ package domain
 
 import (
 	"errors"
-	"fmt"
 	"time"
 )
 
 // ErrConsentNotFound is returned when a consent record does not exist.
 var ErrConsentNotFound = errors.New("consent not found")
 
+// Consent domain sentinel errors.
+var (
+	ErrConsentAccountIDRequired = errors.New("consent: account_id is required")
+	ErrConsentClientIDRequired  = errors.New("consent: client_id is required")
+)
+
 // NewConsent creates a new Consent with the required fields.
 // Validates that accountID and clientID are non-empty.
 func NewConsent(accountID, clientID string, scopes []string) (*Consent, error) {
 	if accountID == "" {
-		return nil, fmt.Errorf("consent: account_id is required")
+		return nil, ErrConsentAccountIDRequired
 	}
 	if clientID == "" {
-		return nil, fmt.Errorf("consent: client_id is required")
+		return nil, ErrConsentClientIDRequired
 	}
 	if scopes == nil {
 		scopes = []string{}

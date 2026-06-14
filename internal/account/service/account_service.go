@@ -279,6 +279,7 @@ func (s *accountServiceImpl) FindAccountByUsername(ctx context.Context, username
 
 // UpdateAccount updates account information.
 func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.Account) error {
+	account.Sanitize()
 	if err := account.Validate(); err != nil {
 		return fmt.Errorf("invalid account: %w", err)
 	}

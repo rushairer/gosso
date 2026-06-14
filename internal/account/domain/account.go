@@ -13,6 +13,9 @@ import (
 var (
 	ErrDisplayNameRequired   = errors.New("display name is required")
 	ErrDisplayNameTooLong    = errors.New("display name must not exceed 255 characters")
+	ErrLocaleRequired        = errors.New("locale is required")
+	ErrLocaleTooLong         = errors.New("locale must not exceed 10 characters")
+	ErrTimezoneRequired      = errors.New("timezone is required")
 	ErrAccountAlreadyDeleted = errors.New("account is already deleted")
 	ErrCannotSuspendDeleted  = errors.New("cannot suspend a deleted account")
 	ErrCannotActivateDeleted = errors.New("cannot activate a deleted account")
@@ -63,31 +66,38 @@ func NewAccount(displayName string) (*Account, error) {
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
+	a.Sanitize()
 	if err := a.Validate(); err != nil {
 		return nil, err
 	}
 	return a, nil
 }
 
-// Validate checks if the account fields are correct.
-func (a *Account) Validate() error {
+// Sanitize trims whitespace from account string fields.
+// Must be called before Validate when accepting user input.
+func (a *Account) Sanitize() {
 	a.DisplayName = strings.TrimSpace(a.DisplayName)
+	a.Locale = strings.TrimSpace(a.Locale)
+	a.Timezone = strings.TrimSpace(a.Timezone)
+}
+
+// Validate checks if the account fields are correct.
+// Call Sanitize() before Validate() when accepting user input.
+func (a *Account) Validate() error {
 	if a.DisplayName == "" {
 		return ErrDisplayNameRequired
 	}
 	if len(a.DisplayName) > 255 {
 		return ErrDisplayNameTooLong
 	}
-	a.Locale = strings.TrimSpace(a.Locale)
 	if a.Locale == "" {
-		return errors.New("locale is required")
+		return ErrLocaleRequired
 	}
 	if len(a.Locale) > 10 {
-		return errors.New("locale must not exceed 10 characters")
+		return ErrLocaleTooLong
 	}
-	a.Timezone = strings.TrimSpace(a.Timezone)
 	if a.Timezone == "" {
-		return errors.New("timezone is required")
+		return ErrTimezoneRequired
 	}
 	return nil
 }

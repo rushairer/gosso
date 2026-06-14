@@ -8,6 +8,14 @@ import (
 	"github.com/google/uuid"
 )
 
+// Role domain sentinel errors.
+var (
+	ErrRoleNameRequired       = errors.New("role name is required")
+	ErrRoleNameTooLong        = errors.New("role name must not exceed 255 characters")
+	ErrRoleDescriptionTooLong = errors.New("role description must not exceed 1024 characters")
+	ErrRoleAlreadyDeleted     = errors.New("role is already deleted")
+)
+
 // Role is the role domain model.
 type Role struct {
 	ID          string         `json:"id"`
@@ -25,13 +33,13 @@ type Role struct {
 func NewRole(name string, description *string) (*Role, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return nil, errors.New("role name is required")
+		return nil, ErrRoleNameRequired
 	}
 	if len(name) > 255 {
-		return nil, errors.New("role name must not exceed 255 characters")
+		return nil, ErrRoleNameTooLong
 	}
 	if description != nil && len(*description) > 1024 {
-		return nil, errors.New("role description must not exceed 1024 characters")
+		return nil, ErrRoleDescriptionTooLong
 	}
 	return &Role{
 		ID:          uuid.New().String(),
@@ -52,7 +60,7 @@ func (r *Role) IsDeleted() bool {
 // SoftDelete soft-deletes the role.
 func (r *Role) SoftDelete() error {
 	if r.IsDeleted() {
-		return errors.New("role is already deleted")
+		return ErrRoleAlreadyDeleted
 	}
 	now := time.Now()
 	r.DeletedAt = &now

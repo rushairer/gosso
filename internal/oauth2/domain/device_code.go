@@ -2,27 +2,34 @@ package domain
 
 import (
 	"errors"
-	"fmt"
 	"time"
 )
 
 // ErrDeviceCodeNotFound is returned when a device code does not exist.
 var ErrDeviceCodeNotFound = errors.New("device code not found")
 
+// DeviceCode domain sentinel errors.
+var (
+	ErrDeviceCodeRequired   = errors.New("device code: device_code is required")
+	ErrUserCodeRequired     = errors.New("device code: user_code is required")
+	ErrDeviceClientRequired = errors.New("device code: client_id is required")
+	ErrDeviceExpiresRequired = errors.New("device code: expires_at is required")
+)
+
 // NewDeviceCode creates a new DeviceCode with the required fields.
 // Validates that deviceCode, userCode, clientID are non-empty and expiresAt is not zero.
 func NewDeviceCode(deviceCode, userCode, clientID string, scopes []string, expiresAt time.Time, interval int) (*DeviceCode, error) {
 	if deviceCode == "" {
-		return nil, fmt.Errorf("device code: device_code is required")
+		return nil, ErrDeviceCodeRequired
 	}
 	if userCode == "" {
-		return nil, fmt.Errorf("device code: user_code is required")
+		return nil, ErrUserCodeRequired
 	}
 	if clientID == "" {
-		return nil, fmt.Errorf("device code: client_id is required")
+		return nil, ErrDeviceClientRequired
 	}
 	if expiresAt.IsZero() {
-		return nil, fmt.Errorf("device code: expires_at is required")
+		return nil, ErrDeviceExpiresRequired
 	}
 	if scopes == nil {
 		scopes = []string{}
