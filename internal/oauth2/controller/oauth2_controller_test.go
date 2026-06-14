@@ -2428,7 +2428,7 @@ func TestToken_RefreshToken_AccountInactive(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "account is not active")
 }
 
-func TestToken_RefreshToken_IPMismatch(t *testing.T) {
+func TestToken_RefreshToken_IPMismatch_Allowed(t *testing.T) {
 	client := newRefreshTestClient()
 	engine := setupRefreshTokenRouter(
 		&mockOAuth2ClientSvcForOAuth2{
@@ -2455,8 +2455,8 @@ func TestToken_RefreshToken_IPMismatch(t *testing.T) {
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "refresh token IP mismatch")
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "access_token")
 }
 
 func TestToken_RefreshToken_ScopeExceeds(t *testing.T) {

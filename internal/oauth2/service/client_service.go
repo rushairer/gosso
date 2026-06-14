@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -56,6 +57,18 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 	if err != nil {
 		return nil, "", fmt.Errorf("generate client id: %w", err)
 	}
+
+	// Validate client metadata before persisting
+	if strings.TrimSpace(req.Name) == "" {
+		return nil, "", fmt.Errorf("client name is required")
+	}
+	if len(req.Name) > 256 {
+		return nil, "", fmt.Errorf("client name must not exceed 256 characters")
+	}
+	if len(req.Description) > 1024 {
+		return nil, "", fmt.Errorf("client description must not exceed 1024 characters")
+	}
+
 	var secretPlaintext string
 	var secretHash string
 

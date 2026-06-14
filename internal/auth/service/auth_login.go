@@ -57,6 +57,16 @@ func buildLoginResult(account *accountDomain.Account, session *sessionDomain.Ses
 	}
 }
 
+// buildMFAResult constructs a LoginResult that signals MFA is required.
+func buildMFAResult(account *accountDomain.Account, mfaToken string, mfaTypes []string) *LoginResult {
+	return &LoginResult{
+		Account:     account,
+		RequiresMFA: true,
+		AccessToken: mfaToken,
+		MFATypes:    mfaTypes,
+	}
+}
+
 // LoginByUsernamePassword login by username and password
 func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginRequest) (result *LoginResult, err error) {
 	defer func() {
@@ -370,11 +380,12 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 		errs = append(errs, fmt.Errorf("revoke refresh tokens: %w", err))
 	}
 
-	// 3. Blacklist the access token so it cannot be used after logout (fail-closed)
+	// 3. Blacklist the access token (best-effort: the token will expire naturally).
+	// Failure here should not cause logout to fail, since session and refresh
+	// tokens are already revoked above — the critical security state is achieved.
 	if accessTokenJTI != "" {
 		if err := s.tokenSvc.RevokeAccessToken(ctx, accessTokenJTI, tokenExpiresAt); err != nil {
-			s.logger.Error("Failed to blacklist access token", zap.Error(err))
-			errs = append(errs, fmt.Errorf("blacklist access token: %w", err))
+			s.logger.Warn("Failed to blacklist access token (will expire naturally)", zap.Error(err))
 		}
 	}
 
@@ -423,12 +434,7 @@ func (s *AuthService) handleMFARequirement(ctx context.Context, account *account
 	if err != nil {
 		return nil, fmt.Errorf("generate mfa token: %w", err)
 	}
-	return &LoginResult{
-		Account:     account,
-		RequiresMFA: true,
-		AccessToken: mfaToken,
-		MFATypes:    s.mfaSvc.GetMFATypes(ctx, account.ID),
-	}, nil
+	return buildMFAResult(account, mfaToken, s.mfaSvc.GetMFATypes(ctx, account.ID)), nil
 }
 
 // CheckMFA implements the MFAChecker interface for use by SocialLoginService.

@@ -161,6 +161,14 @@ func (s *PasswordResetService) SetMaxAttempts(n int) {
 	}
 }
 
+// SetRevokeConcurrency overrides the default concurrency limit for session-revoke
+// goroutines spawned during password reset. The default is 10.
+func (s *PasswordResetService) SetRevokeConcurrency(n int) {
+	if n > 0 {
+		s.revokeSem = make(chan struct{}, n)
+	}
+}
+
 // SetLoginRateLimitClearer sets the service that clears login rate-limit counters.
 // Called after successful password reset to unblock accounts locked by brute-force attacks.
 func (s *PasswordResetService) SetLoginRateLimitClearer(c LoginRateLimitClearer) {

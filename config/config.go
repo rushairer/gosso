@@ -174,10 +174,11 @@ type AuthConfig struct {
 	BackupCodeLength   int           `mapstructure:"backup_code_length"`
 
 	// Password reset settings (0 = use built-in defaults)
-	PasswordResetWaitTimeout time.Duration `mapstructure:"password_reset_wait_timeout"`
-	PasswordResetTokenTTL    time.Duration `mapstructure:"password_reset_token_ttl"`
-	PasswordResetCooldownTTL time.Duration `mapstructure:"password_reset_cooldown_ttl"`
-	PasswordResetMaxAttempts int           `mapstructure:"password_reset_max_attempts"`
+	PasswordResetWaitTimeout      time.Duration `mapstructure:"password_reset_wait_timeout"`
+	PasswordResetTokenTTL         time.Duration `mapstructure:"password_reset_token_ttl"`
+	PasswordResetCooldownTTL      time.Duration `mapstructure:"password_reset_cooldown_ttl"`
+	PasswordResetMaxAttempts      int           `mapstructure:"password_reset_max_attempts"`
+	PasswordResetRevokeConcurrency int           `mapstructure:"password_reset_revoke_concurrency"`
 
 	// Verification code settings (0 = use built-in defaults)
 	VerifyCodeTTL         time.Duration `mapstructure:"verify_code_ttl"`

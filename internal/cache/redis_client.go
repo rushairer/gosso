@@ -85,8 +85,8 @@ func (r *RedisClient) Ping(ctx context.Context) error {
 func (r *RedisClient) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
 	err := r.client.Set(ctx, key, value, expiration).Err()
 	if err != nil {
-		r.logger.Error("Redis SET failed", zap.String("key", key), zap.Error(err))
-		return fmt.Errorf("set key %s: %w", key, err)
+		r.logger.Error("Redis SET failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return fmt.Errorf("set: %w", err)
 	}
 	return nil
 }
@@ -98,8 +98,8 @@ func (r *RedisClient) Get(ctx context.Context, key string) (string, error) {
 		return "", ErrKeyNotFound
 	}
 	if err != nil {
-		r.logger.Error("Redis GET failed", zap.String("key", key), zap.Error(err))
-		return "", fmt.Errorf("get key %s: %w", key, err)
+		r.logger.Error("Redis GET failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return "", fmt.Errorf("get: %w", err)
 	}
 	return val, nil
 }
@@ -108,7 +108,7 @@ func (r *RedisClient) Get(ctx context.Context, key string) (string, error) {
 func (r *RedisClient) Del(ctx context.Context, keys ...string) error {
 	err := r.client.Del(ctx, keys...).Err()
 	if err != nil {
-		r.logger.Error("Redis DEL failed", zap.Strings("keys", keys), zap.Error(err))
+		r.logger.Error("Redis DEL failed", zap.Strings("keys", maskKeys(keys)), zap.Error(err))
 		return fmt.Errorf("delete keys: %w", err)
 	}
 	return nil
@@ -118,8 +118,8 @@ func (r *RedisClient) Del(ctx context.Context, keys ...string) error {
 func (r *RedisClient) Exists(ctx context.Context, key string) (bool, error) {
 	count, err := r.client.Exists(ctx, key).Result()
 	if err != nil {
-		r.logger.Error("Redis EXISTS failed", zap.String("key", key), zap.Error(err))
-		return false, fmt.Errorf("check key %s: %w", key, err)
+		r.logger.Error("Redis EXISTS failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return false, fmt.Errorf("exists: %w", err)
 	}
 	return count > 0, nil
 }
@@ -128,8 +128,8 @@ func (r *RedisClient) Exists(ctx context.Context, key string) (bool, error) {
 func (r *RedisClient) Expire(ctx context.Context, key string, expiration time.Duration) error {
 	err := r.client.Expire(ctx, key, expiration).Err()
 	if err != nil {
-		r.logger.Error("Redis EXPIRE failed", zap.String("key", key), zap.Error(err))
-		return fmt.Errorf("expire key %s: %w", key, err)
+		r.logger.Error("Redis EXPIRE failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return fmt.Errorf("expire: %w", err)
 	}
 	return nil
 }
@@ -138,8 +138,8 @@ func (r *RedisClient) Expire(ctx context.Context, key string, expiration time.Du
 func (r *RedisClient) Incr(ctx context.Context, key string) (int64, error) {
 	val, err := r.client.Incr(ctx, key).Result()
 	if err != nil {
-		r.logger.Error("Redis INCR failed", zap.String("key", key), zap.Error(err))
-		return 0, fmt.Errorf("incr key %s: %w", key, err)
+		r.logger.Error("Redis INCR failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return 0, fmt.Errorf("incr: %w", err)
 	}
 	return val, nil
 }
@@ -148,8 +148,8 @@ func (r *RedisClient) Incr(ctx context.Context, key string) (int64, error) {
 func (r *RedisClient) Decr(ctx context.Context, key string) (int64, error) {
 	val, err := r.client.Decr(ctx, key).Result()
 	if err != nil {
-		r.logger.Error("Redis DECR failed", zap.String("key", key), zap.Error(err))
-		return 0, fmt.Errorf("decr key %s: %w", key, err)
+		r.logger.Error("Redis DECR failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return 0, fmt.Errorf("decr: %w", err)
 	}
 	return val, nil
 }
@@ -158,8 +158,8 @@ func (r *RedisClient) Decr(ctx context.Context, key string) (int64, error) {
 func (r *RedisClient) SetNX(ctx context.Context, key string, value any, expiration time.Duration) (bool, error) {
 	ok, err := r.client.SetNX(ctx, key, value, expiration).Result()
 	if err != nil {
-		r.logger.Error("Redis SETNX failed", zap.String("key", key), zap.Error(err))
-		return false, fmt.Errorf("setnx key %s: %w", key, err)
+		r.logger.Error("Redis SETNX failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return false, fmt.Errorf("setnx: %w", err)
 	}
 	return ok, nil
 }
@@ -168,8 +168,8 @@ func (r *RedisClient) SetNX(ctx context.Context, key string, value any, expirati
 func (r *RedisClient) HSet(ctx context.Context, key string, values ...any) error {
 	err := r.client.HSet(ctx, key, values...).Err()
 	if err != nil {
-		r.logger.Error("Redis HSET failed", zap.String("key", key), zap.Error(err))
-		return fmt.Errorf("hset key %s: %w", key, err)
+		r.logger.Error("Redis HSET failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return fmt.Errorf("hset: %w", err)
 	}
 	return nil
 }
@@ -181,8 +181,8 @@ func (r *RedisClient) HGet(ctx context.Context, key, field string) (string, erro
 		return "", ErrKeyNotFound
 	}
 	if err != nil {
-		r.logger.Error("Redis HGET failed", zap.String("key", key), zap.String("field", field), zap.Error(err))
-		return "", fmt.Errorf("hget key %s field %s: %w", key, field, err)
+		r.logger.Error("Redis HGET failed", zap.String("key", maskKey(key)), zap.String("field", field), zap.Error(err))
+		return "", fmt.Errorf("hget field %s: %w", field, err)
 	}
 	return val, nil
 }
@@ -191,8 +191,8 @@ func (r *RedisClient) HGet(ctx context.Context, key, field string) (string, erro
 func (r *RedisClient) HGetAll(ctx context.Context, key string) (map[string]string, error) {
 	val, err := r.client.HGetAll(ctx, key).Result()
 	if err != nil {
-		r.logger.Error("Redis HGETALL failed", zap.String("key", key), zap.Error(err))
-		return nil, fmt.Errorf("hgetall key %s: %w", key, err)
+		r.logger.Error("Redis HGETALL failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return nil, fmt.Errorf("hgetall: %w", err)
 	}
 	return val, nil
 }
@@ -201,8 +201,8 @@ func (r *RedisClient) HGetAll(ctx context.Context, key string) (map[string]strin
 func (r *RedisClient) HDel(ctx context.Context, key string, fields ...string) error {
 	err := r.client.HDel(ctx, key, fields...).Err()
 	if err != nil {
-		r.logger.Error("Redis HDEL failed", zap.String("key", key), zap.Strings("fields", fields), zap.Error(err))
-		return fmt.Errorf("hdel key %s: %w", key, err)
+		r.logger.Error("Redis HDEL failed", zap.String("key", maskKey(key)), zap.Strings("fields", fields), zap.Error(err))
+		return fmt.Errorf("hdel: %w", err)
 	}
 	return nil
 }
@@ -211,8 +211,8 @@ func (r *RedisClient) HDel(ctx context.Context, key string, fields ...string) er
 func (r *RedisClient) SAdd(ctx context.Context, key string, members ...any) error {
 	err := r.client.SAdd(ctx, key, members...).Err()
 	if err != nil {
-		r.logger.Error("Redis SADD failed", zap.String("key", key), zap.Error(err))
-		return fmt.Errorf("sadd key %s: %w", key, err)
+		r.logger.Error("Redis SADD failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return fmt.Errorf("sadd: %w", err)
 	}
 	return nil
 }
@@ -231,8 +231,8 @@ func (r *RedisClient) SAddWithTTL(ctx context.Context, key string, member string
 	}
 	_, err := script.Run(ctx, r.client, []string{key}, member, secs).Result()
 	if err != nil {
-		r.logger.Error("Redis SADD+EXPIRE failed", zap.String("key", key), zap.Error(err))
-		return fmt.Errorf("sadd_with_ttl key %s: %w", key, err)
+		r.logger.Error("Redis SADD+EXPIRE failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return fmt.Errorf("sadd_with_ttl: %w", err)
 	}
 	return nil
 }
@@ -241,8 +241,8 @@ func (r *RedisClient) SAddWithTTL(ctx context.Context, key string, member string
 func (r *RedisClient) SMembers(ctx context.Context, key string) ([]string, error) {
 	val, err := r.client.SMembers(ctx, key).Result()
 	if err != nil {
-		r.logger.Error("Redis SMEMBERS failed", zap.String("key", key), zap.Error(err))
-		return nil, fmt.Errorf("smembers key %s: %w", key, err)
+		r.logger.Error("Redis SMEMBERS failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return nil, fmt.Errorf("smembers: %w", err)
 	}
 	return val, nil
 }
@@ -251,8 +251,8 @@ func (r *RedisClient) SMembers(ctx context.Context, key string) ([]string, error
 func (r *RedisClient) SIsMember(ctx context.Context, key string, member any) (bool, error) {
 	ok, err := r.client.SIsMember(ctx, key, member).Result()
 	if err != nil {
-		r.logger.Error("Redis SISMEMBER failed", zap.String("key", key), zap.Error(err))
-		return false, fmt.Errorf("sismember key %s: %w", key, err)
+		r.logger.Error("Redis SISMEMBER failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return false, fmt.Errorf("sismember: %w", err)
 	}
 	return ok, nil
 }
@@ -261,8 +261,8 @@ func (r *RedisClient) SIsMember(ctx context.Context, key string, member any) (bo
 func (r *RedisClient) SRem(ctx context.Context, key string, members ...any) error {
 	err := r.client.SRem(ctx, key, members...).Err()
 	if err != nil {
-		r.logger.Error("Redis SREM failed", zap.String("key", key), zap.Error(err))
-		return fmt.Errorf("srem key %s: %w", key, err)
+		r.logger.Error("Redis SREM failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return fmt.Errorf("srem: %w", err)
 	}
 	return nil
 }
@@ -271,8 +271,8 @@ func (r *RedisClient) SRem(ctx context.Context, key string, members ...any) erro
 func (r *RedisClient) TTL(ctx context.Context, key string) (time.Duration, error) {
 	ttl, err := r.client.TTL(ctx, key).Result()
 	if err != nil {
-		r.logger.Error("Redis TTL failed", zap.String("key", key), zap.Error(err))
-		return 0, fmt.Errorf("ttl key %s: %w", key, err)
+		r.logger.Error("Redis TTL failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return 0, fmt.Errorf("ttl: %w", err)
 	}
 	return ttl, nil
 }
@@ -300,8 +300,8 @@ func (r *RedisClient) IncrWithExpiry(ctx context.Context, key string, expiry tim
 	`)
 	result, err := script.Run(ctx, r.client, []string{key}, int(math.Ceil(expiry.Seconds()))).Int64()
 	if err != nil {
-		r.logger.Error("Redis IncrWithExpiry failed", zap.String("key", key), zap.Error(err))
-		return 0, fmt.Errorf("incrWithExpiry key %s: %w", key, err)
+		r.logger.Error("Redis IncrWithExpiry failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return 0, fmt.Errorf("incrWithExpiry: %w", err)
 	}
 	return result, nil
 }
@@ -323,8 +323,8 @@ func (r *RedisClient) CheckAndIncr(ctx context.Context, key string, limit int, e
 	`)
 	result, err := script.Run(ctx, r.client, []string{key}, limit, int(math.Ceil(expiry.Seconds()))).Int64()
 	if err != nil {
-		r.logger.Error("Redis CheckAndIncr failed", zap.String("key", key), zap.Error(err))
-		return 0, fmt.Errorf("checkAndIncr key %s: %w", key, err)
+		r.logger.Error("Redis CheckAndIncr failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return 0, fmt.Errorf("checkAndIncr: %w", err)
 	}
 	return result, nil
 }
@@ -345,8 +345,8 @@ func (r *RedisClient) SetIfExists(ctx context.Context, key string, value any, ex
 	`)
 	result, err := script.Run(ctx, r.client, []string{key}, value, expirySec).Int64()
 	if err != nil {
-		r.logger.Error("Redis SetIfExists failed", zap.String("key", key), zap.Error(err))
-		return false, fmt.Errorf("setIfExists key %s: %w", key, err)
+		r.logger.Error("Redis SetIfExists failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return false, fmt.Errorf("setIfExists: %w", err)
 	}
 	return result == 1, nil
 }
@@ -359,10 +359,29 @@ func (r *RedisClient) GetDel(ctx context.Context, key string) (string, error) {
 		return "", nil
 	}
 	if err != nil {
-		r.logger.Error("Redis GETDEL failed", zap.String("key", key), zap.Error(err))
-		return "", fmt.Errorf("getDel key %s: %w", key, err)
+		r.logger.Error("Redis GETDEL failed", zap.String("key", maskKey(key)), zap.Error(err))
+		return "", fmt.Errorf("getDel: %w", err)
 	}
 	return result, nil
+}
+
+// maskKey redacts the last segment of a Redis key (after the last colon)
+// to prevent PII such as email addresses or IP addresses from appearing in logs.
+// Example: "verify:code:email:user@example.com" → "verify:code:email:***"
+func maskKey(key string) string {
+	if idx := strings.LastIndex(key, ":"); idx >= 0 {
+		return key[:idx+1] + "***"
+	}
+	return "***"
+}
+
+// maskKeys applies maskKey to a slice of keys.
+func maskKeys(keys []string) []string {
+	masked := make([]string, len(keys))
+	for i, k := range keys {
+		masked[i] = maskKey(k)
+	}
+	return masked
 }
 
 // ErrKeyNotFound is the error returned when a Redis key does not exist

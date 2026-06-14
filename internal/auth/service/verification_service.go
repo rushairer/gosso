@@ -14,6 +14,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
@@ -169,6 +170,7 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 		s.logger.Warn("Failed to check cooldown, proceeding anyway", zap.Error(err))
 	}
 	if exists {
+		s.dummyWork()
 		return fmt.Errorf("%w: please wait before requesting another code", ErrCooldownActive)
 	}
 
@@ -262,6 +264,13 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 	default:
 		return "", fmt.Errorf("unknown verify status: %s", result[0])
 	}
+}
+
+// dummyWork performs a bcrypt hash to pad the response time of early-return
+// paths (e.g., cooldown active). This mitigates timing side-channel attacks
+// that could distinguish active cooldown from fresh requests based on latency.
+func (s *VerificationService) dummyWork() {
+	_, _ = bcrypt.GenerateFromPassword([]byte("dummy-work-padding"), bcrypt.DefaultCost)
 }
 
 func (s *VerificationService) buildCodeKey(credType, identifier string) string {

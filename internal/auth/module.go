@@ -160,6 +160,9 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 	if cfg.AuthConfig.PasswordResetMaxAttempts > 0 {
 		passwordResetSvc.SetMaxAttempts(cfg.AuthConfig.PasswordResetMaxAttempts)
 	}
+	if cfg.AuthConfig.PasswordResetRevokeConcurrency > 0 {
+		passwordResetSvc.SetRevokeConcurrency(cfg.AuthConfig.PasswordResetRevokeConcurrency)
+	}
 
 	return &AuthModule{
 		AuthService:          authSvc,

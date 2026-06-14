@@ -176,15 +176,13 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		return
 	}
 
-	// Verify IP binding — reject refresh from a different IP to prevent token theft.
-	// If the original token has no IP recorded (legacy), skip validation.
+	// Log IP changes for security audit but do not reject — mobile/VPN users
+	// legitimately change IPs. Token rotation + blacklist provide theft protection.
 	if oldRefreshToken.IP != "" && utility.NormalizeIP(oldRefreshToken.IP) != utility.NormalizeIP(ctx.ClientIP()) {
-		c.logger.Warn("Refresh token IP mismatch",
-			zap.String("original_ip", oldRefreshToken.IP),
-			zap.String("current_ip", ctx.ClientIP()),
+		c.logger.Warn("Refresh token IP changed",
+			zap.String("original_ip", utility.NormalizeIP(oldRefreshToken.IP)),
+			zap.String("current_ip", utility.NormalizeIP(ctx.ClientIP())),
 			zap.String("account_id", oldRefreshToken.AccountID))
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "refresh token IP mismatch"})
-		return
 	}
 
 	// Verify client binding before rotation (RFC 6749 §6: client_id MUST match)
