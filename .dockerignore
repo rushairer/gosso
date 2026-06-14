@@ -11,7 +11,8 @@ tests/
 doc/
 docs/
 **/*_test.go
-script/
+script/*
+!script/entrypoint.sh
 ssl/
 static/
 vendor/

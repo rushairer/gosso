@@ -1810,6 +1810,21 @@ func TestSendVerification_InvalidPhone(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "invalid phone format")
 }
 
+func TestSendVerification_PhoneNotImplemented(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	engine, _ := setupAuthController(authSvc, tokenMgr)
+
+	body := `{"type":"phone","identifier":"+12345678901"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/verify/send", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotImplemented, w.Code)
+	assert.Contains(t, w.Body.String(), "phone verification is not yet supported")
+}
+
 func TestSendVerification_CredentialNotOwned(t *testing.T) {
 	claims := &tokenDomain.AccessTokenClaims{
 		AccountID: "account-001",

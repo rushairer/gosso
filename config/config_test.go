@@ -86,6 +86,7 @@ func TestConfigManager_ProductionConfigLoadsFromEnv(t *testing.T) {
 	t.Setenv("GOUNO_AUTH_PRIVATE_KEY_PATH", keyPath)
 	t.Setenv("GOUNO_AUTH_PASSWORD_RESET_BASE_URL", "https://sso.example.com/reset-password")
 	t.Setenv("GOUNO_AUTH_TOTP_ENCRYPTION_KEY", "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899")
+	t.Setenv("GOUNO_CORS_ALLOWED_ORIGINS", "https://sso.example.com")
 
 	cm, err := NewConfigManager(nil, "../config", "production")
 	require.NoError(t, err)
@@ -96,6 +97,7 @@ func TestConfigManager_ProductionConfigLoadsFromEnv(t *testing.T) {
 	assert.Equal(t, "https://sso.example.com/reset-password", cfg.AuthConfig.PasswordResetBaseURL)
 	assert.Equal(t, "redis://:strong@redis:6379/0", cfg.RedisConfig.DSN)
 	assert.Equal(t, "host=postgres user=gosso password=strong dbname=gosso port=5432 sslmode=require", cfg.DatabaseConfig.GetDefaultDriver().DSN)
+	assert.Equal(t, []string{"https://sso.example.com"}, cfg.CORSConfig.AllowedOrigins)
 }
 
 // ──────────────────────────────────────────────
@@ -215,6 +217,20 @@ func TestValidate_Errors(t *testing.T) {
 				c.AuthConfig.Issuer = "ftp://example.com"
 			},
 			wantErr: "auth: issuer must be a valid URL with http or https scheme",
+		},
+		{
+			name: "production issuer must use https",
+			mutate: func(c *GoUnoConfig) {
+				c.AuthConfig.Issuer = "http://sso.example.com"
+			},
+			wantErr: "auth: issuer must use https in production",
+		},
+		{
+			name: "production issuer must not be localhost",
+			mutate: func(c *GoUnoConfig) {
+				c.AuthConfig.Issuer = "https://localhost:8080"
+			},
+			wantErr: "auth: issuer must not point to localhost in production",
 		},
 
 		// ── Auth — TOTP key ─────────────────────
@@ -425,6 +441,14 @@ func TestValidate_Errors(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
 	}
+}
+
+func TestValidate_DebugIssuerAllowsLocalhostHTTP(t *testing.T) {
+	cfg := validConfig()
+	cfg.WebServerConfig.Debug = true
+	cfg.AuthConfig.Issuer = "http://localhost:8080"
+
+	assert.NoError(t, cfg.Validate())
 }
 
 // ──────────────────────────────────────────────

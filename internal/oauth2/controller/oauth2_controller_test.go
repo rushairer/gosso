@@ -131,7 +131,7 @@ func (m *mockTokenMgr) ValidateAccessTokenWithContext(_ context.Context, _ strin
 	if m.validateAccessFn != nil {
 		return m.validateAccessFn()
 	}
-	return &tokenDomain.AccessTokenClaims{AccountID: "account-001"}, nil
+	return &tokenDomain.AccessTokenClaims{AccountID: "account-001", ClientID: "cid-test"}, nil
 }
 
 type mockDeviceCodeMgr struct {
@@ -302,14 +302,9 @@ func setupOAuth2Router(clientSvc *mockOAuth2ClientSvcForOAuth2, tokenSvc *mockTo
 		logger:           zap.NewNop(),
 	}
 
-	// Register token and revoke routes (no Redis dependency)
-	// authCtx simulates JWTAuthMiddleware by injecting account_id into context
-	authCtx := func(ctx *gin.Context) {
-		ctx.Set(middleware.ContextKeyAccountID, "account-001")
-		ctx.Next()
-	}
+	// Register protocol routes used by controller tests (no Redis dependency).
 	engine.POST("/oauth2/token", ctrl.Token)
-	engine.POST("/oauth2/revoke", authCtx, ctrl.Revoke)
+	engine.POST("/oauth2/revoke", ctrl.Revoke)
 	engine.POST("/oauth2/introspect", ctrl.Introspect)
 	engine.POST("/oauth2/device/code", ctrl.DeviceCodeRequest)
 
@@ -728,11 +723,19 @@ func TestToken_AuthCode_ConfidentialMissingSecret(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestRevoke_Success(t *testing.T) {
-	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
+	client := newConfidentialTestClient()
+	engine := setupOAuth2Router(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
+	)
 
 	body := `{"token":"some-refresh-token"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/revoke", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth("cid-test", "test-secret")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -740,30 +743,27 @@ func TestRevoke_Success(t *testing.T) {
 }
 
 func TestRevoke_MissingToken(t *testing.T) {
-	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
+	client := newConfidentialTestClient()
+	engine := setupOAuth2Router(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
+	)
 
 	body := `{}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/revoke", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth("cid-test", "test-secret")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestRevoke_DifferentAccount_ReturnsOK(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	engine := gin.New()
-	ctrl := &OAuth2Controller{
-		tokenSvc:         &mockTokenMgr{},
-		accountValidator: &mockAccountValidatorAlwaysActive{},
-		logger:           zap.NewNop(),
-	}
-	// Auth context with a different account ID than the token owner
-	engine.POST("/oauth2/revoke", func(ctx *gin.Context) {
-		ctx.Set(middleware.ContextKeyAccountID, "other-account")
-		ctx.Next()
-	}, ctrl.Revoke)
+func TestRevoke_MissingClientAuth_ReturnsUnauthorized(t *testing.T) {
+	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
 	body := `{"token":"some-refresh-token"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/revoke", bytes.NewBufferString(body))
@@ -771,7 +771,42 @@ func TestRevoke_DifferentAccount_ReturnsOK(t *testing.T) {
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestRevoke_DifferentClient_ReturnsOK(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	client := newConfidentialTestClient()
+	revokeCalled := false
+	ctrl := &OAuth2Controller{
+		clientSvc: &mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		clientAuth: &oauth2Service.ClientAuthenticator{},
+		tokenSvc: &mockTokenMgr{
+			validateRefreshFn: func() (*tokenDomain.RefreshToken, error) {
+				return &tokenDomain.RefreshToken{Token: "valid-refresh", ClientID: "other-client", AccountID: "account-001"}, nil
+			},
+			revokeFn: func() error {
+				revokeCalled = true
+				return nil
+			},
+		},
+		accountValidator: &mockAccountValidatorAlwaysActive{},
+		logger:           zap.NewNop(),
+	}
+	engine.POST("/oauth2/revoke", ctrl.Revoke)
+
+	body := `{"token":"some-refresh-token"}`
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/revoke", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth("cid-test", "test-secret")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
 	assert.Equal(t, http.StatusOK, w.Code)
+	assert.False(t, revokeCalled)
 }
 
 // ──────────────────────────────────────────────
@@ -1159,7 +1194,7 @@ func TestToken_DeviceCode_AuthorizationPending(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "device code already consumed")
+	assert.Contains(t, w.Body.String(), "authorization_pending")
 }
 
 func TestToken_DeviceCode_AccessDenied(t *testing.T) {
@@ -1190,7 +1225,7 @@ func TestToken_DeviceCode_AccessDenied(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "device code already consumed")
+	assert.Contains(t, w.Body.String(), "access_denied")
 }
 
 func TestToken_DeviceCode_ExpiredToken(t *testing.T) {
@@ -1426,7 +1461,7 @@ func TestOAuth2RegisterRoutes_WithRateLimits(t *testing.T) {
 	engine := gin.New()
 	noop := func(ctx *gin.Context) { ctx.Next() }
 	rg := engine.Group("/oauth2")
-	ctrl.RegisterRoutes(rg, noop, noop, noop, noop)
+	ctrl.RegisterRoutes(rg, noop, noop, noop, noop, noop)
 
 	routes := engine.Routes()
 	pathSet := make(map[string]bool)
@@ -1444,7 +1479,7 @@ func TestOAuth2RegisterRoutes_WithRateLimits(t *testing.T) {
 	assert.True(t, pathSet["POST /oauth2/device"])
 }
 
-func TestOAuth2RegisterRoutes_TokenLimitOnlyAppliesToTokenEndpoint(t *testing.T) {
+func TestOAuth2RegisterRoutes_RateLimitsApplyToTargetEndpoints(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctrl, _ := NewOAuth2Controller(
 		&mockOAuth2ClientSvcForOAuth2{},
@@ -1464,14 +1499,20 @@ func TestOAuth2RegisterRoutes_TokenLimitOnlyAppliesToTokenEndpoint(t *testing.T)
 		tokenLimitCalls++
 		ctx.AbortWithStatus(http.StatusTooManyRequests)
 	}
+	deviceUserLimitCalls := 0
+	deviceUserLimit := func(ctx *gin.Context) {
+		deviceUserLimitCalls++
+		ctx.AbortWithStatus(http.StatusTooManyRequests)
+	}
 
 	rg := engine.Group("/oauth2")
-	ctrl.RegisterRoutes(rg, auth, tokenLimit, nil, nil)
+	ctrl.RegisterRoutes(rg, auth, tokenLimit, nil, nil, deviceUserLimit)
 
 	authorizeReq := httptest.NewRequest(http.MethodGet, "/oauth2/authorize", nil)
 	authorizeResp := httptest.NewRecorder()
 	engine.ServeHTTP(authorizeResp, authorizeReq)
 	assert.Equal(t, 0, tokenLimitCalls)
+	assert.Equal(t, 0, deviceUserLimitCalls)
 
 	tokenReq := httptest.NewRequest(http.MethodPost, "/oauth2/token", strings.NewReader("grant_type=client_credentials"))
 	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -1480,6 +1521,25 @@ func TestOAuth2RegisterRoutes_TokenLimitOnlyAppliesToTokenEndpoint(t *testing.T)
 
 	assert.Equal(t, http.StatusTooManyRequests, tokenResp.Code)
 	assert.Equal(t, 1, tokenLimitCalls)
+	assert.Equal(t, 0, deviceUserLimitCalls)
+
+	revokeReq := httptest.NewRequest(http.MethodPost, "/oauth2/revoke", strings.NewReader("token=refresh"))
+	revokeReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	revokeResp := httptest.NewRecorder()
+	engine.ServeHTTP(revokeResp, revokeReq)
+
+	assert.Equal(t, http.StatusTooManyRequests, revokeResp.Code)
+	assert.Equal(t, 2, tokenLimitCalls)
+	assert.Equal(t, 0, deviceUserLimitCalls)
+
+	deviceReq := httptest.NewRequest(http.MethodPost, "/oauth2/device", strings.NewReader("device_code=dc-123&approved=true"))
+	deviceReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	deviceResp := httptest.NewRecorder()
+	engine.ServeHTTP(deviceResp, deviceReq)
+
+	assert.Equal(t, http.StatusTooManyRequests, deviceResp.Code)
+	assert.Equal(t, 2, tokenLimitCalls)
+	assert.Equal(t, 1, deviceUserLimitCalls)
 }
 
 // ──────────────────────────────────────────────

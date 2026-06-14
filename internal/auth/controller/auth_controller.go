@@ -576,7 +576,7 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 
 // SendVerificationRequest send verification code request body
 type SendVerificationRequest struct {
-	Type       string `json:"type" binding:"required"`               // "email" or "phone"
+	Type       string `json:"type" binding:"required"`               // "email"; "phone" is reserved until SMS is configured
 	Identifier string `json:"identifier" binding:"required,max=255"` // email address or phone number
 }
 
@@ -601,6 +601,10 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 	}
 	if req.Type == "phone" && !utility.ValidatePhoneFormat(req.Identifier) {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid phone format"))
+		return
+	}
+	if req.Type == "phone" {
+		ctx.JSON(http.StatusNotImplemented, gouno.NewErrorResponse(http.StatusNotImplemented, "phone verification is not yet supported"))
 		return
 	}
 

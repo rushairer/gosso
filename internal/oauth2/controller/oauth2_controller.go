@@ -158,8 +158,8 @@ func (c *OAuth2Controller) authenticateRequest(ctx *gin.Context) (string, bool) 
 }
 
 // RegisterRoutes registers OAuth2 routes.
-// tokenLimit, introspectLimit, and deviceCodeLimit are optional rate limit middleware for CPU-intensive endpoints.
-func (c *OAuth2Controller) RegisterRoutes(rg *gin.RouterGroup, authMiddleware, tokenLimit, introspectLimit, deviceCodeLimit gin.HandlerFunc) {
+// Rate limit middleware arguments are optional and applied per endpoint.
+func (c *OAuth2Controller) RegisterRoutes(rg *gin.RouterGroup, authMiddleware, tokenLimit, introspectLimit, deviceCodeLimit, deviceUserLimit gin.HandlerFunc) {
 	rg.GET("/authorize", authMiddleware, c.Authorize)
 	rg.POST("/authorize", authMiddleware, c.SubmitConsent)
 
@@ -168,7 +168,11 @@ func (c *OAuth2Controller) RegisterRoutes(rg *gin.RouterGroup, authMiddleware, t
 		tokenHandlers = []gin.HandlerFunc{tokenLimit, c.Token}
 	}
 	rg.POST("/token", tokenHandlers...)
-	rg.POST("/revoke", authMiddleware, c.Revoke)
+	revokeHandlers := []gin.HandlerFunc{c.Revoke}
+	if tokenLimit != nil {
+		revokeHandlers = []gin.HandlerFunc{tokenLimit, c.Revoke}
+	}
+	rg.POST("/revoke", revokeHandlers...)
 
 	introspectHandlers := []gin.HandlerFunc{c.Introspect}
 	if introspectLimit != nil {
@@ -183,7 +187,11 @@ func (c *OAuth2Controller) RegisterRoutes(rg *gin.RouterGroup, authMiddleware, t
 	rg.POST("/device/code", deviceCodeHandlers...)
 
 	rg.GET("/device", authMiddleware, c.DeviceUserPage)
-	rg.POST("/device", c.DeviceUserSubmit)
+	deviceUserHandlers := []gin.HandlerFunc{c.DeviceUserSubmit}
+	if deviceUserLimit != nil {
+		deviceUserHandlers = []gin.HandlerFunc{deviceUserLimit, c.DeviceUserSubmit}
+	}
+	rg.POST("/device", deviceUserHandlers...)
 }
 
 func redirectWithCode(ctx *gin.Context, redirectURI, code, state string) {

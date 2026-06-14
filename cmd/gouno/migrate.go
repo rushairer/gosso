@@ -70,7 +70,10 @@ var migrateStatusCmd = &cobra.Command{
 
 func init() {
 	// Add global flags
-	migrateCmd.PersistentFlags().StringP("config_path", "c", "./config", "config file path")
+	migrateCmd.PersistentFlags().StringP("config", "c", defaultConfigPath, "config directory path")
+	migrateCmd.PersistentFlags().String("config_path", defaultConfigPath, "config directory path (deprecated; use --config)")
+	_ = migrateCmd.PersistentFlags().MarkHidden("config_path")
+	_ = migrateCmd.PersistentFlags().MarkDeprecated("config_path", "use --config")
 	migrateCmd.PersistentFlags().StringP("env", "e", "production", "env: development, test, production")
 	migrateCmd.PersistentFlags().StringP("migrations_path", "m", "./db/migrations", "migrations directory path")
 	migrateCmd.PersistentFlags().StringP("schema", "s", "public", "database schema name")
@@ -91,7 +94,7 @@ func init() {
 // initMigrate initializes configuration and creates a migrate instance.
 // Returns the migrate instance and the underlying *sql.DB (caller must close both).
 func initMigrate(cmd *cobra.Command) (*migrate.Migrate, *sql.DB, error) {
-	configPath := cmd.Flag("config_path").Value.String()
+	configPath := getConfigPath(cmd)
 	env := cmd.Flag("env").Value.String()
 
 	configManager, err := config.NewConfigManager(cmd, configPath, env)

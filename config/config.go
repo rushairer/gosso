@@ -357,6 +357,15 @@ func (c *GoUnoConfig) validateAuth() error {
 	if err != nil || (issuerURL.Scheme != "http" && issuerURL.Scheme != "https") {
 		return fmt.Errorf("auth: issuer must be a valid URL with http or https scheme")
 	}
+	if !c.WebServerConfig.Debug {
+		if issuerURL.Scheme != "https" {
+			return fmt.Errorf("auth: issuer must use https in production")
+		}
+		switch issuerURL.Hostname() {
+		case "localhost", "127.0.0.1", "::1":
+			return fmt.Errorf("auth: issuer must not point to localhost in production")
+		}
+	}
 	if c.AuthConfig.TOTPEncryptionKey == "" {
 		return fmt.Errorf("auth: totp_encryption_key is required")
 	}

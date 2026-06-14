@@ -87,8 +87,8 @@ func RegisterWebRouter(deps RouterDeps) {
 			SocialLimit:   socialLimit,
 		})
 
-		// Client management routes (require JWT authentication + rate limiting)
-		clientLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "client", middleware.IPKeyFunc, deps.RateLimits.API, time.Minute, true, deps.Logger)
+		// Client management routes (require JWT authentication + fail-closed rate limiting)
+		clientLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "client", middleware.IPKeyFunc, deps.RateLimits.API, time.Minute, false, deps.Logger)
 		clientGroup := api.Group("")
 		clientGroup.Use(clientLimit)
 		deps.ClientCtrl.RegisterRoutes(clientGroup, jwtAuth)
@@ -110,9 +110,10 @@ func RegisterWebRouter(deps RouterDeps) {
 	tokenLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "oauth2-token", middleware.IPKeyFunc, deps.RateLimits.Token, time.Minute, false, deps.Logger)
 	introspectLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "introspect", middleware.IPKeyFunc, deps.RateLimits.Introspect, time.Minute, false, deps.Logger)
 	deviceCodeLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "device-code", middleware.IPKeyFunc, deps.RateLimits.DeviceCode, time.Minute, false, deps.Logger)
+	deviceUserLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "device-user", middleware.IPKeyFunc, deps.RateLimits.DeviceCode, time.Minute, false, deps.Logger)
 	oauth2 := deps.Server.Group("/oauth2")
 	oauth2.Use(authMiddleware.AuditMetadataMiddleware())
-	deps.OAuth2Ctrl.RegisterRoutes(oauth2, jwtAuth, tokenLimit, introspectLimit, deviceCodeLimit)
+	deps.OAuth2Ctrl.RegisterRoutes(oauth2, jwtAuth, tokenLimit, introspectLimit, deviceCodeLimit, deviceUserLimit)
 
 	// OIDC routes
 	// .well-known endpoints (Discovery + JWKS) — rate-limited, fail-closed

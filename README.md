@@ -39,7 +39,7 @@ gosso provides a complete SSO server with OAuth 2.0 authorization, OIDC discover
 - Health and readiness probes (`/health`, `/readiness`)
 - OpenAPI spec and Swagger UI (debug mode)
 - Docker and docker-compose for dev, test, and production
-- GitHub Actions CI (lint, unit tests with 60% coverage threshold, govulncheck, integration tests, build, Docker build)
+- GitHub Actions CI (lint, unit tests with 50% coverage threshold across the coverage-gate package set, critical service package coverage gates, govulncheck, integration tests, build, Docker build)
 
 ## Prerequisites
 
@@ -65,7 +65,7 @@ Copy an environment template and fill in your values:
 cp .env.development.example .env.development
 ```
 
-Then create a config YAML file at `config/config.yaml` (or `config/development.yaml`, `config/production.yaml`, etc.):
+Then create or update an environment-specific config YAML file such as `config/development.yaml` or `config/production.yaml`:
 
 ```yaml
 web_server:
@@ -118,11 +118,12 @@ Configuration is loaded by Viper. Environment variables use the `GOUNO_` prefix 
 ### Run
 
 ```bash
-./bin/gosso web --config ./config/config.yaml --address 0.0.0.0 --port 8080
+./bin/gosso web --config ./config --env development --address 0.0.0.0 --port 8080
 ```
 
 CLI flags:
-- `--config` / `-c`: config file path (default `./config/config.yaml`)
+- `--config` / `-c`: config directory path (default `./config`)
+- `--env` / `-e`: config environment name, e.g. `development`, `test`, or `production` (default `production`)
 - `--address` / `-a`: listen address (default `0.0.0.0`)
 - `--port` / `-p`: listen port (default `8080`)
 - `--debug` / `-d`: enable debug mode (default `false`)
@@ -151,6 +152,9 @@ make docker-prod-up
 Before starting production Docker, copy `.env.production.example` to `.env.production`,
 fill in real values, and place the RSA private key at `./keys/private.pem`
 so it is mounted into the container at `/app/keys/private.pem`.
+The production env file is consumed by Docker Compose, so keep it in `KEY=value`
+format. The bundled Postgres service uses `sslmode=disable`; switch to
+`sslmode=require` only when connecting to a database configured with TLS.
 
 Stop with the corresponding `make docker-*-down` commands.
 
@@ -228,7 +232,7 @@ Stop with the corresponding `make docker-*-down` commands.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/auth/verify/send` | Send verification code |
+| POST | `/api/auth/verify/send` | Send email verification code (phone returns 501 until SMS is configured) |
 | POST | `/api/auth/verify/confirm` | Confirm verification code |
 | POST | `/api/auth/password/forgot` | Request password reset |
 | POST | `/api/auth/password/reset` | Complete password reset |
@@ -308,7 +312,7 @@ make docker-test-up
 make test-integration
 ```
 
-Unit tests use `testify/assert`, `go-sqlmock`, and `miniredis`. The CI pipeline requires a minimum of 60% test coverage.
+Unit tests use `testify/assert`, `go-sqlmock`, and `miniredis`. The CI pipeline requires a minimum of 50% test coverage across the coverage-gate package set and package-level coverage floors for critical auth, OAuth2, OIDC, token, and session services.
 
 ## Configuration Reference
 
@@ -407,7 +411,7 @@ gosso 提供完整的 SSO 服务器，包含 OAuth 2.0 授权、OIDC 发现、JW
 - 健康检查和就绪探针（`/health`、`/readiness`）
 - OpenAPI 规范和 Swagger UI（调试模式）
 - Docker + docker-compose 支持开发、测试和生产环境
-- GitHub Actions CI（lint、单测 60% 覆盖率门槛、govulncheck、集成测试、构建、Docker 构建）
+- GitHub Actions CI（lint、覆盖率门禁包集合最低 50% 覆盖率、关键服务包覆盖率门禁、govulncheck、集成测试、构建、Docker 构建）
 
 ## 前置条件
 
@@ -433,18 +437,19 @@ make build
 cp .env.development.example .env.development
 ```
 
-在 `config/config.yaml`（或 `config/development.yaml`、`config/production.yaml`）创建配置文件，结构参考上方英文配置示例。
+创建或更新 `config/development.yaml`、`config/production.yaml` 等环境配置文件，结构参考上方英文配置示例。
 
 配置由 Viper 加载。环境变量使用 `GOUNO_` 前缀，`.` 替换为 `_`（如 `GOUNO_AUTH_ISSUER`）。完整参考见 `.env.production.example`。
 
 ### 运行
 
 ```bash
-./bin/gosso web --config ./config/config.yaml --address 0.0.0.0 --port 8080
+./bin/gosso web --config ./config --env development --address 0.0.0.0 --port 8080
 ```
 
 CLI 参数：
-- `--config` / `-c`：配置文件路径（默认 `./config/config.yaml`）
+- `--config` / `-c`：配置目录路径（默认 `./config`）
+- `--env` / `-e`：配置环境名称，例如 `development`、`test` 或 `production`（默认 `production`）
 - `--address` / `-a`：监听地址（默认 `0.0.0.0`）
 - `--port` / `-p`：监听端口（默认 `8080`）
 - `--debug` / `-d`：开启调试模式（默认 `false`）
@@ -470,6 +475,12 @@ make docker-test-up
 make docker-prod-up
 ```
 
+生产环境启动前，先复制 `.env.production.example` 到 `.env.production`，填写真实值，
+并将 RSA 私钥放到 `./keys/private.pem`，容器内挂载路径为 `/app/keys/private.pem`。
+生产环境变量文件由 Docker Compose 读取，请保持 `KEY=value` 格式。内置 Postgres
+服务默认使用 `sslmode=disable`；只有连接已配置 TLS 的数据库时才切换为
+`sslmode=require`。
+
 使用对应的 `make docker-*-down` 停止。
 
 ## API 端点
@@ -483,7 +494,7 @@ make docker-prod-up
 - **MFA**：`/api/auth/mfa/verify`、`/api/auth/mfa/enroll`、`/api/auth/mfa/activate`、`/api/auth/mfa/backup-codes`
 - **Passkeys**：`/api/passkey/register/*`、`/api/passkey/login/*`、`/api/passkey/mfa/*`、`/api/passkeys`
 - **社交登录**：`/api/auth/social/:provider`、`/api/auth/social/:provider/callback`
-- **验证和密码重置**：`/api/auth/verify/send`、`/api/auth/verify/confirm`、`/api/auth/password/forgot`、`/api/auth/password/reset`
+- **验证和密码重置**：`/api/auth/verify/send`（当前发送邮箱验证码，手机号验证码在接入 SMS 后启用）、`/api/auth/verify/confirm`、`/api/auth/password/forgot`、`/api/auth/password/reset`
 - **客户端管理**：`/api/oauth2/clients/*`
 - **管理后台**：`/api/admin/accounts/*`
 - **健康检查**：`/health`、`/readiness`
@@ -503,7 +514,7 @@ make docker-test-up
 make test-integration
 ```
 
-单元测试使用 `testify/assert`、`go-sqlmock` 和 `miniredis`。CI 管线要求最低 60% 测试覆盖率。
+单元测试使用 `testify/assert`、`go-sqlmock` 和 `miniredis`。CI 管线对覆盖率门禁包集合要求最低 50% 测试覆盖率，并对 auth、OAuth2、OIDC、token、session 等关键服务包设置单包覆盖率门禁。
 
 ## 贡献
 

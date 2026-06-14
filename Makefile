@@ -3,42 +3,50 @@ OUTPUT:=./bin/gosso
 default: build
 
 build:
-	go build -buildvcs=false -ldflags="-s -w" -o $(OUTPUT) $(DEFAULT)
+	GOCACHE=$(LOCAL_GOCACHE) go build -buildvcs=false -ldflags="-s -w" -o $(OUTPUT) $(DEFAULT)
 	chmod +x $(OUTPUT)
 
 build-debug:
-	go build -buildvcs=false -gcflags "-N -l" -o $(OUTPUT) $(DEFAULT)
+	GOCACHE=$(LOCAL_GOCACHE) go build -buildvcs=false -gcflags "-N -l" -o $(OUTPUT) $(DEFAULT)
 	chmod +x $(OUTPUT)
 
 run:
 	$(OUTPUT) web
 
 dev:
-	@if ! command -v air &> /dev/null; then \
+	@if ! command -v air >/dev/null 2>&1; then \
 		go install github.com/air-verse/air@latest; \
 	fi
 	air -c .air.toml
 
 GOPATH_BIN := $(shell go env GOPATH)/bin
+LOCAL_GOCACHE ?= /tmp/gosso-go-build-cache
+LOCAL_GOLANGCI_CACHE ?= /tmp/gosso-golangci-lint-cache
+GO_TEST_ENV := GOCACHE=$(LOCAL_GOCACHE)
+COVERAGE_MIN ?= 50
 
 lint:
-	@if ! command -v golangci-lint &> /dev/null && ! [ -f "$(GOPATH_BIN)/golangci-lint" ]; then \
+	@if ! command -v golangci-lint >/dev/null 2>&1 && ! [ -f "$(GOPATH_BIN)/golangci-lint" ]; then \
 		echo "Installing golangci-lint..."; \
 		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2; \
 	fi
-	$(GOPATH_BIN)/golangci-lint run ./...
+	@GOLANGCI_LINT=$$(command -v golangci-lint || true); \
+	if [ -z "$$GOLANGCI_LINT" ]; then GOLANGCI_LINT="$(GOPATH_BIN)/golangci-lint"; fi; \
+	GOCACHE=$(LOCAL_GOCACHE) GOLANGCI_LINT_CACHE=$(LOCAL_GOLANGCI_CACHE) "$$GOLANGCI_LINT" run ./...
 
 lint-fix:
-	@if ! command -v golangci-lint &> /dev/null && ! [ -f "$(GOPATH_BIN)/golangci-lint" ]; then \
+	@if ! command -v golangci-lint >/dev/null 2>&1 && ! [ -f "$(GOPATH_BIN)/golangci-lint" ]; then \
 		echo "Installing golangci-lint..."; \
 		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2; \
 	fi
-	$(GOPATH_BIN)/golangci-lint run --fix ./...
+	@GOLANGCI_LINT=$$(command -v golangci-lint || true); \
+	if [ -z "$$GOLANGCI_LINT" ]; then GOLANGCI_LINT="$(GOPATH_BIN)/golangci-lint"; fi; \
+	GOCACHE=$(LOCAL_GOCACHE) GOLANGCI_LINT_CACHE=$(LOCAL_GOLANGCI_CACHE) "$$GOLANGCI_LINT" run --fix ./...
 test:
-	go test -race -v -count=1 ./...
+	$(GO_TEST_ENV) go test -race -v -count=1 ./...
 
 test-ui:
-	@if ! command -v goconvey &> /dev/null; then \
+	@if ! command -v goconvey >/dev/null 2>&1; then \
 		go install github.com/smartystreets/goconvey@latest; \
 	fi
 	GOFLAGS="-gcflags=all=-l" goconvey -port 9090 -excludedDirs="bin,cmd,config,doc,log,router" -cover
@@ -46,15 +54,29 @@ test-ui:
 test-integration:
 	@echo "🧪 Running integration tests..."
 	@echo "📋 Ensure docker-compose.test.yml is running (make docker-test-up)"
-	go test -p 1 -tags=integration -v -count=1 -timeout=120s ./internal/auth/service/ ./internal/session/service/ ./internal/token/service/ ./internal/account/ ./middleware/
+	$(GO_TEST_ENV) go test -p 1 -tags=integration -v -count=1 -timeout=120s ./internal/auth/service/ ./internal/session/service/ ./internal/token/service/ ./internal/account/ ./middleware/
 
-check: lint test build
+architecture-check:
+	bash script/check-architecture.sh
+
+coverage-check:
+	@echo "📊 Checking coverage threshold..."
+	$(GO_TEST_ENV) go test -p 1 -coverprofile=coverage.out -covermode=atomic $$(./script/coverage-packages.sh)
+	@cov=$$(GOCACHE=$(LOCAL_GOCACHE) go tool cover -func=coverage.out | grep -E '^total:' | awk '{print $$3}' | sed 's/%//'); \
+	echo "Total coverage: $${cov}%"; \
+	awk "BEGIN {exit !($${cov} >= $(COVERAGE_MIN))}" || (echo "Coverage $${cov}% is below $(COVERAGE_MIN)% threshold" && exit 1)
+
+critical-coverage-check:
+	@echo "📊 Checking critical package coverage thresholds..."
+	./script/check-critical-coverage.sh
+
+check: lint test architecture-check coverage-check critical-coverage-check build
 	@echo "✅ All checks passed"
 
 coverage:
 	@echo "📊 Generating coverage report..."
-	go test -p 1 -coverprofile=coverage.out -covermode=atomic $$(go list ./... | grep -Ev '/(cmd|deploy|docs|examples|script|tests)(/|$$)')
-	go tool cover -func=coverage.out | tail -1
+	$(GO_TEST_ENV) go test -p 1 -coverprofile=coverage.out -covermode=atomic $$(./script/coverage-packages.sh)
+	GOCACHE=$(LOCAL_GOCACHE) go tool cover -func=coverage.out | tail -1
 	@echo "📄 Full report: go tool cover -html=coverage.out"
 
 docker-dev-up:
@@ -164,7 +186,7 @@ help:
 	@echo "🆘 Help Commands:"
 	@echo "  help                 - Show this help message"
 
-.PHONY: default build build-debug run dev lint lint-fix test test-ui test-integration check coverage docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs docker-prod-up docker-prod-down docker-prod-logs env-dev env-test env-prod env-all help
+.PHONY: default build build-debug run dev lint lint-fix test test-ui test-integration architecture-check coverage-check critical-coverage-check check coverage docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs docker-prod-up docker-prod-down docker-prod-logs env-dev env-test env-prod env-all help
 # Examples - 示例程序
 .PHONY: examples example-account example-redis
 

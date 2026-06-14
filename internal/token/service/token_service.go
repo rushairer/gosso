@@ -131,7 +131,8 @@ func (s *TokenService) AccessExpiry() time.Duration {
 
 // ValidateAccessTokenWithContext validates a JWT access token using the request context
 func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*domain.AccessTokenClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &domain.AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
+	parser := jwt.NewParser(jwt.WithIssuer(s.issuer))
+	token, err := parser.ParseWithClaims(tokenString, &domain.AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}

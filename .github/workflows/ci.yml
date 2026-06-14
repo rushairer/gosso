@@ -8,6 +8,7 @@ on:
 
 env:
   GO_VERSION: "1.26"
+  COVERAGE_MIN: "50"
 
 jobs:
   lint:
@@ -58,13 +59,20 @@ jobs:
 
       - name: Check coverage threshold
         run: |
-          go tool cover -func=coverage.out | grep -E '^total:' | awk '{print $3}' | sed 's/%//' | { read cov; echo "Total coverage: ${cov}%"; if [ "$(echo "$cov < 60" | bc -l)" -eq 1 ]; then echo "Coverage ${cov}% is below 60% threshold"; exit 1; fi; }
+          packages=$(./script/coverage-packages.sh)
+          go test -p 1 -coverprofile=coverage-gate.out -covermode=atomic $packages
+          go tool cover -func=coverage-gate.out | grep -E '^total:' | awk '{print $3}' | sed 's/%//' | { read cov; echo "Coverage gate total: ${cov}%"; if [ "$(echo "$cov < ${COVERAGE_MIN}" | bc -l)" -eq 1 ]; then echo "Coverage ${cov}% is below ${COVERAGE_MIN}% threshold"; exit 1; fi; }
+
+      - name: Check critical package coverage
+        run: ./script/check-critical-coverage.sh
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
           name: coverage
-          path: coverage.out
+          path: |
+            coverage.out
+            coverage-gate.out
 
       - name: Per-module coverage report
         if: always()
@@ -182,7 +190,6 @@ jobs:
     name: Docker Build
     runs-on: ubuntu-latest
     needs: [integration-test, build]
-    if: github.event_name == 'push'
 
     steps:
       - uses: actions/checkout@v4

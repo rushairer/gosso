@@ -251,6 +251,20 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		return
 	}
 
+	switch dc.Status {
+	case oauth2Domain.DeviceCodeStatusPending:
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "authorization_pending", "error_description": "authorization is pending"})
+		return
+	case oauth2Domain.DeviceCodeStatusDenied:
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "access_denied", "error_description": "device authorization was denied"})
+		return
+	case oauth2Domain.DeviceCodeStatusAuthorized:
+		// Continue to account validation and atomic claim.
+	default:
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "device code already consumed"})
+		return
+	}
+
 	// Verify account is still active BEFORE claiming the device code.
 	// If checked after claim, an inactive account would waste the device code.
 	if !c.accountValidator.IsAccountActive(ctx, dc.AccountID) {

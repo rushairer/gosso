@@ -10,7 +10,7 @@ info:
     - OpenID Connect Provider (ID token, discovery, JWKS, userinfo)
     - Social login (Google, GitHub, WeChat)
     - Admin account management
-    - Email/phone verification and password reset
+    - Email verification and password reset (phone verification reserved until SMS gateway is configured)
   version: 1.0.0
   contact:
     name: rushairer
@@ -471,7 +471,7 @@ paths:
     post:
       tags: [Auth]
       summary: Send verification code
-      description: Sends a verification code to the specified email or phone number. Requires authentication.
+      description: Sends a verification code to the specified email address. Phone verification is reserved until an SMS gateway is configured and currently returns 501 Not Implemented. Requires authentication.
       operationId: sendVerification
       security:
         - BearerAuth: []
@@ -498,6 +498,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+        "501":
+          description: Phone verification is not implemented
 
   /api/auth/verify/confirm:
     post:
@@ -1783,9 +1785,10 @@ components:
         type:
           type: string
           enum: [email, phone]
+          description: Use email. Phone is reserved until SMS gateway support is configured.
         identifier:
           type: string
-          description: Email address or phone number
+          description: Email address, or phone number for the reserved phone flow
           example: user@example.com
 
     ConfirmVerificationRequest:

@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -32,6 +34,18 @@ func findConfigDir() string {
 }
 
 func parsePostgresDSN(dsn string) (user, password, host string, port int, database string) {
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		u, err := url.Parse(dsn)
+		if err == nil {
+			user = u.User.Username()
+			password, _ = u.User.Password()
+			host = u.Hostname()
+			port, _ = strconv.Atoi(u.Port())
+			database = strings.TrimPrefix(u.Path, "/")
+			return
+		}
+	}
+
 	// host=x user=x password=x dbname=x port=x ...
 	parts := strings.Fields(dsn)
 	for _, part := range parts {
@@ -69,6 +83,21 @@ func parseRedisDSN(dsn string) (host string, port int, password string, database
 
 	if dsn == "" {
 		return
+	}
+
+	if strings.HasPrefix(dsn, "redis://") || strings.HasPrefix(dsn, "rediss://") {
+		u, err := url.Parse(dsn)
+		if err == nil {
+			host = u.Hostname()
+			if parsedPort, convErr := strconv.Atoi(u.Port()); convErr == nil {
+				port = parsedPort
+			}
+			password, _ = u.User.Password()
+			if dbPath := strings.TrimPrefix(u.Path, "/"); dbPath != "" {
+				database, _ = strconv.Atoi(dbPath)
+			}
+			return
+		}
 	}
 
 	// Handle redis:// protocol
@@ -123,6 +152,34 @@ func parseRedisDSN(dsn string) (host string, port int, password string, database
 	return
 }
 
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+func exportString(name, value string) {
+	fmt.Printf("export %s=%s\n", name, shellQuote(value))
+}
+
+func exportInt(name string, value int) {
+	exportString(name, strconv.Itoa(value))
+}
+
+func exportBool(name string, value bool) {
+	exportString(name, strconv.FormatBool(value))
+}
+
+func splitHostPortFallback(host string, fallbackPort int) (string, int) {
+	parsedHost, parsedPort, err := net.SplitHostPort(host)
+	if err != nil {
+		return host, fallbackPort
+	}
+	port, err := strconv.Atoi(parsedPort)
+	if err != nil {
+		return parsedHost, fallbackPort
+	}
+	return parsedHost, port
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		log.Fatalf("❌ Usage: %s <environment>", os.Args[0])
@@ -161,69 +218,74 @@ func main() {
 	redisHost, _, redisPassword, redisDatabase := parseRedisDSN(cfg.RedisConfig.DSN)
 
 	// Output application configuration
-	fmt.Printf("export APP_PORT=%d\n", envConfig.App.Port)
-	fmt.Printf("export APP_EXTERNAL_PORT=%d\n", envConfig.App.ExternalPort)
-	fmt.Printf("export GIN_MODE=%s\n", envConfig.App.GinMode)
-	fmt.Printf("export DEBUG=%t\n", envConfig.App.Debug)
+	exportInt("APP_PORT", envConfig.App.Port)
+	exportInt("APP_EXTERNAL_PORT", envConfig.App.ExternalPort)
+	exportString("GIN_MODE", envConfig.App.GinMode)
+	exportBool("DEBUG", envConfig.App.Debug)
 
 	// Output PostgreSQL configuration (prioritize environment config, fallback to parsed config)
 	if envConfig.Postgres.Database != "" {
-		fmt.Printf("export POSTGRES_DB=%s\n", envConfig.Postgres.Database)
+		exportString("POSTGRES_DB", envConfig.Postgres.Database)
 	} else {
-		fmt.Printf("export POSTGRES_DB=%s\n", pgDatabase)
+		exportString("POSTGRES_DB", pgDatabase)
 	}
 
 	if envConfig.Postgres.User != "" {
-		fmt.Printf("export POSTGRES_USER=%s\n", envConfig.Postgres.User)
+		exportString("POSTGRES_USER", envConfig.Postgres.User)
 	} else {
-		fmt.Printf("export POSTGRES_USER=%s\n", pgUser)
+		exportString("POSTGRES_USER", pgUser)
 	}
 
 	if envConfig.Postgres.Password != "" {
-		fmt.Printf("export POSTGRES_PASSWORD=%s\n", envConfig.Postgres.Password)
+		exportString("POSTGRES_PASSWORD", envConfig.Postgres.Password)
 	} else {
-		fmt.Printf("export POSTGRES_PASSWORD=%s\n", pgPassword)
+		exportString("POSTGRES_PASSWORD", pgPassword)
 	}
 
-	fmt.Printf("export POSTGRES_HOST=%s\n", pgHost)
-	fmt.Printf("export POSTGRES_PORT=%d\n", envConfig.Postgres.Port)
-	fmt.Printf("export POSTGRES_EXTERNAL_PORT=%d\n", envConfig.Postgres.ExternalPort)
+	pgHost, pgPort := splitHostPortFallback(pgHost, envConfig.Postgres.Port)
+	if pgHost == "" {
+		pgHost = "postgres"
+	}
+	exportString("POSTGRES_HOST", pgHost)
+	exportInt("POSTGRES_PORT", pgPort)
+	exportInt("POSTGRES_EXTERNAL_PORT", envConfig.Postgres.ExternalPort)
 
 	// Output Redis configuration
-	fmt.Printf("export REDIS_HOST=%s\n", redisHost)
-	fmt.Printf("export REDIS_PORT=%d\n", envConfig.Redis.Port)
-	fmt.Printf("export REDIS_EXTERNAL_PORT=%d\n", envConfig.Redis.ExternalPort)
+	redisHost, redisPort := splitHostPortFallback(redisHost, envConfig.Redis.Port)
+	exportString("REDIS_HOST", redisHost)
+	exportInt("REDIS_PORT", redisPort)
+	exportInt("REDIS_EXTERNAL_PORT", envConfig.Redis.ExternalPort)
 	if redisPassword != "" {
-		fmt.Printf("export REDIS_PASSWORD=%s\n", redisPassword)
+		exportString("REDIS_PASSWORD", redisPassword)
 	}
 	// Prioritize using the database number from the environment configuration
 	if envConfig.Redis.Database != 0 {
-		fmt.Printf("export REDIS_DATABASE=%d\n", envConfig.Redis.Database)
+		exportInt("REDIS_DATABASE", envConfig.Redis.Database)
 	} else {
-		fmt.Printf("export REDIS_DATABASE=%d\n", redisDatabase)
+		exportInt("REDIS_DATABASE", redisDatabase)
 	}
 
 	// Output SMTP configuration
-	fmt.Printf("export SMTP_HOST=%s\n", envConfig.SMTP.Host)
-	fmt.Printf("export SMTP_PORT=%d\n", envConfig.SMTP.Port)
-	fmt.Printf("export SMTP_EXTERNAL_PORT=%d\n", envConfig.SMTP.ExternalPort)
-	fmt.Printf("export SMTP_USERNAME=%s\n", cfg.SMTPConfig.Username)
-	fmt.Printf("export SMTP_PASSWORD=%s\n", cfg.SMTPConfig.Password)
-	fmt.Printf("export SMTP_FROM=%s\n", cfg.SMTPConfig.From)
+	exportString("SMTP_HOST", envConfig.SMTP.Host)
+	exportInt("SMTP_PORT", envConfig.SMTP.Port)
+	exportInt("SMTP_EXTERNAL_PORT", envConfig.SMTP.ExternalPort)
+	exportString("SMTP_USERNAME", cfg.SMTPConfig.Username)
+	exportString("SMTP_PASSWORD", cfg.SMTPConfig.Password)
+	exportString("SMTP_FROM", cfg.SMTPConfig.From)
 
 	// Output Mailpit configuration
-	fmt.Printf("export MAILPIT_WEB_PORT=%d\n", envConfig.Mailpit.WebPort)
-	fmt.Printf("export MAILPIT_WEB_EXTERNAL_PORT=%d\n", envConfig.Mailpit.WebExternalPort)
+	exportInt("MAILPIT_WEB_PORT", envConfig.Mailpit.WebPort)
+	exportInt("MAILPIT_WEB_EXTERNAL_PORT", envConfig.Mailpit.WebExternalPort)
 
 	// Output Nginx configuration (only production environment)
 	if envConfig.Nginx.HTTPPort != 0 {
-		fmt.Printf("export NGINX_HTTP_PORT=%d\n", envConfig.Nginx.HTTPPort)
-		fmt.Printf("export NGINX_HTTPS_PORT=%d\n", envConfig.Nginx.HTTPSPort)
+		exportInt("NGINX_HTTP_PORT", envConfig.Nginx.HTTPPort)
+		exportInt("NGINX_HTTPS_PORT", envConfig.Nginx.HTTPSPort)
 	}
 
 	// Output network configuration
-	fmt.Printf("export NETWORK_NAME=%s\n", envConfig.Network.Name)
-	fmt.Printf("export NETWORK_SUBNET=%s\n", envConfig.Network.Subnet)
+	exportString("NETWORK_NAME", envConfig.Network.Name)
+	exportString("NETWORK_SUBNET", envConfig.Network.Subnet)
 
 	// Output configuration information to stderr
 	fmt.Fprintf(os.Stderr, "✅ %s environment configuration parsed:\n", strings.ToUpper(env))

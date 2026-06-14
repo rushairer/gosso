@@ -9,23 +9,39 @@ import (
 
 	"github.com/rushairer/gosso/internal/controllerutil"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
-	"github.com/rushairer/gosso/middleware"
 )
 
 // Revoke POST /oauth2/revoke (RFC 7009)
 func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 	var req struct {
-		Token     string `json:"token" form:"token" binding:"required"`
-		TokenHint string `json:"token_type_hint" form:"token_type_hint"`
+		Token        string `json:"token" form:"token" binding:"required"`
+		TokenHint    string `json:"token_type_hint" form:"token_type_hint"`
+		ClientID     string `json:"client_id" form:"client_id"`
+		ClientSecret string `json:"client_secret" form:"client_secret"`
 	}
 	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
 		return
 	}
 
-	// Verify the token belongs to the authenticated user before revoking.
-	accountIDStr, ok := middleware.GetAccountID(ctx)
-	if !ok {
+	// RFC 7009 requires client authentication where applicable. Basic auth
+	// takes precedence over request body credentials per RFC 6749 §2.3.1.
+	if clientID, clientSecret, ok := ctx.Request.BasicAuth(); ok {
+		req.ClientID = clientID
+		req.ClientSecret = clientSecret
+	}
+	if req.ClientID == "" {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client authentication required"})
+		return
+	}
+	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
+		return
+	}
+	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
+		controllerutil.HandleClientAuthError(ctx, c.logger, err,
+			oauth2Service.ErrClientSecretRequired, "client secret is required", "invalid client credentials")
 		return
 	}
 
@@ -33,7 +49,7 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 	if req.TokenHint != "access_token" {
 		rt, err := c.tokenSvc.ValidateRefreshToken(ctx, req.Token)
 		if err == nil {
-			if rt.AccountID != accountIDStr {
+			if rt.ClientID != req.ClientID {
 				ctx.Status(http.StatusOK)
 				return
 			}
@@ -50,7 +66,7 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 	// Try access token (RFC 7009 §2.1: revoke whatever type matches)
 	if req.TokenHint != "refresh_token" {
 		claims, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx, req.Token)
-		if err == nil && claims.AccountID == accountIDStr {
+		if err == nil && claims.ClientID == req.ClientID {
 			if revokeErr := c.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); revokeErr != nil {
 				c.logger.Error("Failed to revoke access token", zap.Error(revokeErr))
 			}

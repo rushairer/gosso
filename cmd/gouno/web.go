@@ -25,7 +25,10 @@ var webCmd = &cobra.Command{
 }
 
 func init() {
-	webCmd.Flags().StringP("config_path", "c", "./config", "config file path")
+	webCmd.Flags().StringP("config", "c", defaultConfigPath, "config directory path")
+	webCmd.Flags().String("config_path", defaultConfigPath, "config directory path (deprecated; use --config)")
+	_ = webCmd.Flags().MarkHidden("config_path")
+	_ = webCmd.Flags().MarkDeprecated("config_path", "use --config")
 	webCmd.Flags().StringP("address", "a", "0.0.0.0", "address to listen on")
 	webCmd.Flags().StringP("port", "p", "8080", "port to listen on")
 	webCmd.Flags().BoolP("debug", "d", false, "debug mode")
@@ -36,7 +39,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	configPath := cmd.Flag("config_path").Value.String()
+	configPath := getConfigPath(cmd)
 	env := cmd.Flag("env").Value.String()
 
 	configManager, err := config.NewConfigManager(cmd, configPath, env)
@@ -129,6 +132,6 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	// Drain in-flight audit batches before exiting
 	auditAuditor.Wait()
 
-	_ = logger.Sync()
 	logger.Info("server exiting")
+	_ = logger.Sync()
 }

@@ -133,6 +133,28 @@ func TestValidateAccessTokenWithContext_WrongKey(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestValidateAccessTokenWithContext_WrongIssuer(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	claims := &domain.AccessTokenClaims{
+		AccountID: "account-wrong-issuer",
+		SessionID: "session-wrong-issuer",
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "https://other-issuer.example.com",
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	token.Header["kid"] = svc.KeyService().KeyID()
+	tokenString, err := token.SignedString(svc.KeyService().PrivateKey())
+	require.NoError(t, err)
+
+	_, err = svc.ValidateAccessTokenWithContext(context.Background(), tokenString)
+	assert.Error(t, err)
+}
+
 func TestValidateAccessTokenWithContext_Revoked(t *testing.T) {
 	svc, cleanup := setupTestTokenService(t)
 	defer cleanup()
