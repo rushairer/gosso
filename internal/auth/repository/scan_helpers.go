@@ -8,7 +8,7 @@ import (
 	"github.com/rushairer/gosso/internal/auth/domain"
 )
 
-// scanWebAuthnCredential scans all 13 columns of a webauthn_credentials row
+// scanWebAuthnCredential scans all 14 columns of a webauthn_credentials row
 // into a new WebAuthnCredential. Returns the raw scan error so callers can
 // check for sql.ErrNoRows.
 func scanWebAuthnCredential(s dbPkg.Scannable) (*domain.WebAuthnCredential, error) {
@@ -28,6 +28,7 @@ func scanWebAuthnCredential(s dbPkg.Scannable) (*domain.WebAuthnCredential, erro
 		&cred.Name,
 		&cred.Verified,
 		&cred.CreatedAt,
+		&cred.UpdatedAt,
 		&lastUsedAt,
 		&deletedAt,
 	)

@@ -20,6 +20,7 @@ type WebAuthnCredential struct {
 	Name            string
 	Verified        bool
 	CreatedAt       time.Time
+	UpdatedAt       time.Time
 	LastUsedAt      *time.Time
 	DeletedAt       *time.Time
 }

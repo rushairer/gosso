@@ -37,12 +37,13 @@ func TestScanWebAuthnCredential_Success(t *testing.T) {
 		Name:            "My Passkey",
 		Verified:        true,
 		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 
 	rows := sqlmock.NewRows(webauthnColumns()).AddRow(
 		cred.ID, cred.AccountID, cred.CredentialID, cred.PublicKey, cred.SignCount,
 		cred.AAGUID, trJSON, cred.AttestationType, cred.Name, cred.Verified,
-		cred.CreatedAt, lastUsedAt, nil, // deleted_at is NULL
+		cred.CreatedAt, cred.UpdatedAt, lastUsedAt, nil, // deleted_at is NULL
 	)
 	mock.ExpectQuery("SELECT .+ FROM webauthn_credentials").WillReturnRows(rows)
 
@@ -53,7 +54,7 @@ func TestScanWebAuthnCredential_Success(t *testing.T) {
 	got, err := scanWebAuthnCredential(result)
 	require.NoError(t, err)
 
-	// 13 columns scanned
+	// 14 columns scanned
 	assert.Equal(t, "cred-001", got.ID)
 	assert.Equal(t, "account-001", got.AccountID)
 	assert.Equal(t, []byte("cred-id-bytes"), got.CredentialID)
@@ -86,7 +87,7 @@ func TestScanWebAuthnCredential_NilTransports(t *testing.T) {
 	rows := sqlmock.NewRows(webauthnColumns()).AddRow(
 		"cred-002", "account-002", []byte("cid"), []byte("pk"), uint32(0),
 		[]byte("aaguid"), nil, "none", "Passkey", false,
-		now, nil, nil, // transports is nil (NULL), lastUsedAt NULL, deletedAt NULL
+		now, now, nil, nil, // transports is nil (NULL), lastUsedAt NULL, deletedAt NULL
 	)
 	mock.ExpectQuery("SELECT .+ FROM webauthn_credentials").WillReturnRows(rows)
 
@@ -116,7 +117,7 @@ func TestScanWebAuthnCredential_NullableTimestamps(t *testing.T) {
 	rows := sqlmock.NewRows(webauthnColumns()).AddRow(
 		"cred-003", "account-003", []byte("cid"), []byte("pk"), uint32(10),
 		[]byte("aaguid"), trJSON, "none", "Hardware Key", true,
-		now, lastUsedAt, deletedAt,
+		now, now, lastUsedAt, deletedAt,
 	)
 	mock.ExpectQuery("SELECT .+ FROM webauthn_credentials").WillReturnRows(rows)
 

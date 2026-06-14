@@ -28,9 +28,13 @@ func (r *webAuthnCredentialRepositoryImpl) CreateCredential(ctx context.Context,
 
 	query := `
 		INSERT INTO webauthn_credentials
-		(id, account_id, credential_id, public_key, sign_count, aaguid, transports, attestation_type, name, verified, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		(id, account_id, credential_id, public_key, sign_count, aaguid, transports, attestation_type, name, verified, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
+
+	if cred.UpdatedAt.IsZero() {
+		cred.UpdatedAt = cred.CreatedAt
+	}
 
 	_, err = tx.ExecContext(ctx, query,
 		cred.ID,
@@ -44,6 +48,7 @@ func (r *webAuthnCredentialRepositoryImpl) CreateCredential(ctx context.Context,
 		cred.Name,
 		cred.Verified,
 		cred.CreatedAt,
+		cred.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("insert webauthn credential: %w", err)
@@ -54,7 +59,7 @@ func (r *webAuthnCredentialRepositoryImpl) CreateCredential(ctx context.Context,
 
 func (r *webAuthnCredentialRepositoryImpl) FindByCredentialID(ctx context.Context, credentialID string) (*domain.WebAuthnCredential, error) {
 	query := `
-		SELECT id, account_id, credential_id, public_key, sign_count, aaguid, transports, attestation_type, name, verified, created_at, last_used_at, deleted_at
+		SELECT id, account_id, credential_id, public_key, sign_count, aaguid, transports, attestation_type, name, verified, created_at, updated_at, last_used_at, deleted_at
 		FROM webauthn_credentials
 		WHERE credential_id = $1 AND deleted_at IS NULL
 		LIMIT 1
@@ -73,7 +78,7 @@ func (r *webAuthnCredentialRepositoryImpl) FindByCredentialID(ctx context.Contex
 
 func (r *webAuthnCredentialRepositoryImpl) FindByAccountID(ctx context.Context, accountID string) ([]*domain.WebAuthnCredential, error) {
 	query := `
-		SELECT id, account_id, credential_id, public_key, sign_count, aaguid, transports, attestation_type, name, verified, created_at, last_used_at, deleted_at
+		SELECT id, account_id, credential_id, public_key, sign_count, aaguid, transports, attestation_type, name, verified, created_at, updated_at, last_used_at, deleted_at
 		FROM webauthn_credentials
 		WHERE account_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at ASC

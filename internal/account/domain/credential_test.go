@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -57,7 +58,7 @@ func TestHashPassword_Deterministic(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, h1)
 	// Verify the hash works
-	assert.NoError(t, compareHashAndPassword(h1, "test"))
+	assert.NoError(t, compareHashAndPassword(t, h1, "test"))
 }
 
 func TestHashPassword_DifferentInputs(t *testing.T) {
@@ -67,13 +68,13 @@ func TestHashPassword_DifferentInputs(t *testing.T) {
 }
 
 // compareHashAndPassword is a test helper
-func compareHashAndPassword(hashed, password string) error {
+func compareHashAndPassword(t *testing.T, hashed, password string) error {
 	cred := &Credential{Type: CredentialTypePassword, Value: hashed}
 	if cred.VerifyPassword(password) {
 		return nil
 	}
-	assert.Fail(nil, "password mismatch")
-	return nil
+	assert.Fail(t, "password mismatch")
+	return fmt.Errorf("password mismatch")
 }
 
 // ──────────────────────────────────────────────

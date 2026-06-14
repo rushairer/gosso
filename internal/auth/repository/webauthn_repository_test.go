@@ -28,18 +28,19 @@ func newTestWebAuthnCred() *domain.WebAuthnCredential {
 		Name:            "My Passkey",
 		Verified:        true,
 		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 }
 
 func webauthnColumns() []string {
 	return []string{"id", "account_id", "credential_id", "public_key", "sign_count",
-		"aaguid", "transports", "attestation_type", "name", "verified", "created_at", "last_used_at", "deleted_at"}
+		"aaguid", "transports", "attestation_type", "name", "verified", "created_at", "updated_at", "last_used_at", "deleted_at"}
 }
 
 func webauthnRowValues(c *domain.WebAuthnCredential) []driver.Value {
 	trJSON, _ := json.Marshal(c.Transports)
 	return []driver.Value{c.ID, c.AccountID, c.CredentialID, c.PublicKey, c.SignCount,
-		c.AAGUID, trJSON, c.AttestationType, c.Name, c.Verified, c.CreatedAt, c.LastUsedAt, c.DeletedAt}
+		c.AAGUID, trJSON, c.AttestationType, c.Name, c.Verified, c.CreatedAt, c.UpdatedAt, c.LastUsedAt, c.DeletedAt}
 }
 
 // ──────────────────────────────────────────────
@@ -57,7 +58,7 @@ func TestWebAuthn_CreateCredential_Success(t *testing.T) {
 	c := newTestWebAuthnCred()
 	mock.ExpectExec("INSERT INTO webauthn_credentials").
 		WithArgs(c.ID, c.AccountID, c.CredentialID, c.PublicKey, c.SignCount,
-			c.AAGUID, sqlmock.AnyArg(), c.AttestationType, c.Name, c.Verified, c.CreatedAt).
+			c.AAGUID, sqlmock.AnyArg(), c.AttestationType, c.Name, c.Verified, c.CreatedAt, c.UpdatedAt).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewWebAuthnCredentialRepository(db)
@@ -115,7 +116,7 @@ func TestWebAuthn_FindByAccountID_Success(t *testing.T) {
 	c1 := newTestWebAuthnCred()
 	c2 := &domain.WebAuthnCredential{
 		ID: "cred-002", AccountID: "account-001", CredentialID: []byte("cred-2"),
-		PublicKey: []byte("pk-2"), Name: "iPhone", Verified: true, CreatedAt: time.Now(),
+		PublicKey: []byte("pk-2"), Name: "iPhone", Verified: true, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	rows := sqlmock.NewRows(webauthnColumns()).
 		AddRow(webauthnRowValues(c1)...).
