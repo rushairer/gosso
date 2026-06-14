@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -223,29 +224,32 @@ type OAuthProvidersConfig struct {
 }
 
 // Validate checks that critical configuration values are present and valid.
+// It accumulates all validation errors across sections and returns them joined,
+// so that callers can fix all issues in one pass instead of one at a time.
 func (c *GoUnoConfig) Validate() error {
+	var errs []error
 	if err := c.validateWebServer(); err != nil {
-		return err
+		errs = append(errs, err)
 	}
 	if err := c.validateLog(); err != nil {
-		return err
+		errs = append(errs, err)
 	}
 	if err := c.validateDatabase(); err != nil {
-		return err
+		errs = append(errs, err)
 	}
 	if err := c.validateRedis(); err != nil {
-		return err
+		errs = append(errs, err)
 	}
 	if err := c.validateAuth(); err != nil {
-		return err
+		errs = append(errs, err)
 	}
 	if err := c.validateSMTP(); err != nil {
-		return err
+		errs = append(errs, err)
 	}
 	if err := c.validateCORS(); err != nil {
-		return err
+		errs = append(errs, err)
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (c *GoUnoConfig) validateWebServer() error {

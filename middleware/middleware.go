@@ -22,7 +22,7 @@ func TimeoutMiddleware(requestTimeout time.Duration) gin.HandlerFunc {
 		timeout.WithTimeout(requestTimeout),
 		timeout.WithResponse(
 			func(ctx *gin.Context) {
-				ctx.JSON(http.StatusRequestTimeout, gouno.RequestTimeoutResponse)
+				ctx.JSON(http.StatusRequestTimeout, gouno.NewRequestTimeoutResponse())
 			},
 		),
 	)
@@ -40,7 +40,7 @@ func RecoveryMiddleware(logger *zap.Logger) gin.HandlerFunc {
 				zap.String("path", ctx.Request.URL.Path),
 				zap.String("method", ctx.Request.Method),
 			)
-			ctx.JSON(http.StatusInternalServerError, gouno.InternalServerErrorResponse)
+			ctx.JSON(http.StatusInternalServerError, gouno.NewInternalServerErrorResponse())
 		},
 	)
 }
@@ -52,7 +52,7 @@ func SecurityHeadersMiddleware(isProduction bool) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		nonce, err := generateCSPNonce()
 		if err != nil {
-			ctx.AbortWithStatusJSON(http.StatusInternalServerError, gouno.InternalServerErrorResponse)
+			ctx.AbortWithStatusJSON(http.StatusInternalServerError, gouno.NewInternalServerErrorResponse())
 			return
 		}
 		ctx.Set(cspNonceKey, nonce)

@@ -451,6 +451,25 @@ func TestValidate_DebugIssuerAllowsLocalhostHTTP(t *testing.T) {
 	assert.NoError(t, cfg.Validate())
 }
 
+func TestValidate_AccumulatesErrorsAcrossSections(t *testing.T) {
+	cfg := validConfig()
+	// Introduce errors in multiple sections simultaneously
+	cfg.DatabaseConfig.Default = "nonexistent"  // database error
+	cfg.RedisConfig.DSN = ""                     // redis error
+	cfg.AuthConfig.TOTPEncryptionKey = ""        // auth error
+	cfg.WebServerConfig.RateLimits.Login = 0     // web_server error
+
+	err := cfg.Validate()
+	require.Error(t, err)
+
+	errMsg := err.Error()
+	// All four section errors should appear in the joined error
+	assert.Contains(t, errMsg, "database: no default driver configured")
+	assert.Contains(t, errMsg, "redis: DSN is empty")
+	assert.Contains(t, errMsg, "auth: totp_encryption_key is required")
+	assert.Contains(t, errMsg, "rate_limits.login must be positive")
+}
+
 // ──────────────────────────────────────────────
 // Validate — valid configs with optional sections
 // ──────────────────────────────────────────────

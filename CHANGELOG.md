@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- `middleware.go` now uses `gouno.NewRequestTimeoutResponse()` and `gouno.NewInternalServerErrorResponse()` instead of shared mutable preset variables — eliminates shared state risk (`middleware/middleware.go`).
+- `config.Validate()` now accumulates all validation errors across sections (web server, database, redis, auth, SMTP, CORS) and returns them joined via `errors.Join` — users can fix all config issues in one pass instead of one at a time (`config/config.go`).
+
 ### Fixed
 - Password reset Lua script (`checkAndIncrementAttemptsScript`) now deletes the key on attempt exhaustion — previously left exhausted token data in Redis until TTL expiry (`internal/auth/service/password_reset_service.go`).
 
