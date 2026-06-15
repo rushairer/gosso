@@ -101,6 +101,9 @@ services:
       timeout: 3s
       retries: 3
       start_period: 10s
+    # NOTE: --requirepass is visible in /proc/<pid>/cmdline inside the container.
+    # For high-security deployments, consider setting requirepass in a mounted
+    # config file or using Docker secrets instead.
     command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD}"]
     security_opt:
       - no-new-privileges:true

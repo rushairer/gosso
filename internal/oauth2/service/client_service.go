@@ -62,13 +62,13 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 
 	// Validate client metadata before persisting
 	if strings.TrimSpace(req.Name) == "" {
-		return nil, "", fmt.Errorf("client name is required")
+		return nil, "", &ValidationError{Message: "client name is required"}
 	}
 	if len(req.Name) > 256 {
-		return nil, "", fmt.Errorf("client name must not exceed 256 characters")
+		return nil, "", &ValidationError{Message: "client name must not exceed 256 characters"}
 	}
 	if len(req.Description) > 1024 {
-		return nil, "", fmt.Errorf("client description must not exceed 1024 characters")
+		return nil, "", &ValidationError{Message: "client description must not exceed 1024 characters"}
 	}
 	if err := validateRedirectURIs(req.RedirectURIs); err != nil {
 		return nil, "", err
@@ -171,7 +171,7 @@ func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, a
 	}
 	if req.RedirectURIs != nil {
 		if len(req.RedirectURIs) == 0 {
-			return nil, fmt.Errorf("redirect_uris must not be empty when provided")
+			return nil, &ValidationError{Message: "redirect_uris must not be empty when provided"}
 		}
 		if err := validateRedirectURIs(req.RedirectURIs); err != nil {
 			return nil, err
@@ -222,7 +222,7 @@ func validateGrantTypes(types []string) error {
 			}
 		}
 		if !found {
-			return fmt.Errorf("invalid grant_type: %q", gt)
+			return &ValidationError{Message: fmt.Sprintf("invalid grant_type: %q", gt)}
 		}
 	}
 	return nil
@@ -232,7 +232,7 @@ func validateRedirectURIs(uris []string) error {
 	for _, uri := range uris {
 		u, err := url.Parse(uri)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Fragment != "" {
-			return fmt.Errorf("redirect_uris must use http or https scheme without fragment: %s", uri)
+			return &ValidationError{Message: fmt.Sprintf("redirect_uris must use http or https scheme without fragment: %s", uri)}
 		}
 	}
 	return nil

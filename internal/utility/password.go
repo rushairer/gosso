@@ -13,7 +13,7 @@ const MinPasswordLength = 12
 // MaxPasswordLength is the maximum allowed password length.
 // Argon2id has no 72-byte limit (unlike bcrypt), but this cap prevents
 // excessive CPU/memory usage from oversized inputs.
-const MaxPasswordLength = 1024
+const MaxPasswordLength = 128
 
 // allowedSpecialChars defines the set of accepted special characters in passwords.
 // This restrictive whitelist avoids obscure Unicode symbols (combining marks, control

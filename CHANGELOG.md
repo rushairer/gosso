@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- OAuth2 token endpoint now returns identical HTTP 401 `invalid_client` for all client authentication failures (client not found, wrong grant type) — prevents client_id enumeration via status code or error string differentiation (`internal/oauth2/controller/oauth2_token.go`).
+- Social login `createNewUser` no longer returns raw database errors to callers — generic error message logged internally for debugging (`internal/auth/service/social_login_service.go`).
+- Removed hardcoded `gosso123` password from `deploy/environments.yaml` — now uses `${POSTGRES_PASSWORD}` environment variable substitution (`deploy/environments.yaml`).
 - Removed hardcoded TOTP encryption key from `config/development.yaml` and `config/test.yaml` — key is now provided via `GOUNO_AUTH_TOTP_ENCRYPTION_KEY` environment variable with default fallback in `config_manager.go` (`config/development.yaml`, `config/test.yaml`, `config/config_manager.go`).
 - `GenerateShortLivedToken` now enforces a maximum TTL of 1 hour (`MaxShortLivedExpiry`) — prevents callers from accidentally creating excessively long-lived tokens (`internal/token/service/token_service.go`).
 - `updateCredentialLastUsed` now uses a dedicated `UpdateLastUsedAt` SQL update instead of `UpdateCredential` — eliminates TOCTOU risk where concurrent modifications to other credential fields could be overwritten (`internal/auth/service/auth_service.go`, `internal/account/repository/`).
@@ -35,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Rate limiter Redis key separator changed from `:` to `|` — prevents key collisions when `keyFunc` returns strings containing `:` (`middleware/redis_ratelimit.go`).
 - Rate limiter Redis error log level downgraded from `Error` to `Warn` — prevents log storms when Redis is unavailable under high traffic (`middleware/redis_ratelimit.go`).
 - Redis DSN empty error message now includes `GOUNO_REDIS_DSN` env var hint (`config/config.go`).
+- `isValidationError` in OAuth2 client controller now uses typed `ValidationError` instead of brittle string matching — prevents misclassification of internal errors as validation errors (`internal/oauth2/service/errors.go`, `internal/oauth2/service/client_service.go`, `internal/oauth2/controller/client_controller.go`).
+- `MaxPasswordLength` lowered from 1024 to 128 bytes — aligns domain layer with controller binding limits; 128 bytes is sufficient for any reasonable password (`internal/utility/password.go`, `internal/account/domain/credential.go`).
+- `PasswordResetService` background goroutines now use cancellable context — `Wait()` signals goroutines to wind down before blocking, enabling faster graceful shutdown (`internal/auth/service/password_reset_service.go`).
+- Test environment PostgreSQL version aligned from 15 to 16 — matches development and production environments (`docker-compose.test.yml`, `deploy/environments.yaml`).
+- `shutdown_timeout` now explicitly declared in `config/development.yaml` and `config/test.yaml` — removes fragile coupling with Viper default in code (`config/development.yaml`, `config/test.yaml`).
 
 ### Removed
 - `checkCredentialExists` (non-transactional variant) — dead code, all callers use `checkCredentialExistsTx` instead (`internal/account/service/account_service.go`).
@@ -44,6 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - OAuth2 `handleRefreshTokenGrant`, `DeviceCodeRequest`, and `handleDeviceCodeGrant` now call `DummyAuthenticate()` on client lookup failure — prevents timing side-channel that could leak whether a `client_id` exists (`internal/oauth2/controller/oauth2_token.go`, `internal/oauth2/controller/oauth2_device.go`).
 - `NewFederatedIdentity` now captures `time.Now()` once instead of calling it twice for `CreatedAt` and `UpdatedAt` — prevents potential timestamp inconsistency (`internal/account/domain/federated_identity.go`).
 - `client_repository_impl.Update` now uses Go-side `time.Now()` parameter instead of SQL-side `NOW()` — consistent with other repositories' `UpdatedAt` handling (`internal/oauth2/repository/client_repository_impl.go`).
+- OAuth2 `handleRefreshTokenGrant` now returns `invalid_client` (not `invalid_grant`) when client is not found — consistent with `handleAuthorizationCodeGrant` error handling (`internal/oauth2/controller/oauth2_token.go`).
+- Added security note for Redis `--requirepass` CLI argument visibility in docker-compose.yml (`docker-compose.yml`).
 
 ### Added
 - `IsValidAccountStatus()` validation function for `AccountStatus` type — consistent with existing `IsValidProvider()` pattern (`internal/account/domain/account.go`).

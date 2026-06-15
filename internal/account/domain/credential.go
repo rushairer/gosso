@@ -92,7 +92,7 @@ func NewCredential(accountID string, credType CredentialType, identifier *string
 }
 
 // NewPasswordCredential creates a password credential (auto-hashed).
-// The plainPassword must be between 1 and 1024 bytes to prevent resource exhaustion.
+// The plainPassword must be between 1 and MaxPasswordLength bytes to prevent resource exhaustion.
 func NewPasswordCredential(accountID string, plainPassword string) (*Credential, error) {
 	if accountID == "" {
 		return nil, ErrAccountIDRequired
@@ -100,8 +100,8 @@ func NewPasswordCredential(accountID string, plainPassword string) (*Credential,
 	if len(plainPassword) == 0 {
 		return nil, errors.New("password must not be empty")
 	}
-	if len(plainPassword) > 1024 {
-		return nil, fmt.Errorf("password must not exceed 1024 bytes")
+	if len(plainPassword) > utility.MaxPasswordLength {
+		return nil, fmt.Errorf("password must not exceed %d bytes", utility.MaxPasswordLength)
 	}
 	hashedPassword, err := HashPassword(plainPassword)
 	if err != nil {

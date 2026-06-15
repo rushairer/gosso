@@ -259,7 +259,7 @@ func TestGetClient_IDORProtection(t *testing.T) {
 func TestRegisterClient_InvalidRedirectScheme(t *testing.T) {
 	clientSvc := &mockOAuth2ClientService{
 		registerFn: func() (*oauth2Domain.OAuth2Client, string, error) {
-			return nil, "", fmt.Errorf("redirect_uris must use http or https scheme without fragment: javascript:alert(1)")
+			return nil, "", &oauth2Service.ValidationError{Message: "redirect_uris must use http or https scheme without fragment: javascript:alert(1)"}
 		},
 	}
 	engine := setupClientController(clientSvc)
@@ -276,7 +276,7 @@ func TestRegisterClient_InvalidRedirectScheme(t *testing.T) {
 func TestRegisterClient_InvalidPostLogoutURI(t *testing.T) {
 	clientSvc := &mockOAuth2ClientService{
 		registerFn: func() (*oauth2Domain.OAuth2Client, string, error) {
-			return nil, "", fmt.Errorf("post_logout_redirect_uris: redirect_uris must use http or https scheme without fragment: javascript:alert(1)")
+			return nil, "", &oauth2Service.ValidationError{Message: "post_logout_redirect_uris: redirect_uris must use http or https scheme without fragment: javascript:alert(1)"}
 		},
 	}
 	engine := setupClientController(clientSvc)
@@ -467,7 +467,7 @@ func TestUpdateClient_ValidGrantTypes(t *testing.T) {
 func TestRegisterClient_InvalidGrantType(t *testing.T) {
 	clientSvc := &mockOAuth2ClientService{
 		registerFn: func() (*oauth2Domain.OAuth2Client, string, error) {
-			return nil, "", fmt.Errorf("invalid grant_type: %q", "invalid_grant")
+			return nil, "", &oauth2Service.ValidationError{Message: fmt.Sprintf("invalid grant_type: %q", "invalid_grant")}
 		},
 	}
 	engine := setupClientController(clientSvc)

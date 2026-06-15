@@ -99,6 +99,8 @@ type PasswordResetService struct {
 	tokenTTL              time.Duration
 	cooldownTTL           time.Duration
 	maxAttempts           int
+	stopCtx               context.Context
+	stopCancel            context.CancelFunc
 }
 
 // PasswordResetServiceConfig holds optional configuration for PasswordResetService.
@@ -145,6 +147,7 @@ func NewPasswordResetServiceWithConfig(
 	if cfg.RevokeConcurrency > 0 {
 		revokeConcurrency = cfg.RevokeConcurrency
 	}
+	stopCtx, stopCancel := context.WithCancel(context.Background())
 	svc := &PasswordResetService{
 		redis:          redis,
 		credentialRepo: credentialRepo,
@@ -160,6 +163,8 @@ func NewPasswordResetServiceWithConfig(
 		tokenTTL:       passwordResetTokenTTL,
 		cooldownTTL:    passwordResetCooldownTTL,
 		maxAttempts:    passwordResetMaxAttempts,
+		stopCtx:        stopCtx,
+		stopCancel:     stopCancel,
 	}
 	if cfg.WaitTimeout > 0 {
 		svc.waitTimeout = cfg.WaitTimeout
@@ -407,7 +412,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		go func() {
 			defer s.wg.Done()
 			defer func() { <-s.revokeSem }()
-			bgCtx, cancel := context.WithTimeout(context.Background(), passwordResetRevokeTimeout)
+			bgCtx, cancel := context.WithTimeout(s.stopCtx, passwordResetRevokeTimeout)
 			defer cancel()
 			if err := s.sessionSvc.RevokeAllForAccount(bgCtx, data.AccountID); err != nil {
 				s.logger.Error("Failed to revoke sessions after password reset",
@@ -420,7 +425,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 			zap.String("account_id", data.AccountID),
 			zap.Bool("synchronous_fallback", true),
 			zap.Int("semaphore_cap", cap(s.revokeSem)))
-		syncCtx, syncCancel := context.WithTimeout(context.Background(), passwordResetSyncRevokeTimeout)
+		syncCtx, syncCancel := context.WithTimeout(s.stopCtx, passwordResetSyncRevokeTimeout)
 		defer syncCancel()
 		if err := s.sessionSvc.RevokeAllForAccount(syncCtx, data.AccountID); err != nil {
 			s.logger.Error("Failed to revoke sessions synchronously after password reset",
@@ -454,6 +459,7 @@ func (s *PasswordResetService) buildCooldownKey(email string) string {
 // Returns after the configured timeout even if goroutines are still running, to avoid
 // blocking shutdown indefinitely when Redis is unreachable.
 func (s *PasswordResetService) Wait() {
+	s.stopCancel() // signal background goroutines to wind down
 	done := make(chan struct{})
 	go func() { s.wg.Wait(); close(done) }()
 	select {

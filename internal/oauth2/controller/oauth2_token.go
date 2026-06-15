@@ -88,7 +88,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 	}
 
 	if !client.HasGrantType("authorization_code") {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "client is not authorized for authorization_code grant"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}
 
@@ -195,11 +195,11 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 	client, err := c.clientSvc.FindByClientID(ctx, oldRefreshToken.ClientID)
 	if err != nil {
 		c.clientAuth.DummyAuthenticate()
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "client not found"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}
 	if !client.HasGrantType("refresh_token") {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "client is not authorized for refresh_token grant"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}
 	// RFC 6749 Section 6: confidential clients MUST authenticate when using refresh token grant.

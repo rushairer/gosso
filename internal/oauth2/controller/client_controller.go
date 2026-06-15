@@ -3,7 +3,6 @@ package controller
 import (
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
@@ -215,10 +214,5 @@ func (c *ClientController) DeleteClient(ctx *gin.Context) {
 
 // isValidationError checks if the error is a client validation error (as opposed to an internal server error).
 func isValidationError(err error) bool {
-	msg := err.Error()
-	return strings.Contains(msg, "required") ||
-		strings.Contains(msg, "invalid") ||
-		strings.Contains(msg, "must") ||
-		strings.Contains(msg, "exceed") ||
-		strings.Contains(msg, "empty")
+	return oauth2Service.IsValidationError(err)
 }

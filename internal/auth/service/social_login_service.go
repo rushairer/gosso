@@ -325,7 +325,11 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 				return result, linkErr
 			}
 		}
-		return nil, err
+		s.logger.Error("Failed to create account with social identity",
+			zap.String("provider", provider),
+			zap.String("email", utility.MaskEmail(email)),
+			zap.Error(err))
+		return nil, errors.New("failed to create account")
 	}
 
 	// Audit log for social login account creation
