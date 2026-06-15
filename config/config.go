@@ -252,6 +252,9 @@ func (c *GoUnoConfig) Validate() error {
 	if err := c.validateCORS(); err != nil {
 		errs = append(errs, err)
 	}
+	if err := c.validateOAuthProviders(); err != nil {
+		errs = append(errs, err)
+	}
 	return errors.Join(errs...)
 }
 
@@ -356,7 +359,7 @@ func (c *GoUnoConfig) validateDatabase() error {
 
 func (c *GoUnoConfig) validateRedis() error {
 	if c.RedisConfig.DSN == "" {
-		return fmt.Errorf("redis: DSN is empty")
+		return fmt.Errorf("redis: DSN is empty (hint: set GOUNO_REDIS_DSN environment variable)")
 	}
 	if c.RedisConfig.MaxActiveConns <= 0 {
 		return fmt.Errorf("redis: max_active_conns must be positive (got %d)", c.RedisConfig.MaxActiveConns)
@@ -434,6 +437,25 @@ func (c *GoUnoConfig) validateAuth() error {
 	if c.AuthConfig.MaxSessions <= 0 {
 		return fmt.Errorf("auth: max_sessions must be positive")
 	}
+	// Validate optional TTL fields — zero means "use built-in default", but negative is always wrong.
+	if c.AuthConfig.MaxSessionAge < 0 {
+		return fmt.Errorf("auth: max_session_age must not be negative (got %s)", c.AuthConfig.MaxSessionAge)
+	}
+	if c.AuthConfig.MFAVerificationTTL < 0 {
+		return fmt.Errorf("auth: mfa_verification_ttl must not be negative (got %s)", c.AuthConfig.MFAVerificationTTL)
+	}
+	if c.AuthConfig.PasswordResetTokenTTL < 0 {
+		return fmt.Errorf("auth: password_reset_token_ttl must not be negative (got %s)", c.AuthConfig.PasswordResetTokenTTL)
+	}
+	if c.AuthConfig.PasswordResetCooldownTTL < 0 {
+		return fmt.Errorf("auth: password_reset_cooldown_ttl must not be negative (got %s)", c.AuthConfig.PasswordResetCooldownTTL)
+	}
+	if c.AuthConfig.VerifyCodeTTL < 0 {
+		return fmt.Errorf("auth: verify_code_ttl must not be negative (got %s)", c.AuthConfig.VerifyCodeTTL)
+	}
+	if c.AuthConfig.VerifyCooldownTTL < 0 {
+		return fmt.Errorf("auth: verify_cooldown_ttl must not be negative (got %s)", c.AuthConfig.VerifyCooldownTTL)
+	}
 	if c.AuthConfig.WebAuthnRPID != "" {
 		if c.AuthConfig.WebAuthnRPName == "" {
 			return fmt.Errorf("auth: webauthn_rp_name is required when webauthn_rp_id is set")
@@ -472,6 +494,9 @@ func (c *GoUnoConfig) validateSMTP() error {
 		default:
 			return fmt.Errorf("smtp: tls_policy must be one of: opportunistic, mandatory, notls (got %q)", c.SMTPConfig.TLSPolicy)
 		}
+		if !c.WebServerConfig.Debug && c.SMTPConfig.TLSPolicy == "notls" {
+			return fmt.Errorf("smtp: tls_policy 'notls' is not allowed in production (set GOUNO_SMTP_TLS_POLICY=mandatory)")
+		}
 		if c.AuthConfig.PasswordResetBaseURL == "" {
 			return fmt.Errorf("auth: password_reset_base_url is required when SMTP is configured")
 		}
@@ -495,4 +520,31 @@ func (c *GoUnoConfig) validateCORS() error {
 		}
 	}
 	return nil
+}
+
+func (c *GoUnoConfig) validateOAuthProviders() error {
+	var errs []error
+	for name, provider := range map[string]OAuthProviderConfig{
+		"google": c.OAuthProviders.Google,
+		"github": c.OAuthProviders.GitHub,
+		"wechat": c.OAuthProviders.WeChat,
+	} {
+		// Skip validation for providers that aren't configured.
+		if provider.ClientID == "" && provider.ClientSecret == "" {
+			continue
+		}
+		if provider.ClientID == "" {
+			errs = append(errs, fmt.Errorf("oauth_providers.%s: client_id is required when client_secret is set", name))
+		}
+		if provider.ClientSecret == "" {
+			errs = append(errs, fmt.Errorf("oauth_providers.%s: client_secret is required when client_id is set", name))
+		}
+		if provider.RedirectURI != "" {
+			redirectURL, err := url.Parse(provider.RedirectURI)
+			if err != nil || (redirectURL.Scheme != "http" && redirectURL.Scheme != "https") {
+				errs = append(errs, fmt.Errorf("oauth_providers.%s: redirect_uri must be a valid URL with http or https scheme", name))
+			}
+		}
+	}
+	return errors.Join(errs...)
 }

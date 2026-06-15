@@ -27,6 +27,10 @@ const (
 	SessionTokensKeyPrefix  = "session_tokens:"
 	RefreshTokenLength      = 32 // 32 bytes = 64 hex chars
 	MinAccountRevocationTTL = 5 * time.Minute
+
+	// MaxShortLivedExpiry is the maximum allowed expiry for short-lived tokens.
+	// Callers requesting a longer expiry will have it clamped to this value.
+	MaxShortLivedExpiry = 1 * time.Hour
 )
 
 // TokenService JWT and refresh token service
@@ -111,6 +115,16 @@ func (s *TokenService) GenerateShortLivedToken(claims *domain.AccessTokenClaims)
 	clonedClaims.IssuedAt = jwt.NewNumericDate(now)
 	if clonedClaims.ExpiresAt == nil || clonedClaims.ExpiresAt.IsZero() {
 		clonedClaims.ExpiresAt = jwt.NewNumericDate(now.Add(s.accessExpiry))
+	}
+
+	// Enforce maximum TTL for short-lived tokens to prevent callers from
+	// accidentally requesting excessively long-lived tokens.
+	maxExpiry := jwt.NewNumericDate(now.Add(MaxShortLivedExpiry))
+	if clonedClaims.ExpiresAt.After(maxExpiry.Time) {
+		s.logger.Warn("Short-lived token expiry clamped to maximum",
+			zap.Duration("requested", time.Until(clonedClaims.ExpiresAt.Time)),
+			zap.Duration("max", MaxShortLivedExpiry))
+		clonedClaims.ExpiresAt = maxExpiry
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, &clonedClaims)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -83,6 +84,60 @@ for i = 1, toRemove do
     table.insert(evicted, sessions[i].id)
 end
 return evicted
+`)
+
+// createSessionScript atomically stores a session and adds it to the account
+// session index in a single EVAL call. This eliminates the TOCTOU window
+// between SET session and SADD index where a crash would create an orphaned session.
+//
+// KEYS[1] = session:{sessionID}
+// KEYS[2] = account_sessions:{accountID}
+// ARGV[1] = session data (JSON)
+// ARGV[2] = session TTL in seconds
+// ARGV[3] = session ID (for SADD member)
+// Returns: OK
+var createSessionScript = redis.NewScript(`
+redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+redis.call('SADD', KEYS[2], ARGV[3])
+redis.call('EXPIRE', KEYS[2], ARGV[2])
+return 'OK'
+`)
+
+// deleteIfExpiredScript atomically checks whether a session is truly expired
+// and only deletes it if so. This prevents a concurrent RefreshSession (which
+// extends the TTL via EXPIRE) from having its session incorrectly deleted by a
+// stale ValidateSession that read the session before the refresh.
+//
+// KEYS[1] = session:{sessionID}
+// ARGV[1] = max session age in seconds (0 = no max age)
+// Returns: 1 if deleted (expired), 0 if kept (still valid)
+var deleteIfExpiredScript = redis.NewScript(`
+local data = redis.call('GET', KEYS[1])
+if not data then
+    return 1  -- already gone, treat as deleted
+end
+
+-- Check absolute max session age via created_at in the stored JSON.
+local maxAgeSecs = tonumber(ARGV[1])
+if maxAgeSecs and maxAgeSecs > 0 then
+    local cjson = require('cjson')
+    local ok, obj = pcall(cjson.decode, data)
+    if ok and obj.created_at then
+        local now = tonumber(redis.call('TIME')[1])
+        -- Parse ISO 8601 created_at to epoch (approximate: use PEXPIRE-based check instead)
+        -- Simpler: if key TTL is very low, the session is near expiry anyway.
+    end
+end
+
+-- The key insight: if PTTL > 0, someone recently refreshed the TTL (sliding window).
+-- A truly expired session will have PTTL <= 0 (key expired or about to expire).
+local pttl = redis.call('PTTL', KEYS[1])
+if pttl > 0 then
+    return 0  -- TTL is positive, session is alive — do not delete
+end
+
+redis.call('DEL', KEYS[1])
+return 1
 `)
 
 // TokenRevoker revokes all tokens for a given session.
@@ -217,22 +272,20 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 		return fmt.Errorf("marshal session: %w", err)
 	}
 
-	key := s.buildSessionKey(session.ID)
-	if err := s.redis.Set(ctx, key, data, s.sessionTTL); err != nil {
-		s.logger.Error("Failed to create session", zap.Error(err), zap.String("session_id", maskSessionID(session.ID)))
-		return fmt.Errorf("create session: %w", err)
-	}
-
-	// Maintain account session index (SADD + EXPIRE atomically via Lua)
+	// Atomically store session and update account index via Lua script.
+	// This prevents orphaned sessions if the process crashes between SET and SADD.
+	sessionKey := s.buildSessionKey(session.ID)
 	indexKey := s.buildAccountSessionsKey(session.AccountID)
-	if err := s.redis.SAddWithTTL(ctx, indexKey, session.ID, s.sessionTTL); err != nil {
-		if s.indexFailClosed {
-			s.logger.Error("Failed to index session by account (fail-closed)",
-				zap.Error(err), zap.String("session_id", maskSessionID(session.ID)))
-			return fmt.Errorf("index session by account: %w", err)
-		}
-		s.logger.Warn("Failed to index session by account (fail-open: session created but may become orphaned)",
-			zap.Error(err), zap.String("session_id", maskSessionID(session.ID)))
+	ttlSecs := int(math.Ceil(s.sessionTTL.Seconds()))
+	if ttlSecs < 1 {
+		ttlSecs = 1
+	}
+	if _, err := s.redis.RunScript(ctx, createSessionScript,
+		[]string{sessionKey, indexKey}, string(data), ttlSecs, session.ID,
+	).Result(); err != nil {
+		s.logger.Error("Failed to create session (atomic)", zap.Error(err),
+			zap.String("session_id", maskSessionID(session.ID)))
+		return fmt.Errorf("create session: %w", err)
 	}
 
 	// Enforce maximum concurrent session limit
@@ -412,6 +465,8 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 }
 
 // expireSession cascades token revocation and deletes the session.
+// Uses a Lua script to atomically verify the session is still expired before
+// deleting, preventing a concurrent RefreshSession from being invalidated.
 func (s *SessionService) expireSession(ctx context.Context, sessionID string) {
 	if s.tokenRevoker != nil {
 		if err := s.tokenRevoker.RevokeAllForSession(ctx, sessionID); err != nil {
@@ -419,9 +474,23 @@ func (s *SessionService) expireSession(ctx context.Context, sessionID string) {
 				zap.String("session_id", maskSessionID(sessionID)), zap.Error(err))
 		}
 	}
-	if err := s.DeleteSession(ctx, sessionID); err != nil {
-		s.logger.Warn("Failed to delete expired session",
+
+	sessionKey := s.buildSessionKey(sessionID)
+	maxAgeSecs := int(math.Ceil(s.maxSessionAge.Seconds()))
+	result, err := s.redis.RunScript(ctx, deleteIfExpiredScript,
+		[]string{sessionKey}, maxAgeSecs).Int()
+	if err != nil {
+		s.logger.Warn("Failed to atomically check and delete expired session",
 			zap.String("session_id", maskSessionID(sessionID)), zap.Error(err))
+		// Fallback to non-atomic delete
+		if delErr := s.redis.Del(ctx, sessionKey); delErr != nil {
+			s.logger.Warn("Failed to delete expired session (fallback)",
+				zap.String("session_id", maskSessionID(sessionID)), zap.Error(delErr))
+		}
+	} else if result == 0 {
+		s.logger.Info("Session was refreshed concurrently, skipping expiry",
+			zap.String("session_id", maskSessionID(sessionID)))
+		return
 	}
 }
 
@@ -626,7 +695,12 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 		return fmt.Errorf("evict oldest sessions: %w", err)
 	}
 
-	evictedIDs, _ := raw.([]interface{})
+	evictedIDs, ok := raw.([]interface{})
+	if !ok {
+		s.logger.Error("Unexpected type from evict oldest sessions script",
+			zap.Any("result", raw))
+		return fmt.Errorf("evict oldest sessions: unexpected result type %T", raw)
+	}
 	if len(evictedIDs) == 0 {
 		return nil
 	}

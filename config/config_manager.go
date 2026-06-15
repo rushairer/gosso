@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -21,8 +20,8 @@ const defaultTOTPEncryptionKey = "0123456789abcdef0123456789abcdef0123456789abcd
 
 // ConfigManager loads, validates, and exposes the application configuration.
 type ConfigManager struct {
-	config     *GoUnoConfig
-	cachedJSON []byte // pre-serialized config bytes, populated at setConfig time
+	config    GoUnoConfig // immutable after construction; returned by value (Go struct copy)
+	hasConfig bool        // true once setConfig has been called
 }
 
 // NewConfigManager creates a configuration manager.
@@ -83,28 +82,18 @@ func NewConfigManager(
 }
 
 func (cm *ConfigManager) setConfig(config *GoUnoConfig) {
-	cm.config = config
-	// Pre-serialize to avoid repeated JSON.Marshal on every Config() call.
-	if b, err := json.Marshal(config); err == nil {
-		cm.cachedJSON = b
-	}
+	cm.config = *config
+	cm.hasConfig = true
 }
 
-// Config returns a deep copy of the configuration.
-// Uses a pre-serialized JSON snapshot (populated at setConfig time) to avoid
-// repeated marshaling. Only the Unmarshal step runs per call.
+// Config returns a copy of the configuration.
+// Since the config is immutable after construction, a simple struct copy
+// (Go value assignment) is safe and much cheaper than JSON round-tripping.
 func (cm *ConfigManager) Config() GoUnoConfig {
-	if cm.config == nil {
+	if !cm.hasConfig {
 		return GoUnoConfig{}
 	}
-	if cm.cachedJSON == nil {
-		return *cm.config
-	}
-	var copy GoUnoConfig
-	if err := json.Unmarshal(cm.cachedJSON, &copy); err != nil {
-		return *cm.config
-	}
-	return copy
+	return cm.config
 }
 
 func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
@@ -149,6 +138,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("auth.device_code_interval", "5s")
 	v.SetDefault("auth.id_token_expiry", "15m")
 	v.SetDefault("auth.max_sessions", 5)
+	v.SetDefault("auth.totp_encryption_key", defaultTOTPEncryptionKey)
 
 	// Redis configuration
 	v.SetDefault("redis.max_active_conns", 10)

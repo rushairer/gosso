@@ -381,7 +381,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	}
 
 	// 6. Audit log (sync — critical security event)
-	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountDelete,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
@@ -429,7 +429,7 @@ func (s *accountServiceImpl) VerifyContactCredential(ctx context.Context, accoun
 		return err
 	}
 
-	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionCredentialVerify,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
@@ -501,7 +501,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	}
 
 	// 8. Audit log (sync — critical security event)
-	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionPasswordChange,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
@@ -605,7 +605,7 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 		return err
 	}
 
-	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionRoleAssign,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
@@ -629,7 +629,7 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 		return err
 	}
 
-	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionRoleRemove,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
@@ -665,7 +665,7 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 		return fmt.Errorf("suspend succeeded but session revocation failed: %w", revokeErr)
 	}
 
-	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountSuspend,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
@@ -684,7 +684,7 @@ func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID stri
 		return err
 	}
 
-	auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountActivate,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
@@ -748,28 +748,6 @@ func validateUsername(username string) error {
 	for _, c := range username {
 		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' && c != '-' && c != '.' {
 			return fmt.Errorf("username may only contain lowercase letters, digits, hyphens, dots, and underscores")
-		}
-	}
-	return nil
-}
-
-// checkCredentialExists checks whether a credential with the given type and identifier already exists.
-func (s *accountServiceImpl) checkCredentialExists(ctx context.Context, credType domain.CredentialType, identifier string) error {
-	cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, credType, identifier)
-	if err != nil {
-		if errors.Is(err, repository.ErrCredentialNotFound) {
-			return nil
-		}
-		return fmt.Errorf("check credential existence: %w", err)
-	}
-	if cred != nil {
-		switch credType {
-		case domain.CredentialTypeEmail:
-			return ErrEmailAlreadyRegistered
-		case domain.CredentialTypePhone:
-			return ErrPhoneAlreadyRegistered
-		case domain.CredentialTypePassword, domain.CredentialTypeTOTP, domain.CredentialTypeWebAuthn, domain.CredentialTypeBackupCode:
-			return fmt.Errorf("%w: %s", ErrCredentialAlreadyExists, credType)
 		}
 	}
 	return nil

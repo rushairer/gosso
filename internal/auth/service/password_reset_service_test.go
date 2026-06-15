@@ -52,7 +52,7 @@ func setupTestMiniredis(t *testing.T) (*cache.RedisClient, *miniredis.Miniredis)
 	logger := zap.NewNop()
 
 	mr := miniredis.RunT(t)
-	redisClient, err := cache.NewRedisClient("redis://"+mr.Addr(), 10, 5*time.Second, logger)
+	redisClient, err := cache.NewRedisClient(context.Background(), "redis://"+mr.Addr(), 10, 5*time.Second, logger)
 	if err != nil {
 		mr.Close()
 		t.Fatalf("failed to create test redis client: %v", err)
@@ -256,6 +256,10 @@ func (m *mockCredentialRepoForReset) FindPasswordCredential(ctx context.Context,
 
 func (m *mockCredentialRepoForReset) UpdateCredential(_ context.Context, _ *sql.Tx, _ *accountDomain.Credential) error {
 	return fmt.Errorf("not implemented")
+}
+
+func (m *mockCredentialRepoForReset) UpdateLastUsedAt(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+	return nil
 }
 
 func (m *mockCredentialRepoForReset) SoftDeleteCredentialsByAccount(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {

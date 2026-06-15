@@ -247,10 +247,12 @@ func (s *AuthService) SetMFAVerificationTTL(d time.Duration) {
 	}
 }
 
-// updateCredentialLastUsed updates the last used time of a credential
+// updateCredentialLastUsed updates only the last_used_at timestamp of a credential.
+// Uses UpdateLastUsedAt to avoid overwriting concurrent modifications to other fields.
 func (s *AuthService) updateCredentialLastUsed(ctx context.Context, cred *accountDomain.Credential) error {
+	now := time.Now()
 	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.credentialRepo.UpdateCredential(ctx, tx, cred)
+		return s.credentialRepo.UpdateLastUsedAt(ctx, tx, cred.ID, now)
 	})
 }
 

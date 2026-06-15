@@ -269,7 +269,7 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, ip, userAgent string) (result *LoginResult, err error) {
 	defer func() {
 		if err != nil {
-			auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+			_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 				auditDomain.ActionLoginFailure,
 				audit.IPFromContext(ctx),
 				&accountID,

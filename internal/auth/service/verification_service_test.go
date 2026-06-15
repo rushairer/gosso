@@ -333,6 +333,10 @@ func (m *mockCredRepoForVerification) UpdateCredential(_ context.Context, _ *sql
 	return fmt.Errorf("not implemented")
 }
 
+func (m *mockCredRepoForVerification) UpdateLastUsedAt(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+	return nil
+}
+
 func (m *mockCredRepoForVerification) SoftDeleteCredentialsByAccount(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	return fmt.Errorf("not implemented")
 }

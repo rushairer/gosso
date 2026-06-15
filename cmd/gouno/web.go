@@ -69,7 +69,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	}
 	defer func() { _ = db.Close() }()
 
-	redis, err := initRedis(globalConfig, logger)
+	redis, err := initRedis(ctx, globalConfig, logger)
 	if err != nil {
 		logger.Error("redis init failed", zap.Error(err))
 		os.Exit(1)

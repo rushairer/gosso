@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/rushairer/batchflow"
@@ -34,6 +35,7 @@ type Auditor struct {
 	recordSchema *batchflow.SQLSchema
 	cancel       context.CancelFunc
 	logger       *zap.Logger
+	closeOnce    sync.Once
 }
 
 // NewAuditor creates an Auditor backed by the given database. Call [Auditor.Wait]
@@ -107,24 +109,26 @@ func (a *Auditor) ErrorChan() <-chan error {
 }
 
 // Close stops the batchflow pipeline, allowing in-flight batches to complete.
+// Safe to call multiple times (idempotent via sync.Once).
 // Call this during application shutdown after the HTTP server has stopped.
 func (a *Auditor) Close() {
-	if a.batchflow != nil {
-		_ = a.batchflow.Close()
-	}
-	if a.cancel != nil {
-		a.cancel()
-	}
+	a.closeOnce.Do(func() {
+		if a.batchflow != nil {
+			if err := a.batchflow.Close(); err != nil {
+				a.logger.Error("Failed to close audit batch pipeline", zap.Error(err))
+			}
+		}
+		if a.cancel != nil {
+			a.cancel()
+		}
+	})
 }
 
 // Wait waits for all in-flight audit batches to be flushed to the database.
-// Call this during graceful shutdown. It stops accepting new requests, flushes
-// pending batches, and waits for completion, but does NOT cancel the context;
-// use [Auditor.Close] for full shutdown with context cancellation.
+// Call this during graceful shutdown. It is equivalent to Close() — it flushes
+// pending batches, cancels the auditor context, and is safe to call multiple times.
 func (a *Auditor) Wait() {
-	if a.batchflow != nil {
-		_ = a.batchflow.Close()
-	}
+	a.Close()
 }
 
 // buildBatchRequest constructs a batchflow.Request from an audit record.
@@ -260,11 +264,14 @@ func AuditLog(ctx context.Context, auditor *Auditor, logger *zap.Logger, record 
 
 // AuditLogSync writes an audit record synchronously for critical security events
 // where loss on crash is unacceptable (login failures, account deletion, role changes).
-// Safe when auditor is nil.
-func AuditLogSync(ctx context.Context, auditor *Auditor, logger *zap.Logger, record *domain.AuditRecord) {
+// Returns nil when auditor is nil (safe no-op). Callers should handle the error
+// (typically by logging) to avoid silent loss of security-critical records.
+func AuditLogSync(ctx context.Context, auditor *Auditor, logger *zap.Logger, record *domain.AuditRecord) error {
 	if auditor != nil {
 		if err := auditor.LogSync(ctx, record); err != nil {
 			logger.Error("Failed to write audit record synchronously", zap.Error(err))
+			return err
 		}
 	}
+	return nil
 }

@@ -33,7 +33,7 @@ func SetupTestRedis(t *testing.T) (*cache.RedisClient, *miniredis.Miniredis) {
 
 	mr := miniredis.RunT(t)
 
-	redisClient, err := cache.NewRedisClient("redis://"+mr.Addr(), 10, 5*time.Second, logger)
+	redisClient, err := cache.NewRedisClient(context.Background(), "redis://"+mr.Addr(), 10, 5*time.Second, logger)
 	if err != nil {
 		mr.Close()
 		t.Fatalf("failed to create test redis client: %v", err)
@@ -129,7 +129,7 @@ func SetupTestEnv(ctx context.Context) (*TestEnv, error) {
 	}
 
 	// Connect to Redis
-	redis, err := cache.NewRedisClient(cfg.RedisConfig.DSN, 10, 10*time.Second, logger)
+	redis, err := cache.NewRedisClient(context.Background(), cfg.RedisConfig.DSN, 10, 10*time.Second, logger)
 	if err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("connect redis: %w (is docker-compose.test.yml running?)", err)

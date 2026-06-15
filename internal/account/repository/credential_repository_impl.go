@@ -196,6 +196,31 @@ func (r *credentialRepositoryImpl) UpdateCredential(ctx context.Context, tx *sql
 	return nil
 }
 
+// UpdateLastUsedAt updates only the last_used_at timestamp of a credential.
+// This avoids overwriting concurrent changes to other credential fields.
+func (r *credentialRepositoryImpl) UpdateLastUsedAt(ctx context.Context, tx *sql.Tx, credentialID string, lastUsedAt time.Time) error {
+	query := `
+		UPDATE account_credentials
+		SET last_used_at = $1
+		WHERE id = $2 AND deleted_at IS NULL
+	`
+
+	result, err := tx.ExecContext(ctx, query, lastUsedAt, credentialID)
+	if err != nil {
+		return fmt.Errorf("update last_used_at: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("%w: %s", ErrCredentialNotFound, credentialID)
+	}
+
+	return nil
+}
+
 // SoftDeleteCredentialsByAccount soft deletes all credentials of an account.
 // Returns nil even if zero rows are affected (idempotent for bulk delete).
 func (r *credentialRepositoryImpl) SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {

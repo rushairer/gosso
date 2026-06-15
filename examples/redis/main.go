@@ -21,7 +21,9 @@ func main() {
 	defer func() { _ = logger.Sync() }()
 
 	// 初始化 Redis 客户端
+	ctx := context.Background()
 	redisClient, err := cache.NewRedisClient(
+		ctx,
 		"redis://localhost:6379/0",
 		100,
 		10*time.Second,
@@ -33,8 +35,6 @@ func main() {
 	defer func() { _ = redisClient.Close() }()
 
 	logger.Info("Redis client initialized successfully")
-
-	ctx := context.Background()
 
 	// ==================== 示例 1: 基础 Redis 操作 ====================
 	basicRedisExample(ctx, redisClient, logger)

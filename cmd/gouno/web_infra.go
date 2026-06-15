@@ -30,7 +30,7 @@ func initDatabase(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logge
 	db.SetConnMaxLifetime(time.Duration(cfg.DatabaseConfig.ConnMaxLifetimeSec) * time.Second)
 	db.SetConnMaxIdleTime(time.Duration(cfg.DatabaseConfig.ConnMaxIdleTimeSec) * time.Second)
 
-	pingCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := db.PingContext(pingCtx); err != nil {
 		_ = db.Close()
@@ -66,8 +66,9 @@ func initDatabase(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logge
 }
 
 // initRedis initializes the Redis connection
-func initRedis(cfg config.GoUnoConfig, logger *zap.Logger) (*cache.RedisClient, error) {
+func initRedis(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger) (*cache.RedisClient, error) {
 	redis, err := cache.NewRedisClient(
+		ctx,
 		cfg.RedisConfig.DSN,
 		cfg.RedisConfig.MaxActiveConns,
 		time.Duration(cfg.RedisConfig.PoolTimeoutSeconds)*time.Second,

@@ -133,7 +133,7 @@ func TestAuditLogSync_NilAuditor(t *testing.T) {
 		CreatedAt: time.Now(),
 	}
 	assert.NotPanics(t, func() {
-		AuditLogSync(context.Background(), nil, zap.NewNop(), record)
+		_ = AuditLogSync(context.Background(), nil, zap.NewNop(), record)
 	})
 }
 
@@ -423,7 +423,7 @@ func TestAuditLogSync_WithAuditor_Success(t *testing.T) {
 	}
 
 	assert.NotPanics(t, func() {
-		AuditLogSync(context.Background(), auditor, zap.NewNop(), record)
+		_ = AuditLogSync(context.Background(), auditor, zap.NewNop(), record)
 	})
 	require.NoError(t, sqlMock.ExpectationsWereMet())
 }
@@ -449,7 +449,7 @@ func TestAuditLogSync_WithAuditor_DBError(t *testing.T) {
 	}
 
 	assert.NotPanics(t, func() {
-		AuditLogSync(context.Background(), auditor, zap.NewNop(), record)
+		_ = AuditLogSync(context.Background(), auditor, zap.NewNop(), record)
 	})
 	require.NoError(t, sqlMock.ExpectationsWereMet())
 }

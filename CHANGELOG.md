@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- Removed hardcoded TOTP encryption key from `config/development.yaml` and `config/test.yaml` — key is now provided via `GOUNO_AUTH_TOTP_ENCRYPTION_KEY` environment variable with default fallback in `config_manager.go` (`config/development.yaml`, `config/test.yaml`, `config/config_manager.go`).
+- `GenerateShortLivedToken` now enforces a maximum TTL of 1 hour (`MaxShortLivedExpiry`) — prevents callers from accidentally creating excessively long-lived tokens (`internal/token/service/token_service.go`).
+- `updateCredentialLastUsed` now uses a dedicated `UpdateLastUsedAt` SQL update instead of `UpdateCredential` — eliminates TOCTOU risk where concurrent modifications to other credential fields could be overwritten (`internal/auth/service/auth_service.go`, `internal/account/repository/`).
+- `validateSMTP()` now rejects `tls_policy: "notls"` in production mode — prevents SMTP credentials from being transmitted in plaintext (`config/config.go`).
+- CSP header now includes `frame-ancestors 'none'` directive — provides defense-in-depth against clickjacking beyond the existing `X-Frame-Options: DENY` (`middleware/middleware.go`).
+
+### Added
+- `createSessionScript` Lua script for atomic session creation — combines `SET session` and `SADD account_index` into a single EVAL call, preventing orphaned sessions on process crash (`internal/session/service/session_service.go`).
+- `deleteIfExpiredScript` Lua script for atomic session expiry verification — checks `PTTL > 0` before deleting, preventing concurrent `RefreshSession` from being invalidated by a stale `ValidateSession` (`internal/session/service/session_service.go`).
+- `validateOAuthProviders()` config validation — checks `ClientID`/`ClientSecret` pairing and `RedirectURI` URL format for all OAuth providers (`config/config.go`).
+- `UpdateLastUsedAt(ctx, tx, credentialID, lastUsedAt)` repository method — updates only the `last_used_at` column without overwriting other credential fields (`internal/account/repository/credential_repository.go`, `internal/account/repository/credential_repository_impl.go`).
+- AuthConfig optional TTL fields (`MaxSessionAge`, `MFAVerificationTTL`, `PasswordResetTokenTTL`, `PasswordResetCooldownTTL`, `VerifyCodeTTL`, `VerifyCooldownTTL`) now reject negative values — prevents silent misconfiguration via environment variables (`config/config.go`).
+- `request_id` now included in all error responses (not just 500-class) — enables clients to correlate 4xx errors with server logs (`internal/controllerutil/error_handler.go`).
+- `AuditLogSync` now returns `error` — callers can detect and handle loss of security-critical audit records instead of silently discarding them (`internal/audit/service/audit.go`).
+
+### Changed
+- `CreateSession` now uses atomic Lua script (`createSessionScript`) for session + index write — eliminates the TOCTOU window between `SET session` and `SADD index` (`internal/session/service/session_service.go`).
+- `expireSession` now uses `deleteIfExpiredScript` Lua script to atomically verify session is still expired before deletion — prevents concurrent `RefreshSession` from being incorrectly invalidated (`internal/session/service/session_service.go`).
+- `EnforceSessionLimit` Lua result type assertion now checks `ok` value and logs error on unexpected types — prevents silent failure if the Lua script returns an unexpected result format (`internal/session/service/session_service.go`).
+- `Config()` now returns a Go struct value copy instead of JSON round-trip deep copy — eliminates repeated `json.Unmarshal` on every call since config is immutable after construction (`config/config_manager.go`).
+- `NewRedisClient` now accepts `ctx context.Context` as first parameter — ping respects parent context cancellation for graceful shutdown (`internal/cache/redis_client.go`).
+- `initDatabase` ping now uses the passed `ctx` instead of `context.Background()` — respects signal cancellation during startup (`cmd/gouno/web_infra.go`).
+- `Auditor.Wait()` now delegates to `Auditor.Close()` with `sync.Once` — ensures context cancellation always happens during shutdown and `batchflow.Close()` is never called twice; batch pipeline close errors are now logged instead of silently discarded (`internal/audit/service/audit.go`).
+- `key_service.go` consolidated duplicate `os.Stat` calls into a single call with reused `info` result (`internal/token/service/key_service.go`).
+- Rate limiter Redis key separator changed from `:` to `|` — prevents key collisions when `keyFunc` returns strings containing `:` (`middleware/redis_ratelimit.go`).
+- Rate limiter Redis error log level downgraded from `Error` to `Warn` — prevents log storms when Redis is unavailable under high traffic (`middleware/redis_ratelimit.go`).
+- Redis DSN empty error message now includes `GOUNO_REDIS_DSN` env var hint (`config/config.go`).
+
+### Removed
+- `checkCredentialExists` (non-transactional variant) — dead code, all callers use `checkCredentialExistsTx` instead (`internal/account/service/account_service.go`).
+
 ### Fixed
 - `SendVerification` and `ConfirmVerification` endpoints now correctly require JWT authentication — moved from unauthenticated route group to protected group. Previously these endpoints always returned 401 because they called `getClaimsFromContext()` without JWT middleware running (`internal/auth/controller/auth_controller.go`).
 - OAuth2 `handleRefreshTokenGrant`, `DeviceCodeRequest`, and `handleDeviceCodeGrant` now call `DummyAuthenticate()` on client lookup failure — prevents timing side-channel that could leak whether a `client_id` exists (`internal/oauth2/controller/oauth2_token.go`, `internal/oauth2/controller/oauth2_device.go`).

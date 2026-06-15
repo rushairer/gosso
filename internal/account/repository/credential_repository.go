@@ -39,6 +39,11 @@ type CredentialRepository interface {
 	// UpdateCredential updates a credential (requires transaction)
 	UpdateCredential(ctx context.Context, tx *sql.Tx, credential *domain.Credential) error
 
+	// UpdateLastUsedAt updates only the last_used_at timestamp of a credential (requires transaction).
+	// Use this instead of UpdateCredential when only the last-used time needs to change,
+	// to avoid overwriting concurrent modifications to other fields (TOCTOU-safe).
+	UpdateLastUsedAt(ctx context.Context, tx *sql.Tx, credentialID string, lastUsedAt time.Time) error
+
 	// SoftDeleteCredentialsByAccount soft deletes all credentials of an account (requires transaction)
 	SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
 
