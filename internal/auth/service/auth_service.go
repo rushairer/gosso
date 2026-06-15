@@ -78,6 +78,15 @@ type AuthService struct {
 	mfaVerificationTTL    time.Duration
 }
 
+// AuthServiceConfig holds optional configuration for AuthService.
+// Zero-valued fields use package defaults.
+type AuthServiceConfig struct {
+	LoginRateLimitWindow  time.Duration // default: defaultLoginRateLimitWindow
+	LoginMaxAttempts      int           // default: defaultLoginMaxAttempts
+	LoginMaxAttemptsPerIP int           // default: defaultLoginMaxAttemptsPerIP
+	MFAVerificationTTL    time.Duration // default: defaultMFAVerificationTTL
+}
+
 // NewAuthService creates a new auth service instance
 func NewAuthService(
 	db *sql.DB,
@@ -92,8 +101,27 @@ func NewAuthService(
 	mfaSvc *MFAService,
 	passkeySvc *PasskeyService,
 ) *AuthService {
+	return NewAuthServiceWithConfig(db, accountSvc, sessionSvc, tokenSvc, credentialRepo, roleRepo, redis, logger, auditor, mfaSvc, passkeySvc, AuthServiceConfig{})
+}
+
+// NewAuthServiceWithConfig creates a new auth service instance with the given config.
+// Zero-valued config fields use package defaults.
+func NewAuthServiceWithConfig(
+	db *sql.DB,
+	accountSvc accountService.AccountService,
+	sessionSvc *sessionService.SessionService,
+	tokenSvc *tokenService.TokenService,
+	credentialRepo accountRepo.CredentialRepository,
+	roleRepo accountRepo.RoleRepository,
+	redis *cache.RedisClient,
+	logger *zap.Logger,
+	auditor *auditService.Auditor,
+	mfaSvc *MFAService,
+	passkeySvc *PasskeyService,
+	cfg AuthServiceConfig,
+) *AuthService {
 	logger = utility.EnsureLogger(logger)
-	return &AuthService{
+	svc := &AuthService{
 		db:                    db,
 		accountSvc:            accountSvc,
 		sessionSvc:            sessionSvc,
@@ -110,6 +138,19 @@ func NewAuthService(
 		loginMaxAttemptsPerIP: defaultLoginMaxAttemptsPerIP,
 		mfaVerificationTTL:    defaultMFAVerificationTTL,
 	}
+	if cfg.LoginRateLimitWindow > 0 {
+		svc.loginRateLimitWindow = cfg.LoginRateLimitWindow
+	}
+	if cfg.LoginMaxAttempts > 0 {
+		svc.loginMaxAttempts = cfg.LoginMaxAttempts
+	}
+	if cfg.LoginMaxAttemptsPerIP > 0 {
+		svc.loginMaxAttemptsPerIP = cfg.LoginMaxAttemptsPerIP
+	}
+	if cfg.MFAVerificationTTL > 0 {
+		svc.mfaVerificationTTL = cfg.MFAVerificationTTL
+	}
+	return svc
 }
 
 // MFAService returns the MFA service instance

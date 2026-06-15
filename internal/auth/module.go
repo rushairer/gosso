@@ -53,17 +53,12 @@ type AuthModuleConfig struct {
 // InitializeAuthModule initializes the authentication module.
 // Returns an error if the TOTP encryption key cannot be set.
 func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
-	sessionSvc := sessionService.NewSessionService(cfg.Redis, cfg.Logger)
-	sessionSvc.SetTokenRevoker(cfg.TokenSvc)
-	if cfg.AuthConfig.SessionTTL > 0 {
-		sessionSvc.SetSessionTTL(cfg.AuthConfig.SessionTTL)
-	}
-	if cfg.AuthConfig.MaxSessions > 0 {
-		sessionSvc.SetMaxSessions(cfg.AuthConfig.MaxSessions)
-	}
-	if cfg.AuthConfig.MaxSessionAge > 0 {
-		sessionSvc.SetMaxSessionAge(cfg.AuthConfig.MaxSessionAge)
-	}
+	sessionSvc := sessionService.NewSessionServiceWithConfig(cfg.Redis, cfg.Logger, sessionService.SessionConfig{
+		SessionTTL:    cfg.AuthConfig.SessionTTL,
+		MaxSessions:   cfg.AuthConfig.MaxSessions,
+		MaxSessionAge: cfg.AuthConfig.MaxSessionAge,
+		TokenRevoker:  cfg.TokenSvc,
+	})
 
 	// PasskeyService (if WebAuthn is configured)
 	var passkeySvc *service.PasskeyService
@@ -84,32 +79,24 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 		}
 	}
 
-	mfaSvc := service.NewMFAService(cfg.CredentialRepo, cfg.DB, cfg.AuthConfig.Issuer, cfg.Logger, passkeySvc)
+	mfaSvc := service.NewMFAServiceWithConfig(cfg.CredentialRepo, cfg.DB, cfg.AuthConfig.Issuer, cfg.Logger, service.MFAServiceConfig{
+		TOTPEncryptionKey: cfg.AuthConfig.TOTPEncryptionKey,
+		BackupCodeCount:   cfg.AuthConfig.BackupCodeCount,
+		BackupCodeLength:  cfg.AuthConfig.BackupCodeLength,
+	}, passkeySvc)
 	if cfg.AuthConfig.TOTPEncryptionKey != "" {
+		// Validate key was set successfully (error already logged in NewMFAServiceWithConfig)
 		if err := mfaSvc.SetTOTPEncryptionKey(cfg.AuthConfig.TOTPEncryptionKey); err != nil {
 			return nil, fmt.Errorf("failed to set TOTP encryption key: %w", err)
 		}
 	}
-	if cfg.AuthConfig.BackupCodeCount > 0 {
-		mfaSvc.SetBackupCodeCount(cfg.AuthConfig.BackupCodeCount)
-	}
-	if cfg.AuthConfig.BackupCodeLength > 0 {
-		mfaSvc.SetBackupCodeLength(cfg.AuthConfig.BackupCodeLength)
-	}
 
-	authSvc := service.NewAuthService(cfg.DB, cfg.AccountSvc, sessionSvc, cfg.TokenSvc, cfg.CredentialRepo, cfg.RoleRepo, cfg.Redis, cfg.Logger, cfg.Auditor, mfaSvc, passkeySvc)
-	if cfg.AuthConfig.LoginRateLimitWindow > 0 {
-		authSvc.SetLoginRateLimitWindow(cfg.AuthConfig.LoginRateLimitWindow)
-	}
-	if cfg.AuthConfig.LoginMaxAttempts > 0 {
-		authSvc.SetLoginMaxAttempts(cfg.AuthConfig.LoginMaxAttempts)
-	}
-	if cfg.AuthConfig.LoginMaxAttemptsPerIP > 0 {
-		authSvc.SetLoginMaxAttemptsPerIP(cfg.AuthConfig.LoginMaxAttemptsPerIP)
-	}
-	if cfg.AuthConfig.MFAVerificationTTL > 0 {
-		authSvc.SetMFAVerificationTTL(cfg.AuthConfig.MFAVerificationTTL)
-	}
+	authSvc := service.NewAuthServiceWithConfig(cfg.DB, cfg.AccountSvc, sessionSvc, cfg.TokenSvc, cfg.CredentialRepo, cfg.RoleRepo, cfg.Redis, cfg.Logger, cfg.Auditor, mfaSvc, passkeySvc, service.AuthServiceConfig{
+		LoginRateLimitWindow:  cfg.AuthConfig.LoginRateLimitWindow,
+		LoginMaxAttempts:      cfg.AuthConfig.LoginMaxAttempts,
+		LoginMaxAttemptsPerIP: cfg.AuthConfig.LoginMaxAttemptsPerIP,
+		MFAVerificationTTL:    cfg.AuthConfig.MFAVerificationTTL,
+	})
 
 	var socialSvc *service.SocialLoginService
 	if len(cfg.Providers) > 0 {
@@ -133,37 +120,21 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 		emailSvc.SetPasswordResetTTL(cfg.AuthConfig.PasswordResetTokenTTL)
 	}
 	smsSvc := notificationService.NewStubSMSService(cfg.Logger)
-	verificationSvc := service.NewVerificationService(cfg.Redis, emailSvc, smsSvc, cfg.CredentialRepo, cfg.Logger)
-	if cfg.AuthConfig.TOTPEncryptionKey != "" {
-		verificationSvc.SetHashPepper(cfg.AuthConfig.TOTPEncryptionKey)
-	}
-	if cfg.AuthConfig.VerifyCodeTTL > 0 {
-		verificationSvc.SetCodeTTL(cfg.AuthConfig.VerifyCodeTTL)
-	}
-	if cfg.AuthConfig.VerifyCooldownTTL > 0 {
-		verificationSvc.SetCooldownTTL(cfg.AuthConfig.VerifyCooldownTTL)
-	}
-	if cfg.AuthConfig.VerifyCodeMaxAttempts > 0 {
-		verificationSvc.SetMaxAttempts(cfg.AuthConfig.VerifyCodeMaxAttempts)
-	}
+	verificationSvc := service.NewVerificationServiceWithConfig(cfg.Redis, emailSvc, smsSvc, cfg.CredentialRepo, cfg.Logger, service.VerificationServiceConfig{
+		CodeTTL:     cfg.AuthConfig.VerifyCodeTTL,
+		CooldownTTL: cfg.AuthConfig.VerifyCooldownTTL,
+		MaxAttempts: cfg.AuthConfig.VerifyCodeMaxAttempts,
+		HashPepper:  cfg.AuthConfig.TOTPEncryptionKey,
+	})
 
-	passwordResetSvc := service.NewPasswordResetService(cfg.Redis, cfg.CredentialRepo, emailSvc, sessionSvc, cfg.TokenSvc, cfg.AccountSvc, cfg.DB, cfg.BaseURL, cfg.Logger)
+	passwordResetSvc := service.NewPasswordResetServiceWithConfig(cfg.Redis, cfg.CredentialRepo, emailSvc, sessionSvc, cfg.TokenSvc, cfg.AccountSvc, cfg.DB, cfg.BaseURL, cfg.Logger, service.PasswordResetServiceConfig{
+		WaitTimeout:       cfg.AuthConfig.PasswordResetWaitTimeout,
+		TokenTTL:          cfg.AuthConfig.PasswordResetTokenTTL,
+		CooldownTTL:       cfg.AuthConfig.PasswordResetCooldownTTL,
+		MaxAttempts:       cfg.AuthConfig.PasswordResetMaxAttempts,
+		RevokeConcurrency: cfg.AuthConfig.PasswordResetRevokeConcurrency,
+	})
 	passwordResetSvc.SetLoginRateLimitClearer(authSvc)
-	if cfg.AuthConfig.PasswordResetWaitTimeout > 0 {
-		passwordResetSvc.SetWaitTimeout(cfg.AuthConfig.PasswordResetWaitTimeout)
-	}
-	if cfg.AuthConfig.PasswordResetTokenTTL > 0 {
-		passwordResetSvc.SetTokenTTL(cfg.AuthConfig.PasswordResetTokenTTL)
-	}
-	if cfg.AuthConfig.PasswordResetCooldownTTL > 0 {
-		passwordResetSvc.SetCooldownTTL(cfg.AuthConfig.PasswordResetCooldownTTL)
-	}
-	if cfg.AuthConfig.PasswordResetMaxAttempts > 0 {
-		passwordResetSvc.SetMaxAttempts(cfg.AuthConfig.PasswordResetMaxAttempts)
-	}
-	if cfg.AuthConfig.PasswordResetRevokeConcurrency > 0 {
-		passwordResetSvc.SetRevokeConcurrency(cfg.AuthConfig.PasswordResetRevokeConcurrency)
-	}
 
 	return &AuthModule{
 		AuthService:          authSvc,

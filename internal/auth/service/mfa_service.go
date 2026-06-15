@@ -45,6 +45,14 @@ type MFAService struct {
 	backupCodeLength  int
 }
 
+// MFAServiceConfig holds optional configuration for MFAService.
+// Zero-valued fields use package defaults.
+type MFAServiceConfig struct {
+	TOTPEncryptionKey string // hex-encoded AES-256 key; empty = no encryption
+	BackupCodeCount   int    // default: defaultBackupCodeCount
+	BackupCodeLength  int    // default: defaultBackupCodeLength
+}
+
 // NewMFAService creates an MFA service instance
 func NewMFAService(
 	credentialRepo accountRepo.CredentialRepository,
@@ -53,17 +61,43 @@ func NewMFAService(
 	logger *zap.Logger,
 	passkeySvc ...*PasskeyService,
 ) *MFAService {
+	var ps *PasskeyService
+	if len(passkeySvc) > 0 {
+		ps = passkeySvc[0]
+	}
+	return NewMFAServiceWithConfig(credentialRepo, db, issuer, logger, MFAServiceConfig{}, ps)
+}
+
+// NewMFAServiceWithConfig creates an MFA service instance with the given config.
+// Zero-valued config fields use package defaults.
+func NewMFAServiceWithConfig(
+	credentialRepo accountRepo.CredentialRepository,
+	db *sql.DB,
+	issuer string,
+	logger *zap.Logger,
+	cfg MFAServiceConfig,
+	passkeySvc *PasskeyService,
+) *MFAService {
 	logger = utility.EnsureLogger(logger)
 	svc := &MFAService{
 		credentialRepo:   credentialRepo,
 		db:               db,
 		issuer:           issuer,
 		logger:           logger,
+		passkeySvc:       passkeySvc,
 		backupCodeCount:  defaultBackupCodeCount,
 		backupCodeLength: defaultBackupCodeLength,
 	}
-	if len(passkeySvc) > 0 {
-		svc.passkeySvc = passkeySvc[0]
+	if cfg.TOTPEncryptionKey != "" {
+		if err := svc.SetTOTPEncryptionKey(cfg.TOTPEncryptionKey); err != nil {
+			logger.Error("Failed to set TOTP encryption key", zap.Error(err))
+		}
+	}
+	if cfg.BackupCodeCount > 0 && cfg.BackupCodeCount <= 20 {
+		svc.backupCodeCount = cfg.BackupCodeCount
+	}
+	if cfg.BackupCodeLength > 0 && cfg.BackupCodeLength <= 12 {
+		svc.backupCodeLength = cfg.BackupCodeLength
 	}
 	return svc
 }

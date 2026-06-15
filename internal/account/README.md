@@ -52,7 +52,7 @@ internal/account/
 │   ├── account_service.go    # 账号服务
 │   └── account_service_test.go # 单元测试
 │
-├── wire.go                    # 依赖注入（手动）
+├── module.go                  # 依赖注入工厂（手动）
 └── README.md                  # 模块文档
 ```
 
@@ -143,7 +143,7 @@ err := accountService.SoftDeleteAccount(ctx, accountID)
 ## 🔐 安全特性
 
 ### 1. 密码安全
-- 使用 `bcrypt` 哈希（cost=10）
+- 使用 `Argon2id` 哈希（OWASP 2023 推荐方案）
 - 不存储明文密码
 - 支持密码强度验证
 
@@ -227,22 +227,21 @@ package main
 
 import (
     "github.com/rushairer/gosso/internal/account"
-    "github.com/rushairer/gosso/internal/db"
 )
 
 func main() {
-    // 1. 连接数据库
-    database, _ := db.Connect(dbConfig)
-    
-    // 2. 初始化账号服务
-    accountService := account.InitializeAccountModule(database.DB)
-    
+    // 1. 连接数据库（使用 database/sql）
+    // db := ...
+
+    // 2. 初始化账号模块（依赖注入）
+    accountModule := account.InitializeAccountModule(db, auditor, logger)
+
     // 3. 注册账号
     req := &service.RegisterAccountRequest{
         Email:    "user@example.com",
         Password: "SecurePass123!",
     }
-    account, _ := accountService.RegisterAccount(ctx, req)
+    account, _ := accountModule.Service.RegisterAccount(ctx, req)
 }
 ```
 

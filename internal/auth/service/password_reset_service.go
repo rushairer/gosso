@@ -101,6 +101,16 @@ type PasswordResetService struct {
 	maxAttempts           int
 }
 
+// PasswordResetServiceConfig holds optional configuration for PasswordResetService.
+// Zero-valued fields use package defaults.
+type PasswordResetServiceConfig struct {
+	WaitTimeout       time.Duration // default: 60s
+	TokenTTL          time.Duration // default: passwordResetTokenTTL
+	CooldownTTL       time.Duration // default: passwordResetCooldownTTL
+	MaxAttempts       int           // default: passwordResetMaxAttempts
+	RevokeConcurrency int           // default: 10
+}
+
 // NewPasswordResetService creates a new password reset service instance
 func NewPasswordResetService(
 	redis *cache.RedisClient,
@@ -113,8 +123,29 @@ func NewPasswordResetService(
 	baseURL string,
 	logger *zap.Logger,
 ) *PasswordResetService {
+	return NewPasswordResetServiceWithConfig(redis, credentialRepo, emailSender, sessionSvc, tokenRevoker, accountSvc, db, baseURL, logger, PasswordResetServiceConfig{})
+}
+
+// NewPasswordResetServiceWithConfig creates a new password reset service instance with the given config.
+// Zero-valued config fields use package defaults.
+func NewPasswordResetServiceWithConfig(
+	redis *cache.RedisClient,
+	credentialRepo accountRepo.CredentialRepository,
+	emailSender PasswordResetEmailSender,
+	sessionSvc *sessionService.SessionService,
+	tokenRevoker AccountTokenRevoker,
+	accountSvc accountService.AccountService,
+	db *sql.DB,
+	baseURL string,
+	logger *zap.Logger,
+	cfg PasswordResetServiceConfig,
+) *PasswordResetService {
 	logger = utility.EnsureLogger(logger)
-	return &PasswordResetService{
+	revokeConcurrency := 10
+	if cfg.RevokeConcurrency > 0 {
+		revokeConcurrency = cfg.RevokeConcurrency
+	}
+	svc := &PasswordResetService{
 		redis:          redis,
 		credentialRepo: credentialRepo,
 		emailSender:    emailSender,
@@ -124,12 +155,25 @@ func NewPasswordResetService(
 		db:             db,
 		baseURL:        baseURL,
 		logger:         logger,
-		revokeSem:      make(chan struct{}, 10),
+		revokeSem:      make(chan struct{}, revokeConcurrency),
 		waitTimeout:    60 * time.Second,
 		tokenTTL:       passwordResetTokenTTL,
 		cooldownTTL:    passwordResetCooldownTTL,
 		maxAttempts:    passwordResetMaxAttempts,
 	}
+	if cfg.WaitTimeout > 0 {
+		svc.waitTimeout = cfg.WaitTimeout
+	}
+	if cfg.TokenTTL > 0 {
+		svc.tokenTTL = cfg.TokenTTL
+	}
+	if cfg.CooldownTTL > 0 {
+		svc.cooldownTTL = cfg.CooldownTTL
+	}
+	if cfg.MaxAttempts > 0 {
+		svc.maxAttempts = cfg.MaxAttempts
+	}
+	return svc
 }
 
 // SetWaitTimeout overrides the default timeout for Wait() during graceful shutdown.

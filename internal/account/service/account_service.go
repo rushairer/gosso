@@ -142,33 +142,22 @@ func NewAccountService(
 }
 
 // SetSessionRevoker sets the session revoker dependency.
-// Must be called during initialization; panics on nil to fail fast.
-// Uses panic (rather than returning error) because a nil revoker is always a
-// programming bug caught at startup, similar to regexp.MustCompile.
+// Must be called during initialization. The runtime nil check in
+// SoftDeleteAccount/ChangePassword provides a safe fallback if omitted.
 func (s *accountServiceImpl) SetSessionRevoker(revoker SessionRevoker) {
-	if revoker == nil {
-		panic("SetSessionRevoker: revoker must not be nil")
-	}
 	s.sessionRevoker = revoker
 }
 
 // SetOAuth2ClientDeleter sets the OAuth2 client deleter dependency.
-// Must be called during initialization; panics on nil to fail fast.
-// Uses panic (rather than returning error) because a nil deleter is always a
-// programming bug caught at startup, similar to regexp.MustCompile.
+// Must be called during initialization. The runtime nil check in
+// SoftDeleteAccount provides a safe fallback if omitted.
 func (s *accountServiceImpl) SetOAuth2ClientDeleter(deleter OAuth2ClientDeleter) {
-	if deleter == nil {
-		panic("SetOAuth2ClientDeleter: deleter must not be nil")
-	}
 	s.oauth2ClientDeleter = deleter
 }
 
 // SetConsentCacheInvalidator sets the consent cache invalidator dependency.
-// Must be called during initialization; panics on nil to fail fast.
+// Optional — failure to set this is non-critical (consent TTL will expire naturally).
 func (s *accountServiceImpl) SetConsentCacheInvalidator(invalidator ConsentCacheInvalidator) {
-	if invalidator == nil {
-		panic("SetConsentCacheInvalidator: invalidator must not be nil")
-	}
 	s.consentCacheInvalidator = invalidator
 }
 
@@ -194,35 +183,15 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
 
-	// 2. Check if credentials already exist
-	if req.Email != "" {
-		if err := s.checkCredentialExists(ctx, domain.CredentialTypeEmail, req.Email); err != nil {
-			return nil, err
-		}
-	}
-	if req.Phone != "" {
-		if err := s.checkCredentialExists(ctx, domain.CredentialTypePhone, req.Phone); err != nil {
-			return nil, err
-		}
-	}
-
-	// 3. Create account + credentials in transaction
+	// 2. Create account + credentials in transaction
 	account, err := domain.NewAccount(req.DisplayName)
 	if err != nil {
 		return nil, fmt.Errorf("create account: %w", err)
 	}
 	if req.Username != "" {
 		username := strings.TrimSpace(req.Username)
-		if username == "" {
-			return nil, fmt.Errorf("username must not be empty")
-		}
-		if len(username) > 50 {
-			return nil, fmt.Errorf("username must not exceed 50 characters")
-		}
-		for _, c := range username {
-			if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' && c != '-' && c != '.' {
-				return nil, fmt.Errorf("username may only contain lowercase letters, digits, hyphens, dots, and underscores")
-			}
+		if err := validateUsername(username); err != nil {
+			return nil, err
 		}
 		account.Username = &username
 	}
@@ -236,6 +205,18 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	account.Metadata = nonNilMap(req.Metadata)
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// Check credential uniqueness inside the transaction to eliminate TOCTOU window.
+		if req.Email != "" {
+			if err := s.checkCredentialExistsTx(ctx, tx, domain.CredentialTypeEmail, req.Email); err != nil {
+				return err
+			}
+		}
+		if req.Phone != "" {
+			if err := s.checkCredentialExistsTx(ctx, tx, domain.CredentialTypePhone, req.Phone); err != nil {
+				return err
+			}
+		}
+
 		if err := s.accountRepo.CreateAccount(ctx, tx, account); err != nil {
 			return err
 		}
@@ -277,7 +258,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		return nil, err
 	}
 
-	// 4. Audit log
+	// 3. Audit log
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountRegister,
 		audit.IPFromContext(ctx),
@@ -380,7 +361,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		return err
 	}
 
-	// 5. Revoke all active sessions and refresh tokens.
+	// 4. Revoke all active sessions and refresh tokens.
 	// Access tokens are invalidated by the JWT middleware's session existence check
 	// (JWTAuthMiddleware validates sessions on every authenticated request), so explicit
 	// blacklisting of access token JTIs is not required here.
@@ -389,7 +370,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		s.logger.Error("Failed to revoke sessions after account deletion", zap.String("account_id", accountID), zap.Error(revokeErr))
 	}
 
-	// 6. Clear consent cache entries for this account.
+	// 5. Clear consent cache entries for this account.
 	// This prevents stale cached consents from surviving after account deletion.
 	// Failure is non-critical since the consent TTL (90 days) will expire naturally.
 	if s.consentCacheInvalidator != nil {
@@ -754,9 +735,50 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 	return nil
 }
 
+// validateUsername validates a username string.
+// Username must be non-empty, at most 50 characters, and contain only
+// lowercase letters, digits, hyphens, dots, and underscores.
+func validateUsername(username string) error {
+	if username == "" {
+		return fmt.Errorf("username must not be empty")
+	}
+	if len(username) > 50 {
+		return fmt.Errorf("username must not exceed 50 characters")
+	}
+	for _, c := range username {
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' && c != '-' && c != '.' {
+			return fmt.Errorf("username may only contain lowercase letters, digits, hyphens, dots, and underscores")
+		}
+	}
+	return nil
+}
+
 // checkCredentialExists checks whether a credential with the given type and identifier already exists.
 func (s *accountServiceImpl) checkCredentialExists(ctx context.Context, credType domain.CredentialType, identifier string) error {
 	cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, credType, identifier)
+	if err != nil {
+		if errors.Is(err, repository.ErrCredentialNotFound) {
+			return nil
+		}
+		return fmt.Errorf("check credential existence: %w", err)
+	}
+	if cred != nil {
+		switch credType {
+		case domain.CredentialTypeEmail:
+			return ErrEmailAlreadyRegistered
+		case domain.CredentialTypePhone:
+			return ErrPhoneAlreadyRegistered
+		case domain.CredentialTypePassword, domain.CredentialTypeTOTP, domain.CredentialTypeWebAuthn, domain.CredentialTypeBackupCode:
+			return fmt.Errorf("%w: %s", ErrCredentialAlreadyExists, credType)
+		}
+	}
+	return nil
+}
+
+// checkCredentialExistsTx is the transaction-variant of checkCredentialExists.
+// Use inside RunInTransaction to avoid TOCTOU race conditions.
+func (s *accountServiceImpl) checkCredentialExistsTx(ctx context.Context, tx *sql.Tx, credType domain.CredentialType, identifier string) error {
+	cred, err := s.credentialRepo.FindByTypeAndIdentifierTx(ctx, tx, credType, identifier)
 	if err != nil {
 		if errors.Is(err, repository.ErrCredentialNotFound) {
 			return nil

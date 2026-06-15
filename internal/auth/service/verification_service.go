@@ -92,6 +92,16 @@ type VerificationService struct {
 	hashPepper     string // optional secret prepended to code before hashing (prevents rainbow tables if Redis is compromised)
 }
 
+// VerificationServiceConfig holds optional configuration for VerificationService.
+// Zero-valued fields use package defaults.
+type VerificationServiceConfig struct {
+	CodeTTL     time.Duration // default: VerifyCodeTTL
+	CooldownTTL time.Duration // default: VerifyCooldownTTL
+	MaxAttempts int           // default: VerifyCodeAttempts
+	CodeLength  int           // default: VerifyCodeLength
+	HashPepper  string        // optional secret prepended to code before hashing
+}
+
 // NewVerificationService creates a new verification service instance
 func NewVerificationService(
 	redis *cache.RedisClient,
@@ -100,8 +110,21 @@ func NewVerificationService(
 	credentialRepo accountRepo.CredentialRepository,
 	logger *zap.Logger,
 ) *VerificationService {
+	return NewVerificationServiceWithConfig(redis, emailSvc, smsSvc, credentialRepo, logger, VerificationServiceConfig{})
+}
+
+// NewVerificationServiceWithConfig creates a new verification service instance with the given config.
+// Zero-valued config fields use package defaults.
+func NewVerificationServiceWithConfig(
+	redis *cache.RedisClient,
+	emailSvc EmailSender,
+	smsSvc SMSSender,
+	credentialRepo accountRepo.CredentialRepository,
+	logger *zap.Logger,
+	cfg VerificationServiceConfig,
+) *VerificationService {
 	logger = utility.EnsureLogger(logger)
-	return &VerificationService{
+	svc := &VerificationService{
 		redis:          redis,
 		emailSvc:       emailSvc,
 		smsSvc:         smsSvc,
@@ -112,6 +135,22 @@ func NewVerificationService(
 		maxAttempts:    VerifyCodeAttempts,
 		codeLength:     VerifyCodeLength,
 	}
+	if cfg.CodeTTL > 0 {
+		svc.codeTTL = cfg.CodeTTL
+	}
+	if cfg.CooldownTTL > 0 {
+		svc.cooldownTTL = cfg.CooldownTTL
+	}
+	if cfg.MaxAttempts > 0 {
+		svc.maxAttempts = cfg.MaxAttempts
+	}
+	if cfg.CodeLength > 0 {
+		svc.codeLength = cfg.CodeLength
+	}
+	if cfg.HashPepper != "" {
+		svc.hashPepper = cfg.HashPepper
+	}
+	return svc
 }
 
 // SetCodeTTL overrides the default verification code TTL.

@@ -369,8 +369,9 @@ func TestRemoveRole_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TestSetSessionRevoker_NilPanics tests that setting a nil session revoker panics
-func TestSetSessionRevoker_NilPanics(t *testing.T) {
+// TestSetSessionRevoker_NilNoOp tests that setting a nil session revoker does not panic
+// (runtime nil check in SoftDeleteAccount/ChangePassword provides safety)
+func TestSetSessionRevoker_NilNoOp(t *testing.T) {
 	db, _, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -381,13 +382,14 @@ func TestSetSessionRevoker_NilPanics(t *testing.T) {
 	roleRepo := repository.RoleRepository(nil)
 
 	svc := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
-	assert.Panics(t, func() {
+	assert.NotPanics(t, func() {
 		svc.SetSessionRevoker(nil)
 	})
 }
 
-// TestSetOAuth2ClientDeleter_NilPanics tests that setting a nil OAuth2 client deleter panics
-func TestSetOAuth2ClientDeleter_NilPanics(t *testing.T) {
+// TestSetOAuth2ClientDeleter_NilNoOp tests that setting a nil OAuth2 client deleter does not panic
+// (runtime nil check in SoftDeleteAccount provides safety)
+func TestSetOAuth2ClientDeleter_NilNoOp(t *testing.T) {
 	db, _, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -398,7 +400,7 @@ func TestSetOAuth2ClientDeleter_NilPanics(t *testing.T) {
 	roleRepo := repository.RoleRepository(nil)
 
 	svc := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
-	assert.Panics(t, func() {
+	assert.NotPanics(t, func() {
 		svc.SetOAuth2ClientDeleter(nil)
 	})
 }
@@ -420,13 +422,13 @@ func TestRegisterAccount(t *testing.T) {
 
 	// Set mock expectations (in order of execution)
 
-	// 1. Expect querying whether email exists (executed outside transaction)
+	// 1. Begin transaction
+	mock.ExpectBegin()
+
+	// 2. Expect querying whether email exists (executed inside transaction)
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
 		WithArgs(domain.CredentialTypeEmail, "test@example.com").
 		WillReturnError(sql.ErrNoRows)
-
-	// 2. Begin transaction
-	mock.ExpectBegin()
 
 	// 3. Expect inserting account
 	mock.ExpectExec("INSERT INTO accounts").
@@ -476,8 +478,8 @@ func TestRegisterAccount_DuplicateEmail(t *testing.T) {
 
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
 
-	// Set mock: email already exists (queried outside transaction)
-	// Note: requires all columns to be returned to match Scan of FindByTypeAndIdentifier
+	// Set mock: email already exists (queried inside transaction)
+	// Note: requires all columns to be returned to match Scan of FindByTypeAndIdentifierTx
 	rows := sqlmock.NewRows([]string{
 		"id", "account_id", "credential_type", "identifier",
 		"credential_value", "verified", "primary_credential", "metadata",
@@ -488,11 +490,15 @@ func TestRegisterAccount_DuplicateEmail(t *testing.T) {
 		time.Now(), time.Now(), nil, nil, nil,
 	)
 
+	// Begin transaction (now the uniqueness check happens inside the transaction)
+	mock.ExpectBegin()
+
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
 		WithArgs(domain.CredentialTypeEmail, "test@example.com").
 		WillReturnRows(rows)
 
-	// Note: after detecting duplicate email, transaction won't begin, so ExpectBegin is not needed
+	// Rollback due to ErrEmailAlreadyRegistered
+	mock.ExpectRollback()
 
 	// Execute registration
 	req := &RegisterAccountRequest{
