@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `TestBigEndianBytes` and `TestStringPtr` unit tests for utility functions (`internal/utility/bigendian_test.go`, `internal/utility/ptr_test.go`).
 - `ErrCredentialAlreadyExists` sentinel error for non-email/phone credential types — enables reliable `errors.Is()` matching in `checkCredentialExists` (`internal/account/service/errors.go`).
 - `utility.DummyWork()` shared timing-attack mitigation function — extracted from duplicated `dummyWork()` in `PasswordResetService` and `VerificationService` (`internal/utility/timing.go`).
+- `Credential.MarshalLogObject` implementing `zapcore.ObjectMarshaler` — ensures password hashes are never logged via `zap.Any()`, masks identifiers by credential type (`internal/account/domain/credential.go`).
+- `TestRevokeAllForSession_MultipleTokens` test — verifies multi-token atomic revocation (`internal/token/service/token_service_test.go`).
+- Password validation test cases for Unicode symbol rejection and whitelist character acceptance (`internal/utility/password_test.go`).
+- `Credential.MarshalLogObject` test cases — verifies Value exclusion, identifier masking, and nil identifier handling (`internal/account/domain/credential_test.go`).
 
 ### Changed
 - SMTP TLS policy now defaults to `TLSMandatory` instead of `TLSOpportunistic` — prevents SMTP credentials from being transmitted in plaintext when TLS negotiation fails. Explicit `"opportunistic"` config value still supported (`internal/notification/service/email_service.go`).
@@ -21,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Auditor.Wait()` and `Auditor.Close()` now have distinct semantics — `Wait()` flushes pending batches without cancelling the context; `Close()` flushes and cancels (`internal/audit/service/audit.go`).
 - `ConsentRepository.Delete` renamed to `SoftDelete` — consistent with `SoftDelete*` naming across all other repositories (`internal/oauth2/repository/`).
 - `ConfigManager.SetConfig` renamed to unexported `setConfig` — aligns with `Config()` returning a deep copy for encapsulation (`config/config_manager.go`).
+- `appModules.emailSvc` type changed from `interface{ Close() }` to `*notificationService.EmailService` — preserves type information for the concrete email service (`cmd/gouno/web_modules.go`).
+- `ConfigManager.Config()` now uses pre-serialized JSON snapshot (populated at `setConfig` time) — eliminates redundant `json.Marshal` on every call, only `json.Unmarshal` runs per `Config()` invocation (`config/config_manager.go`).
+- `ValidatePasswordStrength` special character check now uses an explicit allowlist (`!@#$%^&*()-_=+[]{}|;:',.<>?/` + "`~\"\\`) instead of `unicode.IsPunct || unicode.IsSymbol` — rejects obscure Unicode symbols and combining marks that are hard to type on mobile keyboards (`internal/utility/password.go`).
 - Repository `FindByID`/`FindByIDTx` and `FindByProvider`/`FindByProviderTx` and `FindByAccountAndType`/`FindByAccountAndTypeTx` now delegate to shared package-level functions — eliminates duplicated error-handling logic (`internal/account/repository/`).
 - Social login callback handler now validates `provider` parameter before proceeding — defensive programming against empty provider values (`internal/auth/controller/auth_controller.go`).
 - `AdminController.AddRole` and `RemoveRole` now prevent admins from modifying their own role assignments — consistent with `DeleteAccount`/`DisableAccount`/`EnableAccount` self-operation protection (`internal/admin/controller/admin_controller.go`).
@@ -38,6 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Credential.SoftDelete` and `FederatedIdentity.SoftDelete` used inline `errors.New()` instead of sentinel errors — callers could not reliably check for duplicate-delete via `errors.Is()` (`internal/account/domain/`).
 - `scanOAuth2Client` did not scan `deleted_at` column — loaded `OAuth2Client` structs always had `DeletedAt == nil` (`internal/oauth2/repository/scan_helpers.go`).
 - `scanConsent` did not scan `deleted_at` column — same issue as above (`internal/oauth2/repository/scan_helpers.go`).
+
+### Security
+- `RevokeAllForSession` now uses an atomic Lua script instead of three sequential Redis calls (SMembers + Del + Del) — eliminates TOCTOU race conditions where concurrent `RotateRefreshToken` could cause new tokens to escape revocation (`internal/token/service/token_service.go`).
+- `Credential` now implements `zapcore.ObjectMarshaler` via `MarshalLogObject` — prevents password hashes from being accidentally logged through `zap.Any("credential", cred)`. Identifier fields are masked by credential type (`internal/account/domain/credential.go`).
+- `ValidatePasswordStrength` special character check now uses an explicit allowlist instead of `unicode.IsPunct || unicode.IsSymbol` — prevents obscure Unicode symbols (combining marks, mathematical symbols, etc.) that could bypass intended character requirements (`internal/utility/password.go`).
 
 ### Changed
 - CI lint job now uploads gosec SARIF results to GitHub Security tab via `github/codeql-action/upload-sarif` (`.github/workflows/ci.yml`).

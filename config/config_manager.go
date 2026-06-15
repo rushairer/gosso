@@ -21,7 +21,8 @@ const defaultTOTPEncryptionKey = "0123456789abcdef0123456789abcdef0123456789abcd
 
 // ConfigManager loads, validates, and exposes the application configuration.
 type ConfigManager struct {
-	config *GoUnoConfig
+	config    *GoUnoConfig
+	cachedJSON []byte // pre-serialized config bytes, populated at setConfig time
 }
 
 // NewConfigManager creates a configuration manager.
@@ -83,23 +84,24 @@ func NewConfigManager(
 
 func (cm *ConfigManager) setConfig(config *GoUnoConfig) {
 	cm.config = config
+	// Pre-serialize to avoid repeated JSON.Marshal on every Config() call.
+	if b, err := json.Marshal(config); err == nil {
+		cm.cachedJSON = b
+	}
 }
 
 // Config returns a deep copy of the configuration.
-// Uses JSON round-trip to ensure all nested slices and maps are independently owned,
-// preventing accidental mutation of the internal config state.
+// Uses a pre-serialized JSON snapshot (populated at setConfig time) to avoid
+// repeated marshaling. Only the Unmarshal step runs per call.
 func (cm *ConfigManager) Config() GoUnoConfig {
 	if cm.config == nil {
 		return GoUnoConfig{}
 	}
-	var copy GoUnoConfig
-	b, err := json.Marshal(cm.config)
-	if err != nil {
-		// Should never happen — marshal of a valid config always succeeds.
-		// Return a pointer-based shallow copy as a last resort.
+	if cm.cachedJSON == nil {
 		return *cm.config
 	}
-	if err := json.Unmarshal(b, &copy); err != nil {
+	var copy GoUnoConfig
+	if err := json.Unmarshal(cm.cachedJSON, &copy); err != nil {
 		return *cm.config
 	}
 	return copy

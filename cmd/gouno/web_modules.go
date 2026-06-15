@@ -17,6 +17,7 @@ import (
 	authController "github.com/rushairer/gosso/internal/auth/controller"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/cache"
+	notificationService "github.com/rushairer/gosso/internal/notification/service"
 	"github.com/rushairer/gosso/internal/oauth2"
 	oauth2Controller "github.com/rushairer/gosso/internal/oauth2/controller"
 	oauth2Repository "github.com/rushairer/gosso/internal/oauth2/repository"
@@ -38,7 +39,7 @@ type appModules struct {
 	tokenSvc         *tokenService.TokenService
 	sessionSvc       *sessionService.SessionService
 	passwordResetSvc *authService.PasswordResetService
-	emailSvc         interface{ Close() }
+	emailSvc         *notificationService.EmailService
 }
 
 // initModules initializes all business modules and controllers

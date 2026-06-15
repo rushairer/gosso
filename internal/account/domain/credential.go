@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/crypto/argon2"
 
 	"github.com/rushairer/gosso/internal/utility"
@@ -196,6 +197,31 @@ func (c *Credential) VerifyPassword(plainPassword string) bool {
 		return false
 	}
 	return verifyArgon2id(plainPassword, c.Value)
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler to safely log credentials
+// without exposing the Value field (password hash or other sensitive data).
+func (c *Credential) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddString("id", c.ID)
+	enc.AddString("account_id", c.AccountID)
+	enc.AddString("credential_type", string(c.Type))
+	if c.Identifier != nil {
+		enc.AddString("identifier", utility.MaskIdentifier(string(c.Type), *c.Identifier))
+	}
+	enc.AddBool("verified", c.Verified)
+	enc.AddBool("primary_credential", c.PrimaryCredential)
+	enc.AddTime("created_at", c.CreatedAt)
+	enc.AddTime("updated_at", c.UpdatedAt)
+	if c.VerifiedAt != nil {
+		enc.AddTime("verified_at", *c.VerifiedAt)
+	}
+	if c.LastUsedAt != nil {
+		enc.AddTime("last_used_at", *c.LastUsedAt)
+	}
+	if c.DeletedAt != nil {
+		enc.AddTime("deleted_at", *c.DeletedAt)
+	}
+	return nil
 }
 
 // HashPassword hashes a plaintext password using Argon2id with PHC format encoding.

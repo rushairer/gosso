@@ -3,6 +3,7 @@ package utility
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"unicode"
 )
 
@@ -13,6 +14,11 @@ const MinPasswordLength = 12
 // Argon2id has no 72-byte limit (unlike bcrypt), but this cap prevents
 // excessive CPU/memory usage from oversized inputs.
 const MaxPasswordLength = 1024
+
+// allowedSpecialChars defines the set of accepted special characters in passwords.
+// This restrictive whitelist avoids obscure Unicode symbols (combining marks, control
+// characters, etc.) that are hard to type on mobile keyboards.
+const allowedSpecialChars = "!@#$%^&*()-_=+[]{}|;:',.<>?/`~\"\\"
 
 // ValidatePasswordStrength checks that a password meets minimum strength requirements:
 // at least 12 bytes, with at least one uppercase letter, one lowercase letter, one digit, and one special character.
@@ -33,7 +39,7 @@ func ValidatePasswordStrength(password string) error {
 			hasLower = true
 		case unicode.IsDigit(c):
 			hasDigit = true
-		case unicode.IsPunct(c) || unicode.IsSymbol(c):
+		case strings.ContainsRune(allowedSpecialChars, c):
 			hasSpecial = true
 		}
 	}

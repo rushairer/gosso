@@ -286,6 +286,22 @@ end
 return oldData
 `)
 
+// revokeAllSessionScript atomically revokes all refresh tokens under a session:
+// reads all token hashes from the session set, deletes each refresh token key,
+// and deletes the session set itself — all in a single Lua script to prevent
+// TOCTOU race conditions with concurrent RotateRefreshToken calls.
+// KEYS[1] = session tokens set key (session_tokens:<sessionID>)
+// ARGV[1] = refresh token key prefix (refresh_token:)
+// Returns the number of tokens revoked.
+var revokeAllSessionScript = redis.NewScript(`
+local members = redis.call('SMEMBERS', KEYS[1])
+for _, hash in ipairs(members) do
+    redis.call('DEL', ARGV[1] .. hash)
+end
+redis.call('DEL', KEYS[1])
+return #members
+`)
+
 // RotateRefreshToken rotates refresh tokens atomically.
 // The old token is read, deleted, and replaced with a new token in a single Lua script,
 // eliminating TOCTOU race conditions between concurrent rotation requests.
@@ -418,43 +434,25 @@ func (s *TokenService) RevokeRefreshToken(ctx context.Context, token string) err
 	return nil
 }
 
-// RevokeAllForSession revokes all refresh tokens under a given session
+// RevokeAllForSession atomically revokes all refresh tokens under a given session.
+// Uses a Lua script to read the session set, delete each refresh token key,
+// and delete the session set in a single atomic operation — preventing TOCTOU
+// race conditions with concurrent RotateRefreshToken calls.
 func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string) error {
 	sessionKey := s.buildSessionTokensKey(sessionID)
 
-	hashes, err := s.redis.SMembers(ctx, sessionKey)
+	result, err := s.redis.RunScript(ctx, revokeAllSessionScript,
+		[]string{sessionKey},
+		RefreshTokenKeyPrefix,
+	).Int64()
 	if err != nil {
-		return fmt.Errorf("get session tokens: %w", err)
+		return fmt.Errorf("revoke session tokens: %w", err)
 	}
 
-	// Delete individual tokens FIRST, then the session index.
-	// If index deletion fails, it points to already-deleted tokens (harmless).
-	// The reverse order would leave usable tokens if individual deletion fails,
-	// since ValidateRefreshToken only checks key existence.
-	var errs []error
-	if len(hashes) > 0 {
-		keys := make([]string, len(hashes))
-		for i, hash := range hashes {
-			keys[i] = RefreshTokenKeyPrefix + hash
-		}
-		if err := s.redis.Del(ctx, keys...); err != nil {
-			s.logger.Warn("Failed to delete refresh tokens during session revoke",
-				zap.String("session_id", sessionID), zap.Error(err))
-			errs = append(errs, fmt.Errorf("delete refresh tokens: %w", err))
-		}
-	}
-
-	if err := s.redis.Del(ctx, sessionKey); err != nil {
-		s.logger.Warn("Failed to delete session tokens set", zap.String("session_id", sessionID), zap.Error(err))
-		errs = append(errs, fmt.Errorf("delete session tokens set: %w", err))
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("revoke session tokens (partial failure): %w", errors.Join(errs...))
-	}
+	count := int(result)
 
 	s.logger.Info("Revoked all refresh tokens for session",
-		zap.String("session_id", sessionID), zap.Int("count", len(hashes)))
+		zap.String("session_id", sessionID), zap.Int("count", count))
 
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionTokenRevoke,

@@ -2,10 +2,12 @@ package domain
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 )
 
 // ──────────────────────────────────────────────
@@ -138,4 +140,60 @@ func TestNewCredential(t *testing.T) {
 	assert.False(t, cred.Verified)
 	assert.NotNil(t, cred.Metadata)
 	assert.False(t, cred.CreatedAt.IsZero())
+}
+
+// ──────────────────────────────────────────────
+// MarshalLogObject
+// ──────────────────────────────────────────────
+
+func TestCredential_MarshalLogObject_ExcludesValue(t *testing.T) {
+	cred, err := NewPasswordCredential("acc-1", "strong-password-123")
+	require.NoError(t, err)
+
+	enc := zapcore.NewMapObjectEncoder()
+	err = cred.MarshalLogObject(enc)
+	require.NoError(t, err)
+
+	fields := enc.Fields
+
+	// Value must NOT appear in log output
+	_, hasValue := fields["value"]
+	assert.False(t, hasValue, "Value field must not appear in log output")
+
+	// Sensitive fields should be present
+	assert.Equal(t, cred.ID, fields["id"])
+	assert.Equal(t, "acc-1", fields["account_id"])
+	assert.Equal(t, string(CredentialTypePassword), fields["credential_type"])
+	assert.Equal(t, true, fields["verified"])
+}
+
+func TestCredential_MarshalLogObject_MasksIdentifier(t *testing.T) {
+	email := "user@example.com"
+	cred := &Credential{
+		Type:       CredentialTypeEmail,
+		Identifier: &email,
+	}
+
+	enc := zapcore.NewMapObjectEncoder()
+	err := cred.MarshalLogObject(enc)
+	require.NoError(t, err)
+
+	// Identifier should be masked
+	identifier := enc.Fields["identifier"].(string)
+	assert.True(t, strings.Contains(identifier, "***"), "identifier should be masked: %s", identifier)
+	assert.NotEqual(t, email, identifier, "raw email must not appear in log output")
+}
+
+func TestCredential_MarshalLogObject_NilIdentifier(t *testing.T) {
+	cred := &Credential{
+		Type: CredentialTypePassword,
+	}
+
+	enc := zapcore.NewMapObjectEncoder()
+	err := cred.MarshalLogObject(enc)
+	require.NoError(t, err)
+
+	// Nil identifier should not be present in fields
+	_, hasIdentifier := enc.Fields["identifier"]
+	assert.False(t, hasIdentifier, "nil identifier should not be logged")
 }

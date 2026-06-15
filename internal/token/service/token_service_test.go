@@ -439,6 +439,37 @@ func TestRevokeAllForSession_Empty(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRevokeAllForSession_MultipleTokens(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	sessionID := "session-revoke-multi"
+
+	// Generate multiple tokens under the same session
+	tokens := make([]*domain.RefreshToken, 3)
+	for i := range tokens {
+		rt, err := svc.GenerateRefreshToken(ctx, "acct-revoke-multi", "client-1", sessionID, "openid")
+		require.NoError(t, err)
+		tokens[i] = rt
+	}
+
+	// All tokens should be valid before revoke
+	for _, rt := range tokens {
+		_, err := svc.ValidateRefreshToken(ctx, rt.Token)
+		require.NoError(t, err)
+	}
+
+	err := svc.RevokeAllForSession(ctx, sessionID)
+	require.NoError(t, err)
+
+	// All tokens should be gone
+	for i, rt := range tokens {
+		_, err := svc.ValidateRefreshToken(ctx, rt.Token)
+		assert.Error(t, err, "token %d should be revoked", i)
+	}
+}
+
 // ──────────────────────────────────────────────
 // RevokeAccessToken
 // ──────────────────────────────────────────────
