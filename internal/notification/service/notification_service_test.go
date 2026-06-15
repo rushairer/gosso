@@ -200,8 +200,9 @@ func TestSmtpTLSPolicy(t *testing.T) {
 	}{
 		{"mandatory", "mandatory", mail.TLSMandatory},
 		{"notls", "notls", mail.NoTLS},
-		{"opportunistic default", "", mail.TLSOpportunistic},
-		{"unknown", "unknown", mail.TLSOpportunistic},
+		{"opportunistic", "opportunistic", mail.TLSOpportunistic},
+		{"default (mandatory)", "", mail.TLSMandatory},
+		{"unknown", "unknown", mail.TLSMandatory},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

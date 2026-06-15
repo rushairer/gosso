@@ -28,6 +28,7 @@ type AuthModule struct {
 	CredentialRepo       accountRepo.CredentialRepository
 	PasskeyService       *service.PasskeyService
 	SessionService       *sessionService.SessionService
+	EmailService         *notificationService.EmailService
 }
 
 // AuthModuleConfig holds all dependencies for initializing the authentication module.
@@ -172,5 +173,6 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 		CredentialRepo:       cfg.CredentialRepo,
 		PasskeyService:       passkeySvc,
 		SessionService:       sessionSvc,
+		EmailService:         emailSvc,
 	}, nil
 }

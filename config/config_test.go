@@ -522,7 +522,7 @@ func TestGetDriver_NonExistent(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────
-// ConfigManager.SetConfig / Config
+// ConfigManager.setConfig / Config
 // ──────────────────────────────────────────────
 
 func TestConfigManager_SetConfig_GetConfig(t *testing.T) {
@@ -532,7 +532,7 @@ func TestConfigManager_SetConfig_GetConfig(t *testing.T) {
 	assert.Equal(t, GoUnoConfig{}, cm.Config())
 
 	cfg := validConfig()
-	cm.SetConfig(&cfg)
+	cm.setConfig(&cfg)
 
 	got := cm.Config()
 	assert.Equal(t, cfg.AuthConfig.Issuer, got.AuthConfig.Issuer)

@@ -103,21 +103,17 @@ func (r *roleRepositoryImpl) UpdateRole(ctx context.Context, tx *sql.Tx, role *d
 
 // FindByID finds a role by ID
 func (r *roleRepositoryImpl) FindByID(ctx context.Context, roleID string) (*domain.Role, error) {
-	role, err := scanRole(r.db.QueryRowContext(ctx, roleByIDQuery, roleID))
-
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: %s", ErrRoleNotFound, roleID)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("query role: %w", err)
-	}
-
-	return role, nil
+	return findRoleByID(ctx, r.db.QueryRowContext, roleID)
 }
 
 // FindByIDTx finds a role by ID within a transaction
 func (r *roleRepositoryImpl) FindByIDTx(ctx context.Context, tx *sql.Tx, roleID string) (*domain.Role, error) {
-	role, err := scanRole(tx.QueryRowContext(ctx, roleByIDQuery, roleID))
+	return findRoleByID(ctx, tx.QueryRowContext, roleID)
+}
+
+// findRoleByID is the shared implementation for both transactional and non-transactional variants.
+func findRoleByID(ctx context.Context, queryRow func(context.Context, string, ...any) *sql.Row, roleID string) (*domain.Role, error) {
+	role, err := scanRole(queryRow(ctx, roleByIDQuery, roleID))
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", ErrRoleNotFound, roleID)

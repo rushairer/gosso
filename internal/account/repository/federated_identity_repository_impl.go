@@ -57,21 +57,17 @@ func (r *federatedIdentityRepositoryImpl) CreateFederatedIdentity(ctx context.Co
 
 // FindByProvider finds a federated identity by provider and provider user ID
 func (r *federatedIdentityRepositoryImpl) FindByProvider(ctx context.Context, provider domain.Provider, providerUserID string) (*domain.FederatedIdentity, error) {
-	identity, err := scanFederatedIdentity(r.db.QueryRowContext(ctx, federatedIdentityByProviderQuery, provider, providerUserID))
-
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: %s/%s", ErrFederatedIdentityNotFound, provider, providerUserID)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("query federated identity: %w", err)
-	}
-
-	return identity, nil
+	return findFederatedIdentityByProvider(ctx, r.db.QueryRowContext, provider, providerUserID)
 }
 
 // FindByProviderTx finds a federated identity by provider and provider user ID within a transaction.
 func (r *federatedIdentityRepositoryImpl) FindByProviderTx(ctx context.Context, tx *sql.Tx, provider domain.Provider, providerUserID string) (*domain.FederatedIdentity, error) {
-	identity, err := scanFederatedIdentity(tx.QueryRowContext(ctx, federatedIdentityByProviderQuery, provider, providerUserID))
+	return findFederatedIdentityByProvider(ctx, tx.QueryRowContext, provider, providerUserID)
+}
+
+// findFederatedIdentityByProvider is the shared implementation for both transactional and non-transactional variants.
+func findFederatedIdentityByProvider(ctx context.Context, queryRow func(context.Context, string, ...any) *sql.Row, provider domain.Provider, providerUserID string) (*domain.FederatedIdentity, error) {
+	identity, err := scanFederatedIdentity(queryRow(ctx, federatedIdentityByProviderQuery, provider, providerUserID))
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s/%s", ErrFederatedIdentityNotFound, provider, providerUserID)

@@ -15,7 +15,6 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
@@ -395,7 +394,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 // bcrypt at DefaultCost (~100ms) overlaps with the DB + Redis + SMTP overhead
 // on the real path, making the two indistinguishable.
 func (s *PasswordResetService) dummyWork() {
-	_, _ = bcrypt.GenerateFromPassword([]byte("dummy-work-padding"), bcrypt.DefaultCost)
+	utility.DummyWork()
 }
 
 func (s *PasswordResetService) buildTokenKey(tokenHash string) string {

@@ -539,6 +539,10 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 	}
 
 	provider := ctx.Param("provider")
+	if provider == "" {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "missing provider parameter"))
+		return
+	}
 	code := ctx.Query("code")
 	if code == "" {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "missing code parameter"))

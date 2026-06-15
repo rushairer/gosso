@@ -108,7 +108,7 @@ func TestConsentRepo_FindByAccountAndClient_CorruptScopes(t *testing.T) {
 // Delete — DB error
 // ──────────────────────────────────────────────
 
-func TestConsentRepo_Delete_DBError(t *testing.T) {
+func TestConsentRepo_SoftDelete_DBError(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -121,10 +121,10 @@ func TestConsentRepo_Delete_DBError(t *testing.T) {
 		WillReturnError(fmt.Errorf("connection lost"))
 
 	repo := NewConsentRepository(db)
-	err = repo.Delete(context.Background(), tx, "account-001", "client-001", time.Now())
+	err = repo.SoftDelete(context.Background(), tx, "account-001", "client-001", time.Now())
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "delete consent")
+	assert.Contains(t, err.Error(), "soft delete consent")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -212,10 +212,10 @@ func TestConsentRepo_FindByAccountAndClient_NotFound(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────
-// Delete
+// SoftDelete
 // ──────────────────────────────────────────────
 
-func TestConsentRepo_Delete_Success(t *testing.T) {
+func TestConsentRepo_SoftDelete_Success(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -228,7 +228,7 @@ func TestConsentRepo_Delete_Success(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewConsentRepository(db)
-	err = repo.Delete(context.Background(), tx, "account-001", "client-001", time.Now())
+	err = repo.SoftDelete(context.Background(), tx, "account-001", "client-001", time.Now())
 
 	require.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())

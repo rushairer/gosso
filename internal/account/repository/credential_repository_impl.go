@@ -73,23 +73,17 @@ func (r *credentialRepositoryImpl) CreateCredentials(ctx context.Context, tx *sq
 
 // FindByAccountAndType finds credentials by account ID and type
 func (r *credentialRepositoryImpl) FindByAccountAndType(ctx context.Context, accountID string, credType domain.CredentialType) ([]*domain.Credential, error) {
-	rows, err := r.db.QueryContext(ctx, credentialsByAccountAndTypeQuery, accountID, credType)
-	if err != nil {
-		return nil, fmt.Errorf("query credentials: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	credentials, err := scanCredentials(rows)
-	if err != nil {
-		return nil, err
-	}
-
-	return credentials, nil
+	return findByAccountAndType(ctx, r.db.QueryContext, accountID, credType)
 }
 
 // FindByAccountAndTypeTx finds credentials by account ID and type within a transaction.
 func (r *credentialRepositoryImpl) FindByAccountAndTypeTx(ctx context.Context, tx *sql.Tx, accountID string, credType domain.CredentialType) ([]*domain.Credential, error) {
-	rows, err := tx.QueryContext(ctx, credentialsByAccountAndTypeQuery, accountID, credType)
+	return findByAccountAndType(ctx, tx.QueryContext, accountID, credType)
+}
+
+// findByAccountAndType is the shared implementation for both transactional and non-transactional variants.
+func findByAccountAndType(ctx context.Context, queryFunc func(context.Context, string, ...any) (*sql.Rows, error), accountID string, credType domain.CredentialType) ([]*domain.Credential, error) {
+	rows, err := queryFunc(ctx, credentialsByAccountAndTypeQuery, accountID, credType)
 	if err != nil {
 		return nil, fmt.Errorf("query credentials: %w", err)
 	}

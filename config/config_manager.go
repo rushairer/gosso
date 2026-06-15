@@ -77,11 +77,11 @@ func NewConfigManager(
 	if err := newConfig.Validate(); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
-	configManager.SetConfig(&newConfig)
+	configManager.setConfig(&newConfig)
 	return &configManager, nil
 }
 
-func (cm *ConfigManager) SetConfig(config *GoUnoConfig) {
+func (cm *ConfigManager) setConfig(config *GoUnoConfig) {
 	cm.config = config
 }
 

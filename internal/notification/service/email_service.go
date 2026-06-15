@@ -211,8 +211,10 @@ func smtpTLSPolicy(policy string) mail.TLSPolicy {
 		return mail.TLSMandatory
 	case "notls":
 		return mail.NoTLS
-	default:
+	case "opportunistic":
 		return mail.TLSOpportunistic
+	default:
+		return mail.TLSMandatory
 	}
 }
 

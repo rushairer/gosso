@@ -121,6 +121,11 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		logger.Error("server forced to shutdown", zap.Error(err))
 	}
 
+	// Close email service ticker and release resources
+	if modules.emailSvc != nil {
+		modules.emailSvc.Close()
+	}
+
 	// Wait for background goroutines (e.g., session revocation after password reset) to complete
 	if modules.passwordResetSvc != nil {
 		modules.passwordResetSvc.Wait()

@@ -38,6 +38,7 @@ type appModules struct {
 	tokenSvc         *tokenService.TokenService
 	sessionSvc       *sessionService.SessionService
 	passwordResetSvc *authService.PasswordResetService
+	emailSvc         interface{ Close() }
 }
 
 // initModules initializes all business modules and controllers
@@ -131,6 +132,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		tokenSvc:         tokenSvc,
 		sessionSvc:       authMod.SessionService,
 		passwordResetSvc: authMod.PasswordResetService,
+		emailSvc:         authMod.EmailService,
 	}, nil
 }
 

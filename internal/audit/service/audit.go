@@ -117,14 +117,13 @@ func (a *Auditor) Close() {
 	}
 }
 
-// Wait stops the batchflow pipeline and waits for all in-flight audit batches
-// to be flushed to the database. Call this during graceful shutdown.
+// Wait waits for all in-flight audit batches to be flushed to the database.
+// Call this during graceful shutdown. It stops accepting new requests, flushes
+// pending batches, and waits for completion, but does NOT cancel the context;
+// use [Auditor.Close] for full shutdown with context cancellation.
 func (a *Auditor) Wait() {
 	if a.batchflow != nil {
 		_ = a.batchflow.Close()
-	}
-	if a.cancel != nil {
-		a.cancel()
 	}
 }
 

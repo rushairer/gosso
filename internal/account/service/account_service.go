@@ -770,7 +770,7 @@ func (s *accountServiceImpl) checkCredentialExists(ctx context.Context, credType
 		case domain.CredentialTypePhone:
 			return ErrPhoneAlreadyRegistered
 		case domain.CredentialTypePassword, domain.CredentialTypeTOTP, domain.CredentialTypeWebAuthn, domain.CredentialTypeBackupCode:
-			return fmt.Errorf("credential already exists: %s", credType)
+			return fmt.Errorf("%w: %s", ErrCredentialAlreadyExists, credType)
 		}
 	}
 	return nil

@@ -14,7 +14,6 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
@@ -270,7 +269,7 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 // paths (e.g., cooldown active). This mitigates timing side-channel attacks
 // that could distinguish active cooldown from fresh requests based on latency.
 func (s *VerificationService) dummyWork() {
-	_, _ = bcrypt.GenerateFromPassword([]byte("dummy-work-padding"), bcrypt.DefaultCost)
+	utility.DummyWork()
 }
 
 func (s *VerificationService) buildCodeKey(credType, identifier string) string {

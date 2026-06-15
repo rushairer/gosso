@@ -64,12 +64,12 @@ func (r *consentRepositoryImpl) FindByAccountAndClient(ctx context.Context, acco
 	return consent, nil
 }
 
-// Delete soft-deletes a consent record.
-func (r *consentRepositoryImpl) Delete(ctx context.Context, tx *sql.Tx, accountID, clientID string, deletedAt time.Time) error {
+// SoftDelete soft-deletes a consent record.
+func (r *consentRepositoryImpl) SoftDelete(ctx context.Context, tx *sql.Tx, accountID, clientID string, deletedAt time.Time) error {
 	query := `UPDATE oauth2_consents SET deleted_at = $3 WHERE account_id = $1 AND client_id = $2 AND deleted_at IS NULL`
 	result, err := tx.ExecContext(ctx, query, accountID, clientID, deletedAt)
 	if err != nil {
-		return fmt.Errorf("delete consent: %w", err)
+		return fmt.Errorf("soft delete consent: %w", err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
