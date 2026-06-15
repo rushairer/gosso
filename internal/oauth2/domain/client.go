@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"slices"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // OAuth2Client OAuth2 client entity
@@ -106,12 +108,16 @@ var (
 	ErrClientIDRequired         = errors.New("oauth2 client: client_id is required")
 	ErrClientNameRequired       = errors.New("oauth2 client: name is required")
 	ErrClientGrantTypesRequired = errors.New("oauth2 client: grant_types must not be empty")
+	ErrAccountIDRequired        = errors.New("oauth2 client: account_id is required")
 )
 
 // NewOAuth2Client creates a new OAuth2Client with the required fields validated.
 // ClientSecretHash is optional (only set for confidential clients).
 // Additional fields (RedirectURIs, Scopes, etc.) should be set after construction.
-func NewOAuth2Client(name, clientID string, grantTypes []string) (*OAuth2Client, error) {
+func NewOAuth2Client(accountID, name, clientID string, grantTypes []string) (*OAuth2Client, error) {
+	if accountID == "" {
+		return nil, ErrAccountIDRequired
+	}
 	if clientID == "" {
 		return nil, ErrClientIDRequired
 	}
@@ -121,9 +127,14 @@ func NewOAuth2Client(name, clientID string, grantTypes []string) (*OAuth2Client,
 	if len(grantTypes) == 0 {
 		return nil, ErrClientGrantTypesRequired
 	}
+	now := time.Now()
 	return &OAuth2Client{
-		Name:       name,
-		ClientID:   clientID,
+		ID:        uuid.New().String(),
+		AccountID: accountID,
+		Name:      name,
+		ClientID:  clientID,
 		GrantTypes: grantTypes,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}, nil
 }

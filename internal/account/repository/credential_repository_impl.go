@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/rushairer/gosso/internal/account/domain"
@@ -36,21 +37,33 @@ const findByTypeAndIdentifierQuery = `
 	WHERE credential_type = $1 AND identifier = $2 AND deleted_at IS NULL
 	LIMIT 1`
 
-// CreateCredentials creates multiple credentials
+// CreateCredentials creates multiple credentials in a single batch INSERT.
 func (r *credentialRepositoryImpl) CreateCredentials(ctx context.Context, tx *sql.Tx, credentials []*domain.Credential) error {
-	query := `
-		INSERT INTO account_credentials
-		(id, account_id, credential_type, identifier, credential_value, verified, primary_credential, metadata, created_at, verified_at, last_used_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`
+	if len(credentials) == 0 {
+		return nil
+	}
 
-	for _, cred := range credentials {
+	const colsPerRow = 11
+	var buf strings.Builder
+	buf.WriteString(`INSERT INTO account_credentials
+		(id, account_id, credential_type, identifier, credential_value, verified, primary_credential, metadata, created_at, verified_at, last_used_at)
+		VALUES `)
+
+	args := make([]any, 0, len(credentials)*colsPerRow)
+	for i, cred := range credentials {
 		metadataJSON, err := json.Marshal(cred.Metadata)
 		if err != nil {
 			return fmt.Errorf("marshal metadata: %w", err)
 		}
 
-		_, err = tx.ExecContext(ctx, query,
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		base := i * colsPerRow
+		fmt.Fprintf(&buf, "($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
+			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10, base+11)
+
+		args = append(args,
 			cred.ID,
 			cred.AccountID,
 			cred.Type,
@@ -63,9 +76,11 @@ func (r *credentialRepositoryImpl) CreateCredentials(ctx context.Context, tx *sq
 			cred.VerifiedAt,
 			cred.LastUsedAt,
 		)
-		if err != nil {
-			return fmt.Errorf("insert credential %s: %w", cred.Type, err)
-		}
+	}
+
+	_, err := tx.ExecContext(ctx, buf.String(), args...)
+	if err != nil {
+		return fmt.Errorf("batch insert credentials: %w", err)
 	}
 
 	return nil
@@ -121,18 +136,25 @@ func findByTypeAndIdentifier(ctx context.Context, queryRow func(context.Context,
 	return cred, nil
 }
 
-// FindPasswordCredential finds password credential of an account
+// FindPasswordCredential finds the primary password credential of an account.
 func (r *credentialRepositoryImpl) FindPasswordCredential(ctx context.Context, accountID string) (*domain.Credential, error) {
-	credentials, err := r.FindByAccountAndType(ctx, accountID, domain.CredentialTypePassword)
-	if err != nil {
-		return nil, err
-	}
+	query := `
+		SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
+		       metadata, created_at, updated_at, verified_at, last_used_at, deleted_at
+		FROM account_credentials
+		WHERE account_id = $1 AND credential_type = $2 AND deleted_at IS NULL
+		ORDER BY primary_credential DESC, created_at ASC
+		LIMIT 1`
 
-	if len(credentials) == 0 {
+	cred, err := scanCredential(r.db.QueryRowContext(ctx, query, accountID, domain.CredentialTypePassword))
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: account=%s", ErrCredentialNotFound, accountID)
 	}
+	if err != nil {
+		return nil, fmt.Errorf("find password credential: %w", err)
+	}
 
-	return credentials[0], nil
+	return cred, nil
 }
 
 // UpdateCredential updates a credential

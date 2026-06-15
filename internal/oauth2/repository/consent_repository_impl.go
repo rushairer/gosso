@@ -64,6 +64,24 @@ func (r *consentRepositoryImpl) FindByAccountAndClient(ctx context.Context, acco
 	return consent, nil
 }
 
+// FindByAccountAndClientTx finds a consent record within a transaction.
+func (r *consentRepositoryImpl) FindByAccountAndClientTx(ctx context.Context, tx *sql.Tx, accountID, clientID string) (*domain.Consent, error) {
+	query := `
+		SELECT id, account_id, client_id, scopes, granted_at, created_at, updated_at, deleted_at
+		FROM oauth2_consents
+		WHERE account_id = $1 AND client_id = $2 AND deleted_at IS NULL`
+
+	consent, err := scanConsent(tx.QueryRowContext(ctx, query, accountID, clientID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w: account=%s client=%s", domain.ErrConsentNotFound, accountID, clientID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find consent: %w", err)
+	}
+
+	return consent, nil
+}
+
 // SoftDelete soft-deletes a consent record.
 func (r *consentRepositoryImpl) SoftDelete(ctx context.Context, tx *sql.Tx, accountID, clientID string, deletedAt time.Time) error {
 	query := `UPDATE oauth2_consents SET deleted_at = $3 WHERE account_id = $1 AND client_id = $2 AND deleted_at IS NULL`

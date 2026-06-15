@@ -65,6 +65,10 @@ func (m *mockOAuth2ClientSvcForOAuth2) UpdateClient(_ context.Context, _ *oauth2
 	return nil
 }
 
+func (m *mockOAuth2ClientSvcForOAuth2) UpdateClientByAccountID(_ context.Context, _, _ string, _ *oauth2Service.UpdateClientRequest) (*oauth2Domain.OAuth2Client, error) {
+	return nil, nil
+}
+
 func (m *mockOAuth2ClientSvcForOAuth2) DeleteClient(_ context.Context, _, _ string) error {
 	return nil
 }

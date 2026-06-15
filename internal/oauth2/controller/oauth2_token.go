@@ -194,6 +194,7 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 	// RFC 6749 Section 6: confidential clients MUST authenticate when using refresh token grant
 	client, err := c.clientSvc.FindByClientID(ctx, oldRefreshToken.ClientID)
 	if err != nil {
+		c.clientAuth.DummyAuthenticate()
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "client not found"})
 		return
 	}

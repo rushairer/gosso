@@ -175,12 +175,12 @@ func (r *oauth2ClientRepositoryImpl) Update(ctx context.Context, tx *sql.Tx, cli
 
 	query := `
 		UPDATE oauth2_clients
-		SET name = $1, description = $2, redirect_uris = $3, post_logout_redirect_uris = $4, grant_types = $5, scopes = $6, metadata = $7, updated_at = NOW()
-		WHERE id = $8 AND deleted_at IS NULL
+		SET name = $1, description = $2, redirect_uris = $3, post_logout_redirect_uris = $4, grant_types = $5, scopes = $6, metadata = $7, updated_at = $8
+		WHERE id = $9 AND deleted_at IS NULL
 		RETURNING updated_at`
 
 	err = tx.QueryRowContext(ctx, query,
-		client.Name, client.Description, f.redirectURIs, f.postLogoutURIs, f.grantTypes, f.scopes, f.metadata, client.ID,
+		client.Name, client.Description, f.redirectURIs, f.postLogoutURIs, f.grantTypes, f.scopes, f.metadata, time.Now(), client.ID,
 	).Scan(&client.UpdatedAt)
 
 	if errors.Is(err, sql.ErrNoRows) {

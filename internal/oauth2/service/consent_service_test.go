@@ -42,6 +42,10 @@ func (m *mockConsentRepository) FindByAccountAndClient(_ context.Context, accoun
 	return c, nil
 }
 
+func (m *mockConsentRepository) FindByAccountAndClientTx(_ context.Context, _ *sql.Tx, accountID, clientID string) (*domain.Consent, error) {
+	return m.FindByAccountAndClient(context.Background(), accountID, clientID)
+}
+
 func (m *mockConsentRepository) SoftDelete(_ context.Context, _ *sql.Tx, accountID, clientID string, _ time.Time) error {
 	delete(m.store, m.key(accountID, clientID))
 	return nil

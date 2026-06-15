@@ -127,3 +127,19 @@ func TestAccount_SoftDelete_AlreadyDeleted(t *testing.T) {
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, ErrAccountAlreadyDeleted))
 }
+
+func TestIsValidAccountStatus(t *testing.T) {
+	assert.True(t, IsValidAccountStatus(AccountStatusActive))
+	assert.True(t, IsValidAccountStatus(AccountStatusSuspended))
+	assert.True(t, IsValidAccountStatus(AccountStatusDeleted))
+	assert.False(t, IsValidAccountStatus(""))
+	assert.False(t, IsValidAccountStatus("unknown"))
+}
+
+func TestAccount_Validate_InvalidStatus(t *testing.T) {
+	a, _ := NewAccount("Test")
+	a.Status = AccountStatus("invalid")
+	err := a.Validate()
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidAccountStatus))
+}

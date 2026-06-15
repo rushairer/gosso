@@ -150,18 +150,6 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, cfg AuthRouteConfig
 		}
 		auth.GET("/social/:provider/callback", socialCallbackHandlers...)
 
-		// Verification endpoints (unauthenticated)
-		verifyHandlers := []gin.HandlerFunc{c.SendVerification}
-		if cfg.VerifyLimit != nil {
-			verifyHandlers = []gin.HandlerFunc{cfg.VerifyLimit, c.SendVerification}
-		}
-		auth.POST("/verify/send", verifyHandlers...)
-		confirmHandlers := []gin.HandlerFunc{c.ConfirmVerification}
-		if cfg.VerifyLimit != nil {
-			confirmHandlers = []gin.HandlerFunc{cfg.VerifyLimit, c.ConfirmVerification}
-		}
-		auth.POST("/verify/confirm", confirmHandlers...)
-
 		// Password reset endpoints (unauthenticated)
 		passwordHandlers := []gin.HandlerFunc{c.ForgotPassword}
 		if cfg.PasswordLimit != nil {
@@ -184,6 +172,18 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, cfg AuthRouteConfig
 			// Session management
 			protected.GET("/sessions", c.ListSessions)
 			protected.DELETE("/sessions/:id", c.RevokeSession)
+
+			// Verification endpoints (require JWT)
+			verifyHandlers := []gin.HandlerFunc{c.SendVerification}
+			if cfg.VerifyLimit != nil {
+				verifyHandlers = []gin.HandlerFunc{cfg.VerifyLimit, c.SendVerification}
+			}
+			protected.POST("/verify/send", verifyHandlers...)
+			confirmHandlers := []gin.HandlerFunc{c.ConfirmVerification}
+			if cfg.VerifyLimit != nil {
+				confirmHandlers = []gin.HandlerFunc{cfg.VerifyLimit, c.ConfirmVerification}
+			}
+			protected.POST("/verify/confirm", confirmHandlers...)
 
 			// MFA management (requires JWT + optional rate limiting)
 			protected.POST("/mfa/enroll", append(mfaMgmtHandlers(cfg.MFALimit), c.MFAEnroll)...)

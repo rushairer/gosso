@@ -432,13 +432,9 @@ func TestRegisterAccount(t *testing.T) {
 	mock.ExpectExec("INSERT INTO accounts").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	// 4. Expect batch inserting credentials (password + email, 2 in total)
-	// CreateCredentials uses a loop insertion, so 2 ExpectExecs are required
+	// 4. Expect batch inserting credentials (password + email in single INSERT)
 	mock.ExpectExec("INSERT INTO account_credentials").
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	mock.ExpectExec("INSERT INTO account_credentials").
-		WillReturnResult(sqlmock.NewResult(1, 1))
+		WillReturnResult(sqlmock.NewResult(1, 2))
 
 	// 5. Commit transaction
 	mock.ExpectCommit()

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `SendVerification` and `ConfirmVerification` endpoints now correctly require JWT authentication — moved from unauthenticated route group to protected group. Previously these endpoints always returned 401 because they called `getClaimsFromContext()` without JWT middleware running (`internal/auth/controller/auth_controller.go`).
+- OAuth2 `handleRefreshTokenGrant`, `DeviceCodeRequest`, and `handleDeviceCodeGrant` now call `DummyAuthenticate()` on client lookup failure — prevents timing side-channel that could leak whether a `client_id` exists (`internal/oauth2/controller/oauth2_token.go`, `internal/oauth2/controller/oauth2_device.go`).
+- `NewFederatedIdentity` now captures `time.Now()` once instead of calling it twice for `CreatedAt` and `UpdatedAt` — prevents potential timestamp inconsistency (`internal/account/domain/federated_identity.go`).
+- `client_repository_impl.Update` now uses Go-side `time.Now()` parameter instead of SQL-side `NOW()` — consistent with other repositories' `UpdatedAt` handling (`internal/oauth2/repository/client_repository_impl.go`).
+
+### Added
+- `IsValidAccountStatus()` validation function for `AccountStatus` type — consistent with existing `IsValidProvider()` pattern (`internal/account/domain/account.go`).
+- `Account.Validate()` now checks `Status` against known values when non-empty (`internal/account/domain/account.go`).
+- `IsValidCredentialType()` validation function for `CredentialType` type (`internal/account/domain/credential.go`).
+- `ConsentRepository.FindByAccountAndClientTx()` — transactional variant for consent lookup (`internal/oauth2/repository/consent_repository.go`).
+- `NewSession()` constructor with ID generation and timestamp initialization; `Invalidate()` method for session lifecycle management (`internal/session/domain/session.go`).
+- `UpdateClientByAccountID()` service method — encapsulates ownership check, redirect URI validation, grant type validation, and field persistence (`internal/oauth2/service/client_service.go`).
+- Unit tests for `IsValidAccountStatus`, `IsValidCredentialType`, and `Account.Validate()` status check (`internal/account/domain/account_test.go`, `internal/account/domain/credential_test.go`).
+
+### Changed
+- `NewOAuth2Client` now requires `accountID` parameter and generates `ID` (uuid), `CreatedAt`, `UpdatedAt` — consistent with all other domain constructors (`internal/oauth2/domain/client.go`).
+- `CreateCredentials` now uses batch multi-row INSERT instead of N individual INSERTs — improved performance and atomicity (`internal/account/repository/credential_repository_impl.go`).
+- `FindPasswordCredential` now uses direct `LIMIT 1` query instead of fetching all password credentials and returning the first (`internal/account/repository/credential_repository_impl.go`).
+- Client validation logic (redirect URI scheme, grant types) moved from controller to service layer — `RegisterClient` and `UpdateClient` in controller are now thin handlers (`internal/oauth2/controller/client_controller.go`, `internal/oauth2/service/client_service.go`).
+
 ### Added
 - Database connection pool stats logging — background goroutine logs `db.Stats()` (open, in_use, idle, wait_count, wait_duration, max_idle_closed, max_lifetime_closed) every 60 seconds, respects graceful shutdown via context cancellation (`cmd/gouno/web_infra.go`).
 - `NewOAuth2Client` constructor with required field validation (clientID, name, grantTypes) — prevents creation of invalid client instances (`internal/oauth2/domain/client.go`).

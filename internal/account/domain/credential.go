@@ -42,6 +42,16 @@ const (
 	Argon2KeyLen  = 32        // bytes
 )
 
+// IsValidCredentialType reports whether t is a known credential type.
+func IsValidCredentialType(t CredentialType) bool {
+	switch t {
+	case CredentialTypePassword, CredentialTypeEmail, CredentialTypePhone,
+		CredentialTypeTOTP, CredentialTypeWebAuthn, CredentialTypeBackupCode:
+		return true
+	}
+	return false
+}
+
 // Credential is the credential domain model.
 type Credential struct {
 	ID                string         `json:"id"`

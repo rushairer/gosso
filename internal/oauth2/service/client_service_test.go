@@ -95,7 +95,7 @@ func TestUpdateClient(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("UPDATE oauth2_clients").
-		WithArgs("Updated App", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "uuid-001").
+		WithArgs("Updated App", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "uuid-001").
 		WillReturnRows(sqlmock.NewRows([]string{"updated_at"}).AddRow(now))
 	mock.ExpectCommit()
 

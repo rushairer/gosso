@@ -1,10 +1,9 @@
 package controller
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
-	"net/url"
-	"time"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
@@ -77,29 +76,6 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 		return
 	}
 
-	// Validate redirect URI schemes (no fragments per RFC 6749 §3.1.2)
-	for _, uri := range req.RedirectURIs {
-		u, err := url.Parse(uri)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Fragment != "" {
-			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "redirect_uris must use http or https scheme without fragment"))
-			return
-		}
-	}
-	for _, uri := range req.PostLogoutRedirectURIs {
-		u, err := url.Parse(uri)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Fragment != "" {
-			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "post_logout_redirect_uris must use http or https scheme without fragment"))
-			return
-		}
-	}
-
-	if len(req.GrantTypes) > 0 {
-		if err := validateGrantTypes(req.GrantTypes); err != nil {
-			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
-			return
-		}
-	}
-
 	client, secret, err := c.clientSvc.RegisterClient(ctx, &oauth2Service.RegisterClientRequest{
 		AccountID:              accountID,
 		Name:                   req.Name,
@@ -111,6 +87,10 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 		IsConfidential:         req.IsConfidential,
 	})
 	if err != nil {
+		if isValidationError(err) {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+			return
+		}
 		c.logger.Error("Failed to register client", zap.Error(err), zap.String("account_id", accountID))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to register client"))
 		return
@@ -177,69 +157,28 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 		return
 	}
 
-	client, err := c.clientSvc.FindByClientID(ctx, clientID)
-	if err != nil {
-		c.logger.Debug("Client lookup failed in UpdateClient", zap.Error(err), zap.String("client_id", clientID))
-		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "access denied"))
-		return
-	}
-
-	if client.AccountID != accountID {
-		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "access denied"))
-		return
-	}
-
 	var req UpdateClientRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
 		return
 	}
 
-	if req.Name != "" {
-		client.Name = req.Name
+	svcReq := &oauth2Service.UpdateClientRequest{
+		Name:                   req.Name,
+		Description:            req.Description,
+		RedirectURIs:           req.RedirectURIs,
+		PostLogoutRedirectURIs: req.PostLogoutRedirectURIs,
+		GrantTypes:             req.GrantTypes,
+		Scopes:                 req.Scopes,
 	}
-	if req.Description != "" {
-		client.Description = req.Description
-	}
-	if req.RedirectURIs != nil {
-		if len(req.RedirectURIs) == 0 {
-			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "redirect_uris must not be empty when provided"))
-			return
-		}
-		for _, uri := range req.RedirectURIs {
-			u, err := url.Parse(uri)
-			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Fragment != "" {
-				ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "redirect_uris must use http or https scheme without fragment"))
-				return
-			}
-		}
-		client.RedirectURIs = req.RedirectURIs
-	}
-	if req.GrantTypes != nil {
-		if err := validateGrantTypes(req.GrantTypes); err != nil {
-			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
-			return
-		}
-		client.GrantTypes = req.GrantTypes
-	}
-	if req.Scopes != nil {
-		client.Scopes = req.Scopes
-	}
-	if req.PostLogoutRedirectURIs != nil {
-		for _, uri := range req.PostLogoutRedirectURIs {
-			u, err := url.Parse(uri)
-			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Fragment != "" {
-				ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "post_logout_redirect_uris must use http or https scheme without fragment"))
-				return
-			}
-		}
-		client.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
-	}
-	client.UpdatedAt = time.Now()
 
-	if err := c.clientSvc.UpdateClient(ctx, client); err != nil {
-		c.logger.Error("Failed to update client", zap.Error(err), zap.String("client_id", client.ClientID))
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to update client"))
+	client, err := c.clientSvc.UpdateClientByAccountID(ctx, accountID, clientID, svcReq)
+	if err != nil {
+		if errors.Is(err, oauth2Service.ErrClientAccessDenied) || errors.Is(err, oauth2Domain.ErrClientNotFound) {
+			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "access denied"))
+			return
+		}
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
 		return
 	}
 
@@ -248,8 +187,8 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 
 // UpdateClientRequest is the request body for updating a client
 type UpdateClientRequest struct {
-	Name                   string   `json:"name" binding:"max=255"`
-	Description            string   `json:"description" binding:"max=2000"`
+	Name                   *string  `json:"name"`
+	Description            *string  `json:"description"`
 	RedirectURIs           []string `json:"redirect_uris"`
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
 	GrantTypes             []string `json:"grant_types"`
@@ -274,25 +213,12 @@ func (c *ClientController) DeleteClient(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("client deleted"))
 }
 
-var validGrantTypes = []string{
-	oauth2Domain.GrantTypeAuthorizationCode,
-	oauth2Domain.GrantTypeRefreshToken,
-	oauth2Domain.GrantTypeClientCredentials,
-	oauth2Domain.GrantTypeDeviceCode,
-}
-
-func validateGrantTypes(types []string) error {
-	for _, gt := range types {
-		found := false
-		for _, valid := range validGrantTypes {
-			if gt == valid {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return fmt.Errorf("invalid grant_type: %q", gt)
-		}
-	}
-	return nil
+// isValidationError checks if the error is a client validation error (as opposed to an internal server error).
+func isValidationError(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "required") ||
+		strings.Contains(msg, "invalid") ||
+		strings.Contains(msg, "must") ||
+		strings.Contains(msg, "exceed") ||
+		strings.Contains(msg, "empty")
 }

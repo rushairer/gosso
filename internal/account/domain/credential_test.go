@@ -197,3 +197,14 @@ func TestCredential_MarshalLogObject_NilIdentifier(t *testing.T) {
 	_, hasIdentifier := enc.Fields["identifier"]
 	assert.False(t, hasIdentifier, "nil identifier should not be logged")
 }
+
+func TestIsValidCredentialType(t *testing.T) {
+	assert.True(t, IsValidCredentialType(CredentialTypePassword))
+	assert.True(t, IsValidCredentialType(CredentialTypeEmail))
+	assert.True(t, IsValidCredentialType(CredentialTypePhone))
+	assert.True(t, IsValidCredentialType(CredentialTypeTOTP))
+	assert.True(t, IsValidCredentialType(CredentialTypeWebAuthn))
+	assert.True(t, IsValidCredentialType(CredentialTypeBackupCode))
+	assert.False(t, IsValidCredentialType(""))
+	assert.False(t, IsValidCredentialType("unknown"))
+}

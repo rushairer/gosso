@@ -63,6 +63,7 @@ func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
 
 	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
 	if err != nil {
+		c.clientAuth.DummyAuthenticate()
 		c.logger.Warn("Client lookup failed for device code request", zap.Error(err), zap.String("client_id", req.ClientID))
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
 		return
@@ -232,6 +233,7 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 
 	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
 	if err != nil {
+		c.clientAuth.DummyAuthenticate()
 		c.logger.Warn("Client lookup failed for device code grant", zap.Error(err), zap.String("client_id", req.ClientID))
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
 		return

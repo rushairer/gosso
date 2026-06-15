@@ -25,11 +25,12 @@ import (
 // ──────────────────────────────────────────────
 
 type mockOAuth2ClientService struct {
-	registerFn   func() (*oauth2Domain.OAuth2Client, string, error)
-	findByIDFn   func() (*oauth2Domain.OAuth2Client, error)
-	findByAcctFn func() ([]*oauth2Domain.OAuth2Client, error)
-	updateFn     func() error
-	deleteFn     func() error
+	registerFn          func() (*oauth2Domain.OAuth2Client, string, error)
+	findByIDFn          func() (*oauth2Domain.OAuth2Client, error)
+	findByAcctFn        func() ([]*oauth2Domain.OAuth2Client, error)
+	updateFn            func() error
+	updateByAccountFn   func() (*oauth2Domain.OAuth2Client, error)
+	deleteFn            func() error
 }
 
 func (m *mockOAuth2ClientService) RegisterClient(_ context.Context, _ *oauth2Service.RegisterClientRequest) (*oauth2Domain.OAuth2Client, string, error) {
@@ -58,6 +59,13 @@ func (m *mockOAuth2ClientService) UpdateClient(_ context.Context, _ *oauth2Domai
 		return m.updateFn()
 	}
 	return nil
+}
+
+func (m *mockOAuth2ClientService) UpdateClientByAccountID(_ context.Context, _, _ string, _ *oauth2Service.UpdateClientRequest) (*oauth2Domain.OAuth2Client, error) {
+	if m.updateByAccountFn != nil {
+		return m.updateByAccountFn()
+	}
+	return nil, nil
 }
 
 func (m *mockOAuth2ClientService) DeleteClient(_ context.Context, _, _ string) error {
@@ -249,7 +257,11 @@ func TestGetClient_IDORProtection(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestRegisterClient_InvalidRedirectScheme(t *testing.T) {
-	clientSvc := &mockOAuth2ClientService{}
+	clientSvc := &mockOAuth2ClientService{
+		registerFn: func() (*oauth2Domain.OAuth2Client, string, error) {
+			return nil, "", fmt.Errorf("redirect_uris must use http or https scheme without fragment: javascript:alert(1)")
+		},
+	}
 	engine := setupClientController(clientSvc)
 
 	body := `{"name":"Test","redirect_uris":["javascript:alert(1)"]}`
@@ -262,7 +274,11 @@ func TestRegisterClient_InvalidRedirectScheme(t *testing.T) {
 }
 
 func TestRegisterClient_InvalidPostLogoutURI(t *testing.T) {
-	clientSvc := &mockOAuth2ClientService{}
+	clientSvc := &mockOAuth2ClientService{
+		registerFn: func() (*oauth2Domain.OAuth2Client, string, error) {
+			return nil, "", fmt.Errorf("post_logout_redirect_uris: redirect_uris must use http or https scheme without fragment: javascript:alert(1)")
+		},
+	}
 	engine := setupClientController(clientSvc)
 
 	body := `{"name":"Test","redirect_uris":["https://app.example.com/callback"],"post_logout_redirect_uris":["javascript:alert(1)"]}`
@@ -307,10 +323,9 @@ func TestListClients_ServiceError(t *testing.T) {
 }
 
 func TestUpdateClient_InvalidRedirectScheme(t *testing.T) {
-	client := newTestClient("account-001")
 	clientSvc := &mockOAuth2ClientService{
-		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
-			return client, nil
+		updateByAccountFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return nil, fmt.Errorf("redirect_uris must use http or https scheme without fragment: javascript:alert(1)")
 		},
 	}
 	engine := setupClientController(clientSvc)
@@ -325,10 +340,9 @@ func TestUpdateClient_InvalidRedirectScheme(t *testing.T) {
 }
 
 func TestUpdateClient_InvalidPostLogoutURI(t *testing.T) {
-	client := newTestClient("account-001")
 	clientSvc := &mockOAuth2ClientService{
-		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
-			return client, nil
+		updateByAccountFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return nil, fmt.Errorf("post_logout_redirect_uris: redirect_uris must use http or https scheme without fragment: javascript:alert(1)")
 		},
 	}
 	engine := setupClientController(clientSvc)
@@ -343,12 +357,10 @@ func TestUpdateClient_InvalidPostLogoutURI(t *testing.T) {
 }
 
 func TestUpdateClient_ServiceError(t *testing.T) {
-	client := newTestClient("account-001")
 	clientSvc := &mockOAuth2ClientService{
-		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
-			return client, nil
+		updateByAccountFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return nil, fmt.Errorf("db error")
 		},
-		updateFn: func() error { return fmt.Errorf("db error") },
 	}
 	engine := setupClientController(clientSvc)
 
@@ -358,7 +370,7 @@ func TestUpdateClient_ServiceError(t *testing.T) {
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestDeleteClient_ServiceError(t *testing.T) {
@@ -381,10 +393,9 @@ func TestDeleteClient_ServiceError(t *testing.T) {
 func TestUpdateClient_Success(t *testing.T) {
 	client := newTestClient("account-001")
 	clientSvc := &mockOAuth2ClientService{
-		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+		updateByAccountFn: func() (*oauth2Domain.OAuth2Client, error) {
 			return client, nil
 		},
-		updateFn: func() error { return nil },
 	}
 	engine := setupClientController(clientSvc)
 
@@ -399,10 +410,9 @@ func TestUpdateClient_Success(t *testing.T) {
 }
 
 func TestUpdateClient_IDORProtection(t *testing.T) {
-	client := newTestClient("other-account-999")
 	clientSvc := &mockOAuth2ClientService{
-		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
-			return client, nil
+		updateByAccountFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return nil, oauth2Service.ErrClientAccessDenied
 		},
 	}
 	engine := setupClientController(clientSvc)
@@ -418,10 +428,9 @@ func TestUpdateClient_IDORProtection(t *testing.T) {
 }
 
 func TestUpdateClient_InvalidGrantType(t *testing.T) {
-	client := newTestClient("account-001")
 	clientSvc := &mockOAuth2ClientService{
-		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
-			return client, nil
+		updateByAccountFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return nil, fmt.Errorf("invalid grant_type: %q", "magic_unicorn")
 		},
 	}
 	engine := setupClientController(clientSvc)
@@ -439,10 +448,9 @@ func TestUpdateClient_InvalidGrantType(t *testing.T) {
 func TestUpdateClient_ValidGrantTypes(t *testing.T) {
 	client := newTestClient("account-001")
 	clientSvc := &mockOAuth2ClientService{
-		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+		updateByAccountFn: func() (*oauth2Domain.OAuth2Client, error) {
 			return client, nil
 		},
-		updateFn: func() error { return nil },
 	}
 	engine := setupClientController(clientSvc)
 
@@ -457,7 +465,11 @@ func TestUpdateClient_ValidGrantTypes(t *testing.T) {
 }
 
 func TestRegisterClient_InvalidGrantType(t *testing.T) {
-	clientSvc := &mockOAuth2ClientService{}
+	clientSvc := &mockOAuth2ClientService{
+		registerFn: func() (*oauth2Domain.OAuth2Client, string, error) {
+			return nil, "", fmt.Errorf("invalid grant_type: %q", "invalid_grant")
+		},
+	}
 	engine := setupClientController(clientSvc)
 
 	body := `{"name":"Test App","redirect_uris":["https://app.example.com/callback"],"grant_types":["authorization_code","invalid_grant"]}`

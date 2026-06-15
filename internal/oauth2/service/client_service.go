@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -36,6 +37,7 @@ type OAuth2ClientService interface {
 	FindByClientID(ctx context.Context, clientID string) (*domain.OAuth2Client, error)
 	FindByAccountID(ctx context.Context, accountID string) ([]*domain.OAuth2Client, error)
 	UpdateClient(ctx context.Context, client *domain.OAuth2Client) error
+	UpdateClientByAccountID(ctx context.Context, accountID, clientID string, req *UpdateClientRequest) (*domain.OAuth2Client, error)
 	DeleteClient(ctx context.Context, accountID, clientID string) error
 }
 
@@ -68,6 +70,17 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 	if len(req.Description) > 1024 {
 		return nil, "", fmt.Errorf("client description must not exceed 1024 characters")
 	}
+	if err := validateRedirectURIs(req.RedirectURIs); err != nil {
+		return nil, "", err
+	}
+	if err := validateRedirectURIs(req.PostLogoutRedirectURIs); err != nil {
+		return nil, "", fmt.Errorf("post_logout_redirect_uris: %w", err)
+	}
+	if len(req.GrantTypes) > 0 {
+		if err := validateGrantTypes(req.GrantTypes); err != nil {
+			return nil, "", err
+		}
+	}
 
 	var secretPlaintext string
 	var secretHash string
@@ -93,11 +106,10 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 		scopes = []string{"openid"}
 	}
 
-	client, err := domain.NewOAuth2Client(req.Name, clientID, grantTypes)
+	client, err := domain.NewOAuth2Client(req.AccountID, req.Name, clientID, grantTypes)
 	if err != nil {
 		return nil, "", fmt.Errorf("create oauth2 client: %w", err)
 	}
-	client.AccountID = req.AccountID
 	client.ClientSecretHash = secretHash
 	client.Description = req.Description
 	client.RedirectURIs = req.RedirectURIs
@@ -128,6 +140,102 @@ func (s *oauth2ClientServiceImpl) UpdateClient(ctx context.Context, client *doma
 	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		return s.clientRepo.Update(ctx, tx, client)
 	})
+}
+
+// UpdateClientRequest contains the fields that can be updated on an OAuth2 client.
+type UpdateClientRequest struct {
+	Name                   *string  `json:"name"`
+	Description            *string  `json:"description"`
+	RedirectURIs           []string `json:"redirect_uris"`
+	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
+	GrantTypes             []string `json:"grant_types"`
+	Scopes                 []string `json:"scopes"`
+}
+
+// UpdateClientByAccountID loads a client by ID, verifies ownership, applies partial updates with
+// validation, and persists the result in a single transaction.
+func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, accountID, clientID string, req *UpdateClientRequest) (*domain.OAuth2Client, error) {
+	client, err := s.clientRepo.FindByClientID(ctx, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", domain.ErrClientNotFound, clientID)
+	}
+	if client.AccountID != accountID {
+		return nil, ErrClientAccessDenied
+	}
+
+	if req.Name != nil {
+		client.Name = *req.Name
+	}
+	if req.Description != nil {
+		client.Description = *req.Description
+	}
+	if req.RedirectURIs != nil {
+		if len(req.RedirectURIs) == 0 {
+			return nil, fmt.Errorf("redirect_uris must not be empty when provided")
+		}
+		if err := validateRedirectURIs(req.RedirectURIs); err != nil {
+			return nil, err
+		}
+		client.RedirectURIs = req.RedirectURIs
+	}
+	if req.PostLogoutRedirectURIs != nil {
+		if err := validateRedirectURIs(req.PostLogoutRedirectURIs); err != nil {
+			return nil, fmt.Errorf("post_logout_redirect_uris: %w", err)
+		}
+		client.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
+	}
+	if req.GrantTypes != nil {
+		if err := validateGrantTypes(req.GrantTypes); err != nil {
+			return nil, err
+		}
+		client.GrantTypes = req.GrantTypes
+	}
+	if req.Scopes != nil {
+		client.Scopes = req.Scopes
+	}
+	client.UpdatedAt = time.Now()
+
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		return s.clientRepo.Update(ctx, tx, client)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
+var validGrantTypes = []string{
+	domain.GrantTypeAuthorizationCode,
+	domain.GrantTypeRefreshToken,
+	domain.GrantTypeClientCredentials,
+	domain.GrantTypeDeviceCode,
+}
+
+func validateGrantTypes(types []string) error {
+	for _, gt := range types {
+		found := false
+		for _, valid := range validGrantTypes {
+			if gt == valid {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("invalid grant_type: %q", gt)
+		}
+	}
+	return nil
+}
+
+func validateRedirectURIs(uris []string) error {
+	for _, uri := range uris {
+		u, err := url.Parse(uri)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Fragment != "" {
+			return fmt.Errorf("redirect_uris must use http or https scheme without fragment: %s", uri)
+		}
+	}
+	return nil
 }
 
 var ErrClientAccessDenied = errors.New("access denied: client does not belong to this account")

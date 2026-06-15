@@ -31,6 +31,15 @@ const (
 	AccountStatusDeleted   AccountStatus = "deleted"
 )
 
+// IsValidAccountStatus reports whether s is a known account status.
+func IsValidAccountStatus(s AccountStatus) bool {
+	switch s {
+	case AccountStatusActive, AccountStatusSuspended, AccountStatusDeleted:
+		return true
+	}
+	return false
+}
+
 // Account is the account domain model.
 type Account struct {
 	ID          string         `json:"id"`
@@ -89,6 +98,9 @@ func (a *Account) Validate() error {
 	}
 	if len(a.DisplayName) > 255 {
 		return ErrDisplayNameTooLong
+	}
+	if a.Status != "" && !IsValidAccountStatus(a.Status) {
+		return ErrInvalidAccountStatus
 	}
 	if a.Locale == "" {
 		return ErrLocaleRequired

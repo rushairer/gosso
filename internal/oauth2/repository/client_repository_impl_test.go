@@ -165,7 +165,7 @@ func TestUpdate_Success(t *testing.T) {
 	c := newTestOAuth2Client()
 	c.Name = "Updated App"
 	mock.ExpectQuery("UPDATE oauth2_clients").
-		WithArgs(c.Name, c.Description, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), c.ID).
+		WithArgs(c.Name, c.Description, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), c.ID).
 		WillReturnRows(sqlmock.NewRows([]string{"updated_at"}).AddRow(time.Now()))
 
 	repo := NewOAuth2ClientRepository(db)

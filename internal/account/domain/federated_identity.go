@@ -62,14 +62,15 @@ func NewFederatedIdentity(accountID string, provider Provider, providerUserID st
 		profile = make(map[string]any)
 	}
 
+	now := time.Now()
 	return &FederatedIdentity{
 		ID:             uuid.New().String(),
 		AccountID:      accountID,
 		Provider:       provider,
 		ProviderUserID: providerUserID,
 		Profile:        profile,
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}, nil
 }
 
