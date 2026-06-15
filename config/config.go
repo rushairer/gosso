@@ -174,10 +174,10 @@ type AuthConfig struct {
 	BackupCodeLength   int           `mapstructure:"backup_code_length"`
 
 	// Password reset settings (0 = use built-in defaults)
-	PasswordResetWaitTimeout      time.Duration `mapstructure:"password_reset_wait_timeout"`
-	PasswordResetTokenTTL         time.Duration `mapstructure:"password_reset_token_ttl"`
-	PasswordResetCooldownTTL      time.Duration `mapstructure:"password_reset_cooldown_ttl"`
-	PasswordResetMaxAttempts      int           `mapstructure:"password_reset_max_attempts"`
+	PasswordResetWaitTimeout       time.Duration `mapstructure:"password_reset_wait_timeout"`
+	PasswordResetTokenTTL          time.Duration `mapstructure:"password_reset_token_ttl"`
+	PasswordResetCooldownTTL       time.Duration `mapstructure:"password_reset_cooldown_ttl"`
+	PasswordResetMaxAttempts       int           `mapstructure:"password_reset_max_attempts"`
 	PasswordResetRevokeConcurrency int           `mapstructure:"password_reset_revoke_concurrency"`
 
 	// Verification code settings (0 = use built-in defaults)
@@ -305,6 +305,12 @@ func (c *GoUnoConfig) validateWebServer() error {
 	}
 	if rl.DeviceCode <= 0 {
 		return fmt.Errorf("web_server: rate_limits.device_code must be positive (got %d)", rl.DeviceCode)
+	}
+	if rl.Password <= 0 {
+		return fmt.Errorf("web_server: rate_limits.password must be positive (got %d)", rl.Password)
+	}
+	if rl.Verify <= 0 {
+		return fmt.Errorf("web_server: rate_limits.verify must be positive (got %d)", rl.Verify)
 	}
 	return nil
 }

@@ -10,6 +10,8 @@ data/
 tests/
 doc/
 docs/
+!docs/
+!docs/**
 **/*_test.go
 script/*
 !script/entrypoint.sh

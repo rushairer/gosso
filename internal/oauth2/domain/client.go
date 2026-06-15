@@ -129,12 +129,12 @@ func NewOAuth2Client(accountID, name, clientID string, grantTypes []string) (*OA
 	}
 	now := time.Now()
 	return &OAuth2Client{
-		ID:        uuid.New().String(),
-		AccountID: accountID,
-		Name:      name,
-		ClientID:  clientID,
+		ID:         uuid.New().String(),
+		AccountID:  accountID,
+		Name:       name,
+		ClientID:   clientID,
 		GrantTypes: grantTypes,
-		CreatedAt: now,
-		UpdatedAt: now,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}, nil
 }

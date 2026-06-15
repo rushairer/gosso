@@ -19,8 +19,8 @@ type AuthorizationCode struct {
 	CodeChallengeMethod string    `json:"code_challenge_method,omitempty"`
 	Nonce               string    `json:"nonce,omitempty"`
 	ExpiresAt           time.Time `json:"expires_at"`
-	AuthTime            time.Time `json:"auth_time"`                       // When the user authenticated (consent time)
-	AuthMethods         []string  `json:"auth_methods,omitempty"`          // AMR values (e.g. ["pwd"], ["pwd","otp"], ["swk"])
+	AuthTime            time.Time `json:"auth_time"`              // When the user authenticated (consent time)
+	AuthMethods         []string  `json:"auth_methods,omitempty"` // AMR values (e.g. ["pwd"], ["pwd","otp"], ["swk"])
 }
 
 // NewAuthorizationCode creates a new AuthorizationCode with the required fields.
@@ -100,14 +100,14 @@ func HashPKCEVerifier(verifier string) string {
 
 // Error definitions
 var (
-	ErrCodeNotFound           = errors.New("authorization code not found")
-	ErrCodeExpired            = errors.New("authorization code expired")
-	ErrCodeClientMismatch     = errors.New("authorization code client mismatch")
-	ErrCodeURIMismatch        = errors.New("authorization code redirect_uri mismatch")
-	ErrPKCEVerificationFailed = errors.New("PKCE verification failed")
-	ErrAuthCodeRequired       = errors.New("authorization code: code is required")
-	ErrAuthClientIDRequired   = errors.New("authorization code: client_id is required")
-	ErrAuthAccountIDRequired  = errors.New("authorization code: account_id is required")
+	ErrCodeNotFound            = errors.New("authorization code not found")
+	ErrCodeExpired             = errors.New("authorization code expired")
+	ErrCodeClientMismatch      = errors.New("authorization code client mismatch")
+	ErrCodeURIMismatch         = errors.New("authorization code redirect_uri mismatch")
+	ErrPKCEVerificationFailed  = errors.New("PKCE verification failed")
+	ErrAuthCodeRequired        = errors.New("authorization code: code is required")
+	ErrAuthClientIDRequired    = errors.New("authorization code: client_id is required")
+	ErrAuthAccountIDRequired   = errors.New("authorization code: account_id is required")
 	ErrAuthRedirectURIRequired = errors.New("authorization code: redirect_uri is required")
-	ErrAuthExpiresRequired    = errors.New("authorization code: expires_at is required")
+	ErrAuthExpiresRequired     = errors.New("authorization code: expires_at is required")
 )

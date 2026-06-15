@@ -69,3 +69,24 @@ func TestMaskIdentifier(t *testing.T) {
 		})
 	}
 }
+
+func TestMaskOpaqueID(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"1234567890abcdef", "1234***cdef"},
+		{"123456789", "1234***6789"},
+		{"12345678", "***"},
+		{"", "***"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := MaskOpaqueID(tt.input)
+			if got != tt.want {
+				t.Errorf("MaskOpaqueID(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}

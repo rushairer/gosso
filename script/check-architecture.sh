@@ -63,6 +63,24 @@ pass() {
 }
 
 # ============================================================================
+# D1: go.mod must not contain local filesystem replace directives
+# ============================================================================
+check_D1() {
+    echo ""
+    echo "=== D1: No Local Filesystem Module Replaces ==="
+
+    local found=0
+    while IFS=: read -r file lineno content; do
+        violation "D1" "$file" "$lineno" "Local filesystem replace is not allowed in committed go.mod — use a published module version or local go.work"
+        found=1
+    done < <(grep -nE '^[[:space:]]*replace[[:space:]].*=>[[:space:]]*(\.{1,2}/|/|~)' go.mod 2>/dev/null | sed 's|^|go.mod:|' || true)
+
+    if [ "$found" -eq 0 ]; then
+        pass "D1" "No local filesystem replace directives in go.mod"
+    fi
+}
+
+# ============================================================================
 # E1: Sentinel errors — same error message must not appear in two packages
 # ============================================================================
 check_E1() {
@@ -203,8 +221,8 @@ check_L2() {
     # Raw values are violations; masked values are accepted.
     while IFS=: read -r file lineno content; do
         [[ "$file" == *_test.go ]] && continue
-        # Skip lines where the value is masked (e.g. maskSessionID(...), maskAuthCode(...))
-        echo "$content" | grep -qE 'mask[A-Z][a-zA-Z]*\(' && continue
+        # Skip lines where the value is masked (e.g. maskSessionID(...), utility.MaskOpaqueID(...)).
+        echo "$content" | grep -qE '([mM]ask[A-Z][a-zA-Z]*|utility\.Mask[A-Z][a-zA-Z]*)\(' && continue
         warning "L2" "$file" "$lineno" "Sensitive field logged with raw value (use mask helper): $(echo "$content" | sed 's/^[[:space:]]*//' | head -c 80)"
         found=1
     done < <(grep -rn --include='*.go' -iE 'zap\.(String|Any|Reflect)\([^)]*"(session_id|auth_code|code_verifier|refresh_token)"' internal/ middleware/ 2>/dev/null | grep -v '_test\.go' || true)
@@ -242,6 +260,7 @@ echo "=========================================="
 echo " gosso Architecture Invariant Checker"
 echo "=========================================="
 
+if should_run "D1"; then check_D1; fi
 if should_run "E1"; then check_E1; fi
 if should_run "E3"; then check_E3; fi
 if should_run "C1"; then check_C1; fi

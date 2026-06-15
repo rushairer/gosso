@@ -289,7 +289,7 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 	}
 
 	if err := c.authSvc.Logout(ctx, tc.AccountID, tc.SessionID, accessTokenJTI, tokenExpiresAt); err != nil {
-		c.logger.Error("Logout error", zap.String("account_id", tc.AccountID), zap.String("session_id", tc.SessionID), zap.Error(err))
+		c.logger.Error("Logout error", zap.String("account_id", utility.MaskOpaqueID(tc.AccountID)), zap.String("session_id", utility.MaskOpaqueID(tc.SessionID)), zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout incomplete"))
 		return
 	}

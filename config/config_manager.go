@@ -21,7 +21,7 @@ const defaultTOTPEncryptionKey = "0123456789abcdef0123456789abcdef0123456789abcd
 
 // ConfigManager loads, validates, and exposes the application configuration.
 type ConfigManager struct {
-	config    *GoUnoConfig
+	config     *GoUnoConfig
 	cachedJSON []byte // pre-serialized config bytes, populated at setConfig time
 }
 

@@ -164,8 +164,8 @@ github.com/rushairer/batchflow v1.1.1 h1:iPJ/xSlB7x7cSWzqmsYtOoyoySRkg3Ss6YG19v/
 github.com/rushairer/batchflow v1.1.1/go.mod h1:uuZfI3x82sSjH2JfyAS9ALy4DWcyksZFUxf1TMNGY38=
 github.com/rushairer/go-pipeline/v2 v2.2.4 h1:IlKpa6UTb3biL3mpTDUicCnQ+XYvlzjWCxkoYajo+UY=
 github.com/rushairer/go-pipeline/v2 v2.2.4/go.mod h1:iry0n8BldFMGT5OygmXPIunUi13IxUWrNdANXdRX/Fo=
-github.com/rushairer/gouno v1.0.0 h1:hggjiV655R5W1BtR8Qy0ZfRWCLdzn90iHDh+hKK8Ndc=
-github.com/rushairer/gouno v1.0.0/go.mod h1:uRfJbIFLTG4aVFnH6zlvrifgF7U9HHALtj+A6egvewM=
+github.com/rushairer/gouno v1.0.1 h1:Gj4ovGkJ1zFVHHhAaALWcxRPPWwpWzGJtRfiX1eFhqQ=
+github.com/rushairer/gouno v1.0.1/go.mod h1:uRfJbIFLTG4aVFnH6zlvrifgF7U9HHALtj+A6egvewM=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/sagikazarmark/locafero v0.7.0 h1:5MqpDsTGNDhY8sGp0Aowyf0qKsPrhewaLSsFaodPcyo=
 github.com/sagikazarmark/locafero v0.7.0/go.mod h1:2za3Cg5rMaTMoG/2Ulr9AwtFaIppKXTRYnozin4aB5k=

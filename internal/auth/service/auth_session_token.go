@@ -40,7 +40,7 @@ func (s *AuthService) createSessionAndTokens(ctx context.Context, account *accou
 		if retErr != nil {
 			if delErr := s.sessionSvc.DeleteSession(ctx, session.ID); delErr != nil {
 				s.logger.Warn("Failed to cleanup orphaned session",
-					zap.String("session_id", session.ID), zap.Error(delErr))
+					zap.String("session_id", utility.MaskOpaqueID(session.ID)), zap.Error(delErr))
 			}
 		}
 	}()

@@ -106,16 +106,16 @@ type ConsentCacheInvalidator interface {
 }
 
 type accountServiceImpl struct {
-	db                    *sql.DB
-	accountRepo           repository.AccountRepository
-	credentialRepo        repository.CredentialRepository
-	federatedIdentityRepo repository.FederatedIdentityRepository
-	roleRepo              repository.RoleRepository
-	auditor               *auditService.Auditor
-	sessionRevoker        SessionRevoker
-	oauth2ClientDeleter   OAuth2ClientDeleter
+	db                      *sql.DB
+	accountRepo             repository.AccountRepository
+	credentialRepo          repository.CredentialRepository
+	federatedIdentityRepo   repository.FederatedIdentityRepository
+	roleRepo                repository.RoleRepository
+	auditor                 *auditService.Auditor
+	sessionRevoker          SessionRevoker
+	oauth2ClientDeleter     OAuth2ClientDeleter
 	consentCacheInvalidator ConsentCacheInvalidator
-	logger                *zap.Logger
+	logger                  *zap.Logger
 }
 
 // NewAccountService creates the account service.

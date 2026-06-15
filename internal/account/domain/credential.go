@@ -18,9 +18,9 @@ import (
 )
 
 var (
-	ErrAccountIDRequired         = errors.New("account ID is required")
-	ErrInvalidPhoneFormat        = errors.New("invalid phone format")
-	ErrCredentialAlreadyDeleted  = errors.New("credential is already deleted")
+	ErrAccountIDRequired        = errors.New("account ID is required")
+	ErrInvalidPhoneFormat       = errors.New("invalid phone format")
+	ErrCredentialAlreadyDeleted = errors.New("credential is already deleted")
 )
 
 // CredentialType represents the type of credential.

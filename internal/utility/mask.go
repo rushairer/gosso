@@ -53,3 +53,13 @@ func MaskIdentifier(credType, identifier string) string {
 		return "***"
 	}
 }
+
+// MaskOpaqueID masks an internal opaque identifier while keeping enough
+// characters for log correlation.
+func MaskOpaqueID(id string) string {
+	runes := []rune(id)
+	if len(runes) <= 8 {
+		return "***"
+	}
+	return string(runes[:4]) + "***" + string(runes[len(runes)-4:])
+}

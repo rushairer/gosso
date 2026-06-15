@@ -32,6 +32,8 @@ func validConfig() GoUnoConfig {
 				API:        60,
 				Introspect: 20,
 				DeviceCode: 10,
+				Password:   3,
+				Verify:     3,
 			},
 		},
 		DatabaseConfig: DatabaseConfig{
@@ -338,6 +340,20 @@ func TestValidate_Errors(t *testing.T) {
 			wantErr: "rate_limits.api must be positive",
 		},
 		{
+			name: "zero password rate limit",
+			mutate: func(c *GoUnoConfig) {
+				c.WebServerConfig.RateLimits.Password = 0
+			},
+			wantErr: "rate_limits.password must be positive",
+		},
+		{
+			name: "negative verify rate limit",
+			mutate: func(c *GoUnoConfig) {
+				c.WebServerConfig.RateLimits.Verify = -1
+			},
+			wantErr: "rate_limits.verify must be positive",
+		},
+		{
 			name: "zero max_body_size",
 			mutate: func(c *GoUnoConfig) {
 				c.WebServerConfig.MaxBodySize = 0
@@ -455,10 +471,10 @@ func TestValidate_DebugIssuerAllowsLocalhostHTTP(t *testing.T) {
 func TestValidate_AccumulatesErrorsAcrossSections(t *testing.T) {
 	cfg := validConfig()
 	// Introduce errors in multiple sections simultaneously
-	cfg.DatabaseConfig.Default = "nonexistent"  // database error
-	cfg.RedisConfig.DSN = ""                     // redis error
-	cfg.AuthConfig.TOTPEncryptionKey = ""        // auth error
-	cfg.WebServerConfig.RateLimits.Login = 0     // web_server error
+	cfg.DatabaseConfig.Default = "nonexistent" // database error
+	cfg.RedisConfig.DSN = ""                   // redis error
+	cfg.AuthConfig.TOTPEncryptionKey = ""      // auth error
+	cfg.WebServerConfig.RateLimits.Login = 0   // web_server error
 
 	err := cfg.Validate()
 	require.Error(t, err)

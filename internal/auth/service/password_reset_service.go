@@ -83,22 +83,22 @@ type passwordResetData struct {
 
 // PasswordResetService password reset service
 type PasswordResetService struct {
-	redis                *cache.RedisClient
-	credentialRepo       accountRepo.CredentialRepository
-	emailSender          PasswordResetEmailSender
-	sessionSvc           *sessionService.SessionService
-	tokenRevoker         AccountTokenRevoker
-	accountSvc           accountService.AccountService
+	redis                 *cache.RedisClient
+	credentialRepo        accountRepo.CredentialRepository
+	emailSender           PasswordResetEmailSender
+	sessionSvc            *sessionService.SessionService
+	tokenRevoker          AccountTokenRevoker
+	accountSvc            accountService.AccountService
 	loginRateLimitClearer LoginRateLimitClearer
-	db                   *sql.DB
-	baseURL              string
-	logger               *zap.Logger
-	wg                   sync.WaitGroup
-	revokeSem            chan struct{} // limits concurrent session-revoke goroutines
-	waitTimeout          time.Duration // timeout for Wait() during graceful shutdown
-	tokenTTL             time.Duration
-	cooldownTTL          time.Duration
-	maxAttempts          int
+	db                    *sql.DB
+	baseURL               string
+	logger                *zap.Logger
+	wg                    sync.WaitGroup
+	revokeSem             chan struct{} // limits concurrent session-revoke goroutines
+	waitTimeout           time.Duration // timeout for Wait() during graceful shutdown
+	tokenTTL              time.Duration
+	cooldownTTL           time.Duration
+	maxAttempts           int
 }
 
 // NewPasswordResetService creates a new password reset service instance

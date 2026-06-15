@@ -17,6 +17,7 @@ import (
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
+	"github.com/rushairer/gosso/internal/utility"
 	"github.com/rushairer/gosso/middleware"
 )
 
@@ -259,7 +260,7 @@ func (c *OIDCController) tryLogoutByIDTokenHint(ctx *gin.Context, req logoutRequ
 // Returns the resolved clientID, or "" if no logout was performed.
 func (c *OIDCController) tryLogoutByBearerToken(ctx *gin.Context, claims *tokenDomain.AccessTokenClaims) string {
 	if err := c.logoutSvc.LogoutBySessionID(ctx, claims.AccountID, claims.SessionID); err != nil {
-		c.logger.Error("Logout by session ID failed", zap.String("session_id", claims.SessionID), zap.Error(err))
+		c.logger.Error("Logout by session ID failed", zap.String("session_id", utility.MaskOpaqueID(claims.SessionID)), zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout failed"))
 		ctx.Abort()
 		return ""

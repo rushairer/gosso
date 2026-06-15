@@ -349,9 +349,10 @@ func (m *mockAccountSvcForReset) GetAccountRoles(_ context.Context, _ string) ([
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (m *mockAccountSvcForReset) SetSessionRevoker(_ accountService.SessionRevoker)                {}
-func (m *mockAccountSvcForReset) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter)      {}
-func (m *mockAccountSvcForReset) SetConsentCacheInvalidator(_ accountService.ConsentCacheInvalidator) {}
+func (m *mockAccountSvcForReset) SetSessionRevoker(_ accountService.SessionRevoker)           {}
+func (m *mockAccountSvcForReset) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter) {}
+func (m *mockAccountSvcForReset) SetConsentCacheInvalidator(_ accountService.ConsentCacheInvalidator) {
+}
 
 type stubEmailSenderForReset struct {
 	sentLinks []string

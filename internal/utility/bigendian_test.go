@@ -18,9 +18,9 @@ func TestBigEndianBytes(t *testing.T) {
 		{"128", 128, []byte{128}},
 		{"255", 255, []byte{255}},
 		{"256", 256, []byte{1, 0}},
-		{"65537", 65537, []byte{1, 0, 1}},    // common RSA exponent
+		{"65537", 65537, []byte{1, 0, 1}}, // common RSA exponent
 		{"3", 3, []byte{3}},
-		{"1000", 1000, []byte{3, 232}},        // 0x03E8
+		{"1000", 1000, []byte{3, 232}}, // 0x03E8
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

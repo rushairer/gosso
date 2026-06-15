@@ -74,7 +74,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 
 	// 7. Refresh session
 	if err := s.sessionSvc.RefreshSession(ctx, sessionID); err != nil {
-		s.logger.Warn("Failed to refresh session", zap.Error(err), zap.String("session_id", sessionID))
+		s.logger.Warn("Failed to refresh session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 	}
 
 	return &RefreshResult{

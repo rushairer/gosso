@@ -145,11 +145,11 @@ func NewSessionServiceWithConfig(redis *cache.RedisClient, logger *zap.Logger, c
 	logger = utility.EnsureLogger(logger)
 
 	svc := &SessionService{
-		redis:         redis,
-		logger:        logger,
-		sessionTTL:    DefaultSessionTTL,
-		maxSessionAge: DefaultMaxSessionAge,
-		maxSessions:   DefaultMaxSessions,
+		redis:           redis,
+		logger:          logger,
+		sessionTTL:      DefaultSessionTTL,
+		maxSessionAge:   DefaultMaxSessionAge,
+		maxSessions:     DefaultMaxSessions,
 		indexFailClosed: cfg.IndexFailClosed,
 	}
 	if cfg.SessionTTL > 0 {
@@ -168,14 +168,12 @@ func NewSessionServiceWithConfig(redis *cache.RedisClient, logger *zap.Logger, c
 }
 
 // SetTokenRevoker sets the token revoker for cascading token revocation.
-// Deprecated: pass TokenRevoker via NewSessionServiceWithConfig instead.
 // Must be called during initialization; not safe for concurrent use.
 func (s *SessionService) SetTokenRevoker(revoker TokenRevoker) {
 	s.tokenRevoker = revoker
 }
 
 // SetMaxSessions sets the maximum concurrent sessions per account.
-// Deprecated: pass MaxSessions via NewSessionServiceWithConfig instead.
 // Must be called during initialization; not safe for concurrent use.
 func (s *SessionService) SetMaxSessions(n int) {
 	if n < 0 {
@@ -185,7 +183,6 @@ func (s *SessionService) SetMaxSessions(n int) {
 }
 
 // SetSessionTTL sets the session expiry duration.
-// Deprecated: pass SessionTTL via NewSessionServiceWithConfig instead.
 // Must be called during initialization; not safe for concurrent use.
 func (s *SessionService) SetSessionTTL(ttl time.Duration) {
 	if ttl <= 0 {
@@ -195,7 +192,6 @@ func (s *SessionService) SetSessionTTL(ttl time.Duration) {
 }
 
 // SetMaxSessionAge sets the absolute maximum session lifetime regardless of activity.
-// Deprecated: pass MaxSessionAge via NewSessionServiceWithConfig instead.
 // Must be called during initialization; not safe for concurrent use.
 func (s *SessionService) SetMaxSessionAge(age time.Duration) {
 	if age <= 0 {

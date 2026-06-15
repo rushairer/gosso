@@ -22,14 +22,14 @@ func TestValidatePasswordStrength(t *testing.T) {
 		{"Abcdefghij1!", false},    // valid: upper+lower+digit+special, 12 chars
 		{"N0SpecialHere", true},    // no special character
 		// Unicode symbols must be rejected — they are not in the allowed set
-		{"Abcdefghij1★", true},     // Unicode star symbol (IsSymbol)
-		{"Abcdefghij1€", true},     // Euro sign (IsSymbol)
+		{"Abcdefghij1★", true}, // Unicode star symbol (IsSymbol)
+		{"Abcdefghij1€", true}, // Euro sign (IsSymbol)
 		{"Abcdefghij1©", true}, // Copyright sign (IsSymbol)
 		// Standard special characters from the whitelist must be accepted
-		{"Abcdefghij1#", false},    // hash
-		{"Abcdefghij1(", false},    // parenthesis
-		{"Abcdefghij1[", false},    // bracket
-		{"Abcdefghij1,", false},    // comma
+		{"Abcdefghij1#", false}, // hash
+		{"Abcdefghij1(", false}, // parenthesis
+		{"Abcdefghij1[", false}, // bracket
+		{"Abcdefghij1,", false}, // comma
 	}
 
 	for _, tt := range tests {

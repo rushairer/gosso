@@ -101,8 +101,8 @@ func (m *mockAccountService) GetAccountRoles(_ context.Context, _ string) ([]*ac
 	}
 	return nil, nil
 }
-func (m *mockAccountService) SetSessionRevoker(_ accountService.SessionRevoker)                {}
-func (m *mockAccountService) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter)      {}
+func (m *mockAccountService) SetSessionRevoker(_ accountService.SessionRevoker)                   {}
+func (m *mockAccountService) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter)         {}
 func (m *mockAccountService) SetConsentCacheInvalidator(_ accountService.ConsentCacheInvalidator) {}
 
 // ──────────────────────────────────────────────
@@ -686,7 +686,7 @@ func TestAddRole_SelfAccount(t *testing.T) {
 	engine := setupAdminControllerWithAdminID(&mockAccountService{}, validUUID)
 
 	roleUUID := "660e8400-e29b-41d4-a716-446655440001"
-	body := fmt.Sprintf(`{"role_id": "%s"}`, roleUUID)
+	body := fmt.Sprintf(`{"role_id":%q}`, roleUUID)
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/roles", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

@@ -204,7 +204,7 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 
 	if rt.IP == "" {
 		s.logger.Warn("Generating refresh token without IP binding; IP-based theft detection will be unavailable",
-			zap.String("account_id", accountID), zap.String("session_id", sessionID))
+			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 	}
 
 	data, err := json.Marshal(rt)
@@ -223,7 +223,7 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 		sessionKey := s.buildSessionTokensKey(sessionID)
 		tokenHash := domain.HashToken(tokenString)
 		if err := s.redis.SAddWithTTL(ctx, sessionKey, tokenHash, s.refreshExpiry); err != nil {
-			s.logger.Warn("Failed to index refresh token by session", zap.Error(err), zap.String("session_id", sessionID))
+			s.logger.Warn("Failed to index refresh token by session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 		}
 	}
 
@@ -412,7 +412,7 @@ func (s *TokenService) RevokeRefreshToken(ctx context.Context, token string) err
 			sessionKey := s.buildSessionTokensKey(rt.SessionID)
 			tokenHash := domain.HashToken(token)
 			if err := s.redis.SRem(ctx, sessionKey, tokenHash); err != nil {
-				s.logger.Warn("Failed to remove token hash from session index during revocation", zap.Error(err), zap.String("session_id", rt.SessionID))
+				s.logger.Warn("Failed to remove token hash from session index during revocation", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(rt.SessionID)))
 			}
 		}
 
@@ -452,7 +452,7 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 	count := int(result)
 
 	s.logger.Info("Revoked all refresh tokens for session",
-		zap.String("session_id", sessionID), zap.Int("count", count))
+		zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Int("count", count))
 
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionTokenRevoke,

@@ -9,6 +9,7 @@ import (
 
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // LogoutService handles OIDC RP-Initiated Logout operations.
@@ -97,7 +98,7 @@ func (s *LogoutService) LogoutByAccountID(ctx context.Context, accountID string)
 // LogoutBySessionID deletes a single session and revokes its refresh tokens.
 func (s *LogoutService) LogoutBySessionID(ctx context.Context, accountID, sessionID string) error {
 	if s.sessionSvc == nil {
-		s.logger.Warn("Session service not available for session logout — skipping session revocation", zap.String("session_id", sessionID))
+		s.logger.Warn("Session service not available for session logout — skipping session revocation", zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 		return nil
 	}
 
@@ -109,10 +110,10 @@ func (s *LogoutService) LogoutBySessionID(ctx context.Context, accountID, sessio
 
 	if err := s.tokenSvc.RevokeAllForSession(ctx, sessionID); err != nil {
 		s.logger.Warn("Failed to revoke tokens for session during logout",
-			zap.String("session_id", sessionID), zap.Error(err))
+			zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(err))
 	}
 
 	s.logger.Info("Session logout successful",
-		zap.String("account_id", accountID), zap.String("session_id", sessionID))
+		zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 	return nil
 }

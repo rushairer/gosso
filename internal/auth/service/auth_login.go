@@ -159,7 +159,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 
 	s.logger.Info("Login successful",
 		zap.String("account_id", account.ID),
-		zap.String("session_id", session.ID))
+		zap.String("session_id", utility.MaskOpaqueID(session.ID)))
 
 	// Clear login failures count
 	s.clearLoginRateLimits(ctx, req.IP, account.Username)
@@ -350,7 +350,7 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 
 	s.logger.Info("Passkey login successful",
 		zap.String("account_id", account.ID),
-		zap.String("session_id", session.ID))
+		zap.String("session_id", utility.MaskOpaqueID(session.ID)))
 
 	// 5. Audit log
 	s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, ip, &account.ID,
@@ -406,7 +406,7 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 		return errors.Join(errs...)
 	}
 
-	s.logger.Info("Logout successful", zap.String("session_id", sessionID))
+	s.logger.Info("Logout successful", zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 	return nil
 }
 
