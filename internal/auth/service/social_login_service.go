@@ -27,6 +27,9 @@ import (
 	"github.com/rushairer/gosso/internal/utility"
 )
 
+// ErrProviderURLNotSecure is returned when an OAuth provider URL does not use HTTPS.
+var ErrProviderURLNotSecure = errors.New("social login: provider URL must use HTTPS")
+
 // OAuthProviderConfig single OAuth provider configuration
 type OAuthProviderConfig struct {
 	ClientID     string
@@ -66,7 +69,20 @@ func NewSocialLoginService(
 	logger *zap.Logger,
 	mfaChecker MFAChecker,
 	auditor *auditService.Auditor,
-) *SocialLoginService {
+) (*SocialLoginService, error) {
+	// Validate provider URLs use HTTPS (allow localhost for development).
+	for name, p := range providers {
+		if err := validateProviderURL(p.AuthURL, name+".auth_url"); err != nil {
+			return nil, err
+		}
+		if err := validateProviderURL(p.TokenURL, name+".token_url"); err != nil {
+			return nil, err
+		}
+		if err := validateProviderURL(p.UserInfoURL, name+".userinfo_url"); err != nil {
+			return nil, err
+		}
+	}
+
 	logger = utility.EnsureLogger(logger)
 	return &SocialLoginService{
 		db:                    db,
@@ -87,7 +103,7 @@ func NewSocialLoginService(
 		}(),
 		auditor: auditor,
 		logger:  logger,
-	}
+	}, nil
 }
 
 // SetHTTPClientTimeout overrides the default HTTP client timeout for social login provider requests.
@@ -435,4 +451,25 @@ func (s *SocialLoginService) linkByEmailIfVerified(ctx context.Context, provider
 		return nil, fmt.Errorf("link federated identity: %w", linkErr)
 	}
 	return s.loginExistingUser(ctx, existingCred.AccountID, ip, userAgent)
+}
+
+// validateProviderURL checks that a provider URL uses HTTPS.
+// Empty URLs are allowed (not all providers require all endpoints).
+// Localhost and loopback URLs are exempt for development use.
+func validateProviderURL(rawURL, fieldName string) error {
+	if rawURL == "" {
+		return nil
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("%s: invalid URL: %w", fieldName, err)
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return nil
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("%w: %s uses scheme %q", ErrProviderURLNotSecure, fieldName, u.Scheme)
+	}
+	return nil
 }

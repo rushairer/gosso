@@ -225,14 +225,55 @@ func TestGetAuthURL_ScopesJoined(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestNewSocialLoginService_NilLogger(t *testing.T) {
-	svc := NewSocialLoginService(nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil, nil, nil)
+	svc, err := NewSocialLoginService(nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil, nil, nil)
+	assert.NoError(t, err)
 	assert.NotNil(t, svc.logger)
 }
 
 func TestNewSocialLoginService_DefaultHTTPClient(t *testing.T) {
-	svc := NewSocialLoginService(nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil, nil, nil)
+	svc, err := NewSocialLoginService(nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil, nil, nil)
+	assert.NoError(t, err)
 	assert.NotNil(t, svc.httpClient)
 	assert.Equal(t, 10*time.Second, svc.httpClient.Timeout)
+}
+
+func TestNewSocialLoginService_RejectsHTTProvider(t *testing.T) {
+	providers := map[string]*OAuthProviderConfig{
+		"google": {
+			ClientID: "id",
+			AuthURL:  "http://accounts.google.com/auth",
+			TokenURL: "https://oauth2.googleapis.com/token",
+		},
+	}
+	_, err := NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, nil, nil, nil)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrProviderURLNotSecure)
+}
+
+func TestNewSocialLoginService_AllowsLocalhost(t *testing.T) {
+	providers := map[string]*OAuthProviderConfig{
+		"dev": {
+			ClientID: "id",
+			AuthURL:  "http://localhost:8080/auth",
+			TokenURL: "http://127.0.0.1:8080/token",
+		},
+	}
+	svc, err := NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, nil, nil, nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+}
+
+func TestNewSocialLoginService_AllowsHTTPS(t *testing.T) {
+	providers := map[string]*OAuthProviderConfig{
+		"google": {
+			ClientID: "id",
+			AuthURL:  "https://accounts.google.com/auth",
+			TokenURL: "https://oauth2.googleapis.com/token",
+		},
+	}
+	svc, err := NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, nil, nil, nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
 }
 
 // ──────────────────────────────────────────────

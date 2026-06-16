@@ -766,7 +766,7 @@ func TestRevoke_MissingToken(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestRevoke_MissingClientAuth_ReturnsUnauthorized(t *testing.T) {
+func TestRevoke_MissingClientAuth_ReturnsOK(t *testing.T) {
 	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
 	body := `{"token":"some-refresh-token"}`
@@ -775,7 +775,9 @@ func TestRevoke_MissingClientAuth_ReturnsUnauthorized(t *testing.T) {
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	// RFC 7009 §2.1: public clients may revoke without authentication.
+	// Since no client_id is provided, we proceed without client binding.
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestRevoke_DifferentClient_ReturnsOK(t *testing.T) {

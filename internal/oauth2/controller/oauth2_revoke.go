@@ -30,29 +30,30 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 		req.ClientID = clientID
 		req.ClientSecret = clientSecret
 	}
-	if req.ClientID == "" {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client authentication required"})
-		return
-	}
-	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
-	if err != nil {
-		// Mitigate timing side-channel: perform a dummy bcrypt so the response
-		// time is indistinguishable from "client found, wrong secret."
-		c.clientAuth.DummyAuthenticate()
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
-		return
-	}
-	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-		controllerutil.HandleClientAuthError(ctx, c.logger, err,
-			oauth2Service.ErrClientSecretRequired, "client secret is required", "invalid client credentials")
-		return
+
+	// Resolve client and authenticate if credentials are provided.
+	// RFC 7009 §2.1: public clients may revoke tokens without authentication.
+	var clientIDMatch string
+	if req.ClientID != "" {
+		client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
+		if err != nil {
+			c.clientAuth.DummyAuthenticate()
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
+			return
+		}
+		if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
+			controllerutil.HandleClientAuthError(ctx, c.logger, err,
+				oauth2Service.ErrClientSecretRequired, "client secret is required", "invalid client credentials")
+			return
+		}
+		clientIDMatch = req.ClientID
 	}
 
 	// Try refresh token first (unless hint says otherwise)
 	if req.TokenHint != "access_token" {
 		rt, err := c.tokenSvc.ValidateRefreshToken(ctx, req.Token)
 		if err == nil {
-			if rt.ClientID != req.ClientID {
+			if clientIDMatch != "" && rt.ClientID != clientIDMatch {
 				ctx.Status(http.StatusOK)
 				return
 			}
@@ -69,7 +70,7 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 	// Try access token (RFC 7009 §2.1: revoke whatever type matches)
 	if req.TokenHint != "refresh_token" {
 		claims, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx, req.Token)
-		if err == nil && claims.ClientID == req.ClientID {
+		if err == nil && (clientIDMatch == "" || claims.ClientID == clientIDMatch) {
 			if revokeErr := c.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); revokeErr != nil {
 				c.logger.Error("Failed to revoke access token", zap.Error(revokeErr))
 			}

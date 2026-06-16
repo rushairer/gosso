@@ -99,8 +99,12 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 	})
 
 	var socialSvc *service.SocialLoginService
+	var socialErr error
 	if len(cfg.Providers) > 0 {
-		socialSvc = service.NewSocialLoginService(cfg.DB, cfg.AccountSvc, authSvc, cfg.AccountRepo, cfg.CredentialRepo, cfg.FederatedIdentityRepo, cfg.Providers, cfg.Logger, authSvc, cfg.Auditor)
+		socialSvc, socialErr = service.NewSocialLoginService(cfg.DB, cfg.AccountSvc, authSvc, cfg.AccountRepo, cfg.CredentialRepo, cfg.FederatedIdentityRepo, cfg.Providers, cfg.Logger, authSvc, cfg.Auditor)
+		if socialErr != nil {
+			return nil, fmt.Errorf("initialize social login service: %w", socialErr)
+		}
 		if cfg.AuthConfig.SocialLoginHTTPTimeout > 0 {
 			socialSvc.SetHTTPClientTimeout(cfg.AuthConfig.SocialLoginHTTPTimeout)
 		}
