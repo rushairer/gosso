@@ -82,7 +82,11 @@ func (m *mockCredentialRepo) FindByTypeAndIdentifierTx(ctx context.Context, _ *s
 }
 
 func newTestMFAService(credRepo *mockCredentialRepo) *MFAService {
-	return NewMFAService(credRepo, nil, "http://localhost:8080", nil, nil)
+	svc, err := NewMFAService(credRepo, nil, "http://localhost:8080", nil, nil)
+	if err != nil {
+		panic(err)
+	}
+	return svc
 }
 
 // ──────────────────────────────────────────────
@@ -191,7 +195,8 @@ func TestGetMFATypes_UnverifiedTOTPIgnored(t *testing.T) {
 
 func TestNewMFAService_NilLogger(t *testing.T) {
 	credRepo := &mockCredentialRepo{credMap: map[string][]*accountDomain.Credential{}}
-	svc := NewMFAService(credRepo, nil, "http://localhost:8080", nil, nil)
+	svc, err := NewMFAService(credRepo, nil, "http://localhost:8080", nil, nil)
+	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 	assert.NotNil(t, svc.logger)
 }
@@ -199,7 +204,8 @@ func TestNewMFAService_NilLogger(t *testing.T) {
 func TestNewMFAService_WithPasskeyService(t *testing.T) {
 	credRepo := &mockCredentialRepo{credMap: map[string][]*accountDomain.Credential{}}
 	pkSvc := &PasskeyService{}
-	svc := NewMFAService(credRepo, nil, "http://localhost:8080", nil, pkSvc)
+	svc, err := NewMFAService(credRepo, nil, "http://localhost:8080", nil, pkSvc)
+	assert.NoError(t, err)
 	assert.Equal(t, pkSvc, svc.passkeySvc)
 }
 
@@ -244,7 +250,8 @@ func (m *dbMockCredentialRepo) CreateCredentials(_ context.Context, _ *sql.Tx, c
 
 func newTestMFAServiceWithDB(t *testing.T, credRepo *dbMockCredentialRepo, sqlDB *sql.DB) *MFAService {
 	t.Helper()
-	svc := NewMFAService(credRepo, sqlDB, "http://localhost:8080", nil, nil)
+	svc, err := NewMFAService(credRepo, sqlDB, "http://localhost:8080", nil, nil)
+	require.NoError(t, err)
 	require.NoError(t, svc.SetTOTPEncryptionKey(testEncryptionKeyHex))
 	return svc
 }
@@ -286,7 +293,9 @@ func (m *mockWebAuthnCredRepo) SoftDeleteByAccountID(_ context.Context, _ *sql.T
 func newTestMFAServiceWithPasskeys(t *testing.T, credRepo *mockCredentialRepo, waRepo *mockWebAuthnCredRepo) *MFAService {
 	t.Helper()
 	pkSvc := NewPasskeyService(nil, waRepo, nil, nil, nil, nil)
-	return NewMFAService(credRepo, nil, "http://localhost:8080", nil, pkSvc)
+	svc, err := NewMFAService(credRepo, nil, "http://localhost:8080", nil, pkSvc)
+	require.NoError(t, err)
+	return svc
 }
 
 // ──────────────────────────────────────────────
@@ -839,7 +848,8 @@ func TestEnrollTOTP_RequiresEncryptionKey(t *testing.T) {
 	credRepo := &dbMockCredentialRepo{
 		mockCredentialRepo: &mockCredentialRepo{credMap: map[string][]*accountDomain.Credential{}},
 	}
-	svc := NewMFAService(credRepo, sqlDB, "http://localhost:8080", nil, nil)
+	svc, err := NewMFAService(credRepo, sqlDB, "http://localhost:8080", nil, nil)
+	require.NoError(t, err)
 
 	_, err = svc.EnrollTOTP(context.Background(), "account-001")
 	require.Error(t, err)

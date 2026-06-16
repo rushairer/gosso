@@ -53,10 +53,10 @@ func TestDeviceCodeService_CreateAndGet(t *testing.T) {
 	assert.True(t, dc.ExpiresAt.After(time.Now()))
 	assert.Equal(t, 5, dc.Interval)
 
-	// Retrieve by device code
+	// Retrieve by device code — raw device code is not stored in Redis (security: S1)
 	fetched, err := svc.GetDeviceCode(ctx, dc.DeviceCode)
 	require.NoError(t, err)
-	assert.Equal(t, dc.DeviceCode, fetched.DeviceCode)
+	assert.Empty(t, fetched.DeviceCode)
 	assert.Equal(t, dc.UserCode, fetched.UserCode)
 }
 
@@ -69,13 +69,13 @@ func TestDeviceCodeService_GetByUserCode(t *testing.T) {
 
 	fetched, err := svc.GetDeviceCodeByUserCode(ctx, dc.UserCode)
 	require.NoError(t, err)
-	assert.Equal(t, dc.DeviceCode, fetched.DeviceCode)
+	assert.Equal(t, dc.ClientID, fetched.ClientID)
 
 	// Also test without dash
 	userCodeNoDash := dc.UserCode[:4] + dc.UserCode[5:]
 	fetched2, err := svc.GetDeviceCodeByUserCode(ctx, userCodeNoDash)
 	require.NoError(t, err)
-	assert.Equal(t, dc.DeviceCode, fetched2.DeviceCode)
+	assert.Equal(t, dc.ClientID, fetched2.ClientID)
 }
 
 func TestDeviceCodeService_GetDeviceCode_NotFound(t *testing.T) {
@@ -466,47 +466,44 @@ func TestGetDeviceCodeByUserCode_ResolveError(t *testing.T) {
 	assert.Contains(t, err.Error(), "resolve user code")
 }
 
-func TestAuthorizeDeviceCode_TTLError(t *testing.T) {
+func TestAuthorizeDeviceCode_RedisDown(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
 	ctx := context.Background()
 
-	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	_, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
 	require.NoError(t, err)
 
 	mr.Close()
 
-	err = svc.AuthorizeDeviceCode(ctx, dc.DeviceCode, "account-123")
+	err = svc.AuthorizeDeviceCode(ctx, "nonexistent", "account-123")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "get device code ttl")
 }
 
-func TestDenyDeviceCode_TTLError(t *testing.T) {
+func TestDenyDeviceCode_RedisDown(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
 	ctx := context.Background()
 
-	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	_, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
 	require.NoError(t, err)
 
 	mr.Close()
 
-	err = svc.DenyDeviceCode(ctx, dc.DeviceCode)
+	err = svc.DenyDeviceCode(ctx, "nonexistent")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "get device code ttl")
 }
 
-func TestCheckAndUpdatePollRate_TTLError(t *testing.T) {
+func TestCheckAndUpdatePollRate_RedisDown(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
 	ctx := context.Background()
 
-	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	_, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
 	require.NoError(t, err)
 
 	mr.Close()
 
-	err = svc.CheckAndUpdatePollRate(ctx, dc.DeviceCode)
+	err = svc.CheckAndUpdatePollRate(ctx, "nonexistent")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "get device code ttl")
 }

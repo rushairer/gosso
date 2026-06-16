@@ -19,6 +19,8 @@ return members
 // evictOldestSessionsScript atomically reads all sessions from the account
 // index, identifies the oldest ones that exceed the max limit, deletes their
 // keys, and removes them from the index — all in a single EVAL call.
+// Corrupted sessions (unparseable JSON or missing last_active_at) are also
+// cleaned up to prevent them from blocking new session creation.
 // This eliminates the TOCTOU window in EnforceSessionLimit.
 //
 // KEYS[1] = account_sessions:{accountID}
@@ -36,14 +38,27 @@ end
 
 -- Read all session data to get last_active_at timestamps
 local sessions = {}
+local corrupted = {}
 for i = 1, #sessionIDs do
     local data = redis.call('GET', 'session:' .. sessionIDs[i])
     if data then
         local ok, obj = pcall(cjson.decode, data)
         if ok and obj.last_active_at then
             table.insert(sessions, {id = sessionIDs[i], ts = obj.last_active_at})
+        else
+            -- Corrupted or missing last_active_at: clean up immediately
+            table.insert(corrupted, sessionIDs[i])
         end
+    else
+        -- Key missing but still in index: clean up stale reference
+        table.insert(corrupted, sessionIDs[i])
     end
+end
+
+-- Remove corrupted/stale sessions from index
+for i = 1, #corrupted do
+    redis.call('DEL', 'session:' .. corrupted[i])
+    redis.call('SREM', indexKey, corrupted[i])
 end
 
 -- Sort by last_active_at (ascending = oldest first)
@@ -83,8 +98,7 @@ return 'OK'
 // stale ValidateSession that read the session before the refresh.
 //
 // KEYS[1] = session:{sessionID}
-// ARGV[1] = max session age in seconds (0 = no max age)
-// Returns: 1 if deleted (expired), 0 if kept (still valid)
+// Returns: 1 if deleted (expired) or already gone, 0 if kept (still valid)
 var deleteIfExpiredScript = redis.NewScript(`
 local data = redis.call('GET', KEYS[1])
 if not data then

@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- Device code raw value no longer stored in Redis — only the hash is used as key, raw value returned to client at creation time only (`internal/oauth2/service/device_code_service.go`).
+- `LoginByPasskey` now performs dummy bcrypt work on inactive accounts — prevents timing side-channel for account existence enumeration (`internal/auth/service/auth_login.go`).
+- `SoftDeleteCredentialsByAccount` now clears `credential_value` (password hash) on soft delete — limits exposure from database leaks (`internal/account/repository/credential_repository_impl.go`).
+- OAuth2 `Introspect` endpoint now calls `DummyAuthenticate()` on client lookup failure — eliminates timing side-channel for client ID enumeration (`internal/oauth2/controller/oauth2_revoke.go`).
+- Auth middleware now returns generic `"forbidden"` for 403 responses instead of leaking internal error details (`internal/auth/middleware/auth_middleware.go`).
+- `ClaimAuthorizedDeviceCode` now validates `clientID` is non-empty — prevents empty client_id bypass in Lua script (`internal/oauth2/service/device_code_service.go`).
 - OAuth2 `Revoke` endpoint now supports public client token revocation without client authentication per RFC 7009 §2.1 (`internal/oauth2/controller/oauth2_revoke.go`).
 - Social login `NewSocialLoginService` now validates that all provider URLs (`auth_url`, `token_url`, `userinfo_url`) use HTTPS scheme — allows localhost/loopback for development (`internal/auth/service/social_login_service.go`).
 - `NewPasswordCredential` now enforces password strength validation at the domain layer — defense-in-depth alongside existing service-layer checks (`internal/account/domain/credential.go`).
@@ -83,12 +89,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `shutdown_timeout` now explicitly declared in `config/development.yaml` and `config/test.yaml` — removes fragile coupling with Viper default in code (`config/development.yaml`, `config/test.yaml`).
 - `NewBlacklistService` now returns `(*BlacklistService, error)` — validates `redis != nil` on construction (`internal/token/service/blacklist_service.go`).
 - `NewTokenService` now validates `blacklist != nil` — prevents nil pointer panic during token validation (`internal/token/service/token_service.go`).
-- `NewMFAService` variadic `passkeySvc ...*PasskeyService` changed to `passkeySvc *PasskeyService` — clearer optional injection pattern (`internal/auth/service/mfa_service.go`).
+- `NewMFAService` and `NewMFAServiceWithConfig` now return `(*MFAService, error)` — TOTP encryption key errors are no longer swallowed at construction time (`internal/auth/service/mfa_service.go`, `internal/auth/module.go`).
 - `handleMFARequirement` now returns `ErrServiceUnavailable` sentinel error instead of wrapped internal error — callers can properly classify the failure (`internal/auth/service/auth_login.go`).
 - `DeviceCodeRequestRequest` renamed to `DeviceCodeRequestParams` — eliminates tautological naming (`internal/oauth2/controller/oauth2_device.go`).
 - `RevokeSession` no longer returns `ErrTokenRevokerNotConfigured` — logs a warning and continues with session deletion, consistent with `RevokeAllForAccount` behavior (`internal/session/service/session_service.go`).
 - `deleteIfExpiredScript` Lua script simplified — removed dead ISO 8601 parsing code that was never used (`internal/session/service/session_service.go`).
 - SubmitConsent denial redirect now uses `url.Parse` + `q.Set` instead of string concatenation — prevents malformed URLs when redirect_uri already contains query parameters (`internal/oauth2/controller/oauth2_authorize.go`).
+
+### Fixed
+- `NewConsent` now sets `GrantedAt` to `time.Now()` — previously left as zero value (`internal/oauth2/domain/consent.go`).
+- `PasswordResetService.Wait()` now uses `time.NewTimer` with proper cleanup — prevents goroutine leak when `done` fires before timeout (`internal/auth/service/password_reset_service.go`).
+- `evictOldestSessionsScript` now cleans up corrupted sessions (unparseable JSON or missing `last_active_at`) instead of silently skipping them — prevents corrupted entries from blocking new session creation (`internal/session/service/session_service_scripts.go`).
+- `UnbindFederatedIdentity` now prevents unbinding the user's last authentication method — returns `ErrCannotUnbindLastAuthMethod` if no password or other federated identity exists (`internal/account/service/account_service_identity.go`).
+- `UpdateAccount` repository now uses `account.UpdatedAt` from the domain object instead of generating its own `time.Now()` — eliminates timestamp drift between domain and persisted values (`internal/account/repository/account_repository_impl.go`).
+- `CreateCredentials` batch INSERT now includes `updated_at` column — domain model's `UpdatedAt` is now properly persisted (`internal/account/repository/credential_repository_impl.go`).
+- `VerifyMFALogin` and `LoginByPasskeyWithMFA` now use `ValidateMFAToken()` instead of duplicating the validation logic (`internal/auth/service/auth_login.go`).
+- `validateRedirectURIs` now rejects URIs with empty host (e.g., `https://`) (`internal/oauth2/service/client_service.go`).
+- `deleteIfExpiredScript` doc comment corrected — removed misleading `ARGV[1]` parameter documentation (`internal/session/service/session_service_scripts.go`).
+- `AuthorizeDeviceCode`, `DenyDeviceCode`, `CheckAndUpdatePollRate` now use atomic Lua scripts with internal PTTL — removed redundant and racy TTL pre-checks (`internal/oauth2/service/device_code_service.go`).
 
 ### Removed
 - `checkCredentialExists` (non-transactional variant) — dead code, all callers use `checkCredentialExistsTx` instead (`internal/account/service/account_service.go`).

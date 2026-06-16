@@ -145,12 +145,9 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	}
 
 	// 1. Verify MFA token
-	claims, err := s.tokenSvc.ValidateAccessTokenWithContext(ctx, mfaToken)
+	claims, err := s.ValidateMFAToken(ctx, mfaToken)
 	if err != nil {
-		return nil, ErrInvalidMFAToken
-	}
-	if claims.Scope != ScopeMFA {
-		return nil, ErrInvalidMFATokenScope
+		return nil, err
 	}
 	accountID := claims.AccountID
 	mfaAccountID = &accountID
@@ -203,12 +200,9 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	// IP-level rate limiting is handled by the passkeyRateLimit middleware.
 
 	// 1. Validate MFA token
-	claims, err := s.tokenSvc.ValidateAccessTokenWithContext(ctx, mfaToken)
+	claims, err := s.ValidateMFAToken(ctx, mfaToken)
 	if err != nil {
-		return nil, ErrInvalidMFAToken
-	}
-	if claims.Scope != ScopeMFA {
-		return nil, ErrInvalidMFATokenScope
+		return nil, err
 	}
 	accountID := claims.AccountID
 	mfaAccountID = &accountID
@@ -258,6 +252,10 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 
 	// 2. Check account status
 	if !account.IsActive() {
+		// Mitigate timing side-channel: inactive accounts must perform the same
+		// dummy work as the not-found path to prevent account existence enumeration.
+		// Passkey login has no password, so use bcrypt dummy work instead of Argon2id.
+		utility.DummyWork()
 		return nil, ErrInvalidCredentials
 	}
 

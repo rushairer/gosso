@@ -43,10 +43,10 @@ func (r *credentialRepositoryImpl) CreateCredentials(ctx context.Context, tx *sq
 		return nil
 	}
 
-	const colsPerRow = 11
+	const colsPerRow = 12
 	var buf strings.Builder
 	buf.WriteString(`INSERT INTO account_credentials
-		(id, account_id, credential_type, identifier, credential_value, verified, primary_credential, metadata, created_at, verified_at, last_used_at)
+		(id, account_id, credential_type, identifier, credential_value, verified, primary_credential, metadata, created_at, updated_at, verified_at, last_used_at)
 		VALUES `)
 
 	args := make([]any, 0, len(credentials)*colsPerRow)
@@ -60,8 +60,8 @@ func (r *credentialRepositoryImpl) CreateCredentials(ctx context.Context, tx *sq
 			buf.WriteByte(',')
 		}
 		base := i * colsPerRow
-		fmt.Fprintf(&buf, "($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
-			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10, base+11)
+		fmt.Fprintf(&buf, "($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
+			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10, base+11, base+12)
 
 		args = append(args,
 			cred.ID,
@@ -73,6 +73,7 @@ func (r *credentialRepositoryImpl) CreateCredentials(ctx context.Context, tx *sq
 			cred.PrimaryCredential,
 			metadataJSON,
 			cred.CreatedAt,
+			cred.UpdatedAt,
 			cred.VerifiedAt,
 			cred.LastUsedAt,
 		)
@@ -226,7 +227,7 @@ func (r *credentialRepositoryImpl) UpdateLastUsedAt(ctx context.Context, tx *sql
 func (r *credentialRepositoryImpl) SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `
 		UPDATE account_credentials
-		SET deleted_at = $1, updated_at = $1
+		SET deleted_at = $1, updated_at = $1, credential_value = NULL
 		WHERE account_id = $2 AND deleted_at IS NULL
 	`
 

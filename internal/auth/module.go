@@ -79,16 +79,13 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 		}
 	}
 
-	mfaSvc := service.NewMFAServiceWithConfig(cfg.CredentialRepo, cfg.DB, cfg.AuthConfig.Issuer, cfg.Logger, service.MFAServiceConfig{
+	mfaSvc, err := service.NewMFAServiceWithConfig(cfg.CredentialRepo, cfg.DB, cfg.AuthConfig.Issuer, cfg.Logger, service.MFAServiceConfig{
 		TOTPEncryptionKey: cfg.AuthConfig.TOTPEncryptionKey,
 		BackupCodeCount:   cfg.AuthConfig.BackupCodeCount,
 		BackupCodeLength:  cfg.AuthConfig.BackupCodeLength,
 	}, passkeySvc)
-	if cfg.AuthConfig.TOTPEncryptionKey != "" {
-		// Validate key was set successfully (error already logged in NewMFAServiceWithConfig)
-		if err := mfaSvc.SetTOTPEncryptionKey(cfg.AuthConfig.TOTPEncryptionKey); err != nil {
-			return nil, fmt.Errorf("failed to set TOTP encryption key: %w", err)
-		}
+	if err != nil {
+		return nil, fmt.Errorf("initialize MFA service: %w", err)
 	}
 
 	authSvc := service.NewAuthServiceWithConfig(cfg.DB, cfg.AccountSvc, sessionSvc, cfg.TokenSvc, cfg.CredentialRepo, cfg.RoleRepo, cfg.Redis, cfg.Logger, cfg.Auditor, mfaSvc, passkeySvc, service.AuthServiceConfig{

@@ -288,7 +288,7 @@ func TestCreateCredentials_Success(t *testing.T) {
 	mock.ExpectExec("INSERT INTO account_credentials").
 		WithArgs(c.ID, c.AccountID, string(c.Type), c.Identifier, c.Value,
 			c.Verified, c.PrimaryCredential, sqlmock.AnyArg(),
-			c.CreatedAt, c.VerifiedAt, c.LastUsedAt).
+			c.CreatedAt, c.UpdatedAt, c.VerifiedAt, c.LastUsedAt).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewCredentialRepository(db)

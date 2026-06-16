@@ -126,6 +126,8 @@ func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 
 	client, err := c.clientSvc.FindByClientID(ctx, clientID)
 	if err != nil {
+		// DummyAuthenticate to normalize timing and prevent client ID enumeration.
+		c.clientAuth.DummyAuthenticate()
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}

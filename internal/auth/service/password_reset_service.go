@@ -462,9 +462,11 @@ func (s *PasswordResetService) Wait() {
 	s.stopCancel() // signal background goroutines to wind down
 	done := make(chan struct{})
 	go func() { s.wg.Wait(); close(done) }()
+	timer := time.NewTimer(s.waitTimeout)
+	defer timer.Stop()
 	select {
 	case <-done:
-	case <-time.After(s.waitTimeout):
+	case <-timer.C:
 		s.logger.Warn("Timeout waiting for background password reset goroutines",
 			zap.Duration("timeout", s.waitTimeout))
 	}

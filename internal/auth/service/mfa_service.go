@@ -61,7 +61,7 @@ func NewMFAService(
 	issuer string,
 	logger *zap.Logger,
 	passkeySvc *PasskeyService,
-) *MFAService {
+) (*MFAService, error) {
 	return NewMFAServiceWithConfig(credentialRepo, db, issuer, logger, MFAServiceConfig{}, passkeySvc)
 }
 
@@ -74,7 +74,7 @@ func NewMFAServiceWithConfig(
 	logger *zap.Logger,
 	cfg MFAServiceConfig,
 	passkeySvc *PasskeyService,
-) *MFAService {
+) (*MFAService, error) {
 	logger = utility.EnsureLogger(logger)
 	svc := &MFAService{
 		credentialRepo:   credentialRepo,
@@ -87,7 +87,7 @@ func NewMFAServiceWithConfig(
 	}
 	if cfg.TOTPEncryptionKey != "" {
 		if err := svc.SetTOTPEncryptionKey(cfg.TOTPEncryptionKey); err != nil {
-			logger.Error("Failed to set TOTP encryption key", zap.Error(err))
+			return nil, fmt.Errorf("failed to set TOTP encryption key: %w", err)
 		}
 	}
 	if cfg.BackupCodeCount > 0 && cfg.BackupCodeCount <= 20 {
@@ -96,7 +96,7 @@ func NewMFAServiceWithConfig(
 	if cfg.BackupCodeLength > 0 && cfg.BackupCodeLength <= 12 {
 		svc.backupCodeLength = cfg.BackupCodeLength
 	}
-	return svc
+	return svc, nil
 }
 
 // SetBackupCodeCount overrides the backup code count.

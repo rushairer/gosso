@@ -79,7 +79,11 @@ func (s *DeviceCodeService) CreateDeviceCode(ctx context.Context, clientID strin
 		return nil, fmt.Errorf("create device code: %w", err)
 	}
 
-	data, err := json.Marshal(dc)
+	// Clear raw device code before storing to avoid plaintext exposure in Redis.
+	// The raw value is only returned to the caller (client device), never persisted.
+	storedCode := *dc // shallow copy
+	storedCode.DeviceCode = ""
+	data, err := json.Marshal(storedCode)
 	if err != nil {
 		return nil, fmt.Errorf("marshal device code: %w", err)
 	}
@@ -160,17 +164,9 @@ func (s *DeviceCodeService) GetDeviceCodeByUserCode(ctx context.Context, userCod
 func (s *DeviceCodeService) AuthorizeDeviceCode(ctx context.Context, deviceCode, accountID string) error {
 	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
 
-	remaining, err := s.redis.TTL(ctx, key)
-	if err != nil {
-		return fmt.Errorf("get device code ttl: %w", err)
-	}
-	if remaining <= 0 {
-		return domain.ErrDeviceCodeNotFound
-	}
-
 	authorizedAt := time.Now().Format(time.RFC3339)
 	result, err := s.redis.RunScript(ctx, authorizeDeviceCodeScript, []string{key},
-		accountID, authorizedAt, fmt.Sprintf("%d", int(remaining.Seconds())),
+		accountID, authorizedAt,
 	).Result()
 	if errors.Is(err, redis.Nil) || result == nil {
 		return domain.ErrDeviceCodeNotFound
@@ -188,17 +184,7 @@ func (s *DeviceCodeService) AuthorizeDeviceCode(ctx context.Context, deviceCode,
 func (s *DeviceCodeService) DenyDeviceCode(ctx context.Context, deviceCode string) error {
 	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
 
-	remaining, err := s.redis.TTL(ctx, key)
-	if err != nil {
-		return fmt.Errorf("get device code ttl: %w", err)
-	}
-	if remaining <= 0 {
-		return domain.ErrDeviceCodeNotFound
-	}
-
-	result, err := s.redis.RunScript(ctx, denyDeviceCodeScript, []string{key},
-		fmt.Sprintf("%d", int(remaining.Seconds())),
-	).Result()
+	result, err := s.redis.RunScript(ctx, denyDeviceCodeScript, []string{key}).Result()
 	if errors.Is(err, redis.Nil) || result == nil {
 		return domain.ErrDeviceCodeNotFound
 	}
@@ -223,26 +209,34 @@ func (s *DeviceCodeService) DenyDeviceCode(ctx context.Context, deviceCode strin
 // checkAndUpdatePollRateScript atomically checks the poll interval and updates LastPollAt.
 // KEYS[1] = device code key
 // KEYS[2] = poll epoch tracking key (separate from domain JSON to avoid polluting stored data)
-// ARGV[1] = TTL in seconds
-// ARGV[2] = current epoch seconds (integer)
-// ARGV[3] = interval in seconds
+// ARGV[1] = current epoch seconds (integer)
+// ARGV[2] = interval in seconds
 // Returns 1 if poll allowed, 0 if too fast (slow down), nil if not found.
 var checkAndUpdatePollRateScript = redis.NewScript(`
 local data = redis.call('GET', KEYS[1])
 if not data then
     return nil
 end
-local now = tonumber(ARGV[2])
-local interval = tonumber(ARGV[3])
+local now = tonumber(ARGV[1])
+local interval = tonumber(ARGV[2])
 local lastEpoch = tonumber(redis.call('GET', KEYS[2]) or '0')
 if lastEpoch > 0 and (now - lastEpoch) < interval then
     return 0
 end
-redis.call('SET', KEYS[2], now, 'EX', ARGV[1])
+local pttl = redis.call('PTTL', KEYS[1])
+if pttl > 0 then
+    redis.call('SET', KEYS[2], now, 'PX', pttl)
+else
+    redis.call('SET', KEYS[2], now)
+end
 local cjson = require('cjson')
 local dc = cjson.decode(data)
 dc.last_poll_at = os.date("!%Y-%m-%dT%H:%M:%SZ", now)
-redis.call('SET', KEYS[1], cjson.encode(dc), 'EX', ARGV[1])
+if pttl > 0 then
+    redis.call('SET', KEYS[1], cjson.encode(dc), 'PX', pttl)
+else
+    redis.call('SET', KEYS[1], cjson.encode(dc))
+end
 return 1
 `)
 
@@ -252,17 +246,8 @@ func (s *DeviceCodeService) CheckAndUpdatePollRate(ctx context.Context, deviceCo
 	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
 	pollKey := DeviceCodeKeyPrefix + "poll:" + tokenDomain.HashToken(deviceCode)
 
-	remaining, err := s.redis.TTL(ctx, key)
-	if err != nil {
-		return fmt.Errorf("get device code ttl: %w", err)
-	}
-	if remaining <= 0 {
-		return domain.ErrDeviceCodeNotFound
-	}
-
 	now := time.Now().Unix()
 	result, err := s.redis.RunScript(ctx, checkAndUpdatePollRateScript, []string{key, pollKey},
-		fmt.Sprintf("%d", int(remaining.Seconds())),
 		fmt.Sprintf("%d", now),
 		fmt.Sprintf("%d", int(s.interval.Seconds())),
 	).Result()
@@ -284,6 +269,11 @@ func (s *DeviceCodeService) CheckAndUpdatePollRate(ctx context.Context, deviceCo
 // KEYS[1] = device code key
 // ARGV[1] = accountID, ARGV[2] = authorizedAt (RFC3339), ARGV[3] = TTL seconds
 // Returns updated JSON on success, nil if not pending.
+// authorizeDeviceCodeScript atomically marks a device code as authorized.
+// KEYS[1] = device code key
+// ARGV[1] = account ID
+// ARGV[2] = authorized_at timestamp
+// Returns: updated JSON data, or nil if not found or not pending.
 var authorizeDeviceCodeScript = redis.NewScript(`
 local cjson = require('cjson')
 local data = redis.call('GET', KEYS[1])
@@ -298,13 +288,17 @@ dc.status = "authorized"
 dc.account_id = ARGV[1]
 dc.authorized_at = ARGV[2]
 local updated = cjson.encode(dc)
-redis.call('SET', KEYS[1], updated, 'EX', ARGV[3])
+local pttl = redis.call('PTTL', KEYS[1])
+if pttl > 0 then
+    redis.call('SET', KEYS[1], updated, 'PX', pttl)
+else
+    redis.call('SET', KEYS[1], updated)
+end
 return updated
 `)
 
 // denyDeviceCodeScript atomically checks pending status and sets denied.
 // KEYS[1] = device code key
-// ARGV[1] = TTL seconds
 // Returns updated JSON on success, nil if not pending.
 var denyDeviceCodeScript = redis.NewScript(`
 local cjson = require('cjson')
@@ -318,7 +312,12 @@ if dc.status ~= "pending" then
 end
 dc.status = "denied"
 local updated = cjson.encode(dc)
-redis.call('SET', KEYS[1], updated, 'EX', ARGV[1])
+local pttl = redis.call('PTTL', KEYS[1])
+if pttl > 0 then
+    redis.call('SET', KEYS[1], updated, 'PX', pttl)
+else
+    redis.call('SET', KEYS[1], updated)
+end
 return updated
 `)
 
@@ -362,6 +361,10 @@ return updated
 // Returns the device code data if the claim succeeded, or an error if the code is not in authorized state.
 // This prevents double-use race conditions.
 func (s *DeviceCodeService) ClaimAuthorizedDeviceCode(ctx context.Context, deviceCode string, clientID string) (*domain.DeviceCode, error) {
+	if clientID == "" {
+		return nil, fmt.Errorf("client_id is required for claiming device code")
+	}
+
 	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
 
 	result, err := s.redis.RunScript(ctx, claimAuthorizedScript, []string{key}, clientID).Result()

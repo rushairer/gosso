@@ -1014,6 +1014,16 @@ func TestUnbindFederatedIdentity(t *testing.T) {
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
 
+	// Mock FindPasswordCredential for last-auth-method check
+	mock.ExpectQuery("SELECT (.+) FROM account_credentials WHERE account_id").
+		WithArgs(accountID, domain.CredentialTypePassword).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "account_id", "credential_type", "identifier", "credential_value",
+			"verified", "primary_credential", "metadata", "created_at", "updated_at",
+			"verified_at", "last_used_at", "deleted_at",
+		}).AddRow("cred-001", accountID, domain.CredentialTypePassword, nil, "hashed-pw",
+			true, true, []byte("{}"), now, now, nil, nil, nil))
+
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE federated_identities SET deleted_at").
 		WithArgs(sqlmock.AnyArg(), identityID, accountID).
@@ -1054,6 +1064,16 @@ func TestUnbindFederatedIdentity_NotFound(t *testing.T) {
 	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
+
+	// Mock FindPasswordCredential for last-auth-method check
+	mock.ExpectQuery("SELECT (.+) FROM account_credentials WHERE account_id").
+		WithArgs(accountID, domain.CredentialTypePassword).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "account_id", "credential_type", "identifier", "credential_value",
+			"verified", "primary_credential", "metadata", "created_at", "updated_at",
+			"verified_at", "last_used_at", "deleted_at",
+		}).AddRow("cred-001", accountID, domain.CredentialTypePassword, nil, "hashed-pw",
+			true, true, []byte("{}"), now, now, nil, nil, nil))
 
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE federated_identities SET deleted_at").

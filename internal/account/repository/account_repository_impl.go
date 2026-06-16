@@ -144,7 +144,7 @@ func (r *accountRepositoryImpl) UpdateAccount(ctx context.Context, tx *sql.Tx, a
 		account.Locale,
 		account.Timezone,
 		metadataJSON,
-		time.Now(),
+		account.UpdatedAt,
 		account.ID,
 	)
 	if err != nil {

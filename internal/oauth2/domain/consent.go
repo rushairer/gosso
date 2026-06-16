@@ -33,6 +33,7 @@ func NewConsent(accountID, clientID string, scopes []string) (*Consent, error) {
 		AccountID: accountID,
 		ClientID:  clientID,
 		Scopes:    scopes,
+		GrantedAt: time.Now(),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}, nil

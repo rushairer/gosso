@@ -66,10 +66,35 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 }
 
 // UnbindFederatedIdentity unbinds a third-party identity.
+// Prevents unbinding the last authentication method if the account has no password.
 func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accountID, identityID string) error {
 	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
 		return err
 	}
+
+	// Check that unbinding won't lock the user out: they must have either a password
+	// or at least one other federated identity remaining.
+	hasPassword := false
+	if cred, err := s.credentialRepo.FindPasswordCredential(ctx, accountID); err == nil && cred != nil {
+		hasPassword = true
+	}
+	if !hasPassword {
+		identities, err := s.federatedIdentityRepo.FindByAccountID(ctx, accountID)
+		if err != nil {
+			return fmt.Errorf("check federated identities: %w", err)
+		}
+		// Count active identities (excluding the one being unbound)
+		activeCount := 0
+		for _, id := range identities {
+			if !id.IsDeleted() && id.ID != identityID {
+				activeCount++
+			}
+		}
+		if activeCount == 0 {
+			return ErrCannotUnbindLastAuthMethod
+		}
+	}
+
 	now := time.Now()
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {

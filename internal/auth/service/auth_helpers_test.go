@@ -285,7 +285,10 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 	roleRepo := &testRoleRepository{roles: make(map[string][]*accountDomain.Role)}
 
 	// MFA service — wired to sqlmock so VerifyBackupCode can open transactions.
-	mfaSvc := NewMFAService(credRepo, sqlDB, "http://localhost:8080", logger, nil)
+	mfaSvc, err := NewMFAService(credRepo, sqlDB, "http://localhost:8080", logger, nil)
+	if err != nil {
+		t.Fatalf("NewMFAService: %v", err)
+	}
 
 	// Passkey service
 	passkeySvc := NewPasskeyService(nil, nil, nil, nil, nil, logger)

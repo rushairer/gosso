@@ -231,8 +231,8 @@ func validateGrantTypes(types []string) error {
 func validateRedirectURIs(uris []string) error {
 	for _, uri := range uris {
 		u, err := url.Parse(uri)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Fragment != "" {
-			return &ValidationError{Message: fmt.Sprintf("redirect_uris must use http or https scheme without fragment: %s", uri)}
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Fragment != "" || u.Host == "" {
+			return &ValidationError{Message: fmt.Sprintf("redirect_uris must use http or https scheme with a valid host and without fragment: %s", uri)}
 		}
 	}
 	return nil

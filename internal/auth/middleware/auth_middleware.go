@@ -72,10 +72,12 @@ func JWTAuthMiddleware(tokenSvc TokenValidator, sessionValidator sessionDomain.S
 		claims, err := ValidateBearerToken(ctx, tokenSvc, sessionValidator)
 		if err != nil {
 			status := http.StatusUnauthorized
+			msg := "unauthorized"
 			if errors.Is(err, ErrTokenScopeNotAllowed) {
 				status = http.StatusForbidden
+				msg = "forbidden"
 			}
-			ctx.AbortWithStatusJSON(status, gouno.NewErrorResponse(status, err.Error()))
+			ctx.AbortWithStatusJSON(status, gouno.NewErrorResponse(status, msg))
 			return
 		}
 

@@ -230,7 +230,8 @@ func newTestMFAService(t *testing.T, credRepo accountRepo.CredentialRepository) 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	svc := service.NewMFAService(credRepo, db, "test-issuer", zap.NewNop(), nil)
+	svc, err := service.NewMFAService(credRepo, db, "test-issuer", zap.NewNop(), nil)
+	require.NoError(t, err)
 	require.NoError(t, svc.SetTOTPEncryptionKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
 	return svc, mock
 }

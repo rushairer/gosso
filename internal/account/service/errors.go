@@ -11,6 +11,7 @@ var (
 	ErrPhoneAlreadyRegistered        = errors.New("phone already registered")
 	ErrAccountNotActive              = errors.New("account is not active")
 	ErrCredentialAlreadyExists       = errors.New("credential already exists")
+	ErrCannotUnbindLastAuthMethod    = errors.New("cannot unbind the only authentication method; set a password first")
 )
 
 // Dependency configuration errors for late-bound dependencies.
