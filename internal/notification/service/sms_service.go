@@ -1,3 +1,8 @@
+// Package service provides notification services (email, SMS).
+//
+// NOTE: SMS functionality is currently a STUB implementation.
+// All SMS verification code requests will return ErrSMSNotImplemented.
+// To enable SMS support, replace StubSMSService with a real gateway implementation.
 package service
 
 import (

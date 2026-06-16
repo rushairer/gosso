@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- OAuth2 `Revoke` endpoint now supports public client token revocation without client authentication per RFC 7009 §2.1 (`internal/oauth2/controller/oauth2_revoke.go`).
+- Social login `NewSocialLoginService` now validates that all provider URLs (`auth_url`, `token_url`, `userinfo_url`) use HTTPS scheme — allows localhost/loopback for development (`internal/auth/service/social_login_service.go`).
+- `NewPasswordCredential` now enforces password strength validation at the domain layer — defense-in-depth alongside existing service-layer checks (`internal/account/domain/credential.go`).
+- `Account.Validate()` now unconditionally validates `Status` field — empty status no longer passes validation, preventing accounts with blank status from persisting (`internal/account/domain/account.go`).
 - OAuth2 token endpoint now returns identical HTTP 401 `invalid_client` for all client authentication failures (client not found, wrong grant type) — prevents client_id enumeration via status code or error string differentiation (`internal/oauth2/controller/oauth2_token.go`).
 - Social login `createNewUser` no longer returns raw database errors to callers — generic error message logged internally for debugging (`internal/auth/service/social_login_service.go`).
 - Removed hardcoded `gosso123` password from `deploy/environments.yaml` — now uses `${POSTGRES_PASSWORD}` environment variable substitution (`deploy/environments.yaml`).
@@ -24,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CSP nonce now uses `base64.RawURLEncoding` instead of `StdEncoding` — safer for HTTP header embedding without quoting (`middleware/middleware.go`).
 
 ### Added
+- `Consent.NewConsent()` factory now generates UUID `ID` and sets `CreatedAt`/`UpdatedAt` — consistent with other domain entity factories (`internal/oauth2/domain/consent.go`).
+- `DeviceCode.Authorize()`, `Deny()`, `MarkUsed()` state transition methods — domain layer now defines valid status transitions with sentinel errors for invalid transitions (`internal/oauth2/domain/device_code.go`).
+- `DeviceCode.CreatedAt` field — tracks when the device code was created (`internal/oauth2/domain/device_code.go`).
+- `NewWebAuthnCredential()` factory with required field validation and `SoftDelete()` lifecycle method — consistent with other domain entities (`internal/auth/domain/webauthn.go`).
+- `Credential` factory functions (`NewCredential`, `NewPasswordCredential`, `NewEmailCredential`, `NewPhoneCredential`) now set `UpdatedAt` — consistent with `CreatedAt` initialization (`internal/account/domain/credential.go`).
 - `createSessionScript` Lua script for atomic session creation — combines `SET session` and `SADD account_index` into a single EVAL call, preventing orphaned sessions on process crash (`internal/session/service/session_service.go`).
 - `deleteIfExpiredScript` Lua script for atomic session expiry verification — checks `PTTL > 0` before deleting, preventing concurrent `RefreshSession` from being invalidated by a stale `ValidateSession` (`internal/session/service/session_service.go`).
 - `validateOAuthProviders()` config validation — checks `ClientID`/`ClientSecret` pairing and `RedirectURI` URL format for all OAuth providers (`config/config.go`).
@@ -42,6 +51,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ErrSessionServiceNotConfigured` sentinel error — returned by `LogoutByAccountID`/`LogoutBySessionID` when session service is nil (`internal/oidc/service/logout_service.go`).
 
 ### Changed
+- `NewSocialLoginService` now returns `(*SocialLoginService, error)` instead of `*SocialLoginService` — allows URL validation errors to surface at initialization (`internal/auth/service/social_login_service.go`, `internal/auth/module.go`).
+- `SoftDeleteAccount` SQL parameter ordering normalized to `$1=deletedAt, $2=status, $3=accountID` — improved readability (`internal/account/repository/account_repository_impl.go`).
+- `passkey_service.go` now uses `domain.NewWebAuthnCredential()` factory instead of direct struct construction — ensures consistent validation (`internal/auth/service/passkey_service.go`).
+- Removed unused `./static:/var/www/static:ro` volume mount from production Docker Compose — the static directory does not exist (`docker-compose.yml`).
+- SMS service package now has explicit documentation that it is a stub implementation (`internal/notification/service/sms_service.go`).
 - `CreateSession` now uses atomic Lua script (`createSessionScript`) for session + index write — eliminates the TOCTOU window between `SET session` and `SADD index` (`internal/session/service/session_service.go`).
 - `expireSession` now uses `deleteIfExpiredScript` Lua script to atomically verify session is still expired before deletion — prevents concurrent `RefreshSession` from being incorrectly invalidated (`internal/session/service/session_service.go`).
 - `EnforceSessionLimit` Lua result type assertion now checks `ok` value and logs error on unexpected types — prevents silent failure if the Lua script returns an unexpected result format (`internal/session/service/session_service.go`).

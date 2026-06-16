@@ -204,7 +204,7 @@ func TestSoftDeleteAccount_Success(t *testing.T) {
 
 	deletedAt := time.Now()
 	mock.ExpectExec("UPDATE accounts").
-		WithArgs(deletedAt, "account-001", string(domain.AccountStatusDeleted)).
+		WithArgs(deletedAt, string(domain.AccountStatusDeleted), "account-001").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewAccountRepository(db)
