@@ -10,9 +10,12 @@ import (
 func TestNewConsent_Success(t *testing.T) {
 	consent, err := NewConsent("account-001", "client-001", []string{"openid", "profile"})
 	require.NoError(t, err)
+	assert.NotEmpty(t, consent.ID)
 	assert.Equal(t, "account-001", consent.AccountID)
 	assert.Equal(t, "client-001", consent.ClientID)
 	assert.Equal(t, []string{"openid", "profile"}, consent.Scopes)
+	assert.False(t, consent.CreatedAt.IsZero())
+	assert.False(t, consent.UpdatedAt.IsZero())
 }
 
 func TestNewConsent_EmptyAccountID(t *testing.T) {

@@ -10,10 +10,14 @@ var ErrDeviceCodeNotFound = errors.New("device code not found")
 
 // DeviceCode domain sentinel errors.
 var (
-	ErrDeviceCodeRequired    = errors.New("device code: device_code is required")
-	ErrUserCodeRequired      = errors.New("device code: user_code is required")
-	ErrDeviceClientRequired  = errors.New("device code: client_id is required")
-	ErrDeviceExpiresRequired = errors.New("device code: expires_at is required")
+	ErrDeviceCodeRequired         = errors.New("device code: device_code is required")
+	ErrUserCodeRequired           = errors.New("device code: user_code is required")
+	ErrDeviceClientRequired       = errors.New("device code: client_id is required")
+	ErrDeviceExpiresRequired      = errors.New("device code: expires_at is required")
+	ErrDeviceCodeAlreadyAuthorized = errors.New("device code: already authorized")
+	ErrDeviceCodeAlreadyDenied    = errors.New("device code: already denied")
+	ErrDeviceCodeAlreadyUsed      = errors.New("device code: already used")
+	ErrDeviceCodeNotAuthorized    = errors.New("device code: not authorized")
 )
 
 // NewDeviceCode creates a new DeviceCode with the required fields.
@@ -42,6 +46,7 @@ func NewDeviceCode(deviceCode, userCode, clientID string, scopes []string, expir
 		Status:     DeviceCodeStatusPending,
 		ExpiresAt:  expiresAt,
 		Interval:   interval,
+		CreatedAt:  time.Now(),
 	}, nil
 }
 
@@ -67,6 +72,7 @@ type DeviceCode struct {
 	AuthorizedAt time.Time        `json:"authorized_at,omitempty"` // When the user authorized the device
 	LastPollAt   time.Time        `json:"last_poll_at"`
 	Interval     int              `json:"interval"` // Minimum seconds between poll requests
+	CreatedAt    time.Time        `json:"created_at"`
 }
 
 // IsExpired returns true if the device code has passed its expiration time.
@@ -77,6 +83,47 @@ func (d *DeviceCode) IsExpired() bool {
 // IsPending returns true if the device code is still awaiting user authorization.
 func (d *DeviceCode) IsPending() bool {
 	return d.Status == DeviceCodeStatusPending
+}
+
+// Authorize transitions the device code from pending to authorized.
+func (d *DeviceCode) Authorize(accountID string) error {
+	if d.Status == DeviceCodeStatusAuthorized {
+		return ErrDeviceCodeAlreadyAuthorized
+	}
+	if d.Status == DeviceCodeStatusDenied {
+		return ErrDeviceCodeAlreadyDenied
+	}
+	if d.Status == DeviceCodeStatusUsed {
+		return ErrDeviceCodeAlreadyUsed
+	}
+	d.Status = DeviceCodeStatusAuthorized
+	d.AccountID = accountID
+	d.AuthorizedAt = time.Now()
+	return nil
+}
+
+// Deny transitions the device code from pending to denied.
+func (d *DeviceCode) Deny() error {
+	if d.Status == DeviceCodeStatusAuthorized {
+		return ErrDeviceCodeAlreadyAuthorized
+	}
+	if d.Status == DeviceCodeStatusDenied {
+		return ErrDeviceCodeAlreadyDenied
+	}
+	if d.Status == DeviceCodeStatusUsed {
+		return ErrDeviceCodeAlreadyUsed
+	}
+	d.Status = DeviceCodeStatusDenied
+	return nil
+}
+
+// MarkUsed transitions the device code from authorized to used.
+func (d *DeviceCode) MarkUsed() error {
+	if d.Status != DeviceCodeStatusAuthorized {
+		return ErrDeviceCodeNotAuthorized
+	}
+	d.Status = DeviceCodeStatusUsed
+	return nil
 }
 
 // Sentinel errors for device code operations.

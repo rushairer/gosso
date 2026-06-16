@@ -99,7 +99,7 @@ func (a *Account) Validate() error {
 	if len(a.DisplayName) > 255 {
 		return ErrDisplayNameTooLong
 	}
-	if a.Status != "" && !IsValidAccountStatus(a.Status) {
+	if !IsValidAccountStatus(a.Status) {
 		return ErrInvalidAccountStatus
 	}
 	if a.Locale == "" {

@@ -1,10 +1,20 @@
 package domain
 
 import (
+	"errors"
 	"time"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	wa "github.com/go-webauthn/webauthn/webauthn"
+	"github.com/google/uuid"
+)
+
+// WebAuthnCredential domain sentinel errors.
+var (
+	ErrWebAuthnAccountIDRequired    = errors.New("webauthn: account_id is required")
+	ErrWebAuthnCredentialIDRequired = errors.New("webauthn: credential_id is required")
+	ErrWebAuthnPublicKeyRequired    = errors.New("webauthn: public_key is required")
+	ErrWebAuthnAlreadyDeleted       = errors.New("webauthn: credential already deleted")
 )
 
 // WebAuthnCredential represents a stored WebAuthn passkey credential.
@@ -25,6 +35,33 @@ type WebAuthnCredential struct {
 	DeletedAt       *time.Time `json:"deleted_at,omitempty"`
 }
 
+// NewWebAuthnCredential creates a new WebAuthnCredential with validation.
+func NewWebAuthnCredential(accountID string, credentialID, publicKey []byte, attestationType string, transports []string, signCount uint32, aagUID []byte, name string) (*WebAuthnCredential, error) {
+	if accountID == "" {
+		return nil, ErrWebAuthnAccountIDRequired
+	}
+	if len(credentialID) == 0 {
+		return nil, ErrWebAuthnCredentialIDRequired
+	}
+	if len(publicKey) == 0 {
+		return nil, ErrWebAuthnPublicKeyRequired
+	}
+	now := time.Now()
+	return &WebAuthnCredential{
+		ID:              uuid.New().String(),
+		AccountID:       accountID,
+		CredentialID:    credentialID,
+		PublicKey:       publicKey,
+		AttestationType: attestationType,
+		Transports:      transports,
+		SignCount:       signCount,
+		AAGUID:          aagUID,
+		Name:            name,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}, nil
+}
+
 // MarkUsed updates LastUsedAt to now.
 func (c *WebAuthnCredential) MarkUsed() {
 	now := time.Now()
@@ -39,6 +76,17 @@ func (c *WebAuthnCredential) IncrementSignCount() {
 // IsDeleted returns true if the credential has been soft-deleted.
 func (c *WebAuthnCredential) IsDeleted() bool {
 	return c.DeletedAt != nil
+}
+
+// SoftDelete marks the credential as deleted. Returns ErrWebAuthnAlreadyDeleted if already deleted.
+func (c *WebAuthnCredential) SoftDelete() error {
+	if c.DeletedAt != nil {
+		return ErrWebAuthnAlreadyDeleted
+	}
+	now := time.Now()
+	c.DeletedAt = &now
+	c.UpdatedAt = now
+	return nil
 }
 
 // ToWebAuthnCredential converts to the go-webauthn library Credential type.

@@ -88,6 +88,7 @@ func NewCredential(accountID string, credType CredentialType, identifier *string
 		Verified:   false,
 		Metadata:   make(map[string]any),
 		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
 	}, nil
 }
 
@@ -103,6 +104,9 @@ func NewPasswordCredential(accountID string, plainPassword string) (*Credential,
 	if len(plainPassword) > utility.MaxPasswordLength {
 		return nil, fmt.Errorf("password must not exceed %d bytes", utility.MaxPasswordLength)
 	}
+	if err := utility.ValidatePasswordStrength(plainPassword); err != nil {
+		return nil, err
+	}
 	hashedPassword, err := HashPassword(plainPassword)
 	if err != nil {
 		return nil, err
@@ -116,6 +120,7 @@ func NewPasswordCredential(accountID string, plainPassword string) (*Credential,
 		Verified:  true, // password credentials are verified at creation
 		Metadata:  make(map[string]any),
 		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}, nil
 }
 
@@ -140,6 +145,7 @@ func NewEmailCredential(accountID string, email string) (*Credential, error) {
 		Verified:   false,
 		Metadata:   make(map[string]any),
 		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
 	}, nil
 }
 
@@ -164,6 +170,7 @@ func NewPhoneCredential(accountID string, phone string) (*Credential, error) {
 		Verified:   false,
 		Metadata:   make(map[string]any),
 		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
 	}, nil
 }
 

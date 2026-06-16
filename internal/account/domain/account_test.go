@@ -143,3 +143,11 @@ func TestAccount_Validate_InvalidStatus(t *testing.T) {
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, ErrInvalidAccountStatus))
 }
+
+func TestAccount_Validate_EmptyStatus(t *testing.T) {
+	a, _ := NewAccount("Test")
+	a.Status = ""
+	err := a.Validate()
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidAccountStatus))
+}

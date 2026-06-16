@@ -3,6 +3,8 @@ package domain
 import (
 	"errors"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // ErrConsentNotFound is returned when a consent record does not exist.
@@ -27,9 +29,12 @@ func NewConsent(accountID, clientID string, scopes []string) (*Consent, error) {
 		scopes = []string{}
 	}
 	return &Consent{
+		ID:        uuid.New().String(),
 		AccountID: accountID,
 		ClientID:  clientID,
 		Scopes:    scopes,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}, nil
 }
 

@@ -153,20 +153,20 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, ac
 	}
 
 	// Save credential to database
-	now := time.Now()
-	cred := &domain.WebAuthnCredential{
-		ID:              uuid.New().String(),
-		AccountID:       accountID,
-		CredentialID:    credential.ID,
-		PublicKey:       credential.PublicKey,
-		SignCount:       credential.Authenticator.SignCount,
-		AAGUID:          credential.Authenticator.AAGUID,
-		Transports:      transportsToStrings(credential.Transport),
-		AttestationType: credential.AttestationType,
-		Name:            "Passkey",
-		Verified:        true,
-		CreatedAt:       now,
+	cred, err := domain.NewWebAuthnCredential(
+		accountID,
+		credential.ID,
+		credential.PublicKey,
+		credential.AttestationType,
+		transportsToStrings(credential.Transport),
+		credential.Authenticator.SignCount,
+		credential.Authenticator.AAGUID,
+		"Passkey",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create webauthn credential: %w", err)
 	}
+	cred.Verified = true
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		return s.credRepo.CreateCredential(ctx, tx, cred)

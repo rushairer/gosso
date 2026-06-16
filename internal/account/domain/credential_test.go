@@ -15,14 +15,19 @@ import (
 // ──────────────────────────────────────────────
 
 func TestNewPasswordCredential_Success(t *testing.T) {
-	cred, err := NewPasswordCredential("account-001", "strong-password-123")
+	cred, err := NewPasswordCredential("account-001", "Strong-Pass-123!")
 	require.NoError(t, err)
 	assert.NotEmpty(t, cred.ID)
 	assert.Equal(t, "account-001", cred.AccountID)
 	assert.Equal(t, CredentialTypePassword, cred.Type)
 	assert.NotEmpty(t, cred.Value)
 	assert.True(t, cred.Verified)
-	assert.NotEqual(t, "strong-password-123", cred.Value) // hashed, not plain
+	assert.NotEqual(t, "Strong-Pass-123!", cred.Value) // hashed, not plain
+}
+
+func TestNewPasswordCredential_WeakPassword(t *testing.T) {
+	_, err := NewPasswordCredential("account-001", "weakpassword")
+	assert.Error(t, err, "password without uppercase, digit, and special char should be rejected")
 }
 
 // ──────────────────────────────────────────────
@@ -30,13 +35,13 @@ func TestNewPasswordCredential_Success(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestVerifyPassword_CorrectPassword(t *testing.T) {
-	cred, err := NewPasswordCredential("account-001", "correct-password")
+	cred, err := NewPasswordCredential("account-001", "Correct-Pass-123!")
 	require.NoError(t, err)
-	assert.True(t, cred.VerifyPassword("correct-password"))
+	assert.True(t, cred.VerifyPassword("Correct-Pass-123!"))
 }
 
 func TestVerifyPassword_WrongPassword(t *testing.T) {
-	cred, err := NewPasswordCredential("account-001", "correct-password")
+	cred, err := NewPasswordCredential("account-001", "Correct-Pass-123!")
 	require.NoError(t, err)
 	assert.False(t, cred.VerifyPassword("wrong-password"))
 }
@@ -147,7 +152,7 @@ func TestNewCredential(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestCredential_MarshalLogObject_ExcludesValue(t *testing.T) {
-	cred, err := NewPasswordCredential("acc-1", "strong-password-123")
+	cred, err := NewPasswordCredential("acc-1", "Strong-Pass-123!")
 	require.NoError(t, err)
 
 	enc := zapcore.NewMapObjectEncoder()

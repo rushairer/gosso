@@ -1,12 +1,14 @@
 package domain
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	wa "github.com/go-webauthn/webauthn/webauthn"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newTestWebAuthnCred() *WebAuthnCredential {
@@ -112,4 +114,65 @@ func TestNewWebAuthnUser_EmptyCredentials(t *testing.T) {
 func TestWebAuthnUser_ImplementsInterface(t *testing.T) {
 	user := NewWebAuthnUser("id", "name", "display", nil)
 	var _ wa.User = user
+}
+
+// ──────────────────────────────────────────────
+// NewWebAuthnCredential
+// ──────────────────────────────────────────────
+
+func TestNewWebAuthnCredential_Success(t *testing.T) {
+	cred, err := NewWebAuthnCredential(
+		"account-001",
+		[]byte("cred-id"),
+		[]byte("public-key"),
+		"none",
+		[]string{"internal"},
+		0,
+		[]byte("aaguid"),
+		"My Passkey",
+	)
+	require.NoError(t, err)
+	assert.NotEmpty(t, cred.ID)
+	assert.Equal(t, "account-001", cred.AccountID)
+	assert.Equal(t, []byte("cred-id"), cred.CredentialID)
+	assert.Equal(t, []byte("public-key"), cred.PublicKey)
+	assert.Equal(t, "none", cred.AttestationType)
+	assert.False(t, cred.CreatedAt.IsZero())
+	assert.False(t, cred.UpdatedAt.IsZero())
+}
+
+func TestNewWebAuthnCredential_EmptyAccountID(t *testing.T) {
+	_, err := NewWebAuthnCredential("", []byte("cred-id"), []byte("pk"), "none", nil, 0, nil, "name")
+	assert.ErrorIs(t, err, ErrWebAuthnAccountIDRequired)
+}
+
+func TestNewWebAuthnCredential_EmptyCredentialID(t *testing.T) {
+	_, err := NewWebAuthnCredential("account-001", nil, []byte("pk"), "none", nil, 0, nil, "name")
+	assert.ErrorIs(t, err, ErrWebAuthnCredentialIDRequired)
+}
+
+func TestNewWebAuthnCredential_EmptyPublicKey(t *testing.T) {
+	_, err := NewWebAuthnCredential("account-001", []byte("cred-id"), nil, "none", nil, 0, nil, "name")
+	assert.ErrorIs(t, err, ErrWebAuthnPublicKeyRequired)
+}
+
+// ──────────────────────────────────────────────
+// SoftDelete
+// ──────────────────────────────────────────────
+
+func TestWebAuthnCredential_SoftDelete_Success(t *testing.T) {
+	c := newTestWebAuthnCred()
+	err := c.SoftDelete()
+	assert.NoError(t, err)
+	assert.True(t, c.IsDeleted())
+	assert.False(t, c.DeletedAt.IsZero())
+	assert.False(t, c.UpdatedAt.IsZero())
+}
+
+func TestWebAuthnCredential_SoftDelete_AlreadyDeleted(t *testing.T) {
+	c := newTestWebAuthnCred()
+	err := c.SoftDelete()
+	require.NoError(t, err)
+	err = c.SoftDelete()
+	assert.True(t, errors.Is(err, ErrWebAuthnAlreadyDeleted))
 }
