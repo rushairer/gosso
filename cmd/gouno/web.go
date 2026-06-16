@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
@@ -35,6 +36,8 @@ func init() {
 func startWebServer(cmd *cobra.Command, args []string) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	startTime := time.Now()
 
 	configPath := getConfigPath(cmd)
 	env := cmd.Flag("env").Value.String()
@@ -85,7 +88,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	engine, err := setupEngine(ctx, globalConfig, logger, modules, db, redis)
+	engine, err := setupEngine(ctx, globalConfig, logger, modules, db, redis, startTime)
 	if err != nil {
 		logger.Error("engine setup failed", zap.Error(err))
 		os.Exit(1)

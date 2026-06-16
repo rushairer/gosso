@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +15,12 @@ import (
 
 // clientDeleteErrorMap maps client deletion errors to HTTP responses.
 var clientDeleteErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: oauth2Domain.ErrClientNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "client not found"}},
+	{Sentinel: oauth2Service.ErrClientAccessDenied, Mapping: controllerutil.ErrorMapping{Status: http.StatusForbidden, Message: "access denied"}},
+}
+
+// updateClientErrorMap maps client update errors to HTTP responses.
+var updateClientErrorMap = []controllerutil.ErrorRule{
 	{Sentinel: oauth2Domain.ErrClientNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "client not found"}},
 	{Sentinel: oauth2Service.ErrClientAccessDenied, Mapping: controllerutil.ErrorMapping{Status: http.StatusForbidden, Message: "access denied"}},
 }
@@ -173,11 +178,8 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 
 	client, err := c.clientSvc.UpdateClientByAccountID(ctx, accountID, clientID, svcReq)
 	if err != nil {
-		if errors.Is(err, oauth2Service.ErrClientAccessDenied) || errors.Is(err, oauth2Domain.ErrClientNotFound) {
-			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "access denied"))
-			return
-		}
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+		controllerutil.HandleServiceError(ctx, c.logger, err, updateClientErrorMap,
+			http.StatusBadRequest, "failed to update client")
 		return
 	}
 

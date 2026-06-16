@@ -20,10 +20,6 @@ type Session struct {
 	IP           string    `json:"ip"`
 	UserAgent    string    `json:"user_agent"`
 	MFAVerified  bool      `json:"mfa_verified"`
-	// Deprecated: Valid is set but never checked — session validity is determined
-	// by TTL and max-age checks in the session service. Retained for backward
-	// compatibility with existing Redis-stored session data.
-	Valid        bool      `json:"valid"`
 	CreatedAt    time.Time `json:"created_at"`
 	LastActiveAt time.Time `json:"last_active_at"`
 	// Metadata stores additional session information (e.g., device type, browser).
@@ -40,7 +36,6 @@ func NewSession(accountID, username, ip, userAgent string, mfaVerified bool) *Se
 		IP:           ip,
 		UserAgent:    userAgent,
 		MFAVerified:  mfaVerified,
-		Valid:        true,
 		CreatedAt:    now,
 		LastActiveAt: now,
 		Metadata:     make(map[string]any),
@@ -55,9 +50,4 @@ func (s *Session) IsExpired(ttl time.Duration) bool {
 // UpdateActivity updates the last-active timestamp.
 func (s *Session) UpdateActivity() {
 	s.LastActiveAt = time.Now()
-}
-
-// Invalidate marks the session as invalid.
-func (s *Session) Invalidate() {
-	s.Valid = false
 }

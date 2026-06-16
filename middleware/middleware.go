@@ -73,7 +73,10 @@ func SecurityHeadersMiddleware(isProduction bool) gin.HandlerFunc {
 	}
 }
 
-const cspNonceKey = "csp_nonce"
+const (
+	cspNonceKey  = "csp_nonce"
+	cspNonceSize = 16
+)
 
 // GetCSPNonce returns the CSP nonce for the current request, or an empty string if not set.
 func GetCSPNonce(ctx *gin.Context) string {
@@ -86,7 +89,7 @@ func GetCSPNonce(ctx *gin.Context) string {
 }
 
 func generateCSPNonce() (string, error) {
-	b := make([]byte, 16)
+	b := make([]byte, cspNonceSize)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}

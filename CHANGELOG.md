@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- Upgraded `golang.org/x/crypto` from v0.52.0 to v0.53.0 — picks up latest security patches (`go.mod`).
 - `UnbindFederatedIdentity` last-auth-method check now runs inside transaction — prevents TOCTOU race that could lock users out (`internal/account/service/account_service_identity.go`).
 - `SetAccountRevokedAfter` now uses Lua ratchet script — prevents concurrent logout requests from overwriting a later revocation timestamp with an earlier one (`internal/token/service/blacklist_service.go`).
 - `VerifyMFALogin` now enforces per-account MFA rate limiting (10 attempts / 5 min) in addition to per-IP — prevents brute-force on TOTP codes with a valid MFA token (`internal/auth/service/auth_login.go`).
@@ -63,6 +64,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ErrSessionServiceNotConfigured` sentinel error — returned by `LogoutByAccountID`/`LogoutBySessionID` when session service is nil (`internal/oidc/service/logout_service.go`).
 
 ### Changed
+- `SendVerification` error handling now uses centralized `controllerutil.HandleServiceError` with `ErrorRule` map — consistent with all other controller error paths (`internal/auth/controller/auth_controller.go`).
+- `UpdateClient` error handling now uses centralized `controllerutil.HandleServiceError` with `ErrorRule` map — stops leaking `err.Error()` to clients (`internal/oauth2/controller/client_controller.go`).
+- CSP nonce size extracted to named `cspNonceSize` constant — eliminates magic number in `generateCSPNonce()` (`middleware/middleware.go`).
+- `/health` endpoint now returns uptime alongside status — provides structured liveness information for monitoring (`router/web.go`).
 - `FederatedIdentityRepository` interface now includes `FindByAccountIDTx` — transactional variant for use inside `RunInTransaction` to prevent TOCTOU races (`internal/account/repository/federated_identity_repository.go`).
 - `redirectWithCode` now accepts `issuer` parameter — includes `iss` in authorization redirect per OIDC Core Section 3.1.2.6 (`internal/oauth2/controller/oauth2_controller.go`).
 - `AccountService` now uses `AccountServiceOptions` for optional cross-module dependencies — eliminates `Set*` methods and their temporal coupling risks (`internal/account/service/account_service.go`, `internal/account/module.go`, `cmd/gouno/web_modules.go`).
@@ -124,9 +129,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Account.Validate()` now checks `Username` length (max 64 chars) — catches invalid usernames from paths that bypass service-level validation (`internal/account/domain/account.go`).
 - `UpdateSession` error message now masks session ID — consistent with all other session logging (`internal/session/service/session_service.go`).
 - `NewTokenService` now validates `accessExpiry` and `refreshExpiry` are positive — prevents zero/negative TTL tokens (`internal/token/service/token_service.go`).
-- `Session.Valid` field marked as deprecated — never checked, validity determined by TTL/max-age (`internal/session/domain/session.go`).
 
 ### Removed
+- `Session.Valid` field and `Invalidate()` method — never read, validity determined by TTL/max-age checks in session service (`internal/session/domain/session.go`).
 - `checkCredentialExists` (non-transactional variant) — dead code, all callers use `checkCredentialExistsTx` instead (`internal/account/service/account_service.go`).
 - `ScopeMFA` and `RoleAdmin` constants removed from `errors.go` — moved to new `constants.go` file (`internal/auth/service/errors.go`).
 - `ContextKeyAccountID` and `ContextKeyClaims` removed from `requestid.go` — moved to new `context_keys.go` file (`middleware/requestid.go`).
@@ -144,7 +149,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Account.Validate()` now checks `Status` against known values when non-empty (`internal/account/domain/account.go`).
 - `IsValidCredentialType()` validation function for `CredentialType` type (`internal/account/domain/credential.go`).
 - `ConsentRepository.FindByAccountAndClientTx()` — transactional variant for consent lookup (`internal/oauth2/repository/consent_repository.go`).
-- `NewSession()` constructor with ID generation and timestamp initialization; `Invalidate()` method for session lifecycle management (`internal/session/domain/session.go`).
+- `NewSession()` constructor with ID generation and timestamp initialization (`internal/session/domain/session.go`).
 - `UpdateClientByAccountID()` service method — encapsulates ownership check, redirect URI validation, grant type validation, and field persistence (`internal/oauth2/service/client_service.go`).
 - Unit tests for `IsValidAccountStatus`, `IsValidCredentialType`, and `Account.Validate()` status check (`internal/account/domain/account_test.go`, `internal/account/domain/credential_test.go`).
 

@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"crypto/subtle"
-	"errors"
 	"net/http"
 	"net/mail"
 	"time"
@@ -30,6 +29,12 @@ var loginErrorMap = []controllerutil.ErrorRule{
 // revokeSessionErrorMap maps session revocation errors to HTTP responses.
 var revokeSessionErrorMap = []controllerutil.ErrorRule{
 	{Sentinel: sessionService.ErrSessionAccessDenied, Mapping: controllerutil.ErrorMapping{Status: http.StatusForbidden, Message: "session not found or access denied"}},
+}
+
+// sendVerificationErrorMap maps verification code send errors to HTTP responses.
+var sendVerificationErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: authService.ErrCooldownActive, Mapping: controllerutil.ErrorMapping{Status: http.StatusTooManyRequests, Message: "too many requests, please try again later"}},
+	{Sentinel: authService.ErrUnsupportedType, Mapping: controllerutil.ErrorMapping{Status: http.StatusBadRequest, Message: "unsupported credential type"}},
 }
 
 // authServiceDeps defines the auth service methods used by AuthController.
@@ -629,15 +634,8 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 	}
 
 	if err := c.verificationSvc.SendCode(ctx, req.Type, req.Identifier, tc.AccountID); err != nil {
-		c.logger.Warn("Failed to send verification code", zap.String("type", req.Type), zap.Error(err))
-		switch {
-		case errors.Is(err, authService.ErrCooldownActive):
-			ctx.JSON(http.StatusTooManyRequests, gouno.NewErrorResponse(http.StatusTooManyRequests, "too many requests, please try again later"))
-		case errors.Is(err, authService.ErrUnsupportedType):
-			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "unsupported credential type"))
-		default:
-			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to send verification code"))
-		}
+		controllerutil.HandleServiceError(ctx, c.logger, err, sendVerificationErrorMap,
+			http.StatusInternalServerError, "failed to send verification code")
 		return
 	}
 

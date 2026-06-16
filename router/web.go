@@ -39,12 +39,13 @@ type RouterDeps struct {
 	Debug            bool
 	SessionValidator sessionDomain.SessionValidator
 	Logger           *zap.Logger
+	StartTime        time.Time
 }
 
 // RegisterWebRouter registers all routes
 func RegisterWebRouter(deps RouterDeps) {
 	// Health check (no auth, no rate limiting)
-	registerHealthRoutes(deps.Server, deps.DB, deps.Redis)
+	registerHealthRoutes(deps.Server, deps.DB, deps.Redis, deps.StartTime)
 
 	// Test routes (debug only)
 	if deps.Debug {
@@ -163,9 +164,12 @@ func registerSwaggerRouter(server *gin.Engine) {
 	}
 }
 
-func registerHealthRoutes(server *gin.Engine, db *sql.DB, redis *cache.RedisClient) {
+func registerHealthRoutes(server *gin.Engine, db *sql.DB, redis *cache.RedisClient, startTime time.Time) {
 	server.GET("/health", func(ctx *gin.Context) {
-		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+		ctx.JSON(http.StatusOK, gin.H{
+			"status": "ok",
+			"uptime": time.Since(startTime).String(),
+		})
 	})
 
 	server.GET("/readiness", func(ctx *gin.Context) {

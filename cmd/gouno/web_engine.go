@@ -17,7 +17,7 @@ import (
 )
 
 // setupEngine configures the Gin engine: middleware + routes
-func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger, m *appModules, db *sql.DB, redis *cache.RedisClient) (*gin.Engine, error) {
+func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger, m *appModules, db *sql.DB, redis *cache.RedisClient, startTime time.Time) (*gin.Engine, error) {
 	engine := gin.New()
 	if err := engine.SetTrustedProxies(cfg.WebServerConfig.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("invalid trusted proxies configuration: %w", err)
@@ -64,6 +64,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		Debug:            cfg.WebServerConfig.Debug,
 		SessionValidator: m.sessionSvc,
 		Logger:           logger,
+		StartTime:        startTime,
 	})
 
 	return engine, nil
