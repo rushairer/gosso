@@ -48,37 +48,53 @@ func TestSafeAuditReason(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────
-// Setters
+// AuthServiceConfig (constructor-based configuration)
 // ──────────────────────────────────────────────
 
-func TestAuthServiceSetters(t *testing.T) {
+func TestAuthServiceConfig(t *testing.T) {
 	fixture := setupTestAuthService(t)
 
+	// Default values when constructed with empty config
 	assert.Equal(t, defaultLoginRateLimitWindow, fixture.svc.loginRateLimitWindow)
 	assert.Equal(t, defaultLoginMaxAttempts, fixture.svc.loginMaxAttempts)
 	assert.Equal(t, defaultLoginMaxAttemptsPerIP, fixture.svc.loginMaxAttemptsPerIP)
 	assert.Equal(t, defaultMFAVerificationTTL, fixture.svc.mfaVerificationTTL)
 
-	fixture.svc.SetLoginRateLimitWindow(30 * time.Minute)
-	fixture.svc.SetLoginMaxAttempts(10)
-	fixture.svc.SetLoginMaxAttemptsPerIP(50)
-	fixture.svc.SetMFAVerificationTTL(10 * time.Minute)
+	// Positive values override defaults via config
+	svc := NewAuthServiceWithConfig(
+		fixture.svc.db, fixture.svc.accountSvc, fixture.svc.sessionSvc,
+		fixture.svc.tokenSvc, fixture.svc.credentialRepo, fixture.svc.roleRepo,
+		fixture.svc.redis, fixture.svc.logger, fixture.svc.auditor,
+		fixture.svc.mfaSvc, fixture.svc.passkeySvc,
+		AuthServiceConfig{
+			LoginRateLimitWindow:  30 * time.Minute,
+			LoginMaxAttempts:      10,
+			LoginMaxAttemptsPerIP: 50,
+			MFAVerificationTTL:    10 * time.Minute,
+		},
+	)
+	assert.Equal(t, 30*time.Minute, svc.loginRateLimitWindow)
+	assert.Equal(t, 10, svc.loginMaxAttempts)
+	assert.Equal(t, 50, svc.loginMaxAttemptsPerIP)
+	assert.Equal(t, 10*time.Minute, svc.mfaVerificationTTL)
 
-	assert.Equal(t, 30*time.Minute, fixture.svc.loginRateLimitWindow)
-	assert.Equal(t, 10, fixture.svc.loginMaxAttempts)
-	assert.Equal(t, 50, fixture.svc.loginMaxAttemptsPerIP)
-	assert.Equal(t, 10*time.Minute, fixture.svc.mfaVerificationTTL)
-
-	// No-op on non-positive values
-	fixture.svc.SetLoginRateLimitWindow(0)
-	fixture.svc.SetLoginMaxAttempts(-1)
-	fixture.svc.SetLoginMaxAttemptsPerIP(0)
-	fixture.svc.SetMFAVerificationTTL(-1 * time.Minute)
-
-	assert.Equal(t, 30*time.Minute, fixture.svc.loginRateLimitWindow)
-	assert.Equal(t, 10, fixture.svc.loginMaxAttempts)
-	assert.Equal(t, 50, fixture.svc.loginMaxAttemptsPerIP)
-	assert.Equal(t, 10*time.Minute, fixture.svc.mfaVerificationTTL)
+	// Zero/negative values keep defaults
+	svc2 := NewAuthServiceWithConfig(
+		fixture.svc.db, fixture.svc.accountSvc, fixture.svc.sessionSvc,
+		fixture.svc.tokenSvc, fixture.svc.credentialRepo, fixture.svc.roleRepo,
+		fixture.svc.redis, fixture.svc.logger, fixture.svc.auditor,
+		fixture.svc.mfaSvc, fixture.svc.passkeySvc,
+		AuthServiceConfig{
+			LoginRateLimitWindow:  0,
+			LoginMaxAttempts:      -1,
+			LoginMaxAttemptsPerIP: 0,
+			MFAVerificationTTL:    -1 * time.Minute,
+		},
+	)
+	assert.Equal(t, defaultLoginRateLimitWindow, svc2.loginRateLimitWindow)
+	assert.Equal(t, defaultLoginMaxAttempts, svc2.loginMaxAttempts)
+	assert.Equal(t, defaultLoginMaxAttemptsPerIP, svc2.loginMaxAttemptsPerIP)
+	assert.Equal(t, defaultMFAVerificationTTL, svc2.mfaVerificationTTL)
 }
 
 // ──────────────────────────────────────────────
@@ -170,7 +186,22 @@ func TestLoginByUsernamePassword_RateLimited(t *testing.T) {
 	defer fixture.sqlDB.Close()
 
 	fixture.seedTestAccount("account-001", "testuser", "password123")
-	fixture.svc.SetLoginMaxAttempts(2)
+
+	// Recreate the service with a low max-attempts threshold for rate-limit testing.
+	fixture.svc = NewAuthServiceWithConfig(
+		fixture.sqlDB,
+		fixture.accountSvc,
+		fixture.sessionSvc,
+		fixture.tokenSvc,
+		fixture.credRepo,
+		fixture.roleRepo,
+		fixture.redis,
+		fixture.logger,
+		nil, // auditor
+		fixture.svc.MFAService(),
+		fixture.svc.PasskeyService(),
+		AuthServiceConfig{LoginMaxAttempts: 2},
+	)
 
 	// First attempt: wrong password, counter=1, not locked
 	_, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{

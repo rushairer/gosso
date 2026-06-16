@@ -82,7 +82,7 @@ func (m *mockCredentialRepo) FindByTypeAndIdentifierTx(ctx context.Context, _ *s
 }
 
 func newTestMFAService(credRepo *mockCredentialRepo) *MFAService {
-	return NewMFAService(credRepo, nil, "http://localhost:8080", nil)
+	return NewMFAService(credRepo, nil, "http://localhost:8080", nil, nil)
 }
 
 // ──────────────────────────────────────────────
@@ -191,7 +191,7 @@ func TestGetMFATypes_UnverifiedTOTPIgnored(t *testing.T) {
 
 func TestNewMFAService_NilLogger(t *testing.T) {
 	credRepo := &mockCredentialRepo{credMap: map[string][]*accountDomain.Credential{}}
-	svc := NewMFAService(credRepo, nil, "http://localhost:8080", nil)
+	svc := NewMFAService(credRepo, nil, "http://localhost:8080", nil, nil)
 	assert.NotNil(t, svc)
 	assert.NotNil(t, svc.logger)
 }
@@ -244,7 +244,7 @@ func (m *dbMockCredentialRepo) CreateCredentials(_ context.Context, _ *sql.Tx, c
 
 func newTestMFAServiceWithDB(t *testing.T, credRepo *dbMockCredentialRepo, sqlDB *sql.DB) *MFAService {
 	t.Helper()
-	svc := NewMFAService(credRepo, sqlDB, "http://localhost:8080", nil)
+	svc := NewMFAService(credRepo, sqlDB, "http://localhost:8080", nil, nil)
 	require.NoError(t, svc.SetTOTPEncryptionKey(testEncryptionKeyHex))
 	return svc
 }
@@ -839,7 +839,7 @@ func TestEnrollTOTP_RequiresEncryptionKey(t *testing.T) {
 	credRepo := &dbMockCredentialRepo{
 		mockCredentialRepo: &mockCredentialRepo{credMap: map[string][]*accountDomain.Credential{}},
 	}
-	svc := NewMFAService(credRepo, sqlDB, "http://localhost:8080", nil)
+	svc := NewMFAService(credRepo, sqlDB, "http://localhost:8080", nil, nil)
 
 	_, err = svc.EnrollTOTP(context.Background(), "account-001")
 	require.Error(t, err)

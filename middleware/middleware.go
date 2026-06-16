@@ -90,7 +90,7 @@ func generateCSPNonce() (string, error) {
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
-	return base64.StdEncoding.EncodeToString(b), nil
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 // MaxBodySizeMiddleware limits the request body to the given number of bytes.

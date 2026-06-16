@@ -10,10 +10,6 @@ const (
 	ContextKeyRequestID = "request_id"
 	// HeaderRequestID is the HTTP header name for the request ID.
 	HeaderRequestID = "X-Request-ID"
-	// ContextKeyAccountID is the gin context key for the account ID.
-	ContextKeyAccountID = "account_id"
-	// ContextKeyClaims is the gin context key for the JWT claims.
-	ContextKeyClaims = "jwt_claims"
 
 	maxRequestIDLength = 128
 )

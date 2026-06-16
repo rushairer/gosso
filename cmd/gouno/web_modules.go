@@ -59,7 +59,10 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		return nil, fmt.Errorf("failed to initialize key service: %w", err)
 	}
 
-	blacklistSvc := tokenService.NewBlacklistService(redis, logger)
+	blacklistSvc, err := tokenService.NewBlacklistService(redis, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize blacklist service: %w", err)
+	}
 	tokenSvc, err := tokenService.NewTokenService(
 		keySvc,
 		cfg.AuthConfig.Issuer,

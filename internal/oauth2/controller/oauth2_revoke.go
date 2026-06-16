@@ -36,6 +36,9 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 	}
 	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
 	if err != nil {
+		// Mitigate timing side-channel: perform a dummy bcrypt so the response
+		// time is indistinguishable from "client found, wrong secret."
+		c.clientAuth.DummyAuthenticate()
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}

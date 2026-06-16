@@ -42,7 +42,8 @@ func setupRealTokenService(t *testing.T) (*tokenService.TokenService, func()) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	keySvc, err := tokenService.NewKeyService("", "", false, logger)
 	require.NoError(t, err)
-	blacklist := tokenService.NewBlacklistService(redisClient, logger)
+	blacklist, err := tokenService.NewBlacklistService(redisClient, logger)
+	require.NoError(t, err)
 	svc, err := tokenService.NewTokenService(
 		keySvc,
 		"http://localhost:8080",

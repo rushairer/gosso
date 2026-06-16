@@ -208,7 +208,7 @@ type authServiceFixture struct {
 	svc        *AuthService
 	redis      *cache.RedisClient
 	mr         interface{ Close() }
-	sqlDB      interface{ Close() error }
+	sqlDB      *sql.DB
 	sqlMock    sqlmock.Sqlmock
 	accountSvc *testAccountService
 	credRepo   *authTestCredentialRepo
@@ -250,7 +250,12 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 		sqlDB.Close()
 		t.Fatalf("failed to create key service: %v", err)
 	}
-	blacklistSvc := tokenService.NewBlacklistService(redisClient, logger)
+	blacklistSvc, err := tokenService.NewBlacklistService(redisClient, logger)
+	if err != nil {
+		mr.Close()
+		sqlDB.Close()
+		t.Fatalf("failed to create blacklist service: %v", err)
+	}
 	tokSvc, err := tokenService.NewTokenService(
 		keySvc,
 		"http://localhost:8080",
@@ -282,7 +287,7 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 	roleRepo := &testRoleRepository{roles: make(map[string][]*accountDomain.Role)}
 
 	// MFA service — wired to sqlmock so VerifyBackupCode can open transactions.
-	mfaSvc := NewMFAService(credRepo, sqlDB, "http://localhost:8080", logger)
+	mfaSvc := NewMFAService(credRepo, sqlDB, "http://localhost:8080", logger, nil)
 
 	// Passkey service
 	passkeySvc := NewPasskeyService(nil, nil, nil, nil, nil, logger)

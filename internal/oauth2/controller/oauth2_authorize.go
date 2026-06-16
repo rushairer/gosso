@@ -130,20 +130,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		allowedScopes := intersectScopes(clientAllowedScopes, existingConsent.Scopes)
 		if len(allowedScopes) == 0 {
 			// No overlap — require re-consent
-			var buf bytes.Buffer
-			if err := c.consentTmpl.Execute(&buf, gin.H{
-				"ClientName": client.Name, "ClientID": clientID,
-				"Scopes": requestedScopes, "Scope": scope, "State": state,
-				"RedirectURI": redirectURI, "CodeChallenge": codeChallenge,
-				"CodeChallengeMethod": codeChallengeMethod, "Nonce": nonce,
-				"CSRFToken": csrfTokenFromCookie(ctx), "ConsentID": consentID,
-				"CSPNonce": middleware.GetCSPNonce(ctx),
-			}); err != nil {
-				c.logger.Error("Failed to render consent template", zap.Error(err))
-				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-				return
-			}
-			ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
+			c.renderConsentTemplate(ctx, client.Name, clientID, requestedScopes, scope, state, redirectURI, codeChallenge, codeChallengeMethod, nonce, consentID)
 			return
 		}
 		code, err := c.authCodeSvc.GenerateCode(ctx, clientID, accountIDStr, redirectURI, allowedScopes, codeChallenge, codeChallengeMethod, nonce)
@@ -155,26 +142,8 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
-	var buf bytes.Buffer
-	if err := c.consentTmpl.Execute(&buf, gin.H{
-		"ClientName":          client.Name,
-		"ClientID":            clientID,
-		"Scopes":              splitScope(scope),
-		"Scope":               scope,
-		"State":               state,
-		"RedirectURI":         redirectURI,
-		"CodeChallenge":       codeChallenge,
-		"CodeChallengeMethod": codeChallengeMethod,
-		"Nonce":               nonce,
-		"CSRFToken":           csrfTokenFromCookie(ctx),
-		"ConsentID":           consentID,
-		"CSPNonce":            middleware.GetCSPNonce(ctx),
-	}); err != nil {
-		c.logger.Error("Failed to render consent template", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-		return
-	}
-	ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
+	// No existing consent — show consent page
+	c.renderConsentTemplate(ctx, client.Name, clientID, splitScope(scope), scope, state, redirectURI, codeChallenge, codeChallengeMethod, nonce, consentID)
 }
 
 // ConsentRequest is the consent approval request body.
@@ -228,20 +197,18 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client", "error_description": "invalid client or redirect_uri"})
 			return
 		}
-		redirectURI := req.RedirectURI
-		if req.State != "" {
-			u, err := url.Parse(redirectURI)
-			if err == nil {
-				q := u.Query()
-				q.Set("error", "access_denied")
-				q.Set("state", req.State)
-				u.RawQuery = q.Encode()
-				redirectURI = u.String()
-			}
-		} else {
-			redirectURI += "?error=access_denied"
+		u, err := url.Parse(req.RedirectURI)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_redirect_uri"})
+			return
 		}
-		ctx.Redirect(http.StatusFound, redirectURI)
+		q := u.Query()
+		q.Set("error", "access_denied")
+		if req.State != "" {
+			q.Set("state", req.State)
+		}
+		u.RawQuery = q.Encode()
+		ctx.Redirect(http.StatusFound, u.String())
 		return
 	}
 
@@ -325,4 +292,28 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	}
 
 	redirectWithCode(ctx, req.RedirectURI, code.Code, req.State)
+}
+
+// renderConsentTemplate renders the consent page and writes it to the response.
+func (c *OAuth2Controller) renderConsentTemplate(ctx *gin.Context, clientName, clientID string, scopes []string, scope, state, redirectURI, codeChallenge, codeChallengeMethod, nonce, consentID string) {
+	var buf bytes.Buffer
+	if err := c.consentTmpl.Execute(&buf, gin.H{
+		"ClientName":          clientName,
+		"ClientID":            clientID,
+		"Scopes":              scopes,
+		"Scope":               scope,
+		"State":               state,
+		"RedirectURI":         redirectURI,
+		"CodeChallenge":       codeChallenge,
+		"CodeChallengeMethod": codeChallengeMethod,
+		"Nonce":               nonce,
+		"CSRFToken":           csrfTokenFromCookie(ctx),
+		"ConsentID":           consentID,
+		"CSPNonce":            middleware.GetCSPNonce(ctx),
+	}); err != nil {
+		c.logger.Error("Failed to render consent template", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+	ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
 }

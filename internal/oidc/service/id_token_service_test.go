@@ -132,7 +132,8 @@ func setupTestIDTokenService(t *testing.T) (*IDTokenService, func()) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	cleanup := mr.Close
 
-	blacklist := tokenService.NewBlacklistService(redisClient, logger)
+	blacklist, errBS := tokenService.NewBlacklistService(redisClient, logger)
+	require.NoError(t, errBS)
 	keySvc, err := tokenService.NewKeyService("", "", false, logger)
 	require.NoError(t, err)
 	tokenSvc, err := tokenService.NewTokenService(

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -138,18 +139,9 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		return
 	}
 
-	var idToken string
-	for _, s := range authCode.Scopes {
-		if s == "openid" {
-			var idErr error
-			idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, authCode.AccountID, authCode.ClientID, authCode.Scopes, authCode.Nonce, authCode.AuthTime, accessToken, authCode.AuthMethods)
-			if idErr != nil {
-				c.logger.Error("Failed to generate ID token", zap.Error(idErr))
-				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "error_description": "failed to generate id_token"})
-				return
-			}
-			break
-		}
+	idToken, ok := c.maybeGenerateIDToken(ctx, authCode.AccountID, authCode.ClientID, authCode.Scopes, authCode.Nonce, authCode.AuthTime, accessToken, authCode.AuthMethods)
+	if !ok {
+		return
 	}
 
 	response := gin.H{
@@ -329,4 +321,25 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 		"expires_in":   int(c.tokenSvc.AccessExpiry().Seconds()),
 		"scope":        strings.Join(scopes, " "),
 	})
+}
+
+// maybeGenerateIDToken generates an ID token if the "openid" scope is present.
+// Returns the ID token string (or empty string if openid scope is not requested).
+// On error, writes an HTTP error response and returns ("", false).
+func (c *OAuth2Controller) maybeGenerateIDToken(ctx *gin.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time, accessToken string, authMethods []string) (string, bool) {
+	if c.idTokenSvc == nil {
+		return "", true
+	}
+	for _, s := range scopes {
+		if s == "openid" {
+			idToken, err := c.idTokenSvc.GenerateIDToken(ctx, accountID, clientID, scopes, nonce, authTime, accessToken, authMethods)
+			if err != nil {
+				c.logger.Error("Failed to generate ID token", zap.Error(err))
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "error_description": "failed to generate id_token"})
+				return "", false
+			}
+			return idToken, true
+		}
+	}
+	return "", true
 }

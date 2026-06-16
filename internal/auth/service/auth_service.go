@@ -215,37 +215,6 @@ func (s *AuthService) MarkPasskeyMFAVerified(ctx context.Context, mfaTokenJTI st
 	return s.redis.Set(ctx, key, "1", s.mfaVerificationTTL)
 }
 
-// SetLoginRateLimitWindow overrides the login rate limit window (for config-driven setup).
-// Must be called during initialization; not safe for concurrent use.
-func (s *AuthService) SetLoginRateLimitWindow(d time.Duration) {
-	if d > 0 {
-		s.loginRateLimitWindow = d
-	}
-}
-
-// SetLoginMaxAttempts overrides the max login attempts per username+IP.
-// Must be called during initialization; not safe for concurrent use.
-func (s *AuthService) SetLoginMaxAttempts(n int) {
-	if n > 0 {
-		s.loginMaxAttempts = n
-	}
-}
-
-// SetLoginMaxAttemptsPerIP overrides the max login attempts per IP.
-// Must be called during initialization; not safe for concurrent use.
-func (s *AuthService) SetLoginMaxAttemptsPerIP(n int) {
-	if n > 0 {
-		s.loginMaxAttemptsPerIP = n
-	}
-}
-
-// SetMFAVerificationTTL overrides the MFA verification flag TTL.
-// Must be called during initialization; not safe for concurrent use.
-func (s *AuthService) SetMFAVerificationTTL(d time.Duration) {
-	if d > 0 {
-		s.mfaVerificationTTL = d
-	}
-}
 
 // updateCredentialLastUsed updates only the last_used_at timestamp of a credential.
 // Uses UpdateLastUsedAt to avoid overwriting concurrent modifications to other fields.

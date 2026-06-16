@@ -39,9 +39,3 @@ var (
 	ErrPasswordResetInvalidToken = errors.New("invalid or expired reset token")
 	ErrPasswordResetExhausted    = errors.New("reset token exhausted, please request a new one")
 )
-
-// Scope constants for JWT token claims
-const ScopeMFA = "mfa"
-
-// Role constants for RBAC
-const RoleAdmin = "admin"

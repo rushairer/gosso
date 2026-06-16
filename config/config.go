@@ -126,7 +126,7 @@ type SMTPConfig struct {
 	Host          string        `mapstructure:"host"`
 	Port          int           `mapstructure:"port"`
 	Username      string        `mapstructure:"username"`
-	Password      string        `mapstructure:"password"`
+	Password      string        `mapstructure:"password" json:"-"`
 	From          string        `mapstructure:"from"`
 	TLSPolicy     string        `mapstructure:"tls_policy"`
 	SendRateLimit time.Duration `mapstructure:"send_rate_limit"` // minimum interval between sends (0 = 100ms default)
@@ -160,7 +160,7 @@ type AuthConfig struct {
 	WebAuthnRPID            string        `mapstructure:"webauthn_rp_id"`
 	WebAuthnRPName          string        `mapstructure:"webauthn_rp_name"`
 	WebAuthnRPOrigin        string        `mapstructure:"webauthn_rp_origin"`
-	TOTPEncryptionKey       string        `mapstructure:"totp_encryption_key"`
+	TOTPEncryptionKey       string        `mapstructure:"totp_encryption_key" json:"-"`
 
 	// Login rate limiting (0 = use built-in defaults)
 	LoginRateLimitWindow  time.Duration `mapstructure:"login_rate_limit_window"`
@@ -211,7 +211,7 @@ type CORSConfig struct {
 // (e.g. Google, GitHub, WeChat).
 type OAuthProviderConfig struct {
 	ClientID     string   `mapstructure:"client_id"`
-	ClientSecret string   `mapstructure:"client_secret"`
+	ClientSecret string   `mapstructure:"client_secret" json:"-"`
 	RedirectURI  string   `mapstructure:"redirect_uri"`
 	Scopes       []string `mapstructure:"scopes"`
 	AuthURL      string   `mapstructure:"auth_url"`

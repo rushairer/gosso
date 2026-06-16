@@ -391,7 +391,11 @@ func TestSessionService_RevokeSession_NoTokenRevoker(t *testing.T) {
 	defer func() { _ = svc.DeleteSession(ctx, session.ID) }()
 
 	err = svc.RevokeSession(ctx, "account-001", session.ID)
-	assert.ErrorIs(t, err, ErrTokenRevokerNotConfigured)
+	assert.NoError(t, err) // token revoker missing is now a warning, not an error
+
+	// Session should still be deleted despite missing token revoker
+	_, getErr := svc.GetSession(ctx, session.ID)
+	assert.Error(t, getErr, "session should be deleted even without token revoker")
 }
 
 // ──────────────────────────────────────────────

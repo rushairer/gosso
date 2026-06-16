@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -69,12 +70,16 @@ func (s *LogoutService) ValidateIDTokenHint(tokenString string) (*IDTokenClaims,
 	return claims, nil
 }
 
+var (
+	// ErrSessionServiceNotConfigured is returned when the session service is not available.
+	ErrSessionServiceNotConfigured = errors.New("session service not configured")
+)
+
 // LogoutByAccountID revokes all sessions and refresh tokens for the given account.
 // Token revocation is handled internally by SessionService.RevokeAllForAccount via its TokenRevoker.
 func (s *LogoutService) LogoutByAccountID(ctx context.Context, accountID string) error {
 	if s.sessionSvc == nil {
-		s.logger.Warn("Session service not available for account logout — skipping session revocation", zap.String("account_id", accountID))
-		return nil
+		return ErrSessionServiceNotConfigured
 	}
 
 	if err := s.sessionSvc.RevokeAllForAccount(ctx, accountID); err != nil {
@@ -98,8 +103,7 @@ func (s *LogoutService) LogoutByAccountID(ctx context.Context, accountID string)
 // LogoutBySessionID deletes a single session and revokes its refresh tokens.
 func (s *LogoutService) LogoutBySessionID(ctx context.Context, accountID, sessionID string) error {
 	if s.sessionSvc == nil {
-		s.logger.Warn("Session service not available for session logout — skipping session revocation", zap.String("session_id", utility.MaskOpaqueID(sessionID)))
-		return nil
+		return ErrSessionServiceNotConfigured
 	}
 
 	// Revoke session FIRST so that even if token revocation fails,

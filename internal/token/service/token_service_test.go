@@ -27,7 +27,8 @@ func setupTestTokenService(t *testing.T) (*TokenService, func()) {
 	keySvc, err := NewKeyService("", "", false, logger)
 	require.NoError(t, err)
 
-	blacklist := NewBlacklistService(redisClient, logger)
+	blacklist, errBS := NewBlacklistService(redisClient, logger)
+	require.NoError(t, errBS)
 	svc, err := NewTokenService(
 		keySvc,
 		"http://localhost:8080",

@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `updateCredentialLastUsed` now uses a dedicated `UpdateLastUsedAt` SQL update instead of `UpdateCredential` — eliminates TOCTOU risk where concurrent modifications to other credential fields could be overwritten (`internal/auth/service/auth_service.go`, `internal/account/repository/`).
 - `validateSMTP()` now rejects `tls_policy: "notls"` in production mode — prevents SMTP credentials from being transmitted in plaintext (`config/config.go`).
 - CSP header now includes `frame-ancestors 'none'` directive — provides defense-in-depth against clickjacking beyond the existing `X-Frame-Options: DENY` (`middleware/middleware.go`).
+- MFA token blacklist now executes immediately after verification instead of via `defer` — closes the race window between MFA verification and session creation where a concurrent request could reuse the same MFA token (`internal/auth/service/auth_login.go`).
+- Empty username/password login attempts now count against rate limits — prevents unlimited probing with empty credentials (`internal/auth/service/auth_login.go`).
+- Sensitive config fields (`SMTPConfig.Password`, `OAuthProviderConfig.ClientSecret`, `AuthConfig.TOTPEncryptionKey`) now have `json:"-"` tags — prevents accidental serialization of secrets (`config/config.go`).
+- OAuth2 `Revoke` endpoint now calls `DummyAuthenticate()` on client lookup failure — eliminates timing side-channel that could distinguish "client not found" from "wrong secret" (`internal/oauth2/controller/oauth2_revoke.go`).
+- Credential query errors no longer include raw identifiers (email/phone) — prevents PII leakage into logs (`internal/account/repository/credential_repository_impl.go`).
+- CSP nonce now uses `base64.RawURLEncoding` instead of `StdEncoding` — safer for HTTP header embedding without quoting (`middleware/middleware.go`).
 
 ### Added
 - `createSessionScript` Lua script for atomic session creation — combines `SET session` and `SADD account_index` into a single EVAL call, preventing orphaned sessions on process crash (`internal/session/service/session_service.go`).
@@ -25,6 +31,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - AuthConfig optional TTL fields (`MaxSessionAge`, `MFAVerificationTTL`, `PasswordResetTokenTTL`, `PasswordResetCooldownTTL`, `VerifyCodeTTL`, `VerifyCooldownTTL`) now reject negative values — prevents silent misconfiguration via environment variables (`config/config.go`).
 - `request_id` now included in all error responses (not just 500-class) — enables clients to correlate 4xx errors with server logs (`internal/controllerutil/error_handler.go`).
 - `AuditLogSync` now returns `error` — callers can detect and handle loss of security-critical audit records instead of silently discarding them (`internal/audit/service/audit.go`).
+- `RequireAccountID()` function — explicit rename from `GetAccountID()` to signal that it aborts the request on failure; old name kept as deprecated alias (`middleware/account.go`).
+- `constants.go` file for auth service scope/role constants — `ScopeMFA` and `RoleAdmin` moved from `errors.go` (`internal/auth/service/constants.go`).
+- `context_keys.go` file for middleware context key constants — `ContextKeyAccountID` and `ContextKeyClaims` moved from `requestid.go` (`middleware/context_keys.go`).
+- `completeLogin()` helper — consolidates session/token creation, rate limit clearing, and audit logging across login methods (`internal/auth/service/auth_login.go`).
+- `signToken()` private method — eliminates duplicated JWT signing logic between `GenerateAccessToken` and `GenerateShortLivedToken` (`internal/token/service/token_service.go`).
+- `maybeGenerateIDToken()` method — consolidates OpenID scope check and ID token generation from `handleAuthorizationCodeGrant` and `handleDeviceCodeGrant` (`internal/oauth2/controller/oauth2_token.go`).
+- `renderConsentTemplate()` helper — consolidates duplicate consent page rendering in `Authorize` (`internal/oauth2/controller/oauth2_authorize.go`).
+- `auditLogSync()` helper on `accountServiceImpl` — wraps `AuditLogSync` with error logging, replacing silent `_ =` discard pattern at 7 call sites (`internal/account/service/account_service.go`).
+- `ErrSessionServiceNotConfigured` sentinel error — returned by `LogoutByAccountID`/`LogoutBySessionID` when session service is nil (`internal/oidc/service/logout_service.go`).
 
 ### Changed
 - `CreateSession` now uses atomic Lua script (`createSessionScript`) for session + index write — eliminates the TOCTOU window between `SET session` and `SADD index` (`internal/session/service/session_service.go`).
@@ -43,9 +58,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `PasswordResetService` background goroutines now use cancellable context — `Wait()` signals goroutines to wind down before blocking, enabling faster graceful shutdown (`internal/auth/service/password_reset_service.go`).
 - Test environment PostgreSQL version aligned from 15 to 16 — matches development and production environments (`docker-compose.test.yml`, `deploy/environments.yaml`).
 - `shutdown_timeout` now explicitly declared in `config/development.yaml` and `config/test.yaml` — removes fragile coupling with Viper default in code (`config/development.yaml`, `config/test.yaml`).
+- `NewBlacklistService` now returns `(*BlacklistService, error)` — validates `redis != nil` on construction (`internal/token/service/blacklist_service.go`).
+- `NewTokenService` now validates `blacklist != nil` — prevents nil pointer panic during token validation (`internal/token/service/token_service.go`).
+- `NewMFAService` variadic `passkeySvc ...*PasskeyService` changed to `passkeySvc *PasskeyService` — clearer optional injection pattern (`internal/auth/service/mfa_service.go`).
+- `handleMFARequirement` now returns `ErrServiceUnavailable` sentinel error instead of wrapped internal error — callers can properly classify the failure (`internal/auth/service/auth_login.go`).
+- `DeviceCodeRequestRequest` renamed to `DeviceCodeRequestParams` — eliminates tautological naming (`internal/oauth2/controller/oauth2_device.go`).
+- `RevokeSession` no longer returns `ErrTokenRevokerNotConfigured` — logs a warning and continues with session deletion, consistent with `RevokeAllForAccount` behavior (`internal/session/service/session_service.go`).
+- `deleteIfExpiredScript` Lua script simplified — removed dead ISO 8601 parsing code that was never used (`internal/session/service/session_service.go`).
+- SubmitConsent denial redirect now uses `url.Parse` + `q.Set` instead of string concatenation — prevents malformed URLs when redirect_uri already contains query parameters (`internal/oauth2/controller/oauth2_authorize.go`).
 
 ### Removed
 - `checkCredentialExists` (non-transactional variant) — dead code, all callers use `checkCredentialExistsTx` instead (`internal/account/service/account_service.go`).
+- `ScopeMFA` and `RoleAdmin` constants removed from `errors.go` — moved to new `constants.go` file (`internal/auth/service/errors.go`).
+- `ContextKeyAccountID` and `ContextKeyClaims` removed from `requestid.go` — moved to new `context_keys.go` file (`middleware/requestid.go`).
 
 ### Fixed
 - `SendVerification` and `ConfirmVerification` endpoints now correctly require JWT authentication — moved from unauthenticated route group to protected group. Previously these endpoints always returned 401 because they called `getClaimsFromContext()` without JWT middleware running (`internal/auth/controller/auth_controller.go`).

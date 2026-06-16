@@ -118,6 +118,14 @@ type accountServiceImpl struct {
 	logger                  *zap.Logger
 }
 
+// auditLogSync writes an audit record synchronously and logs any error.
+// Used for critical security events where loss on crash is unacceptable.
+func (s *accountServiceImpl) auditLogSync(ctx context.Context, record *auditDomain.AuditRecord) {
+	if err := auditService.AuditLogSync(ctx, s.auditor, s.logger, record); err != nil {
+		s.logger.Error("Failed to write sync audit log", zap.Error(err))
+	}
+}
+
 // NewAccountService creates the account service.
 func NewAccountService(
 	db *sql.DB,
@@ -381,7 +389,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	}
 
 	// 6. Audit log (sync — critical security event)
-	_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountDelete,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
@@ -429,7 +437,7 @@ func (s *accountServiceImpl) VerifyContactCredential(ctx context.Context, accoun
 		return err
 	}
 
-	_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionCredentialVerify,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
@@ -501,7 +509,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	}
 
 	// 8. Audit log (sync — critical security event)
-	_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionPasswordChange,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
@@ -605,7 +613,7 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 		return err
 	}
 
-	_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionRoleAssign,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
@@ -629,7 +637,7 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 		return err
 	}
 
-	_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionRoleRemove,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
@@ -665,7 +673,7 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 		return fmt.Errorf("suspend succeeded but session revocation failed: %w", revokeErr)
 	}
 
-	_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountSuspend,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
@@ -684,7 +692,7 @@ func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID stri
 		return err
 	}
 
-	_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountActivate,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),

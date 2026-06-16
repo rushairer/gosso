@@ -82,12 +82,11 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	// Argon2id allows longer passwords than bcrypt, but we still cap it at utility.MaxPasswordLength.
 	const maxUsernameLen = 254
 	const maxPasswordLen = utility.MaxPasswordLength
-	if len(req.Username) > maxUsernameLen || len(req.Password) > maxPasswordLen || req.Username == "" || req.Password == "" {
-		return nil, ErrInvalidCredentials
-	}
 
 	// 1. Check rate limit for login failures (keyed on IP + normalized username).
 	// Fail-closed: if Redis is unavailable, deny login to prevent brute-force attacks.
+	// Rate limit is checked BEFORE input validation so that empty/invalid credentials
+	// are still counted — otherwise an attacker can probe with unlimited empty requests.
 	normalizedUsername := strings.ToLower(req.Username)
 	normalizedIP := utility.NormalizeIP(req.IP)
 	attemptsKey := fmt.Sprintf("login_attempts:%s:%s", normalizedIP, normalizedUsername)
@@ -103,6 +102,11 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	// Check overall IP-level rate limit to prevent username enumeration
 	if err := s.checkIPRateLimit(ctx, req.IP); err != nil {
 		return nil, err
+	}
+
+	// Validate input lengths AFTER rate limit check to prevent unlimited empty-credential probing.
+	if len(req.Username) > maxUsernameLen || len(req.Password) > maxPasswordLen || req.Username == "" || req.Password == "" {
+		return nil, ErrInvalidCredentials
 	}
 
 	// 2. Find account
@@ -202,18 +206,22 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	accountID := claims.AccountID
 	mfaAccountID = &accountID
 
-	// 2. Blacklist MFA token immediately after validation to prevent reuse,
-	// regardless of whether the MFA code verification succeeds or fails.
-	defer func() {
-		if err := s.blacklistMFAToken(ctx, claims); err != nil {
-			s.logger.Error("Failed to blacklist MFA token after verification attempt",
-				zap.String("account_id", accountID), zap.String("jti", claims.ID), zap.Error(err))
-		}
-	}()
-
-	// 3. Verify based on MFA type
+	// 2. Verify based on MFA type
 	if err := s.verifyMFACode(ctx, mfaType, accountID, mfaCode, claims.ID); err != nil {
+		// Blacklist MFA token on failure to prevent brute-force replay.
+		if bErr := s.blacklistMFAToken(ctx, claims); bErr != nil {
+			s.logger.Error("Failed to blacklist MFA token after failed verification",
+				zap.String("account_id", accountID), zap.String("jti", claims.ID), zap.Error(bErr))
+		}
 		return nil, err
+	}
+
+	// 3. Blacklist MFA token immediately after successful verification to prevent reuse
+	// before session creation. This closes the race window between MFA verification and
+	// the eventual function return that would fire a deferred blacklist.
+	if err := s.blacklistMFAToken(ctx, claims); err != nil {
+		s.logger.Error("Failed to blacklist MFA token after verification",
+			zap.String("account_id", accountID), zap.String("jti", claims.ID), zap.Error(err))
 	}
 
 	// 4. Find account
@@ -225,24 +233,8 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 		return nil, ErrInvalidCredentials
 	}
 
-	// 5. Create session and tokens
-	session, accessToken, refreshToken, err := s.createSessionAndTokens(ctx, account, ip, userAgent)
-	if err != nil {
-		return nil, err
-	}
-
-	s.logger.Info("MFA login successful", zap.String("account_id", account.ID))
-
-	// Clear login rate limit counters on successful MFA verification
-	s.clearLoginRateLimits(ctx, ip, account.Username)
-
-	// 6. Audit log
-	s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, ip, &account.ID,
-		map[string]any{"account_id": account.ID, "session_id": session.ID},
-		map[string]any{"ip": ip, "user_agent": userAgent},
-	)
-
-	return buildLoginResult(account, session, accessToken, refreshToken), nil
+	// 5. Complete login (session, tokens, rate limit clear, audit)
+	return s.completeLogin(ctx, account, ip, userAgent, auditDomain.ActionMFALoginSuccess, nil)
 }
 
 // CompletePasskeyMFALogin completes MFA login directly after passkey verification,
@@ -291,24 +283,8 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 		return nil, ErrInvalidCredentials
 	}
 
-	// 5. Create session and tokens
-	session, accessToken, refreshToken, err := s.createSessionAndTokens(ctx, account, ip, userAgent)
-	if err != nil {
-		return nil, err
-	}
-
-	s.logger.Info("Passkey MFA login successful", zap.String("account_id", account.ID))
-
-	// Clear login rate limit counters on successful MFA verification
-	s.clearLoginRateLimits(ctx, ip, account.Username)
-
-	// 6. Audit log
-	s.loginAuditLogs(ctx, auditDomain.ActionMFALoginSuccess, ip, &account.ID,
-		map[string]any{"account_id": account.ID, "session_id": session.ID},
-		map[string]any{"ip": ip, "user_agent": userAgent},
-	)
-
-	return buildLoginResult(account, session, accessToken, refreshToken), nil
+	// 5. Complete login (session, tokens, rate limit clear, audit)
+	return s.completeLogin(ctx, account, ip, userAgent, auditDomain.ActionMFALoginSuccess, nil)
 }
 
 // LoginByPasskey login directly after passkey verification (skipping password check)
@@ -342,26 +318,9 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 		return mfaResult, mfaErr
 	}
 
-	// 4. Create session and tokens
-	session, accessToken, refreshToken, err := s.createSessionAndTokens(ctx, account, ip, userAgent)
-	if err != nil {
-		return nil, err
-	}
-
-	s.logger.Info("Passkey login successful",
-		zap.String("account_id", account.ID),
-		zap.String("session_id", utility.MaskOpaqueID(session.ID)))
-
-	// 5. Audit log
-	s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, ip, &account.ID,
-		map[string]any{"method": "passkey", "account_id": account.ID, "session_id": session.ID},
-		map[string]any{"ip": ip, "user_agent": userAgent},
-	)
-
-	// 6. Clear rate-limit counters on successful passkey login
-	s.clearLoginRateLimits(ctx, ip, account.Username)
-
-	return buildLoginResult(account, session, accessToken, refreshToken), nil
+	// 4. Complete login (session, tokens, rate limit clear, audit)
+	return s.completeLogin(ctx, account, ip, userAgent, auditDomain.ActionLoginSuccess,
+		map[string]any{"method": "passkey"})
 }
 
 // Logout deletes session and revokes tokens
@@ -417,7 +376,7 @@ func (s *AuthService) handleMFARequirement(ctx context.Context, account *account
 	mfaEnabled, err := s.mfaSvc.IsMFAEnabled(ctx, account.ID)
 	if err != nil {
 		s.logger.Error("Failed to check MFA status, denying login", zap.String("account_id", account.ID), zap.Error(err))
-		return nil, fmt.Errorf("check mfa status: %w", err)
+		return nil, ErrServiceUnavailable
 	}
 	if !mfaEnabled {
 		return nil, nil
@@ -555,4 +514,30 @@ func (s *AuthService) ClearLoginRateLimitsByUsername(ctx context.Context, userna
 			break
 		}
 	}
+}
+
+// completeLogin performs the common post-authentication steps: create session and tokens,
+// clear rate limits, and write a success audit log. Returns the login result.
+func (s *AuthService) completeLogin(ctx context.Context, account *accountDomain.Account, ip, userAgent, action string, extraDetail map[string]any) (*LoginResult, error) {
+	session, accessToken, refreshToken, err := s.createSessionAndTokens(ctx, account, ip, userAgent)
+	if err != nil {
+		return nil, err
+	}
+
+	s.logger.Info("Login successful",
+		zap.String("account_id", account.ID),
+		zap.String("session_id", utility.MaskOpaqueID(session.ID)))
+
+	s.clearLoginRateLimits(ctx, ip, account.Username)
+
+	detail := map[string]any{"account_id": account.ID, "session_id": session.ID}
+	for k, v := range extraDetail {
+		detail[k] = v
+	}
+	s.loginAuditLogs(ctx, action, ip, &account.ID,
+		detail,
+		map[string]any{"ip": ip, "user_agent": userAgent},
+	)
+
+	return buildLoginResult(account, session, accessToken, refreshToken), nil
 }

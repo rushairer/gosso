@@ -29,14 +29,18 @@ type BlacklistService struct {
 	logger *zap.Logger
 }
 
-// NewBlacklistService creates a new token blacklist service instance
-func NewBlacklistService(redis *cache.RedisClient, logger *zap.Logger) *BlacklistService {
+// NewBlacklistService creates a new token blacklist service instance.
+// Returns an error if redis is nil.
+func NewBlacklistService(redis *cache.RedisClient, logger *zap.Logger) (*BlacklistService, error) {
+	if redis == nil {
+		return nil, errors.New("blacklist service: redis client is required")
+	}
 	logger = utility.EnsureLogger(logger)
 
 	return &BlacklistService{
 		redis:  redis,
 		logger: logger,
-	}
+	}, nil
 }
 
 // RevokeToken revokes a token (adds it to the blacklist)

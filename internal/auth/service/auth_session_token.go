@@ -81,11 +81,13 @@ func (s *AuthService) loginAuditLogs(ctx context.Context, action string, actor s
 
 // loginAuditLogsSync logs a login failure audit record synchronously for critical security events.
 func (s *AuthService) loginAuditLogsSync(ctx context.Context, action string, actor string, accountID *string, detail map[string]any, meta map[string]any) {
-	_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	if err := auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		action,
 		actor,
 		accountID,
 		utility.MustMarshalJSON(detail),
 		utility.MustMarshalJSON(meta),
-	))
+	)); err != nil {
+		s.logger.Error("Failed to write sync audit log", zap.String("action", action), zap.Error(err))
+	}
 }

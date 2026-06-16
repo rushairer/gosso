@@ -154,7 +154,11 @@ func blacklistExample(ctx context.Context, redisClient *cache.RedisClient, logge
 	logger.Info("========== Token Blacklist Service ==========")
 
 	// 创建黑名单服务
-	blacklistSvc := tokenService.NewBlacklistService(redisClient, logger)
+	blacklistSvc, err := tokenService.NewBlacklistService(redisClient, logger)
+	if err != nil {
+		logger.Error("Failed to create blacklist service", zap.Error(err))
+		return
+	}
 
 	// 模拟一个 JWT Token
 	jti := fmt.Sprintf("token-%s", uuid.New().String())

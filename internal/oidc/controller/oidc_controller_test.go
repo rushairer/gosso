@@ -25,6 +25,8 @@ import (
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Repo "github.com/rushairer/gosso/internal/oauth2/repository"
 	oidcService "github.com/rushairer/gosso/internal/oidc/service"
+	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
+	sessionService "github.com/rushairer/gosso/internal/session/service"
 	"github.com/rushairer/gosso/internal/testutil"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
@@ -396,6 +398,11 @@ func setupTestKeyService(t *testing.T) *tokenService.KeyService {
 
 func setupTestTokenService(t *testing.T, keySvc *tokenService.KeyService, issuer string, redisClient *cache.RedisClient, blacklistSvc *tokenService.BlacklistService) *tokenService.TokenService {
 	t.Helper()
+	if blacklistSvc == nil {
+		var err error
+		blacklistSvc, err = tokenService.NewBlacklistService(redisClient, zap.NewNop())
+		require.NoError(t, err)
+	}
 	tokenSvc, err := tokenService.NewTokenService(keySvc, issuer, 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, nil, zap.NewNop())
 	require.NoError(t, err)
 	return tokenSvc
@@ -445,7 +452,9 @@ func setupLogoutEngine(t *testing.T, clientRepo *mockClientRepo) (*gin.Engine, *
 
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
-	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
+	blacklistSvc, err := tokenService.NewBlacklistService(redisClient, zap.NewNop())
+	require.NoError(t, err)
+	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, blacklistSvc)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
@@ -481,13 +490,12 @@ func TestLogout_InvalidIDTokenHint(t *testing.T) {
 
 func TestLogout_ExpiredIDTokenHint(t *testing.T) {
 	// Expired tokens SHOULD be accepted per OIDC RP-Initiated Logout spec.
-	// This is validated at the service layer (TestValidateIDTokenHint_ExpiredTokenAccepted).
-	// At the controller layer, the accepted token triggers LogoutByAccountID which
-	// gracefully handles missing session service (warns and continues).
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
 	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
-	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	sessionSvc := sessionService.NewSessionService(redisClient, zap.NewNop())
+	sessionSvc.SetTokenRevoker(tokenSvc)
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 
 	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
@@ -520,7 +528,9 @@ func TestLogout_IDTokenHint_WrongIssuer(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
 	tokenSvc := setupTestTokenService(t, keySvc, "https://other-issuer.com", redisClient, nil)
-	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	sessionSvc := sessionService.NewSessionService(redisClient, zap.NewNop())
+	sessionSvc.SetTokenRevoker(tokenSvc)
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
 	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
@@ -549,7 +559,9 @@ func TestLogout_IDTokenHint_NoAudience(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
 	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
-	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	sessionSvc := sessionService.NewSessionService(redisClient, zap.NewNop())
+	sessionSvc.SetTokenRevoker(tokenSvc)
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
 	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
@@ -577,7 +589,9 @@ func TestLogout_IDTokenHint_WrongSignature(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
 	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
-	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	sessionSvc := sessionService.NewSessionService(redisClient, zap.NewNop())
+	sessionSvc.SetTokenRevoker(tokenSvc)
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 
 	// Sign with a DIFFERENT key service
 	otherKeySvc, err := tokenService.NewKeyService("", "", false, zap.NewNop())
@@ -612,7 +626,9 @@ func TestLogout_BearerToken_InvalidSignature(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
 	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
-	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	sessionSvc := sessionService.NewSessionService(redisClient, zap.NewNop())
+	sessionSvc.SetTokenRevoker(tokenSvc)
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 
 	otherKeySvc, err := tokenService.NewKeyService("", "", false, zap.NewNop())
 	require.NoError(t, err)
@@ -649,7 +665,9 @@ func TestLogout_PostLogoutRedirect_InvalidURI(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
 	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
-	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	sessionSvc := sessionService.NewSessionService(redisClient, zap.NewNop())
+	sessionSvc.SetTokenRevoker(tokenSvc)
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
 	clientRepo := &mockClientRepo{
@@ -690,7 +708,9 @@ func TestLogout_PostLogoutRedirect_ValidURI(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
 	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
-	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	sessionSvc := sessionService.NewSessionService(redisClient, zap.NewNop())
+	sessionSvc.SetTokenRevoker(tokenSvc)
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
 	clientRepo := &mockClientRepo{
@@ -734,7 +754,9 @@ func TestLogout_PostLogoutRedirect_ClientNotFound(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
 	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
-	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	sessionSvc := sessionService.NewSessionService(redisClient, zap.NewNop())
+	sessionSvc.SetTokenRevoker(tokenSvc)
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 
 	clientRepo := &mockClientRepo{
 		findByClientIDFn: func() (*oauth2Domain.OAuth2Client, error) {
@@ -775,7 +797,9 @@ func TestLogout_ClientIDMismatch(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
 	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, nil)
-	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	sessionSvc := sessionService.NewSessionService(redisClient, zap.NewNop())
+	sessionSvc.SetTokenRevoker(tokenSvc)
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 
 	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
@@ -913,15 +937,18 @@ func signValidAccessTokenWithClientID(t *testing.T, keySvc *tokenService.KeyServ
 
 // setupLogoutEngineWithBlacklist creates a logout test engine with a working BlacklistService,
 // so that ValidateAccessTokenWithContext can validate tokens end-to-end.
-func setupLogoutEngineWithBlacklist(t *testing.T, clientRepo *mockClientRepo) (*gin.Engine, *tokenService.KeyService) {
+func setupLogoutEngineWithBlacklist(t *testing.T, clientRepo *mockClientRepo) (*gin.Engine, *tokenService.KeyService, *sessionService.SessionService) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
-	blacklistSvc := tokenService.NewBlacklistService(redisClient, zap.NewNop())
+	blacklistSvc, err := tokenService.NewBlacklistService(redisClient, zap.NewNop())
+	require.NoError(t, err)
 	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, blacklistSvc)
-	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	sessionSvc := sessionService.NewSessionService(redisClient, zap.NewNop())
+	sessionSvc.SetTokenRevoker(tokenSvc)
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
 	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, clientRepo, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
@@ -931,7 +958,12 @@ func setupLogoutEngineWithBlacklist(t *testing.T, clientRepo *mockClientRepo) (*
 	oidcGroup := engine.Group("/oidc")
 	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
 
-	return engine, keySvc
+	// Pre-create default test session used by most Bearer token tests
+	require.NoError(t, sessionSvc.CreateSession(context.Background(), &sessionDomain.Session{
+		ID: "session-001", AccountID: "account-001", IP: "127.0.0.1", UserAgent: "test",
+	}))
+
+	return engine, keySvc, sessionSvc
 }
 
 // ──────────────────────────────────────────────
@@ -939,7 +971,7 @@ func setupLogoutEngineWithBlacklist(t *testing.T, clientRepo *mockClientRepo) (*
 // ──────────────────────────────────────────────
 
 func TestLogout_BearerToken_Success(t *testing.T) {
-	engine, keySvc := setupLogoutEngineWithBlacklist(t, &mockClientRepo{})
+	engine, keySvc, _ := setupLogoutEngineWithBlacklist(t, &mockClientRepo{})
 
 	token := signValidAccessToken(t, keySvc, "https://sso.example.com", "account-001", "session-001")
 
@@ -957,7 +989,7 @@ func TestLogout_BearerToken_Success(t *testing.T) {
 }
 
 func TestLogout_BearerToken_WithClientID_NoRedirect(t *testing.T) {
-	engine, keySvc := setupLogoutEngineWithBlacklist(t, &mockClientRepo{})
+	engine, keySvc, _ := setupLogoutEngineWithBlacklist(t, &mockClientRepo{})
 
 	token := signValidAccessTokenWithClientID(t, keySvc, "https://sso.example.com", "account-001", "session-001", "client-001")
 
@@ -984,7 +1016,7 @@ func TestLogout_BearerToken_WithPostLogoutRedirect(t *testing.T) {
 			}, nil
 		},
 	}
-	engine, keySvc := setupLogoutEngineWithBlacklist(t, clientRepo)
+	engine, keySvc, _ := setupLogoutEngineWithBlacklist(t, clientRepo)
 
 	token := signValidAccessTokenWithClientID(t, keySvc, "https://sso.example.com", "account-001", "session-001", "client-001")
 
@@ -1014,7 +1046,7 @@ func TestLogout_BearerToken_InvalidPostLogoutRedirect(t *testing.T) {
 			}, nil
 		},
 	}
-	engine, keySvc := setupLogoutEngineWithBlacklist(t, clientRepo)
+	engine, keySvc, _ := setupLogoutEngineWithBlacklist(t, clientRepo)
 
 	token := signValidAccessTokenWithClientID(t, keySvc, "https://sso.example.com", "account-001", "session-001", "client-001")
 
@@ -1034,9 +1066,15 @@ func TestLogout_BearerToken_InvalidPostLogoutRedirect(t *testing.T) {
 func TestLogout_BearerToken_WithIDTokenHint_SameAccount(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
-	blacklistSvc := tokenService.NewBlacklistService(redisClient, zap.NewNop())
+	blacklistSvc, err := tokenService.NewBlacklistService(redisClient, zap.NewNop())
+	require.NoError(t, err)
 	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, blacklistSvc)
-	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	sessionSvc := sessionService.NewSessionService(redisClient, zap.NewNop())
+	sessionSvc.SetTokenRevoker(tokenSvc)
+	require.NoError(t, sessionSvc.CreateSession(context.Background(), &sessionDomain.Session{
+		ID: "session-001", AccountID: "account-001", IP: "127.0.0.1", UserAgent: "test",
+	}))
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 
 	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 
@@ -1068,7 +1106,8 @@ func TestLogout_BearerToken_WithIDTokenHint_SameAccount(t *testing.T) {
 func TestLogout_BearerToken_WithIDTokenHint_AccountMismatch(t *testing.T) {
 	keySvc := setupTestKeyService(t)
 	redisClient, _ := testutil.SetupTestRedis(t)
-	blacklistSvc := tokenService.NewBlacklistService(redisClient, zap.NewNop())
+	blacklistSvc, err := tokenService.NewBlacklistService(redisClient, zap.NewNop())
+	require.NoError(t, err)
 	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, blacklistSvc)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
 

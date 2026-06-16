@@ -127,7 +127,7 @@ func findByTypeAndIdentifier(ctx context.Context, queryRow func(context.Context,
 	cred, err := scanCredential(queryRow(ctx, findByTypeAndIdentifierQuery, credType, identifier))
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: type=%s identifier=%s", ErrCredentialNotFound, credType, identifier)
+		return nil, fmt.Errorf("%w: type=%s", ErrCredentialNotFound, credType)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query credential: %w", err)

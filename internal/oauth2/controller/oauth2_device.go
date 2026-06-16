@@ -46,8 +46,8 @@ func (c *OAuth2Controller) renderResultTemplate(ctx *gin.Context, data gin.H) bo
 	return true
 }
 
-// DeviceCodeRequestRequest is the device code initiation request body.
-type DeviceCodeRequestRequest struct {
+// DeviceCodeRequestParams is the device code initiation request body.
+type DeviceCodeRequestParams struct {
 	ClientID     string `form:"client_id" binding:"required,max=128"`
 	ClientSecret string `form:"client_secret" binding:"max=256"`
 	Scope        string `form:"scope" binding:"max=2048"`
@@ -55,7 +55,7 @@ type DeviceCodeRequestRequest struct {
 
 // DeviceCodeRequest POST /oauth2/device/code
 func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
-	var req DeviceCodeRequestRequest
+	var req DeviceCodeRequestParams
 	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "client_id is required"})
 		return
@@ -332,20 +332,9 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		return
 	}
 
-	var idToken string
-	if c.idTokenSvc != nil {
-		for _, s := range dc.Scopes {
-			if s == "openid" {
-				var idErr error
-				idToken, idErr = c.idTokenSvc.GenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", dc.AuthorizedAt, accessToken, nil)
-				if idErr != nil {
-					c.logger.Error("Failed to generate ID token for device code", zap.Error(idErr))
-					ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-					return
-				}
-				break
-			}
-		}
+	idToken, ok := c.maybeGenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", dc.AuthorizedAt, accessToken, nil)
+	if !ok {
+		return
 	}
 
 	response := gin.H{

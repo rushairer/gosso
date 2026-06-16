@@ -20,7 +20,8 @@ func setupTestBlacklistService(t *testing.T) (*BlacklistService, func(), *minire
 	redisClient, mr := testutil.SetupTestRedis(t)
 	cleanup := mr.Close
 
-	service := NewBlacklistService(redisClient, logger)
+	service, errBS := NewBlacklistService(redisClient, logger)
+	require.NoError(t, errBS)
 
 	return service, cleanup, mr
 }

@@ -117,19 +117,7 @@ if not data then
     return 1  -- already gone, treat as deleted
 end
 
--- Check absolute max session age via created_at in the stored JSON.
-local maxAgeSecs = tonumber(ARGV[1])
-if maxAgeSecs and maxAgeSecs > 0 then
-    local cjson = require('cjson')
-    local ok, obj = pcall(cjson.decode, data)
-    if ok and obj.created_at then
-        local now = tonumber(redis.call('TIME')[1])
-        -- Parse ISO 8601 created_at to epoch (approximate: use PEXPIRE-based check instead)
-        -- Simpler: if key TTL is very low, the session is near expiry anyway.
-    end
-end
-
--- The key insight: if PTTL > 0, someone recently refreshed the TTL (sliding window).
+-- If PTTL > 0, someone recently refreshed the TTL (sliding window).
 -- A truly expired session will have PTTL <= 0 (key expired or about to expire).
 local pttl = redis.call('PTTL', KEYS[1])
 if pttl > 0 then
@@ -476,9 +464,8 @@ func (s *SessionService) expireSession(ctx context.Context, sessionID string) {
 	}
 
 	sessionKey := s.buildSessionKey(sessionID)
-	maxAgeSecs := int(math.Ceil(s.maxSessionAge.Seconds()))
 	result, err := s.redis.RunScript(ctx, deleteIfExpiredScript,
-		[]string{sessionKey}, maxAgeSecs).Int()
+		[]string{sessionKey}).Int()
 	if err != nil {
 		s.logger.Warn("Failed to atomically check and delete expired session",
 			zap.String("session_id", maskSessionID(sessionID)), zap.Error(err))
@@ -650,7 +637,8 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 			return fmt.Errorf("revoke tokens for session: %w", err)
 		}
 	} else {
-		return ErrTokenRevokerNotConfigured
+		s.logger.Warn("Token revoker not configured, skipping token revocation during session revoke",
+			zap.String("session_id", maskSessionID(sessionID)))
 	}
 
 	// Delete session key

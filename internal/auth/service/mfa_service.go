@@ -53,19 +53,16 @@ type MFAServiceConfig struct {
 	BackupCodeLength  int    // default: defaultBackupCodeLength
 }
 
-// NewMFAService creates an MFA service instance
+// NewMFAService creates an MFA service instance.
+// passkeySvc is optional and may be nil.
 func NewMFAService(
 	credentialRepo accountRepo.CredentialRepository,
 	db *sql.DB,
 	issuer string,
 	logger *zap.Logger,
-	passkeySvc ...*PasskeyService,
+	passkeySvc *PasskeyService,
 ) *MFAService {
-	var ps *PasskeyService
-	if len(passkeySvc) > 0 {
-		ps = passkeySvc[0]
-	}
-	return NewMFAServiceWithConfig(credentialRepo, db, issuer, logger, MFAServiceConfig{}, ps)
+	return NewMFAServiceWithConfig(credentialRepo, db, issuer, logger, MFAServiceConfig{}, passkeySvc)
 }
 
 // NewMFAServiceWithConfig creates an MFA service instance with the given config.

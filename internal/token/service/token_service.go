@@ -64,6 +64,9 @@ func NewTokenService(
 	if redis == nil {
 		return nil, errors.New("token service: redis client is required")
 	}
+	if blacklist == nil {
+		return nil, errors.New("token service: blacklist service is required")
+	}
 	return &TokenService{
 		keySvc:        keySvc,
 		issuer:        issuer,
@@ -79,7 +82,6 @@ func NewTokenService(
 // GenerateAccessToken generates a JWT access token (RS256)
 func (s *TokenService) GenerateAccessToken(claims *domain.AccessTokenClaims) (string, error) {
 	now := time.Now()
-	// Copy claims to avoid mutating caller's state
 	clonedClaims := *claims
 	if clonedClaims.ID == "" {
 		clonedClaims.ID = uuid.New().String()
@@ -89,15 +91,7 @@ func (s *TokenService) GenerateAccessToken(claims *domain.AccessTokenClaims) (st
 	clonedClaims.IssuedAt = jwt.NewNumericDate(now)
 	clonedClaims.ExpiresAt = jwt.NewNumericDate(now.Add(s.accessExpiry))
 
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, &clonedClaims)
-	token.Header["kid"] = s.keySvc.KeyID()
-	tokenString, err := token.SignedString(s.keySvc.PrivateKey())
-	if err != nil {
-		s.logger.Error("Failed to sign access token", zap.Error(err))
-		return "", fmt.Errorf("sign access token: %w", err)
-	}
-
-	return tokenString, nil
+	return s.signToken(&clonedClaims, "access token")
 }
 
 // GenerateShortLivedToken generates a JWT access token (RS256) that respects
@@ -127,14 +121,18 @@ func (s *TokenService) GenerateShortLivedToken(claims *domain.AccessTokenClaims)
 		clonedClaims.ExpiresAt = maxExpiry
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, &clonedClaims)
+	return s.signToken(&clonedClaims, "short-lived token")
+}
+
+// signToken creates and signs a JWT with RS256, setting the kid header.
+func (s *TokenService) signToken(claims *domain.AccessTokenClaims, label string) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = s.keySvc.KeyID()
 	tokenString, err := token.SignedString(s.keySvc.PrivateKey())
 	if err != nil {
-		s.logger.Error("Failed to sign short-lived token", zap.Error(err))
-		return "", fmt.Errorf("sign short-lived token: %w", err)
+		s.logger.Error("Failed to sign "+label, zap.Error(err))
+		return "", fmt.Errorf("sign %s: %w", label, err)
 	}
-
 	return tokenString, nil
 }
 
