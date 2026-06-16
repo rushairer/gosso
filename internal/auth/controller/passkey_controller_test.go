@@ -84,6 +84,9 @@ func (m *mockTokenMgrForPasskey) RotateRefreshToken(_ context.Context, _ string)
 	return &tokenDomain.RefreshToken{Token: "rotated"}, nil
 }
 func (m *mockTokenMgrForPasskey) RevokeRefreshToken(_ context.Context, _ string) error { return nil }
+func (m *mockTokenMgrForPasskey) RevokeAccessToken(_ context.Context, _ string, _ time.Time) error {
+	return nil
+}
 func (m *mockTokenMgrForPasskey) IntrospectToken(_ context.Context, _ string) (map[string]any, error) {
 	return map[string]any{"active": true}, nil
 }

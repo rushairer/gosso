@@ -16,25 +16,12 @@ import (
 	"go.uber.org/zap"
 
 	authMiddleware "github.com/rushairer/gosso/internal/auth/middleware"
+	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/cache"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
-	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
-
-// TokenManager defines the token operations needed by the OAuth2 controller.
-type TokenManager interface {
-	GenerateAccessToken(claims *tokenDomain.AccessTokenClaims) (string, error)
-	GenerateRefreshToken(ctx context.Context, accountID, clientID, sessionID, scope string) (*tokenDomain.RefreshToken, error)
-	ValidateRefreshToken(ctx context.Context, token string) (*tokenDomain.RefreshToken, error)
-	ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*tokenDomain.AccessTokenClaims, error)
-	RotateRefreshToken(ctx context.Context, oldToken string) (*tokenDomain.RefreshToken, error)
-	RevokeRefreshToken(ctx context.Context, token string) error
-	RevokeAccessToken(ctx context.Context, jti string, expiresAt time.Time) error
-	IntrospectToken(ctx context.Context, tokenString string) (map[string]any, error)
-	AccessExpiry() time.Duration
-}
 
 // DeviceCodeManager defines the device code operations needed by the OAuth2 controller.
 type DeviceCodeManager interface {
@@ -91,7 +78,7 @@ type OAuth2Controller struct {
 	clientSvc        oauth2Service.OAuth2ClientService
 	authCodeSvc      AuthCodeManager
 	consentSvc       ConsentManager
-	tokenSvc         TokenManager
+	tokenSvc         authService.TokenManager
 	idTokenSvc       IDTokenManager
 	deviceCodeSvc    DeviceCodeManager
 	clientAuth       ClientAuthManager
@@ -110,10 +97,10 @@ func NewOAuth2Controller(
 	clientSvc oauth2Service.OAuth2ClientService,
 	authCodeSvc AuthCodeManager,
 	consentSvc ConsentManager,
-	tokenSvc TokenManager,
-	idTokenSvc IDTokenManager,
-	deviceCodeSvc DeviceCodeManager,
-	clientAuth ClientAuthManager,
+	tokenSvc         authService.TokenManager,
+	idTokenSvc       IDTokenManager,
+	deviceCodeSvc    DeviceCodeManager,
+	clientAuth       ClientAuthManager,
 	accountValidator AccountValidator,
 	sessionValidator sessionDomain.SessionValidator,
 	redis *cache.RedisClient,

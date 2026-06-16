@@ -44,7 +44,7 @@ type appModules struct {
 
 // initModules initializes all business modules and controllers
 func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logger *zap.Logger, cfg config.GoUnoConfig, auditor *auditService.Auditor) (*appModules, error) {
-	accountMod := account.InitializeAccountModule(db, auditor, logger)
+	accountMod := account.InitializeAccountModule(db, auditor, logger, nil)
 
 	if cfg.AuthConfig.RSAKeyBits > 0 {
 		tokenService.SetRSAKeyBits(cfg.AuthConfig.RSAKeyBits)
@@ -100,17 +100,16 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		return nil, fmt.Errorf("failed to initialize auth module: %w", err)
 	}
 
-	// Wire session revoker into account service (for account deletion -> session revocation)
-	accountMod.Service.SetSessionRevoker(authMod.SessionService)
-
 	oauth2Mod := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig)
 	oidcMod := oidc.InitializeOIDCModule(tokenSvc, accountMod.Service, cfg.AuthConfig, authMod.SessionService, accountMod.CredentialRepo, logger)
 
-	// Wire OAuth2 client deleter into account service (for account deletion -> OAuth2 client cascade)
-	accountMod.Service.SetOAuth2ClientDeleter(&oauth2ClientDeleterAdapter{clientRepo: oauth2Mod.ClientRepo})
-
-	// Wire consent cache invalidator into account service (for account deletion -> consent cache cleanup)
-	accountMod.Service.SetConsentCacheInvalidator(oauth2Mod.ConsentService)
+	// Wire cross-module dependencies into account service via a single atomic call.
+	// This replaces the previous three Set* calls that had temporal coupling risks.
+	accountMod.Service.SetOptions(&accountService.AccountServiceOptions{
+		SessionRevoker:          authMod.SessionService,
+		OAuth2ClientDeleter:     &oauth2ClientDeleterAdapter{clientRepo: oauth2Mod.ClientRepo},
+		ConsentCacheInvalidator: oauth2Mod.ConsentService,
+	})
 
 	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, !cfg.WebServerConfig.Debug, logger)
 	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &oauth2Service.ClientAuthenticator{}, &accountValidatorAdapter{accountSvc: accountMod.Service, logger: logger}, authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)

@@ -254,6 +254,11 @@ func (a *Auditor) LogSync(ctx context.Context, record *domain.AuditRecord) error
 
 // AuditLog is a convenience helper that submits an audit record asynchronously
 // and logs a warning on failure. Safe when auditor is nil.
+//
+// Use AuditLog for non-critical events where occasional loss is acceptable
+// (e.g. account registration, federated identity binding). For security-critical
+// events (login failures, account deletion, role changes, password changes) where
+// loss on crash is unacceptable, use AuditLogSync instead.
 func AuditLog(ctx context.Context, auditor *Auditor, logger *zap.Logger, record *domain.AuditRecord) {
 	if auditor != nil {
 		if err := auditor.Log(ctx, record); err != nil {

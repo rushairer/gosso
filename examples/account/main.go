@@ -34,7 +34,7 @@ func main() {
 	defer func() { _ = sqlDB.Close() }()
 
 	// 2. Initialize the account service
-	accountMod := account.InitializeAccountModule(sqlDB, nil, nil)
+	accountMod := account.InitializeAccountModule(sqlDB, nil, nil, nil)
 	accountService := accountMod.Service
 
 	ctx := context.Background()

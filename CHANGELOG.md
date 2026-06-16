@@ -51,6 +51,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ErrSessionServiceNotConfigured` sentinel error — returned by `LogoutByAccountID`/`LogoutBySessionID` when session service is nil (`internal/oidc/service/logout_service.go`).
 
 ### Changed
+- `AccountService` now uses `AccountServiceOptions` for optional cross-module dependencies — eliminates `Set*` methods and their temporal coupling risks (`internal/account/service/account_service.go`, `internal/account/module.go`, `cmd/gouno/web_modules.go`).
+- `NewAccountService` now returns `*accountServiceImpl` instead of `AccountService` interface — follows Go convention of returning concrete types (`internal/account/service/account_service.go`).
+- `account_service.go` (28KB) split into 3 focused files: core CRUD in `account_service.go`, management operations in `account_service_manage.go`, identity/role helpers in `account_service_identity.go`.
+- `session_service.go` (26KB) split into 3 focused files: core operations in `session_service.go`, Lua scripts in `session_service_scripts.go`, management methods in `session_service_manage.go`.
+- `token_service.go` (20KB) split into 3 focused files: generation in `token_service.go`, validation in `token_service_validate.go`, revocation in `token_service_revoke.go`.
+- `auth_login.go` (20KB) split into 2 focused files: login flows in `auth_login.go`, helper functions in `auth_login_helpers.go`.
+- `TokenManager` interface unified — `RevokeAccessToken` method added to `auth/service/interfaces.go`, duplicate removed from `oauth2/controller/oauth2_controller.go`.
+- `utility/timing.go` renamed to `utility/security.go` — better reflects the file's purpose (bcrypt timing-attack mitigation).
+- `AuditLog` documentation now clarifies that security-critical events must use `AuditLogSync` instead.
 - `NewSocialLoginService` now returns `(*SocialLoginService, error)` instead of `*SocialLoginService` — allows URL validation errors to surface at initialization (`internal/auth/service/social_login_service.go`, `internal/auth/module.go`).
 - `SoftDeleteAccount` SQL parameter ordering normalized to `$1=deletedAt, $2=status, $3=accountID` — improved readability (`internal/account/repository/account_repository_impl.go`).
 - `passkey_service.go` now uses `domain.NewWebAuthnCredential()` factory instead of direct struct construction — ensures consistent validation (`internal/auth/service/passkey_service.go`).

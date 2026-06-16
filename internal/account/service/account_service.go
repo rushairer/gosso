@@ -3,10 +3,8 @@ package service
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/mail"
 	"strings"
 	"time"
 
@@ -68,14 +66,10 @@ type AccountService interface {
 	// GetAccountRoles returns the roles assigned to the account.
 	GetAccountRoles(ctx context.Context, accountID string) ([]*domain.Role, error)
 
-	// SetSessionRevoker sets the session revoker dependency (initialization-time only).
-	SetSessionRevoker(revoker SessionRevoker)
-
-	// SetOAuth2ClientDeleter sets the OAuth2 client deleter dependency (initialization-time only).
-	SetOAuth2ClientDeleter(deleter OAuth2ClientDeleter)
-
-	// SetConsentCacheInvalidator sets the consent cache invalidator dependency (initialization-time only).
-	SetConsentCacheInvalidator(invalidator ConsentCacheInvalidator)
+	// SetOptions configures optional cross-module dependencies.
+	// Must be called during initialization before any dependent operations.
+	// The call is atomic: all fields in opts are applied together.
+	SetOptions(opts *AccountServiceOptions)
 }
 
 // RegisterAccountRequest is the request payload for account registration.
@@ -105,6 +99,14 @@ type ConsentCacheInvalidator interface {
 	DeleteConsentsByAccount(ctx context.Context, accountID string) error
 }
 
+// AccountServiceOptions holds optional dependencies for NewAccountService.
+// All fields are optional — nil values are handled at runtime with safe fallbacks.
+type AccountServiceOptions struct {
+	SessionRevoker          SessionRevoker          // required for SoftDelete/ChangePassword/Suspend
+	OAuth2ClientDeleter     OAuth2ClientDeleter     // required for SoftDelete
+	ConsentCacheInvalidator ConsentCacheInvalidator // optional, non-critical
+}
+
 type accountServiceImpl struct {
 	db                      *sql.DB
 	accountRepo             repository.AccountRepository
@@ -127,6 +129,7 @@ func (s *accountServiceImpl) auditLogSync(ctx context.Context, record *auditDoma
 }
 
 // NewAccountService creates the account service.
+// opts may be nil; optional dependencies can be set via AccountServiceOptions.
 func NewAccountService(
 	db *sql.DB,
 	accountRepo repository.AccountRepository,
@@ -135,7 +138,8 @@ func NewAccountService(
 	roleRepo repository.RoleRepository,
 	auditor *auditService.Auditor,
 	logger *zap.Logger,
-) AccountService {
+	opts *AccountServiceOptions,
+) *accountServiceImpl {
 	logger = utility.EnsureLogger(logger)
 	svc := &accountServiceImpl{
 		db:                    db,
@@ -146,27 +150,21 @@ func NewAccountService(
 		auditor:               auditor,
 		logger:                logger,
 	}
+	if opts != nil {
+		svc.sessionRevoker = opts.SessionRevoker
+		svc.oauth2ClientDeleter = opts.OAuth2ClientDeleter
+		svc.consentCacheInvalidator = opts.ConsentCacheInvalidator
+	}
 	return svc
 }
 
-// SetSessionRevoker sets the session revoker dependency.
-// Must be called during initialization. The runtime nil check in
-// SoftDeleteAccount/ChangePassword provides a safe fallback if omitted.
-func (s *accountServiceImpl) SetSessionRevoker(revoker SessionRevoker) {
-	s.sessionRevoker = revoker
-}
-
-// SetOAuth2ClientDeleter sets the OAuth2 client deleter dependency.
-// Must be called during initialization. The runtime nil check in
-// SoftDeleteAccount provides a safe fallback if omitted.
-func (s *accountServiceImpl) SetOAuth2ClientDeleter(deleter OAuth2ClientDeleter) {
-	s.oauth2ClientDeleter = deleter
-}
-
-// SetConsentCacheInvalidator sets the consent cache invalidator dependency.
-// Optional — failure to set this is non-critical (consent TTL will expire naturally).
-func (s *accountServiceImpl) SetConsentCacheInvalidator(invalidator ConsentCacheInvalidator) {
-	s.consentCacheInvalidator = invalidator
+// SetOptions configures optional cross-module dependencies atomically.
+func (s *accountServiceImpl) SetOptions(opts *AccountServiceOptions) {
+	if opts != nil {
+		s.sessionRevoker = opts.SessionRevoker
+		s.oauth2ClientDeleter = opts.OAuth2ClientDeleter
+		s.consentCacheInvalidator = opts.ConsentCacheInvalidator
+	}
 }
 
 // requireActiveAccount looks up an account by ID and returns it only if it exists and is active.
@@ -313,512 +311,4 @@ func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.
 	))
 
 	return nil
-}
-
-// SoftDeleteAccount soft-deletes an account (cascades to all related data).
-// Idempotent: returns nil if the account is already deleted.
-func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID string) error {
-	// 1. Validate request
-	if accountID == "" {
-		return domain.ErrAccountIDRequired
-	}
-
-	// 2. Fail-fast: ensure dependencies are configured before starting the transaction
-	if s.sessionRevoker == nil {
-		return fmt.Errorf("%w: cannot revoke sessions on account deletion", ErrSessionRevokerNotBound)
-	}
-	if s.oauth2ClientDeleter == nil {
-		return fmt.Errorf("%w: cannot cascade-delete OAuth2 clients", ErrOAuth2ClientDeleterNotBound)
-	}
-
-	// 3. Soft-delete in transaction (includes idempotency check to prevent concurrent deletion)
-	now := time.Now()
-	txStart := time.Now()
-
-	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		// Re-check inside transaction to prevent concurrent deletion
-		account, err := s.accountRepo.FindByIDIncludingDeletedTx(ctx, tx, accountID)
-		if err != nil {
-			return fmt.Errorf("find account: %w", err)
-		}
-		if account.DeletedAt != nil {
-			return nil // idempotent
-		}
-
-		if err := s.credentialRepo.SoftDeleteCredentialsByAccount(ctx, tx, accountID, now); err != nil {
-			return err
-		}
-		if err := s.federatedIdentityRepo.SoftDeleteByAccountID(ctx, tx, accountID, now); err != nil {
-			return err
-		}
-		if err := s.roleRepo.SoftDeleteRolesByAccountID(ctx, tx, accountID, now); err != nil {
-			return err
-		}
-		if err := s.oauth2ClientDeleter.SoftDeleteOAuth2ClientsByAccount(ctx, tx, accountID, now); err != nil {
-			return err
-		}
-		return s.accountRepo.SoftDeleteAccount(ctx, tx, accountID, now)
-	})
-	txDuration := time.Since(txStart)
-	if txDuration > 2*time.Second {
-		s.logger.Warn("Slow account soft-delete transaction",
-			zap.String("account_id", accountID),
-			zap.Duration("duration", txDuration))
-	}
-	if err != nil {
-		return err
-	}
-
-	// 4. Revoke all active sessions and refresh tokens.
-	// Access tokens are invalidated by the JWT middleware's session existence check
-	// (JWTAuthMiddleware validates sessions on every authenticated request), so explicit
-	// blacklisting of access token JTIs is not required here.
-	var revokeErr error
-	if revokeErr = s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
-		s.logger.Error("Failed to revoke sessions after account deletion", zap.String("account_id", accountID), zap.Error(revokeErr))
-	}
-
-	// 5. Clear consent cache entries for this account.
-	// This prevents stale cached consents from surviving after account deletion.
-	// Failure is non-critical since the consent TTL (90 days) will expire naturally.
-	if s.consentCacheInvalidator != nil {
-		if err := s.consentCacheInvalidator.DeleteConsentsByAccount(ctx, accountID); err != nil {
-			s.logger.Warn("Failed to clear consent cache after account deletion",
-				zap.String("account_id", accountID), zap.Error(err))
-		}
-	}
-
-	// 6. Audit log (sync — critical security event)
-	s.auditLogSync(ctx, auditDomain.NewRecord(
-		auditDomain.ActionAccountDelete,
-		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
-		auditMetaFromContext(ctx),
-	))
-
-	if revokeErr != nil {
-		return fmt.Errorf("account deleted but session revocation failed: %w", revokeErr)
-	}
-	return nil
-}
-
-// VerifyContactCredential verifies the account's primary contact credential.
-func (s *accountServiceImpl) VerifyContactCredential(ctx context.Context, accountID string) error {
-	// 1. Find credential
-	credentials, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, domain.CredentialTypeEmail)
-	if err != nil {
-		if !errors.Is(err, repository.ErrCredentialNotFound) {
-			return fmt.Errorf("find email credential: %w", err)
-		}
-	}
-	if len(credentials) == 0 {
-		// Try phone credential as fallback
-		credentials, err = s.credentialRepo.FindByAccountAndType(ctx, accountID, domain.CredentialTypePhone)
-		if err != nil {
-			if !errors.Is(err, repository.ErrCredentialNotFound) {
-				return fmt.Errorf("find phone credential: %w", err)
-			}
-		}
-		if len(credentials) == 0 {
-			return repository.ErrCredentialNotFound
-		}
-	}
-
-	credential := credentials[0]
-
-	// 2. Mark as verified
-	credential.Verify()
-
-	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.credentialRepo.UpdateCredential(ctx, tx, credential)
-	})
-	if err != nil {
-		return err
-	}
-
-	s.auditLogSync(ctx, auditDomain.NewRecord(
-		auditDomain.ActionCredentialVerify,
-		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "credential_type": credential.Type}),
-		auditMetaFromContext(ctx),
-	))
-
-	return nil
-}
-
-// VerifyCredential is kept for compatibility with older internal callers.
-//
-// Deprecated: use VerifyContactCredential.
-func (s *accountServiceImpl) VerifyCredential(ctx context.Context, accountID string) error {
-	return s.VerifyContactCredential(ctx, accountID)
-}
-
-// ChangePassword changes the account password.
-func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error {
-	// 0. Ensure account is active
-	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
-		return err
-	}
-
-	// 1. Fail-fast: ensure session revoker is configured before modifying data
-	if s.sessionRevoker == nil {
-		return fmt.Errorf("%w: cannot revoke sessions on password change", ErrSessionRevokerNotBound)
-	}
-
-	// 2. Find password credential
-	passwordCred, err := s.credentialRepo.FindPasswordCredential(ctx, accountID)
-	if err != nil {
-		return fmt.Errorf("find password credential: %w", err)
-	}
-
-	// 3. Verify old password
-	if !passwordCred.VerifyPassword(oldPassword) {
-		return ErrIncorrectOldPassword
-	}
-
-	// 4. Validate new password strength
-	if err := utility.ValidatePasswordStrength(newPassword); err != nil {
-		return err
-	}
-
-	// 5. Hash new password
-	newPasswordHash, err := domain.HashPassword(newPassword)
-	if err != nil {
-		return fmt.Errorf("hash new password: %w", err)
-	}
-
-	// 6. Update password
-	passwordCred.Value = newPasswordHash
-
-	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.credentialRepo.UpdateCredential(ctx, tx, passwordCred)
-	})
-	if err != nil {
-		return err
-	}
-
-	// 7. Revoke all existing sessions so that any attacker with a stolen session is kicked out
-	if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
-		s.logger.Error("Failed to revoke sessions after password change",
-			zap.String("account_id", accountID), zap.Error(revokeErr))
-		// Password was already changed successfully, but caller should know session revocation failed
-		// so they can take additional action (e.g., notify the user).
-		return fmt.Errorf("password changed but session revocation failed: %w", revokeErr)
-	}
-
-	// 8. Audit log (sync — critical security event)
-	s.auditLogSync(ctx, auditDomain.NewRecord(
-		auditDomain.ActionPasswordChange,
-		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
-		auditMetaFromContext(ctx),
-	))
-
-	return nil
-}
-
-// BindFederatedIdentity binds a third-party identity.
-func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountID string, provider domain.Provider, providerUserID string, profile map[string]any) error {
-	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
-		return err
-	}
-	identity, err := domain.NewFederatedIdentity(accountID, provider, providerUserID, profile)
-	if err != nil {
-		return fmt.Errorf("create federated identity: %w", err)
-	}
-
-	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		// Check inside the transaction to avoid TOCTOU: a concurrent request
-		// could bind the same identity between our check and the insert.
-		existing, err := s.federatedIdentityRepo.FindByProviderTx(ctx, tx, provider, providerUserID)
-		if err == nil && existing != nil {
-			return ErrFederatedIdentityAlreadyBound
-		}
-		return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
-	})
-	if err != nil {
-		// Handle race condition: two concurrent requests both passed the
-		// FindByProvider check. The unique constraint caught the duplicate —
-		// look up the existing identity and return a clean business error.
-		if dbutil.IsUniqueViolation(err) {
-			existing, findErr := s.federatedIdentityRepo.FindByProvider(ctx, provider, providerUserID)
-			if findErr == nil && existing != nil {
-				if existing.AccountID == accountID {
-					// Already bound to this account — idempotent success
-					return nil
-				}
-				return ErrFederatedIdentityAlreadyBound
-			}
-		}
-		return err
-	}
-
-	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
-		auditDomain.ActionFederatedIdentityBind,
-		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "provider": string(provider), "provider_user_id": providerUserID}),
-		auditMetaFromContext(ctx),
-	))
-
-	return nil
-}
-
-// UnbindFederatedIdentity unbinds a third-party identity.
-func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accountID, identityID string) error {
-	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
-		return err
-	}
-	now := time.Now()
-
-	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.federatedIdentityRepo.SoftDeleteByID(ctx, tx, accountID, identityID, now)
-	})
-	if err != nil {
-		return err
-	}
-
-	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
-		auditDomain.ActionFederatedIdentityUnbind,
-		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "identity_id": identityID}),
-		auditMetaFromContext(ctx),
-	))
-
-	return nil
-}
-
-// AssignRole assigns a role to the account.
-func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID string) error {
-	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
-		return err
-	}
-
-	// Verify role exists and assign atomically to prevent TOCTOU race conditions.
-	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		role, err := s.roleRepo.FindByIDTx(ctx, tx, roleID)
-		if err != nil {
-			return err
-		}
-		if role.IsDeleted() {
-			return repository.ErrRoleNotFound
-		}
-		return s.roleRepo.AssignRoleToAccount(ctx, tx, accountID, roleID)
-	})
-	if err != nil {
-		return err
-	}
-
-	s.auditLogSync(ctx, auditDomain.NewRecord(
-		auditDomain.ActionRoleAssign,
-		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
-		auditMetaFromContext(ctx),
-	))
-	return nil
-}
-
-// RemoveRole removes a role from the account.
-func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID string) error {
-	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
-		return err
-	}
-	now := time.Now()
-
-	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.roleRepo.RemoveRoleFromAccount(ctx, tx, accountID, roleID, now)
-	})
-	if err != nil {
-		return err
-	}
-
-	s.auditLogSync(ctx, auditDomain.NewRecord(
-		auditDomain.ActionRoleRemove,
-		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
-		auditMetaFromContext(ctx),
-	))
-	return nil
-}
-
-// ListAccounts returns a paginated list of accounts.
-func (s *accountServiceImpl) ListAccounts(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error) {
-	return s.accountRepo.FindAll(ctx, page, pageSize, status)
-}
-
-// SuspendAccount suspends the account atomically.
-func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID string) error {
-	// Fail-fast: ensure session revoker is configured before modifying data
-	if s.sessionRevoker == nil {
-		return fmt.Errorf("%w: cannot revoke sessions on account suspension", ErrSessionRevokerNotBound)
-	}
-
-	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.accountRepo.SuspendAccount(ctx, tx, accountID)
-	})
-	if err != nil {
-		return err
-	}
-
-	// Revoke all active sessions so the suspended user loses access immediately
-	if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
-		s.logger.Error("Failed to revoke sessions after account suspension",
-			zap.String("account_id", accountID), zap.Error(revokeErr))
-		return fmt.Errorf("suspend succeeded but session revocation failed: %w", revokeErr)
-	}
-
-	s.auditLogSync(ctx, auditDomain.NewRecord(
-		auditDomain.ActionAccountSuspend,
-		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
-		auditMetaFromContext(ctx),
-	))
-	return nil
-}
-
-// ActivateAccount reactivates the account atomically.
-func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID string) error {
-	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.accountRepo.ActivateAccount(ctx, tx, accountID)
-	})
-	if err != nil {
-		return err
-	}
-
-	s.auditLogSync(ctx, auditDomain.NewRecord(
-		auditDomain.ActionAccountActivate,
-		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
-		auditMetaFromContext(ctx),
-	))
-	return nil
-}
-
-// GetAccountRoles returns the roles assigned to the account.
-func (s *accountServiceImpl) GetAccountRoles(ctx context.Context, accountID string) ([]*domain.Role, error) {
-	return s.roleRepo.FindRolesByAccountID(ctx, accountID)
-}
-
-// validateRegistration validates the registration request.
-func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) error {
-	if req.Password == "" {
-		return errors.New("password is required")
-	}
-
-	if err := utility.ValidatePasswordStrength(req.Password); err != nil {
-		return err
-	}
-
-	if req.Email == "" && req.Phone == "" {
-		return errors.New("at least one of email or phone is required")
-	}
-
-	if req.DisplayName == "" {
-		return domain.ErrDisplayNameRequired
-	}
-
-	// Validate email format
-	if req.Email != "" {
-		addr, err := mail.ParseAddress(req.Email)
-		if err != nil || addr.Address != req.Email {
-			return errors.New("invalid email format")
-		}
-	}
-
-	// Validate phone format
-	if req.Phone != "" {
-		if !utility.ValidatePhoneFormat(req.Phone) {
-			return domain.ErrInvalidPhoneFormat
-		}
-	}
-
-	return nil
-}
-
-// validateUsername validates a username string.
-// Username must be non-empty, at most 50 characters, and contain only
-// lowercase letters, digits, hyphens, dots, and underscores.
-func validateUsername(username string) error {
-	if username == "" {
-		return fmt.Errorf("username must not be empty")
-	}
-	if len(username) > 50 {
-		return fmt.Errorf("username must not exceed 50 characters")
-	}
-	for _, c := range username {
-		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' && c != '-' && c != '.' {
-			return fmt.Errorf("username may only contain lowercase letters, digits, hyphens, dots, and underscores")
-		}
-	}
-	return nil
-}
-
-// checkCredentialExistsTx is the transaction-variant of checkCredentialExists.
-// Use inside RunInTransaction to avoid TOCTOU race conditions.
-func (s *accountServiceImpl) checkCredentialExistsTx(ctx context.Context, tx *sql.Tx, credType domain.CredentialType, identifier string) error {
-	cred, err := s.credentialRepo.FindByTypeAndIdentifierTx(ctx, tx, credType, identifier)
-	if err != nil {
-		if errors.Is(err, repository.ErrCredentialNotFound) {
-			return nil
-		}
-		return fmt.Errorf("check credential existence: %w", err)
-	}
-	if cred != nil {
-		switch credType {
-		case domain.CredentialTypeEmail:
-			return ErrEmailAlreadyRegistered
-		case domain.CredentialTypePhone:
-			return ErrPhoneAlreadyRegistered
-		case domain.CredentialTypePassword, domain.CredentialTypeTOTP, domain.CredentialTypeWebAuthn, domain.CredentialTypeBackupCode:
-			return fmt.Errorf("%w: %s", ErrCredentialAlreadyExists, credType)
-		}
-	}
-	return nil
-}
-
-// auditMetaFromContext extracts IP and user-agent from context for audit logging.
-func auditMetaFromContext(ctx context.Context) json.RawMessage {
-	return utility.MustMarshalJSON(map[string]any{
-		"ip":         audit.IPFromContext(ctx),
-		"user_agent": audit.UserAgentFromContext(ctx),
-	})
-}
-
-// nonNilMap returns m if non-nil, otherwise an empty map.
-// Prevents nil-map panics and ensures JSON serialization produces {} instead of null.
-func nonNilMap(m map[string]any) map[string]any {
-	if m == nil {
-		return make(map[string]any)
-	}
-	return m
-}
-
-// classifyRegistrationConflict determines the specific conflict cause when a
-// registration unique constraint violation occurs. It checks credential
-// existence to return a precise business error.
-func (s *accountServiceImpl) classifyRegistrationConflict(ctx context.Context, req *RegisterAccountRequest) error {
-	// Check email credential first (most common conflict)
-	if req.Email != "" {
-		cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, domain.CredentialTypeEmail, req.Email)
-		if err == nil && cred != nil {
-			return ErrEmailAlreadyRegistered
-		}
-	}
-	// Check phone credential
-	if req.Phone != "" {
-		cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, domain.CredentialTypePhone, req.Phone)
-		if err == nil && cred != nil {
-			return ErrPhoneAlreadyRegistered
-		}
-	}
-	// If neither credential conflicts, it must be a username conflict
-	return ErrUsernameAlreadyTaken
 }

@@ -134,6 +134,8 @@ func (m *mockTokenManager) RotateRefreshToken(_ context.Context, _ string) (*tok
 
 func (m *mockTokenManager) RevokeRefreshToken(_ context.Context, _ string) error { return nil }
 
+func (m *mockTokenManager) RevokeAccessToken(_ context.Context, _ string, _ time.Time) error { return nil }
+
 func (m *mockTokenManager) IntrospectToken(_ context.Context, _ string) (map[string]any, error) {
 	return map[string]any{"active": true}, nil
 }
@@ -1521,10 +1523,7 @@ func (m *mockAccountServiceForSocial) GetAccountRoles(_ context.Context, _ strin
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (m *mockAccountServiceForSocial) SetSessionRevoker(_ accountService.SessionRevoker)           {}
-func (m *mockAccountServiceForSocial) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter) {}
-func (m *mockAccountServiceForSocial) SetConsentCacheInvalidator(_ accountService.ConsentCacheInvalidator) {
-}
+func (m *mockAccountServiceForSocial) SetOptions(_ *accountService.AccountServiceOptions) {}
 
 type mockFederatedIdentityRepoForSocial struct {
 	findByProviderFn func(ctx context.Context, provider accountDomain.Provider, providerUserID string) (*accountDomain.FederatedIdentity, error)

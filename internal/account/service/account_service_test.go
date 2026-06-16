@@ -37,7 +37,7 @@ func TestFindAccountByID(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	now := time.Now()
 	accountRows := sqlmock.NewRows([]string{
@@ -73,7 +73,7 @@ func TestFindAccountByID_NotFound(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
 		WithArgs("nonexistent").
@@ -99,7 +99,7 @@ func TestFindAccountByUsername(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	now := time.Now()
 	accountRows := sqlmock.NewRows([]string{
@@ -135,7 +135,7 @@ func TestListAccounts(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	now := time.Now()
 
@@ -174,7 +174,7 @@ func TestListAccounts_Empty(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	mock.ExpectQuery("SELECT COUNT").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
@@ -199,7 +199,7 @@ func TestGetAccountRoles(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	now := time.Now()
 	roleRows := sqlmock.NewRows([]string{
@@ -232,7 +232,7 @@ func TestActivateAccount(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE accounts SET status").
@@ -257,7 +257,7 @@ func TestAssignRole(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	now := time.Now()
 	accountRows := sqlmock.NewRows([]string{
@@ -306,7 +306,7 @@ func TestRemoveRole(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	now := time.Now()
 	accountRows := sqlmock.NewRows([]string{
@@ -343,7 +343,7 @@ func TestRemoveRole_NotFound(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	now := time.Now()
 	accountRows := sqlmock.NewRows([]string{
@@ -369,9 +369,8 @@ func TestRemoveRole_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TestSetSessionRevoker_NilNoOp tests that setting a nil session revoker does not panic
-// (runtime nil check in SoftDeleteAccount/ChangePassword provides safety)
-func TestSetSessionRevoker_NilNoOp(t *testing.T) {
+// TestSetOptions_NilNoOp tests that setting nil options does not panic
+func TestSetOptions_NilNoOp(t *testing.T) {
 	db, _, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -381,27 +380,9 @@ func TestSetSessionRevoker_NilNoOp(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.RoleRepository(nil)
 
-	svc := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	svc := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 	assert.NotPanics(t, func() {
-		svc.SetSessionRevoker(nil)
-	})
-}
-
-// TestSetOAuth2ClientDeleter_NilNoOp tests that setting a nil OAuth2 client deleter does not panic
-// (runtime nil check in SoftDeleteAccount provides safety)
-func TestSetOAuth2ClientDeleter_NilNoOp(t *testing.T) {
-	db, _, err := sqlmock.New()
-	require.NoError(t, err)
-	defer db.Close()
-
-	accountRepo := repository.NewAccountRepository(db)
-	credentialRepo := repository.NewCredentialRepository(db)
-	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
-	roleRepo := repository.RoleRepository(nil)
-
-	svc := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
-	assert.NotPanics(t, func() {
-		svc.SetOAuth2ClientDeleter(nil)
+		svc.SetOptions(nil)
 	})
 }
 
@@ -418,7 +399,7 @@ func TestRegisterAccount(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	// Set mock expectations (in order of execution)
 
@@ -476,7 +457,7 @@ func TestRegisterAccount_DuplicateEmail(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	// Set mock: email already exists (queried inside transaction)
 	// Note: requires all columns to be returned to match Scan of FindByTypeAndIdentifierTx
@@ -534,10 +515,8 @@ func TestChangePassword(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
-	impl := accountService.(*accountServiceImpl)
-	impl.SetSessionRevoker(&stubSessionRevoker{})
-	impl.SetOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+	accountService.SetOptions(&AccountServiceOptions{SessionRevoker: &stubSessionRevoker{}, OAuth2ClientDeleter: &stubOAuth2ClientDeleter{}})
 
 	accountID := "test-account-id"
 	oldPassword := "OldPassword123!"
@@ -594,10 +573,8 @@ func TestSoftDeleteAccount(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
-	impl := accountService.(*accountServiceImpl)
-	impl.SetSessionRevoker(&stubSessionRevoker{})
-	impl.SetOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+	accountService.SetOptions(&AccountServiceOptions{SessionRevoker: &stubSessionRevoker{}, OAuth2ClientDeleter: &stubOAuth2ClientDeleter{}})
 
 	accountID := "test-account-id"
 
@@ -662,10 +639,8 @@ func TestSuspendAccount(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
-	impl := accountService.(*accountServiceImpl)
-	impl.SetSessionRevoker(&stubSessionRevoker{})
-	impl.SetOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+	accountService.SetOptions(&AccountServiceOptions{SessionRevoker: &stubSessionRevoker{}, OAuth2ClientDeleter: &stubOAuth2ClientDeleter{}})
 
 	accountID := "test-account-id"
 
@@ -692,7 +667,7 @@ func TestSuspendAccount_NilSessionRevoker(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	err = accountService.SuspendAccount(context.Background(), "test-account-id")
 
@@ -711,7 +686,7 @@ func TestUpdateAccount(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	now := time.Now()
 	username := "updateduser"
@@ -760,7 +735,7 @@ func TestUpdateAccount_NotFound(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	now := time.Now()
 	username := "ghost"
@@ -798,7 +773,7 @@ func TestVerifyContactCredential_Email(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	accountID := "account-001"
 	now := time.Now()
@@ -841,7 +816,7 @@ func TestVerifyContactCredential_PhoneFallback(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	accountID := "account-001"
 	now := time.Now()
@@ -889,7 +864,7 @@ func TestVerifyContactCredential_NoCredentialFound(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	accountID := "account-no-creds"
 
@@ -921,7 +896,7 @@ func TestBindFederatedIdentity(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	accountID := "account-001"
 
@@ -969,7 +944,7 @@ func TestBindFederatedIdentity_AlreadyBound(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	accountID := "account-001"
 	now := time.Now()
@@ -1021,7 +996,7 @@ func TestUnbindFederatedIdentity(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	accountID := "account-001"
 	identityID := "fi-001"
@@ -1062,7 +1037,7 @@ func TestUnbindFederatedIdentity_NotFound(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	accountID := "account-001"
 	identityID := "nonexistent"
@@ -1093,8 +1068,8 @@ func TestUnbindFederatedIdentity_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TestSetSessionRevoker_LateBind tests late-binding session revoker via interface method
-func TestSetSessionRevoker_LateBind(t *testing.T) {
+// TestSetOptions_LateBind tests late-binding via SetOptions
+func TestSetOptions_LateBind(t *testing.T) {
 	db, _, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -1104,77 +1079,21 @@ func TestSetSessionRevoker_LateBind(t *testing.T) {
 	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
+	svc := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
-	accountService.SetSessionRevoker(&stubSessionRevoker{})
+	svc.SetOptions(&AccountServiceOptions{
+		SessionRevoker:      &stubSessionRevoker{},
+		OAuth2ClientDeleter: &stubOAuth2ClientDeleter{},
+	})
 
-	// Verify it was bound by calling a function that checks for it
-	// SuspendAccount requires session revoker
-	impl := accountService.(*accountServiceImpl)
-	assert.NotNil(t, impl.sessionRevoker)
+	assert.NotNil(t, svc.sessionRevoker)
+	assert.NotNil(t, svc.oauth2ClientDeleter)
 }
 
-// TestSetSessionRevoker tests the interface method directly
-func TestSetSessionRevoker(t *testing.T) {
-	db, _, err := sqlmock.New()
-	require.NoError(t, err)
-	defer db.Close()
-
-	accountRepo := repository.NewAccountRepository(db)
-	credentialRepo := repository.NewCredentialRepository(db)
-	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
-	roleRepo := repository.NewRoleRepository(db)
-
-	svc := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
-	svc.SetSessionRevoker(&stubSessionRevoker{})
-
-	impl := svc.(*accountServiceImpl)
-	assert.NotNil(t, impl.sessionRevoker)
-}
-
-// TestSetSessionRevoker_FakeImplementation tests that the interface method works with non-impl types
-func TestSetSessionRevoker_FakeImplementation(t *testing.T) {
-	// This test verifies that the interface method can be called on any AccountService implementation
-	// (unlike the old BindSessionRevoker which used type assertions)
+// TestSetOptions_FakeImplementation tests that SetOptions works with non-impl types
+func TestSetOptions_FakeImplementation(t *testing.T) {
 	fake := &fakeAccountService{}
-	fake.SetSessionRevoker(&stubSessionRevoker{}) // should not panic
-}
-
-// TestSetOAuth2ClientDeleter_LateBind tests late-binding OAuth2 client deleter via interface method
-func TestSetOAuth2ClientDeleter_LateBind(t *testing.T) {
-	db, _, err := sqlmock.New()
-	require.NoError(t, err)
-	defer db.Close()
-
-	accountRepo := repository.NewAccountRepository(db)
-	credentialRepo := repository.NewCredentialRepository(db)
-	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
-	roleRepo := repository.NewRoleRepository(db)
-
-	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
-
-	accountService.SetOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
-
-	impl := accountService.(*accountServiceImpl)
-	assert.NotNil(t, impl.oauth2ClientDeleter)
-}
-
-// TestSetOAuth2ClientDeleter tests the interface method directly
-func TestSetOAuth2ClientDeleter(t *testing.T) {
-	db, _, err := sqlmock.New()
-	require.NoError(t, err)
-	defer db.Close()
-
-	accountRepo := repository.NewAccountRepository(db)
-	credentialRepo := repository.NewCredentialRepository(db)
-	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
-	roleRepo := repository.NewRoleRepository(db)
-
-	svc := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil)
-	svc.SetOAuth2ClientDeleter(&stubOAuth2ClientDeleter{})
-
-	impl := svc.(*accountServiceImpl)
-	assert.NotNil(t, impl.oauth2ClientDeleter)
+	fake.SetOptions(&AccountServiceOptions{SessionRevoker: &stubSessionRevoker{}}) // should not panic
 }
 
 // fakeAccountService is a non-pointer-type AccountService used to test interface methods.
@@ -1209,6 +1128,4 @@ func (f *fakeAccountService) ActivateAccount(_ context.Context, _ string) error 
 func (f *fakeAccountService) GetAccountRoles(_ context.Context, _ string) ([]*domain.Role, error) {
 	return nil, nil
 }
-func (f *fakeAccountService) SetSessionRevoker(_ SessionRevoker)                   {}
-func (f *fakeAccountService) SetOAuth2ClientDeleter(_ OAuth2ClientDeleter)         {}
-func (f *fakeAccountService) SetConsentCacheInvalidator(_ ConsentCacheInvalidator) {}
+func (f *fakeAccountService) SetOptions(_ *AccountServiceOptions) {}

@@ -62,9 +62,7 @@ func (m *mockAccountService) ActivateAccount(_ context.Context, _ string) error 
 func (m *mockAccountService) GetAccountRoles(_ context.Context, _ string) ([]*accountDomain.Role, error) {
 	return nil, nil
 }
-func (m *mockAccountService) SetSessionRevoker(_ accountService.SessionRevoker)                   {}
-func (m *mockAccountService) SetOAuth2ClientDeleter(_ accountService.OAuth2ClientDeleter)         {}
-func (m *mockAccountService) SetConsentCacheInvalidator(_ accountService.ConsentCacheInvalidator) {}
+func (m *mockAccountService) SetOptions(_ *accountService.AccountServiceOptions) {}
 
 // mockCredentialRepo implements accountRepo.CredentialRepository for testing
 type mockCredentialRepo struct {
