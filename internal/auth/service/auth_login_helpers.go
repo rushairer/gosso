@@ -172,6 +172,22 @@ func (s *AuthService) checkIPRateLimit(ctx context.Context, ip string) error {
 	return nil
 }
 
+// checkMFAAccountRateLimit enforces per-account rate limiting on MFA code verification attempts.
+// This prevents brute-force attacks on TOTP codes even with a valid MFA token.
+// Fail-closed: if Redis is unavailable, deny the attempt.
+func (s *AuthService) checkMFAAccountRateLimit(ctx context.Context, accountID string) error {
+	key := fmt.Sprintf("mfa_attempts:%s", accountID)
+	count, incrErr := s.redis.CheckAndIncr(ctx, key, mfaAccountMaxAttempts, mfaAccountRateLimitWindow)
+	if incrErr != nil {
+		s.logger.Error("Failed to check MFA account rate limit, denying attempt", zap.Error(incrErr))
+		return ErrServiceUnavailable
+	}
+	if count >= int64(mfaAccountMaxAttempts) {
+		return ErrIPLocked
+	}
+	return nil
+}
+
 // clearLoginRateLimits removes per-user rate limit counters after successful login.
 // Per-IP limits are intentionally preserved to prevent abuse from distributed attacks
 // that use many accounts from the same IP.

@@ -102,6 +102,29 @@ func (r *federatedIdentityRepositoryImpl) FindByAccountID(ctx context.Context, a
 	return identities, nil
 }
 
+// FindByAccountIDTx finds all federated identities by account ID within a transaction.
+func (r *federatedIdentityRepositoryImpl) FindByAccountIDTx(ctx context.Context, tx *sql.Tx, accountID string) ([]*domain.FederatedIdentity, error) {
+	query := `
+		SELECT id, account_id, provider, provider_user_id, profile, created_at, updated_at, deleted_at
+		FROM federated_identities
+		WHERE account_id = $1 AND deleted_at IS NULL
+		ORDER BY created_at DESC
+	`
+
+	rows, err := tx.QueryContext(ctx, query, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("query federated identities: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	identities, err := scanFederatedIdentities(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	return identities, nil
+}
+
 // SoftDeleteByAccountID soft deletes all federated identities of an account.
 // Returns nil even if zero rows are affected (idempotent for bulk delete).
 func (r *federatedIdentityRepositoryImpl) SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {

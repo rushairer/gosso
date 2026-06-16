@@ -164,9 +164,15 @@ func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, a
 	}
 
 	if req.Name != nil {
+		if len(*req.Name) > 256 {
+			return nil, &ValidationError{Message: "name must not exceed 256 characters"}
+		}
 		client.Name = *req.Name
 	}
 	if req.Description != nil {
+		if len(*req.Description) > 1024 {
+			return nil, &ValidationError{Message: "description must not exceed 1024 characters"}
+		}
 		client.Description = *req.Description
 	}
 	if req.RedirectURIs != nil {
@@ -231,11 +237,24 @@ func validateGrantTypes(types []string) error {
 func validateRedirectURIs(uris []string) error {
 	for _, uri := range uris {
 		u, err := url.Parse(uri)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Fragment != "" || u.Host == "" {
-			return &ValidationError{Message: fmt.Sprintf("redirect_uris must use http or https scheme with a valid host and without fragment: %s", uri)}
+		if err != nil || u.Fragment != "" || u.Host == "" {
+			return &ValidationError{Message: fmt.Sprintf("redirect_uris must use a valid host without fragment: %s", uri)}
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return &ValidationError{Message: fmt.Sprintf("redirect_uris must use http or https scheme: %s", uri)}
+		}
+		// Per RFC 6749 Section 3.1.2 and OAuth 2.0 Security Best Current Practice (RFC 9700),
+		// HTTP is only allowed for loopback addresses (native app development).
+		if u.Scheme == "http" && !isLoopbackHost(u.Hostname()) {
+			return &ValidationError{Message: fmt.Sprintf("redirect_uris must use https for non-loopback hosts: %s", uri)}
 		}
 	}
 	return nil
+}
+
+// isLoopbackHost checks if a hostname is a loopback address.
+func isLoopbackHost(host string) bool {
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 var ErrClientAccessDenied = errors.New("access denied: client does not belong to this account")

@@ -138,7 +138,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
-		redirectWithCode(ctx, redirectURI, code.Code, state)
+		redirectWithCode(ctx, redirectURI, code.Code, state, c.issuer)
 		return
 	}
 
@@ -291,7 +291,7 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		return
 	}
 
-	redirectWithCode(ctx, req.RedirectURI, code.Code, req.State)
+	redirectWithCode(ctx, req.RedirectURI, code.Code, req.State, c.issuer)
 }
 
 // renderConsentTemplate renders the consent page and writes it to the response.

@@ -282,7 +282,8 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 		return fmt.Errorf("store reset token: %w", err)
 	}
 
-	// Set cooldown (fail-open: if Redis is down, we lose cooldown but can still reset)
+	// Set cooldown BEFORE sending email to prevent rapid-fire email sending.
+	// Fail-open: if Redis is down, we lose cooldown but can still reset.
 	if err := s.redis.Set(ctx, cooldownKey, []byte("1"), s.cooldownTTL); err != nil {
 		s.logger.Warn("Failed to set reset cooldown", zap.Error(err))
 	}
@@ -412,7 +413,10 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		go func() {
 			defer s.wg.Done()
 			defer func() { <-s.revokeSem }()
-			bgCtx, cancel := context.WithTimeout(s.stopCtx, passwordResetRevokeTimeout)
+			// Use context.Background() so the goroutine can complete even after
+			// stopCtx is cancelled during graceful shutdown. The timeout provides
+			// the actual deadline.
+			bgCtx, cancel := context.WithTimeout(context.Background(), passwordResetRevokeTimeout)
 			defer cancel()
 			if err := s.sessionSvc.RevokeAllForAccount(bgCtx, data.AccountID); err != nil {
 				s.logger.Error("Failed to revoke sessions after password reset",
@@ -425,7 +429,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 			zap.String("account_id", data.AccountID),
 			zap.Bool("synchronous_fallback", true),
 			zap.Int("semaphore_cap", cap(s.revokeSem)))
-		syncCtx, syncCancel := context.WithTimeout(s.stopCtx, passwordResetSyncRevokeTimeout)
+		syncCtx, syncCancel := context.WithTimeout(context.Background(), passwordResetSyncRevokeTimeout)
 		defer syncCancel()
 		if err := s.sessionSvc.RevokeAllForAccount(syncCtx, data.AccountID); err != nil {
 			s.logger.Error("Failed to revoke sessions synchronously after password reset",

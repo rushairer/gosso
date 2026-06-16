@@ -67,37 +67,43 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 
 // UnbindFederatedIdentity unbinds a third-party identity.
 // Prevents unbinding the last authentication method if the account has no password.
+// The check and deletion are performed atomically within a transaction to prevent TOCTOU races.
 func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accountID, identityID string) error {
 	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
 		return err
 	}
 
-	// Check that unbinding won't lock the user out: they must have either a password
-	// or at least one other federated identity remaining.
-	hasPassword := false
-	if cred, err := s.credentialRepo.FindPasswordCredential(ctx, accountID); err == nil && cred != nil {
-		hasPassword = true
-	}
-	if !hasPassword {
-		identities, err := s.federatedIdentityRepo.FindByAccountID(ctx, accountID)
-		if err != nil {
-			return fmt.Errorf("check federated identities: %w", err)
-		}
-		// Count active identities (excluding the one being unbound)
-		activeCount := 0
-		for _, id := range identities {
-			if !id.IsDeleted() && id.ID != identityID {
-				activeCount++
-			}
-		}
-		if activeCount == 0 {
-			return ErrCannotUnbindLastAuthMethod
-		}
-	}
-
 	now := time.Now()
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// Check that unbinding won't lock the user out: they must have either a password
+		// or at least one other federated identity remaining.
+		hasPassword := false
+		pwCreds, err := s.credentialRepo.FindByAccountAndTypeTx(ctx, tx, accountID, domain.CredentialTypePassword)
+		if err == nil {
+			for _, c := range pwCreds {
+				if !c.IsDeleted() {
+					hasPassword = true
+					break
+				}
+			}
+		}
+		if !hasPassword {
+			identities, err := s.federatedIdentityRepo.FindByAccountIDTx(ctx, tx, accountID)
+			if err != nil {
+				return fmt.Errorf("check federated identities: %w", err)
+			}
+			activeCount := 0
+			for _, id := range identities {
+				if !id.IsDeleted() && id.ID != identityID {
+					activeCount++
+				}
+			}
+			if activeCount == 0 {
+				return ErrCannotUnbindLastAuthMethod
+			}
+		}
+
 		return s.federatedIdentityRepo.SoftDeleteByID(ctx, tx, accountID, identityID, now)
 	})
 	if err != nil {

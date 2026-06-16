@@ -20,6 +20,9 @@ type Session struct {
 	IP           string    `json:"ip"`
 	UserAgent    string    `json:"user_agent"`
 	MFAVerified  bool      `json:"mfa_verified"`
+	// Deprecated: Valid is set but never checked — session validity is determined
+	// by TTL and max-age checks in the session service. Retained for backward
+	// compatibility with existing Redis-stored session data.
 	Valid        bool      `json:"valid"`
 	CreatedAt    time.Time `json:"created_at"`
 	LastActiveAt time.Time `json:"last_active_at"`

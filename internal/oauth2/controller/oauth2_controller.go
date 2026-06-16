@@ -194,7 +194,7 @@ func (c *OAuth2Controller) RegisterRoutes(rg *gin.RouterGroup, authMiddleware, t
 	rg.POST("/device", deviceUserHandlers...)
 }
 
-func redirectWithCode(ctx *gin.Context, redirectURI, code, state string) {
+func redirectWithCode(ctx *gin.Context, redirectURI, code, state, issuer string) {
 	parsedURL, err := url.Parse(redirectURI)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_redirect_uri"})
@@ -204,6 +204,10 @@ func redirectWithCode(ctx *gin.Context, redirectURI, code, state string) {
 	params.Set("code", code)
 	if state != "" {
 		params.Set("state", state)
+	}
+	// OIDC Core Section 3.1.2.6: iss parameter MUST be included if advertised in discovery.
+	if issuer != "" {
+		params.Set("iss", issuer)
 	}
 	parsedURL.RawQuery = params.Encode()
 	ctx.Redirect(http.StatusFound, parsedURL.String())

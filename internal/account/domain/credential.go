@@ -198,6 +198,7 @@ func (c *Credential) MarkUsed() {
 }
 
 // SoftDelete soft-deletes the credential. Returns an error if already deleted.
+// Clears the Value field to avoid retaining sensitive data (e.g., password hashes) in memory.
 func (c *Credential) SoftDelete() error {
 	if c.IsDeleted() {
 		return ErrCredentialAlreadyDeleted
@@ -205,6 +206,7 @@ func (c *Credential) SoftDelete() error {
 	now := time.Now()
 	c.DeletedAt = &now
 	c.UpdatedAt = now
+	c.Value = ""
 	return nil
 }
 

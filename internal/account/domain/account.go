@@ -13,6 +13,7 @@ import (
 var (
 	ErrDisplayNameRequired   = errors.New("display name is required")
 	ErrDisplayNameTooLong    = errors.New("display name must not exceed 255 characters")
+	ErrUsernameTooLong       = errors.New("username must not exceed 64 characters")
 	ErrLocaleRequired        = errors.New("locale is required")
 	ErrLocaleTooLong         = errors.New("locale must not exceed 10 characters")
 	ErrTimezoneRequired      = errors.New("timezone is required")
@@ -98,6 +99,9 @@ func (a *Account) Validate() error {
 	}
 	if len(a.DisplayName) > 255 {
 		return ErrDisplayNameTooLong
+	}
+	if a.Username != nil && len(*a.Username) > 64 {
+		return ErrUsernameTooLong
 	}
 	if !IsValidAccountStatus(a.Status) {
 		return ErrInvalidAccountStatus

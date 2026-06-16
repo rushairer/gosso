@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- `UnbindFederatedIdentity` last-auth-method check now runs inside transaction — prevents TOCTOU race that could lock users out (`internal/account/service/account_service_identity.go`).
+- `SetAccountRevokedAfter` now uses Lua ratchet script — prevents concurrent logout requests from overwriting a later revocation timestamp with an earlier one (`internal/token/service/blacklist_service.go`).
+- `VerifyMFALogin` now enforces per-account MFA rate limiting (10 attempts / 5 min) in addition to per-IP — prevents brute-force on TOTP codes with a valid MFA token (`internal/auth/service/auth_login.go`).
+- `PasswordResetService.Wait()` background goroutines now use `context.Background()` — prevents graceful shutdown from cancelling in-flight session revocations (`internal/auth/service/password_reset_service.go`).
+- `RequestReset` now sets cooldown before sending email — prevents rapid-fire email sending if Redis cooldown-set fails (`internal/auth/service/password_reset_service.go`).
+- `validateRedirectURIs` now requires HTTPS for non-loopback redirect URIs — only `localhost`, `127.0.0.1`, `[::1]` may use HTTP, per RFC 9700 (`internal/oauth2/service/client_service.go`).
 - Device code raw value no longer stored in Redis — only the hash is used as key, raw value returned to client at creation time only (`internal/oauth2/service/device_code_service.go`).
 - `LoginByPasskey` now performs dummy bcrypt work on inactive accounts — prevents timing side-channel for account existence enumeration (`internal/auth/service/auth_login.go`).
 - `SoftDeleteCredentialsByAccount` now clears `credential_value` (password hash) on soft delete — limits exposure from database leaks (`internal/account/repository/credential_repository_impl.go`).
@@ -57,6 +63,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ErrSessionServiceNotConfigured` sentinel error — returned by `LogoutByAccountID`/`LogoutBySessionID` when session service is nil (`internal/oidc/service/logout_service.go`).
 
 ### Changed
+- `FederatedIdentityRepository` interface now includes `FindByAccountIDTx` — transactional variant for use inside `RunInTransaction` to prevent TOCTOU races (`internal/account/repository/federated_identity_repository.go`).
+- `redirectWithCode` now accepts `issuer` parameter — includes `iss` in authorization redirect per OIDC Core Section 3.1.2.6 (`internal/oauth2/controller/oauth2_controller.go`).
 - `AccountService` now uses `AccountServiceOptions` for optional cross-module dependencies — eliminates `Set*` methods and their temporal coupling risks (`internal/account/service/account_service.go`, `internal/account/module.go`, `cmd/gouno/web_modules.go`).
 - `NewAccountService` now returns `*accountServiceImpl` instead of `AccountService` interface — follows Go convention of returning concrete types (`internal/account/service/account_service.go`).
 - `account_service.go` (28KB) split into 3 focused files: core CRUD in `account_service.go`, management operations in `account_service_manage.go`, identity/role helpers in `account_service_identity.go`.
@@ -107,6 +115,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `validateRedirectURIs` now rejects URIs with empty host (e.g., `https://`) (`internal/oauth2/service/client_service.go`).
 - `deleteIfExpiredScript` doc comment corrected — removed misleading `ARGV[1]` parameter documentation (`internal/session/service/session_service_scripts.go`).
 - `AuthorizeDeviceCode`, `DenyDeviceCode`, `CheckAndUpdatePollRate` now use atomic Lua scripts with internal PTTL — removed redundant and racy TTL pre-checks (`internal/oauth2/service/device_code_service.go`).
+- `RegisterAccount` no longer overwrites `account.Locale` with empty string when `req.Locale` is empty — preserves default "en" from domain constructor (`internal/account/service/account_service.go`).
+- Authorization response now includes `iss` parameter per OIDC Core Section 3.1.2.6 — prevents ISS-mixup attacks (`internal/oauth2/controller/oauth2_controller.go`).
+- `authorization_code` grant now only generates refresh token when client has `refresh_token` in registered grant types — previously generated tokens that would fail on refresh (`internal/oauth2/controller/oauth2_token.go`).
+- `client_credentials` grant now requires explicit scope parameter — previously granted all registered scopes when scope was empty (`internal/oauth2/controller/oauth2_token.go`).
+- `UpdateClientByAccountID` now validates name (256 chars) and description (1024 chars) length — consistent with registration validation (`internal/oauth2/service/client_service.go`).
+- `Credential.SoftDelete()` now clears `Value` field — consistent with repository-level `SoftDeleteCredentialsByAccount` (`internal/account/domain/credential.go`).
+- `Account.Validate()` now checks `Username` length (max 64 chars) — catches invalid usernames from paths that bypass service-level validation (`internal/account/domain/account.go`).
+- `UpdateSession` error message now masks session ID — consistent with all other session logging (`internal/session/service/session_service.go`).
+- `NewTokenService` now validates `accessExpiry` and `refreshExpiry` are positive — prevents zero/negative TTL tokens (`internal/token/service/token_service.go`).
+- `Session.Valid` field marked as deprecated — never checked, validity determined by TTL/max-age (`internal/session/domain/session.go`).
 
 ### Removed
 - `checkCredentialExists` (non-transactional variant) — dead code, all callers use `checkCredentialExistsTx` instead (`internal/account/service/account_service.go`).

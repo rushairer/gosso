@@ -201,7 +201,9 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		}
 		account.Username = &username
 	}
-	account.Locale = req.Locale
+	if req.Locale != "" {
+		account.Locale = req.Locale
+	}
 	if req.Timezone != "" {
 		if _, err := time.LoadLocation(req.Timezone); err != nil {
 			return nil, fmt.Errorf("invalid timezone: %s", req.Timezone)

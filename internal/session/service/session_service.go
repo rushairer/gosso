@@ -240,7 +240,7 @@ func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Sess
 	}
 	if !ok {
 		s.logger.Debug("Session expired during update, skipping", zap.String("session_id", maskSessionID(session.ID)))
-		return fmt.Errorf("session %s no longer exists", session.ID)
+		return fmt.Errorf("session %s no longer exists", maskSessionID(session.ID))
 	}
 
 	// Refresh the account sessions index TTL to prevent it from expiring before the session

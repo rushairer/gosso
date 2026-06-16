@@ -152,6 +152,11 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	accountID := claims.AccountID
 	mfaAccountID = &accountID
 
+	// Prevent brute-force against MFA codes per account (not just per IP).
+	if err := s.checkMFAAccountRateLimit(ctx, accountID); err != nil {
+		return nil, err
+	}
+
 	// 2. Verify based on MFA type
 	if err := s.verifyMFACode(ctx, mfaType, accountID, mfaCode, claims.ID); err != nil {
 		// Blacklist MFA token on failure to prevent brute-force replay.

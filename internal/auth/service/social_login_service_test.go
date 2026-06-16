@@ -105,6 +105,9 @@ func (m *mockSocialFederatedIdentityRepo) FindByProvider(ctx context.Context, pr
 func (m *mockSocialFederatedIdentityRepo) FindByAccountID(_ context.Context, _ string) ([]*accountDomain.FederatedIdentity, error) {
 	panic("not implemented")
 }
+func (m *mockSocialFederatedIdentityRepo) FindByAccountIDTx(_ context.Context, _ *sql.Tx, _ string) ([]*accountDomain.FederatedIdentity, error) {
+	panic("not implemented")
+}
 func (m *mockSocialFederatedIdentityRepo) SoftDeleteByAccountID(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	panic("not implemented")
 }

@@ -132,11 +132,14 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		return
 	}
 
-	refreshToken, err := c.tokenSvc.GenerateRefreshToken(ctx, authCode.AccountID, authCode.ClientID, "", strings.Join(authCode.Scopes, " "))
-	if err != nil {
-		c.logger.Error("Failed to generate refresh token for authorization code", zap.Error(err), zap.String("client_id", req.ClientID))
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-		return
+	var refreshToken *tokenDomain.RefreshToken
+	if client.HasGrantType("refresh_token") {
+		refreshToken, err = c.tokenSvc.GenerateRefreshToken(ctx, authCode.AccountID, authCode.ClientID, "", strings.Join(authCode.Scopes, " "))
+		if err != nil {
+			c.logger.Error("Failed to generate refresh token for authorization code", zap.Error(err), zap.String("client_id", req.ClientID))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
 	}
 
 	idToken, ok := c.maybeGenerateIDToken(ctx, authCode.AccountID, authCode.ClientID, authCode.Scopes, authCode.Nonce, authCode.AuthTime, accessToken, authCode.AuthMethods)
@@ -145,11 +148,13 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 	}
 
 	response := gin.H{
-		"access_token":  accessToken,
-		"refresh_token": refreshToken.Token,
-		"token_type":    "Bearer",
-		"expires_in":    int(c.tokenSvc.AccessExpiry().Seconds()),
-		"scope":         strings.Join(authCode.Scopes, " "),
+		"access_token": accessToken,
+		"token_type":   "Bearer",
+		"expires_in":   int(c.tokenSvc.AccessExpiry().Seconds()),
+		"scope":        strings.Join(authCode.Scopes, " "),
+	}
+	if refreshToken != nil {
+		response["refresh_token"] = refreshToken.Token
 	}
 	if idToken != "" {
 		response["id_token"] = idToken
@@ -290,11 +295,8 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 
 	scopes := client.ValidateScope(splitScope(req.Scope))
 	if len(scopes) == 0 {
-		if req.Scope != "" {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_scope", "error_description": "requested scopes are not valid for this client"})
-			return
-		}
-		scopes = client.Scopes
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_scope", "error_description": "scope parameter is required and must contain valid scopes for this client"})
+		return
 	}
 
 	// Verify account is still active (deleted/suspended clients cannot get new tokens)

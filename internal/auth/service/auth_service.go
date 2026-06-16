@@ -30,6 +30,10 @@ const (
 	defaultLoginMaxAttempts = 5
 	// defaultLoginMaxAttemptsPerIP is the default max login attempts per IP.
 	defaultLoginMaxAttemptsPerIP = 30
+	// mfaAccountMaxAttempts is the max MFA verification attempts per account within the rate limit window.
+	mfaAccountMaxAttempts = 10
+	// mfaAccountRateLimitWindow is the window for per-account MFA rate limiting.
+	mfaAccountRateLimitWindow = 5 * time.Minute
 )
 
 // LoginRequest login request

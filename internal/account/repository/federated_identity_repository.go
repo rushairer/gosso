@@ -29,6 +29,10 @@ type FederatedIdentityRepository interface {
 	// FindByAccountID finds all federated identities by account ID
 	FindByAccountID(ctx context.Context, accountID string) ([]*domain.FederatedIdentity, error)
 
+	// FindByAccountIDTx finds all federated identities by account ID within a transaction.
+	// Use this variant inside RunInTransaction to avoid TOCTOU race conditions.
+	FindByAccountIDTx(ctx context.Context, tx *sql.Tx, accountID string) ([]*domain.FederatedIdentity, error)
+
 	// SoftDeleteByAccountID soft deletes all federated identities of an account (requires transaction)
 	SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
 

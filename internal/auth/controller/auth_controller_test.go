@@ -1545,6 +1545,10 @@ func (m *mockFederatedIdentityRepoForSocial) FindByAccountID(_ context.Context, 
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *mockFederatedIdentityRepoForSocial) FindByAccountIDTx(_ context.Context, _ *sql.Tx, _ string) ([]*accountDomain.FederatedIdentity, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 func (m *mockFederatedIdentityRepoForSocial) SoftDeleteByAccountID(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	return fmt.Errorf("not implemented")
 }

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/cache"
@@ -131,18 +132,45 @@ func (s *BlacklistService) buildBlacklistKey(jti string) string {
 	return fmt.Sprintf("%s%s", BlacklistKeyPrefix, jti)
 }
 
+// setAccountRevokedAfterScript atomically updates the revoked-after timestamp only if the
+// new value is greater than the existing one. This prevents concurrent revocation requests
+// from "un-revoking" tokens by overwriting a later timestamp with an earlier one.
+// KEYS[1] = account_revoked_after:{accountID}
+// ARGV[1] = new timestamp (Unix seconds)
+// ARGV[2] = TTL in seconds
+// Returns 1 if updated, 0 if existing value is already >= new value.
+var setAccountRevokedAfterScript = redis.NewScript(`
+local cur = redis.call('GET', KEYS[1])
+if cur and tonumber(ARGV[1]) <= tonumber(cur) then
+    return 0
+end
+redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+return 1
+`)
+
 // SetAccountRevokedAfter records that all access tokens issued before the given
 // timestamp should be considered revoked for the given account. The key
 // automatically expires after the specified duration (should be >= access token
 // expiry to ensure all pre-revocation tokens have naturally expired).
+// Uses a ratchet: only updates if the new timestamp is greater than the existing one.
 func (s *BlacklistService) SetAccountRevokedAfter(ctx context.Context, accountID string, revokedAt time.Time, ttl time.Duration) error {
 	key := s.buildAccountRevokedAfterKey(accountID)
 	timestamp := revokedAt.Unix()
 
-	if err := s.redis.Set(ctx, key, timestamp, ttl); err != nil {
+	result, err := s.redis.RunScript(ctx, setAccountRevokedAfterScript, []string{key},
+		timestamp, int(ttl.Seconds()),
+	).Int64()
+	if err != nil {
 		s.logger.Error("Failed to set account revoked-after timestamp",
 			zap.String("account_id", accountID), zap.Error(err))
 		return fmt.Errorf("set account revoked after: %w", err)
+	}
+
+	if result == 0 {
+		s.logger.Debug("Account revoked-after timestamp already set to a later value, skipping",
+			zap.String("account_id", accountID),
+			zap.Time("revoked_at", revokedAt))
+		return nil
 	}
 
 	s.logger.Info("Account tokens revoked after timestamp",

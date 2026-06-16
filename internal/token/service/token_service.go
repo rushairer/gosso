@@ -65,6 +65,12 @@ func NewTokenService(
 	if blacklist == nil {
 		return nil, errors.New("token service: blacklist service is required")
 	}
+	if accessExpiry <= 0 {
+		return nil, errors.New("token service: accessExpiry must be positive")
+	}
+	if refreshExpiry <= 0 {
+		return nil, errors.New("token service: refreshExpiry must be positive")
+	}
 	return &TokenService{
 		keySvc:        keySvc,
 		issuer:        issuer,

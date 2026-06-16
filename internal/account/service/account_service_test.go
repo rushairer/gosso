@@ -1014,7 +1014,9 @@ func TestUnbindFederatedIdentity(t *testing.T) {
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
 
-	// Mock FindPasswordCredential for last-auth-method check
+	// The password and identity checks are now INSIDE the transaction (TOCTOU fix)
+	mock.ExpectBegin()
+	// Mock FindByAccountAndTypeTx for password check inside transaction
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials WHERE account_id").
 		WithArgs(accountID, domain.CredentialTypePassword).
 		WillReturnRows(sqlmock.NewRows([]string{
@@ -1024,7 +1026,6 @@ func TestUnbindFederatedIdentity(t *testing.T) {
 		}).AddRow("cred-001", accountID, domain.CredentialTypePassword, nil, "hashed-pw",
 			true, true, []byte("{}"), now, now, nil, nil, nil))
 
-	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE federated_identities SET deleted_at").
 		WithArgs(sqlmock.AnyArg(), identityID, accountID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -1065,7 +1066,9 @@ func TestUnbindFederatedIdentity_NotFound(t *testing.T) {
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
 
-	// Mock FindPasswordCredential for last-auth-method check
+	// The password check is now INSIDE the transaction (TOCTOU fix)
+	mock.ExpectBegin()
+	// Mock FindByAccountAndTypeTx for password check inside transaction
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials WHERE account_id").
 		WithArgs(accountID, domain.CredentialTypePassword).
 		WillReturnRows(sqlmock.NewRows([]string{
@@ -1075,7 +1078,6 @@ func TestUnbindFederatedIdentity_NotFound(t *testing.T) {
 		}).AddRow("cred-001", accountID, domain.CredentialTypePassword, nil, "hashed-pw",
 			true, true, []byte("{}"), now, now, nil, nil, nil))
 
-	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE federated_identities SET deleted_at").
 		WithArgs(sqlmock.AnyArg(), identityID, accountID).
 		WillReturnResult(sqlmock.NewResult(0, 0))

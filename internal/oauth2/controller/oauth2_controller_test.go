@@ -324,7 +324,7 @@ func newConfidentialTestClient() *oauth2Domain.OAuth2Client {
 		ClientSecretHash: string(hash),
 		Name:             "Test App",
 		RedirectURIs:     []string{"https://app.example.com/callback"},
-		GrantTypes:       []string{"authorization_code", "client_credentials"},
+		GrantTypes:       []string{"authorization_code", "client_credentials", "refresh_token"},
 		Scopes:           []string{"openid", "profile", "email"},
 		IsConfidential:   true,
 		CreatedAt:        time.Now(),
@@ -978,7 +978,7 @@ func TestRedirectWithCode_WithState(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(w)
 
 	ctx.Request, _ = http.NewRequest("GET", "/", nil)
-	redirectWithCode(ctx, "https://app.example.com/callback", "auth-code-123", "my-state")
+	redirectWithCode(ctx, "https://app.example.com/callback", "auth-code-123", "my-state", "https://auth.example.com")
 
 	assert.Equal(t, http.StatusFound, w.Code)
 	location := w.Header().Get("Location")
@@ -992,7 +992,7 @@ func TestRedirectWithCode_WithoutState(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(w)
 
 	ctx.Request, _ = http.NewRequest("GET", "/", nil)
-	redirectWithCode(ctx, "https://app.example.com/callback", "auth-code-123", "")
+	redirectWithCode(ctx, "https://app.example.com/callback", "auth-code-123", "", "https://auth.example.com")
 
 	assert.Equal(t, http.StatusFound, w.Code)
 	location := w.Header().Get("Location")
