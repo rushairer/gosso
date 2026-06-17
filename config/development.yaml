@@ -67,6 +67,10 @@ auth:
         - email
     private_key_path: "./keys/private.pem"
     password_reset_base_url: "http://localhost:3000/reset-password"
+    # WebAuthn / Passkey configuration
+    webauthn_rp_id: "localhost"
+    webauthn_rp_name: "gouno-dev"
+    webauthn_rp_origin: "http://localhost:3000"
 cors:
     allowed_origins:
         - "http://localhost:3000"

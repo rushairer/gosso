@@ -16,6 +16,7 @@ import (
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	"github.com/rushairer/gosso/internal/utility"
 	"github.com/rushairer/gosso/middleware"
 )
 
@@ -199,13 +200,13 @@ func (c *OAuth2Controller) DeviceUserSubmit(ctx *gin.Context) {
 
 	if req.Approved == "true" {
 		if err := c.deviceCodeSvc.AuthorizeDeviceCode(ctx, req.DeviceCode, accountIDStr); err != nil {
-			c.logger.Warn("Device code authorization failed", zap.Error(err), zap.String("device_code", req.DeviceCode))
+			c.logger.Warn("Device code authorization failed", zap.Error(err), zap.String("device_code", utility.MaskOpaqueID(req.DeviceCode)))
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "device code authorization failed"})
 			return
 		}
 	} else {
 		if err := c.deviceCodeSvc.DenyDeviceCode(ctx, req.DeviceCode); err != nil {
-			c.logger.Warn("Device code denial failed", zap.Error(err), zap.String("device_code", req.DeviceCode))
+			c.logger.Warn("Device code denial failed", zap.Error(err), zap.String("device_code", utility.MaskOpaqueID(req.DeviceCode)))
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "device code denial failed"})
 			return
 		}
@@ -254,7 +255,7 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 
 	dc, err := c.deviceCodeSvc.GetDeviceCode(ctx, req.DeviceCode)
 	if err != nil {
-		c.logger.Debug("Device code lookup failed", zap.Error(err), zap.String("device_code", req.DeviceCode))
+		c.logger.Debug("Device code lookup failed", zap.Error(err), zap.String("device_code", utility.MaskOpaqueID(req.DeviceCode)))
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "device code not found"})
 		return
 	}
@@ -301,7 +302,7 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 	// status check is needed before this call.
 	claimedDC, err := c.deviceCodeSvc.ClaimAuthorizedDeviceCode(ctx, req.DeviceCode, req.ClientID)
 	if err != nil {
-		c.logger.Warn("Device code claim failed", zap.Error(err), zap.String("device_code", req.DeviceCode), zap.String("client_id", req.ClientID))
+		c.logger.Warn("Device code claim failed", zap.Error(err), zap.String("device_code", utility.MaskOpaqueID(req.DeviceCode)), zap.String("client_id", req.ClientID))
 		// Distinguish expired vs consumed per RFC 8628 §3.5
 		errorDesc := "device code already consumed"
 		if lookupDC, lookupErr := c.deviceCodeSvc.GetDeviceCode(ctx, req.DeviceCode); lookupErr == nil && lookupDC.IsExpired() {

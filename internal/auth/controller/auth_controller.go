@@ -430,6 +430,7 @@ func (c *AuthController) MFAEnroll(ctx *gin.Context) {
 		return
 	}
 
+	controllerutil.SetNoCacheHeaders(ctx)
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(enrollment))
 }
 

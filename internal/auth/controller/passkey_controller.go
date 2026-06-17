@@ -18,7 +18,7 @@ import (
 
 // passkeyLoginErrorMap maps passkey login errors to HTTP responses.
 var passkeyLoginErrorMap = []controllerutil.ErrorRule{
-	{Sentinel: authService.ErrPasskeyNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "no passkey found for this account"}},
+	{Sentinel: authService.ErrPasskeyNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "login failed"}},
 }
 
 // passkeyDeleteErrorMap maps passkey credential deletion errors to HTTP responses.

@@ -73,6 +73,10 @@ auth:
         - email
     private_key_path: "/app/keys/private.pem"
     password_reset_base_url: ""
+    # WebAuthn / Passkey configuration (REQUIRED for passkey support)
+    webauthn_rp_id: ""
+    webauthn_rp_name: ""
+    webauthn_rp_origin: ""
     # REQUIRED: 64-char hex string (32 bytes) for encrypting TOTP secrets at rest.
     # Generate with: openssl rand -hex 32
     totp_encryption_key: ""

@@ -50,6 +50,12 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 		return nil, ErrTokenRevoked
 	}
 
+	// Reject tokens with a not-before claim in the future.
+	// Allow 30 seconds of clock skew to handle minor time differences between servers.
+	if claims.NotBefore != nil && claims.NotBefore.After(time.Now().Add(30*time.Second)) {
+		return nil, ErrInvalidToken
+	}
+
 	// Account-level revocation check — rejects all tokens issued before the
 	// account's revocation timestamp (e.g., after OIDC logout).
 	if claims.IssuedAt != nil && claims.AccountID != "" {

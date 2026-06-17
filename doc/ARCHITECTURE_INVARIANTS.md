@@ -235,7 +235,7 @@ ctx.JSON(401, gouno.NewErrorResponse(401, "account is locked"))
 
 ### D1: No new late-bind patterns
 
-The existing `BindSessionRevoker` / `BindOAuth2ClientDeleter` late-bind pattern is a legacy workaround for circular dependencies. New modules must resolve circular dependencies through interface extraction, not late binding.
+New modules must resolve circular dependencies through interface extraction, not late binding.
 
 If you find yourself writing a `BindXxx` function:
 1. First, check if the circular dependency can be broken by extracting a narrow interface

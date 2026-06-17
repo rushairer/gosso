@@ -60,6 +60,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `isTransientError` in email service now only retries on network timeouts and `*net.OpError` — previously retried on all `net.Error` types including permanent DNS failures (`internal/notification/service/email_service.go`).
 - WebAuthn initialization failure now logs a warning that passkey functionality is unavailable — previously only logged the error without indicating the operational impact (`internal/auth/module.go`).
 - JWKS `Reload()` method documentation now includes key rotation procedure — warns that the entire JWKS is replaced and recommends waiting for old tokens to expire before rotation (`internal/oidc/service/jwks_service.go`).
+- MFA `EnrollTOTP` response now sets no-cache headers — prevents TOTP secret from being cached by proxies or browsers (`internal/auth/controller/auth_controller.go`).
+- `ValidateAccessTokenWithContext` now enforces `NotBefore` claim with 30s clock skew tolerance — closes gap where tokens with future `nbf` were accepted by resource servers but rejected by introspection (`internal/token/service/token_service_validate.go`).
+- Passkey `LoginBegin` error message generalized to "login failed" — prevents account passkey registration status enumeration (`internal/auth/controller/passkey_controller.go`).
+- OAuth2 `device_code` values now masked with `MaskOpaqueID()` in all log statements — prevents bearer-equivalent secret leakage via logs (`internal/oauth2/controller/oauth2_device.go`).
 
 ### Added
 - `ErrPasswordRequired`, `ErrPasswordTooLong`, `ErrEmailRequired`, `ErrInvalidEmailFormat`, `ErrPhoneRequired` sentinel errors in credential domain — enables `errors.Is()` matching for constructor validation errors (`internal/account/domain/credential.go`).
@@ -89,6 +93,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ErrSessionServiceNotConfigured` sentinel error — returned by `LogoutByAccountID`/`LogoutBySessionID` when session service is nil (`internal/oidc/service/logout_service.go`).
 
 ### Changed
+- Admin rate limit now has a default of 30/min via `config_manager.go` — was missing from Viper defaults, causing validation failure when not explicitly configured (`config/config_manager.go`).
+- Refresh token TTL calculation in `RotateRefreshToken` now uses `math.Ceil` consistently with `GenerateRefreshToken` — prevents up to 1 second TTL discrepancy on rotation (`internal/token/service/token_service_revoke.go`).
+- `Permissions-Policy` header now additionally restricts `payment`, `usb`, `midi`, `autoplay`, `fullscreen` — defense-in-depth beyond the previous `geolocation`, `camera`, `microphone` (`middleware/middleware.go`).
+- Admin controller now uses shared `controllerutil.ValidateUUID` instead of a local duplicate — ensures consistent `ctx.Abort()` on validation failure (`internal/admin/controller/admin_controller.go`).
+- `ConsentService.GetConsent` now logs a warning on cache JSON corruption before falling back to DB — enables detection of cache integrity issues in production (`internal/oauth2/service/consent_service.go`).
+- WebAuthn configuration (`webauthn_rp_id`, `webauthn_rp_name`, `webauthn_rp_origin`) now included in development and production YAML templates — improves discoverability for operators (`config/development.yaml`, `config/production.yaml`).
+- Global coverage threshold raised from 50% to 60% — aligns with documented invariant T1 in `ARCHITECTURE_INVARIANTS.md` (`Makefile`).
+- `session/service` minimum coverage threshold raised from 6.6% to 20% — security-critical session lifecycle management requires higher coverage (`script/check-critical-coverage.sh`).
+- `ARCHITECTURE_INVARIANTS.md` D1 invariant: removed stale reference to `BindSessionRevoker` / `BindOAuth2ClientDeleter` — these legacy patterns no longer exist in the codebase (`doc/ARCHITECTURE_INVARIANTS.md`).
 - `controllerutil.ValidateUUID` helper added as shared UUID validation for path/query parameters — extracted from `admin/controller` pattern for reuse across modules (`internal/controllerutil/response_helpers.go`).
 - `LoginRateLimitClearer` interface now returns `error` from `ClearLoginRateLimitsByUsername` — enables callers to detect and handle Redis failures after password reset (`internal/auth/service/password_reset_service.go`).
 - `AssignRoleToAccount` repository now accepts `createdAt time.Time` parameter — consistent with all other repository timestamp methods (`internal/account/repository/role_repository_impl.go`).

@@ -54,10 +54,11 @@ func (s *ConsentService) GetConsent(ctx context.Context, accountID, clientID str
 	data, err := s.redis.Get(ctx, key)
 	if err == nil {
 		var consent domain.Consent
-		if jsonErr := json.Unmarshal([]byte(data), &consent); jsonErr == nil {
+		jsonErr := json.Unmarshal([]byte(data), &consent)
+		if jsonErr == nil {
 			return &consent, nil
 		}
-		// Cache corrupt — fall through to DB
+		s.logger.Warn("consent cache corrupt, falling back to DB", zap.Error(jsonErr))
 	} else if !errors.Is(err, cache.ErrKeyNotFound) {
 		s.logger.Warn("Redis consent cache read failed, falling back to DB",
 			zap.String("account_id", accountID), zap.Error(err))

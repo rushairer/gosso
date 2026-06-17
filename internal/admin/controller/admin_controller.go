@@ -99,15 +99,6 @@ func (c *AdminController) ListAccounts(ctx *gin.Context) {
 	}))
 }
 
-// validateUUID validates and returns the UUID string, or sends a 400 error.
-func validateUUID(ctx *gin.Context, value, paramName string) (string, bool) {
-	if _, err := uuid.Parse(value); err != nil {
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid "+paramName))
-		return "", false
-	}
-	return value, true
-}
-
 // isSelfAccount checks if the current admin is operating on their own account.
 // Uses UUID parsing to handle format differences (e.g., with/without braces).
 func isSelfAccount(ctx *gin.Context, accountID string) bool {
@@ -122,7 +113,7 @@ func isSelfAccount(ctx *gin.Context, accountID string) bool {
 
 // GetAccount GET /api/admin/accounts/:account_id
 func (c *AdminController) GetAccount(ctx *gin.Context) {
-	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
+	accountID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("account_id"), "account_id")
 	if !ok {
 		return
 	}
@@ -139,7 +130,7 @@ func (c *AdminController) GetAccount(ctx *gin.Context) {
 
 // DeleteAccount DELETE /api/admin/accounts/:account_id
 func (c *AdminController) DeleteAccount(ctx *gin.Context) {
-	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
+	accountID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("account_id"), "account_id")
 	if !ok {
 		return
 	}
@@ -160,7 +151,7 @@ func (c *AdminController) DeleteAccount(ctx *gin.Context) {
 
 // DisableAccount POST /api/admin/accounts/:account_id/disable
 func (c *AdminController) DisableAccount(ctx *gin.Context) {
-	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
+	accountID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("account_id"), "account_id")
 	if !ok {
 		return
 	}
@@ -181,7 +172,7 @@ func (c *AdminController) DisableAccount(ctx *gin.Context) {
 
 // EnableAccount POST /api/admin/accounts/:account_id/enable
 func (c *AdminController) EnableAccount(ctx *gin.Context) {
-	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
+	accountID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("account_id"), "account_id")
 	if !ok {
 		return
 	}
@@ -202,7 +193,7 @@ func (c *AdminController) EnableAccount(ctx *gin.Context) {
 
 // GetAccountRoles GET /api/admin/accounts/:account_id/roles
 func (c *AdminController) GetAccountRoles(ctx *gin.Context) {
-	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
+	accountID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("account_id"), "account_id")
 	if !ok {
 		return
 	}
@@ -224,7 +215,7 @@ type AddRoleRequestBody struct {
 
 // AddRole POST /api/admin/accounts/:account_id/roles
 func (c *AdminController) AddRole(ctx *gin.Context) {
-	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
+	accountID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("account_id"), "account_id")
 	if !ok {
 		return
 	}
@@ -239,7 +230,7 @@ func (c *AdminController) AddRole(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
 		return
 	}
-	if _, ok := validateUUID(ctx, req.RoleID, "role_id"); !ok {
+	if _, ok := controllerutil.ValidateUUID(ctx, req.RoleID, "role_id"); !ok {
 		return
 	}
 
@@ -254,7 +245,7 @@ func (c *AdminController) AddRole(ctx *gin.Context) {
 
 // RemoveRole DELETE /api/admin/accounts/:account_id/roles/:role_id
 func (c *AdminController) RemoveRole(ctx *gin.Context) {
-	accountID, ok := validateUUID(ctx, ctx.Param("account_id"), "account_id")
+	accountID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("account_id"), "account_id")
 	if !ok {
 		return
 	}
@@ -264,7 +255,7 @@ func (c *AdminController) RemoveRole(ctx *gin.Context) {
 		return
 	}
 
-	roleID, ok := validateUUID(ctx, ctx.Param("role_id"), "role_id")
+	roleID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("role_id"), "role_id")
 	if !ok {
 		return
 	}

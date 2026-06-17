@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -91,7 +92,7 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	newHash := domain.HashToken(newTokenString)
 	oldHash := domain.HashToken(oldToken)
 	newKey := s.buildRefreshTokenKey(newTokenString)
-	expirySeconds := int(s.refreshExpiry.Seconds())
+	expirySeconds := int(math.Ceil(s.refreshExpiry.Seconds()))
 
 	// 3. Pre-read old token to get SessionID before running the Lua script.
 	//    This enables the session index update to happen atomically inside the script.
