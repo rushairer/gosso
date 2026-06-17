@@ -28,6 +28,13 @@ var loginErrorMap = []controllerutil.ErrorRule{
 	{Sentinel: authService.ErrMFARateLimited, Mapping: controllerutil.ErrorMapping{Status: http.StatusTooManyRequests, Message: "too many MFA attempts, try again later"}},
 }
 
+// validSocialProviders is the allowlist of supported social login providers.
+var validSocialProviders = map[string]bool{
+	"google": true,
+	"github": true,
+	"wechat": true,
+}
+
 // revokeSessionErrorMap maps session revocation errors to HTTP responses.
 var revokeSessionErrorMap = []controllerutil.ErrorRule{
 	{Sentinel: sessionService.ErrSessionAccessDenied, Mapping: controllerutil.ErrorMapping{Status: http.StatusForbidden, Message: "session not found or access denied"}},
@@ -344,9 +351,8 @@ func (c *AuthController) RevokeSession(ctx *gin.Context) {
 		return
 	}
 
-	sessionID := ctx.Param("id")
-	if sessionID == "" {
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "session id required"))
+	sessionID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("id"), "session_id")
+	if !ok {
 		return
 	}
 
@@ -515,6 +521,10 @@ func (c *AuthController) SocialAuthURL(ctx *gin.Context) {
 	}
 
 	provider := ctx.Param("provider")
+	if !validSocialProviders[provider] {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "unsupported social provider"))
+		return
+	}
 
 	// Generate cryptographic state for CSRF protection
 	state, err := authService.GenerateAuthState()
@@ -570,8 +580,8 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 	}
 
 	provider := ctx.Param("provider")
-	if provider == "" {
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "missing provider parameter"))
+	if !validSocialProviders[provider] {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "unsupported social provider"))
 		return
 	}
 	code := ctx.Query("code")

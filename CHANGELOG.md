@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- `deleteIfExpiredScript` now removes expired session IDs from the `account_sessions` index set — prevents stale entries from accumulating and causing Redis memory growth and increasing latency for session operations (`internal/session/service/session_service_scripts.go`, `internal/session/service/session_service.go`).
+- OAuth2 `handleRefreshTokenGrant` now authenticates the client before validating the refresh token — prevents unauthenticated callers from probing token existence via differing error responses (`internal/oauth2/controller/oauth2_token.go`).
+- OAuth2 `handleClientCredentialsGrant` now returns identical `"invalid_client"` error for all authentication failures — prevents client_id enumeration via error description differentiation (`internal/oauth2/controller/oauth2_token.go`).
+- UUID format validation added to `client_id` path parameter in client management endpoints, `session_id` path parameter in session revocation, and `request_id` query parameter in passkey registration — rejects garbage strings before hitting the database (`internal/oauth2/controller/client_controller.go`, `internal/auth/controller/auth_controller.go`, `internal/auth/controller/passkey_controller.go`).
+- JTI (token identifier) values now masked with `MaskOpaqueID()` in all log statements — prevents token correlation from partial log access (`internal/token/service/blacklist_service.go`, `internal/token/service/token_service_validate.go`, `internal/auth/service/auth_login.go`).
+- Social login provider path parameter now validated against an allowlist (`google`, `github`, `wechat`) — rejects arbitrary strings before reaching the service layer (`internal/auth/controller/auth_controller.go`).
 - `SoftDeleteCredential` (single) now clears `credential_value` on soft delete — consistent with bulk `SoftDeleteCredentialsByAccount` (`internal/account/repository/credential_repository_impl.go`).
 - Production database DSN example now defaults to `sslmode=require` — previously defaulted to `disable` (`config/production.example`).
 - SMTP TLS policy changed from `opportunistic` to `mandatory` in production — prevents MITM downgrade attacks (`config/production.yaml`).
@@ -75,6 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ErrSessionServiceNotConfigured` sentinel error — returned by `LogoutByAccountID`/`LogoutBySessionID` when session service is nil (`internal/oidc/service/logout_service.go`).
 
 ### Changed
+- `controllerutil.ValidateUUID` helper added as shared UUID validation for path/query parameters — extracted from `admin/controller` pattern for reuse across modules (`internal/controllerutil/response_helpers.go`).
+- `LoginRateLimitClearer` interface now returns `error` from `ClearLoginRateLimitsByUsername` — enables callers to detect and handle Redis failures after password reset (`internal/auth/service/password_reset_service.go`).
 - `AssignRoleToAccount` repository now accepts `createdAt time.Time` parameter — consistent with all other repository timestamp methods (`internal/account/repository/role_repository_impl.go`).
 - `OAuth2Client.Metadata` JSON tag: removed `omitempty` — consistent with Account/Credential/Role Metadata fields (`internal/oauth2/domain/client.go`).
 - `Consent.CreatedAt` and `Consent.UpdatedAt` JSON tags: removed `omitempty` — consistent with all other entities (`internal/oauth2/domain/consent.go`).
@@ -125,6 +133,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - SubmitConsent denial redirect now uses `url.Parse` + `q.Set` instead of string concatenation — prevents malformed URLs when redirect_uri already contains query parameters (`internal/oauth2/controller/oauth2_authorize.go`).
 
 ### Fixed
+- `ClearLoginRateLimitsByUsername` now returns an `error` instead of silently swallowing Redis failures — callers can now detect and log rate-limit cleanup failures after password reset (`internal/auth/service/auth_login.go`, `internal/auth/service/password_reset_service.go`).
+- `production.yaml` now explicitly sets `shutdown_timeout: 30s` — previously relied on Viper default, which is correct but less transparent for production deployments (`config/production.yaml`).
+- `IntrospectToken` NotBefore check now allows 30 seconds of clock skew — prevents tokens from being rejected due to minor time differences between servers (`internal/token/service/token_service_validate.go`).
+- `RefreshSession` error message now masks session ID with `MaskOpaqueID()` — consistent with all other session logging (`internal/session/service/session_service.go`).
 - MFA controller handlers (`MFAEnroll`, `MFAActivate`, `MFADisable`, `MFAGenerateBackupCodes`) now check for nil `MFAService()` before calling — prevents nil pointer panic when MFA service is not configured (`internal/auth/controller/auth_controller.go`).
 - Ad-hoc `errors.New()` calls in `RequestReset`, `ActivateTOTP`, `VerifyCodeForAccount`, `AssertIdentifierForAccount`, `createAccountWithSocialIdentity`, `ConfirmVerificationCredential` now use canonical sentinel errors — enables reliable `errors.Is()` matching by callers (`internal/auth/service/`).
 - `GetMFATypes` now returns `([]string, error)` instead of silently degrading — prevents database failures from omitting available MFA types in login response (`internal/auth/service/mfa_service.go`).

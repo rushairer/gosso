@@ -14,6 +14,7 @@ web_server:
     read_header_timeout: 2s
     write_timeout: 30s
     request_timeout: 10s
+    shutdown_timeout: 30s
     trusted_proxies:
         - "172.22.0.0/16"  # Docker network (gosso-prod-network)
     rate_limits:

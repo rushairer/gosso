@@ -130,7 +130,10 @@ func (c *ClientController) ListClients(ctx *gin.Context) {
 
 // GetClient GET /api/oauth2/clients/:client_id
 func (c *ClientController) GetClient(ctx *gin.Context) {
-	clientID := ctx.Param("client_id")
+	clientID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("client_id"), "client_id")
+	if !ok {
+		return
+	}
 
 	accountID, ok := middleware.GetAccountID(ctx)
 	if !ok {
@@ -154,7 +157,10 @@ func (c *ClientController) GetClient(ctx *gin.Context) {
 
 // UpdateClient PUT /api/oauth2/clients/:client_id
 func (c *ClientController) UpdateClient(ctx *gin.Context) {
-	clientID := ctx.Param("client_id")
+	clientID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("client_id"), "client_id")
+	if !ok {
+		return
+	}
 
 	accountID, ok := middleware.GetAccountID(ctx)
 	if !ok {
@@ -198,7 +204,10 @@ type UpdateClientRequest struct {
 
 // DeleteClient DELETE /api/oauth2/clients/:client_id
 func (c *ClientController) DeleteClient(ctx *gin.Context) {
-	clientID := ctx.Param("client_id")
+	clientID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("client_id"), "client_id")
+	if !ok {
+		return
+	}
 
 	accountID, ok := middleware.GetAccountID(ctx)
 	if !ok {

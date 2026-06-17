@@ -100,7 +100,7 @@ func newTestClient(accountID string) *oauth2Domain.OAuth2Client {
 	return &oauth2Domain.OAuth2Client{
 		ID:             "client-uuid-001",
 		AccountID:      accountID,
-		ClientID:       "cid-abc123",
+		ClientID:       "550e8400-e29b-41d4-a716-446655440000",
 		Name:           "Test App",
 		Description:    "A test app",
 		RedirectURIs:   []string{"https://app.example.com/callback"},
@@ -137,7 +137,7 @@ func TestRegisterClient_Success(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "cid-abc123", data["client_id"])
+	assert.Equal(t, "550e8400-e29b-41d4-a716-446655440000", data["client_id"])
 	assert.Equal(t, "secret-123", data["client_secret"])
 }
 
@@ -210,7 +210,7 @@ func TestGetClient_Success(t *testing.T) {
 	}
 	engine := setupClientController(clientSvc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/oauth2/clients/cid-abc123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/oauth2/clients/550e8400-e29b-41d4-a716-446655440000", nil)
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -226,7 +226,7 @@ func TestGetClient_NotFound(t *testing.T) {
 	}
 	engine := setupClientController(clientSvc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/oauth2/clients/nonexistent", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/oauth2/clients/550e8400-e29b-41d4-a716-446655440000", nil)
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -244,7 +244,7 @@ func TestGetClient_IDORProtection(t *testing.T) {
 	}
 	engine := setupClientController(clientSvc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/oauth2/clients/cid-abc123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/oauth2/clients/550e8400-e29b-41d4-a716-446655440000", nil)
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -331,7 +331,7 @@ func TestUpdateClient_InvalidRedirectScheme(t *testing.T) {
 	engine := setupClientController(clientSvc)
 
 	body := `{"redirect_uris":["javascript:alert(1)"]}`
-	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/cid-abc123", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/550e8400-e29b-41d4-a716-446655440000", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -348,7 +348,7 @@ func TestUpdateClient_InvalidPostLogoutURI(t *testing.T) {
 	engine := setupClientController(clientSvc)
 
 	body := `{"post_logout_redirect_uris":["javascript:alert(1)"]}`
-	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/cid-abc123", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/550e8400-e29b-41d4-a716-446655440000", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -365,7 +365,7 @@ func TestUpdateClient_ServiceError(t *testing.T) {
 	engine := setupClientController(clientSvc)
 
 	body := `{"name":"Updated App"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/cid-abc123", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/550e8400-e29b-41d4-a716-446655440000", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -383,7 +383,7 @@ func TestDeleteClient_ServiceError(t *testing.T) {
 	}
 	engine := setupClientController(clientSvc)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/oauth2/clients/cid-abc123", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/oauth2/clients/550e8400-e29b-41d4-a716-446655440000", nil)
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -400,7 +400,7 @@ func TestUpdateClient_Success(t *testing.T) {
 	engine := setupClientController(clientSvc)
 
 	body := `{"name":"Updated App","description":"Updated description"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/cid-abc123", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/550e8400-e29b-41d4-a716-446655440000", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -418,7 +418,7 @@ func TestUpdateClient_IDORProtection(t *testing.T) {
 	engine := setupClientController(clientSvc)
 
 	body := `{"name":"Hacked Name"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/cid-abc123", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/550e8400-e29b-41d4-a716-446655440000", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -436,7 +436,7 @@ func TestUpdateClient_InvalidGrantType(t *testing.T) {
 	engine := setupClientController(clientSvc)
 
 	body := `{"grant_types":["authorization_code","magic_unicorn"]}`
-	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/cid-abc123", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/550e8400-e29b-41d4-a716-446655440000", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -455,7 +455,7 @@ func TestUpdateClient_ValidGrantTypes(t *testing.T) {
 	engine := setupClientController(clientSvc)
 
 	body := `{"grant_types":["authorization_code","refresh_token","client_credentials","urn:ietf:params:oauth:grant-type:device_code"]}`
-	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/cid-abc123", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/oauth2/clients/550e8400-e29b-41d4-a716-446655440000", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -492,7 +492,7 @@ func TestDeleteClient_Success(t *testing.T) {
 	}
 	engine := setupClientController(clientSvc)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/oauth2/clients/cid-abc123", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/oauth2/clients/550e8400-e29b-41d4-a716-446655440000", nil)
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -510,7 +510,7 @@ func TestDeleteClient_IDORProtection(t *testing.T) {
 	}
 	engine := setupClientController(clientSvc)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/oauth2/clients/cid-abc123", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/oauth2/clients/550e8400-e29b-41d4-a716-446655440000", nil)
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)

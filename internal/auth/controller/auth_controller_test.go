@@ -599,11 +599,11 @@ func TestRevokeSession_CannotRevokeCurrent(t *testing.T) {
 	tokenMgr := &mockTokenManager{}
 	claims := &tokenDomain.AccessTokenClaims{
 		AccountID: "account-001",
-		SessionID: "current-session",
+		SessionID: "550e8400-e29b-41d4-a716-446655440099",
 	}
 	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/auth/sessions/current-session", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/sessions/550e8400-e29b-41d4-a716-446655440099", nil)
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -618,11 +618,11 @@ func TestRevokeSession_Success(t *testing.T) {
 	tokenMgr := &mockTokenManager{}
 	claims := &tokenDomain.AccessTokenClaims{
 		AccountID: "account-001",
-		SessionID: "current-session",
+		SessionID: "550e8400-e29b-41d4-a716-446655440001",
 	}
 	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/auth/sessions/other-session-id", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/sessions/550e8400-e29b-41d4-a716-446655440002", nil)
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -1152,7 +1152,7 @@ func TestRevokeSession_ServiceError(t *testing.T) {
 	}
 	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/auth/sessions/other-session", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/sessions/550e8400-e29b-41d4-a716-446655440001", nil)
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -1170,7 +1170,7 @@ func TestRevokeSession_AccessDenied(t *testing.T) {
 	}
 	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/auth/sessions/other-session", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/sessions/550e8400-e29b-41d4-a716-446655440001", nil)
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 

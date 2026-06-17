@@ -162,7 +162,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 		// Blacklist MFA token on failure to prevent brute-force replay.
 		if bErr := s.blacklistMFAToken(ctx, claims); bErr != nil {
 			s.logger.Error("Failed to blacklist MFA token after failed verification",
-				zap.String("account_id", accountID), zap.String("jti", claims.ID), zap.Error(bErr))
+				zap.String("account_id", accountID), zap.String("jti", utility.MaskOpaqueID(claims.ID)), zap.Error(bErr))
 		}
 		return nil, err
 	}
@@ -172,7 +172,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	// the eventual function return that would fire a deferred blacklist.
 	if err := s.blacklistMFAToken(ctx, claims); err != nil {
 		s.logger.Error("Failed to blacklist MFA token after verification",
-			zap.String("account_id", accountID), zap.String("jti", claims.ID), zap.Error(err))
+			zap.String("account_id", accountID), zap.String("jti", utility.MaskOpaqueID(claims.ID)), zap.Error(err))
 	}
 
 	// 4. Find account
@@ -325,19 +325,24 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 // for the given username across all IPs. Used after password reset to unblock
 // accounts that were locked by brute-force attacks.
 // Uses SCAN with pattern matching since the IP component is unknown.
-func (s *AuthService) ClearLoginRateLimitsByUsername(ctx context.Context, username string) {
+// Returns the first error encountered, if any.
+func (s *AuthService) ClearLoginRateLimitsByUsername(ctx context.Context, username string) error {
 	pattern := fmt.Sprintf("login_attempts:*:%s", strings.ToLower(username))
 	cursor := uint64(0)
+	var firstErr error
 	for {
 		keys, nextCursor, err := s.redis.ScanKeys(ctx, cursor, pattern, 100)
 		if err != nil {
 			s.logger.Warn("Failed to scan login rate limit keys during cleanup",
 				zap.String("username", utility.MaskEmail(username)), zap.Error(err))
-			return
+			return fmt.Errorf("scan rate limit keys: %w", err)
 		}
 		for _, key := range keys {
 			if delErr := s.redis.Del(ctx, key); delErr != nil {
 				s.logger.Warn("Failed to delete login rate limit key", zap.String("key", key), zap.Error(delErr))
+				if firstErr == nil {
+					firstErr = fmt.Errorf("delete rate limit key %s: %w", key, delErr)
+				}
 			}
 		}
 		cursor = nextCursor
@@ -345,4 +350,5 @@ func (s *AuthService) ClearLoginRateLimitsByUsername(ctx context.Context, userna
 			break
 		}
 	}
+	return firstErr
 }

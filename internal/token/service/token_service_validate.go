@@ -12,6 +12,7 @@ import (
 
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/token/domain"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // ValidateAccessTokenWithContext validates a JWT access token using the request context
@@ -42,7 +43,7 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 	}
 	revoked, err := s.blacklist.IsTokenRevoked(ctx, claims.ID)
 	if err != nil {
-		s.logger.Error("Failed to check token blacklist, rejecting token", zap.Error(err), zap.String("jti", claims.ID))
+		s.logger.Error("Failed to check token blacklist, rejecting token", zap.Error(err), zap.String("jti", utility.MaskOpaqueID(claims.ID)))
 		return nil, ErrBlacklistUnavailable
 	}
 	if revoked {
@@ -102,8 +103,9 @@ func (s *TokenService) IntrospectToken(ctx context.Context, tokenString string) 
 		return map[string]any{"active": false}, nil
 	}
 
-	// Reject tokens with a not-before claim in the future
-	if claims.NotBefore != nil && claims.NotBefore.After(time.Now()) {
+	// Reject tokens with a not-before claim in the future.
+	// Allow 30 seconds of clock skew to handle minor time differences between servers.
+	if claims.NotBefore != nil && claims.NotBefore.After(time.Now().Add(30*time.Second)) {
 		return map[string]any{"active": false}, nil
 	}
 

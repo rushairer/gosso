@@ -72,7 +72,7 @@ type AccountTokenRevoker interface {
 // LoginRateLimitClearer clears login rate-limit counters for a given username.
 // Used after successful password reset to unblock accounts locked by brute-force attacks.
 type LoginRateLimitClearer interface {
-	ClearLoginRateLimitsByUsername(ctx context.Context, username string)
+	ClearLoginRateLimitsByUsername(ctx context.Context, username string) error
 }
 
 type passwordResetData struct {
@@ -386,7 +386,9 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	// after a legitimate password reset (e.g., after a brute-force attack
 	// triggered rate limiting on the victim's account).
 	if s.loginRateLimitClearer != nil {
-		s.loginRateLimitClearer.ClearLoginRateLimitsByUsername(ctx, data.Email)
+		if err := s.loginRateLimitClearer.ClearLoginRateLimitsByUsername(ctx, data.Email); err != nil {
+			s.logger.Warn("Failed to clear login rate limits after password reset", zap.Error(err))
+		}
 	}
 
 	// Synchronously revoke all access tokens issued before this password reset.

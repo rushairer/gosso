@@ -293,7 +293,7 @@ func (s *SessionService) RefreshSession(ctx context.Context, sessionID string) e
 
 	// Reject refresh if session has exceeded absolute max lifetime
 	if s.maxSessionAge > 0 && time.Since(session.CreatedAt) > s.maxSessionAge {
-		s.expireSession(ctx, sessionID)
+		s.expireSession(ctx, sessionID, s.buildAccountSessionsKey(session.AccountID))
 		return ErrSessionExpired
 	}
 
@@ -312,7 +312,7 @@ func (s *SessionService) RefreshSession(ctx context.Context, sessionID string) e
 		return fmt.Errorf("refresh session: %w", err)
 	}
 	if !ok {
-		return fmt.Errorf("session %s no longer exists", sessionID)
+		return fmt.Errorf("session %s no longer exists", maskSessionID(sessionID))
 	}
 
 	return nil
@@ -330,14 +330,14 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 		s.logger.Warn("Session exceeded max lifetime",
 			zap.String("session_id", maskSessionID(sessionID)),
 			zap.Duration("max_age", s.maxSessionAge))
-		s.expireSession(ctx, sessionID)
+		s.expireSession(ctx, sessionID, s.buildAccountSessionsKey(session.AccountID))
 		return nil, ErrSessionExpired
 	}
 
 	// Check if session has expired due to inactivity
 	if session.IsExpired(s.sessionTTL) {
 		s.logger.Warn("Session expired", zap.String("session_id", maskSessionID(sessionID)))
-		s.expireSession(ctx, sessionID)
+		s.expireSession(ctx, sessionID, s.buildAccountSessionsKey(session.AccountID))
 		return nil, ErrSessionExpired
 	}
 
@@ -356,7 +356,9 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 // expireSession cascades token revocation and deletes the session.
 // Uses a Lua script to atomically verify the session is still expired before
 // deleting, preventing a concurrent RefreshSession from being invalidated.
-func (s *SessionService) expireSession(ctx context.Context, sessionID string) {
+// The accountSessionsKey parameter (may be empty) enables cleanup of stale
+// entries from the account_sessions index set.
+func (s *SessionService) expireSession(ctx context.Context, sessionID string, accountSessionsKey string) {
 	if s.tokenRevoker != nil {
 		if err := s.tokenRevoker.RevokeAllForSession(ctx, sessionID); err != nil {
 			s.logger.Warn("Failed to revoke tokens for expired session",
@@ -366,7 +368,7 @@ func (s *SessionService) expireSession(ctx context.Context, sessionID string) {
 
 	sessionKey := s.buildSessionKey(sessionID)
 	result, err := s.redis.RunScript(ctx, deleteIfExpiredScript,
-		[]string{sessionKey}).Int()
+		[]string{sessionKey, accountSessionsKey}, sessionID).Int()
 	if err != nil {
 		s.logger.Warn("Failed to atomically check and delete expired session",
 			zap.String("session_id", maskSessionID(sessionID)), zap.Error(err))
@@ -374,6 +376,12 @@ func (s *SessionService) expireSession(ctx context.Context, sessionID string) {
 		if delErr := s.redis.Del(ctx, sessionKey); delErr != nil {
 			s.logger.Warn("Failed to delete expired session (fallback)",
 				zap.String("session_id", maskSessionID(sessionID)), zap.Error(delErr))
+		}
+		if accountSessionsKey != "" {
+			if remErr := s.redis.SRem(ctx, accountSessionsKey, sessionID); remErr != nil {
+				s.logger.Warn("Failed to remove stale session index entry (fallback)",
+					zap.String("session_id", maskSessionID(sessionID)), zap.Error(remErr))
+			}
 		}
 	} else if result == 0 {
 		s.logger.Info("Session was refreshed concurrently, skipping expiry",

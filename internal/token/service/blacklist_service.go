@@ -55,7 +55,7 @@ func (s *BlacklistService) RevokeToken(ctx context.Context, jti string, reason s
 
 	data, err := json.Marshal(blacklist)
 	if err != nil {
-		s.logger.Error("Failed to marshal token blacklist", zap.Error(err), zap.String("jti", jti))
+		s.logger.Error("Failed to marshal token blacklist", zap.Error(err), zap.String("jti", utility.MaskOpaqueID(jti)))
 		return fmt.Errorf("marshal token blacklist: %w", err)
 	}
 
@@ -64,18 +64,18 @@ func (s *BlacklistService) RevokeToken(ctx context.Context, jti string, reason s
 	ttl := time.Until(expiresAt) + 5*time.Minute
 	if ttl <= 0 {
 		// Token has already expired, no need to add to blacklist
-		s.logger.Warn("Token already expired, skip blacklist", zap.String("jti", jti))
+		s.logger.Warn("Token already expired, skip blacklist", zap.String("jti", utility.MaskOpaqueID(jti)))
 		return nil
 	}
 
 	key := s.buildBlacklistKey(jti)
 	if err := s.redis.Set(ctx, key, data, ttl); err != nil {
-		s.logger.Error("Failed to revoke token", zap.Error(err), zap.String("jti", jti))
+		s.logger.Error("Failed to revoke token", zap.Error(err), zap.String("jti", utility.MaskOpaqueID(jti)))
 		return fmt.Errorf("revoke token: %w", err)
 	}
 
 	s.logger.Info("Token revoked",
-		zap.String("jti", jti),
+		zap.String("jti", utility.MaskOpaqueID(jti)),
 		zap.String("reason", reason),
 		zap.Duration("ttl", ttl))
 
@@ -87,7 +87,7 @@ func (s *BlacklistService) IsTokenRevoked(ctx context.Context, jti string) (bool
 	key := s.buildBlacklistKey(jti)
 	exists, err := s.redis.Exists(ctx, key)
 	if err != nil {
-		s.logger.Error("Failed to check token blacklist", zap.Error(err), zap.String("jti", jti))
+		s.logger.Error("Failed to check token blacklist", zap.Error(err), zap.String("jti", utility.MaskOpaqueID(jti)))
 		return false, fmt.Errorf("check token blacklist: %w", err)
 	}
 
@@ -102,13 +102,13 @@ func (s *BlacklistService) GetRevokeInfo(ctx context.Context, jti string) (*doma
 		return nil, ErrTokenNotRevoked
 	}
 	if err != nil {
-		s.logger.Error("Failed to get token blacklist", zap.Error(err), zap.String("jti", jti))
+		s.logger.Error("Failed to get token blacklist", zap.Error(err), zap.String("jti", utility.MaskOpaqueID(jti)))
 		return nil, fmt.Errorf("get token blacklist: %w", err)
 	}
 
 	var blacklist domain.TokenBlacklist
 	if err := json.Unmarshal([]byte(data), &blacklist); err != nil {
-		s.logger.Error("Failed to unmarshal token blacklist", zap.Error(err), zap.String("jti", jti))
+		s.logger.Error("Failed to unmarshal token blacklist", zap.Error(err), zap.String("jti", utility.MaskOpaqueID(jti)))
 		return nil, fmt.Errorf("unmarshal token blacklist: %w", err)
 	}
 
@@ -119,11 +119,11 @@ func (s *BlacklistService) GetRevokeInfo(ctx context.Context, jti string) (*doma
 func (s *BlacklistService) removeFromBlacklist(ctx context.Context, jti string) error {
 	key := s.buildBlacklistKey(jti)
 	if err := s.redis.Del(ctx, key); err != nil {
-		s.logger.Error("Failed to remove token from blacklist", zap.Error(err), zap.String("jti", jti))
+		s.logger.Error("Failed to remove token from blacklist", zap.Error(err), zap.String("jti", utility.MaskOpaqueID(jti)))
 		return fmt.Errorf("remove token from blacklist: %w", err)
 	}
 
-	s.logger.Info("Token removed from blacklist", zap.String("jti", jti))
+	s.logger.Info("Token removed from blacklist", zap.String("jti", utility.MaskOpaqueID(jti)))
 	return nil
 }
 

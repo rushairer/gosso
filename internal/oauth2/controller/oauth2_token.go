@@ -165,7 +165,35 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 }
 
 func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenRequest) {
-	// Non-destructive read first to validate client before consuming the token
+	// RFC 6749 §6: Authenticate the client BEFORE validating the refresh token.
+	// This prevents unauthenticated callers from probing token existence via
+	// differing error responses between "invalid token" and "wrong credentials."
+	if req.ClientID == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "client_id is required"})
+		return
+	}
+	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
+	if err != nil {
+		c.clientAuth.DummyAuthenticate()
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
+		return
+	}
+	if !client.HasGrantType("refresh_token") {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
+		return
+	}
+	// RFC 6749 §6: confidential clients MUST authenticate when using refresh token grant.
+	// Public clients are exempt — they are bound by the refresh token itself and optionally PKCE.
+	if client.IsConfidential {
+		if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
+			controllerutil.HandleClientAuthError(ctx, c.logger, err,
+				oauth2Service.ErrClientSecretRequired,
+				"client_secret required for confidential clients", "invalid client_secret")
+			return
+		}
+	}
+
+	// Now that the client is authenticated, validate the refresh token
 	oldRefreshToken, err := c.tokenSvc.ValidateRefreshToken(ctx, req.RefreshToken)
 	if err != nil {
 		c.logger.Debug("Refresh token validation failed", zap.Error(err))
@@ -182,32 +210,10 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 			zap.String("account_id", oldRefreshToken.AccountID))
 	}
 
-	// Verify client binding before rotation (RFC 6749 §6: client_id MUST match)
+	// Verify client binding (RFC 6749 §6: client_id MUST match)
 	if req.ClientID != oldRefreshToken.ClientID {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "client_id mismatch or missing"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "client_id mismatch"})
 		return
-	}
-
-	// RFC 6749 Section 6: confidential clients MUST authenticate when using refresh token grant
-	client, err := c.clientSvc.FindByClientID(ctx, oldRefreshToken.ClientID)
-	if err != nil {
-		c.clientAuth.DummyAuthenticate()
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
-		return
-	}
-	if !client.HasGrantType("refresh_token") {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
-		return
-	}
-	// RFC 6749 Section 6: confidential clients MUST authenticate when using refresh token grant.
-	// Public clients are exempt — they are bound by the refresh token itself and optionally PKCE.
-	if client.IsConfidential {
-		if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-			controllerutil.HandleClientAuthError(ctx, c.logger, err,
-				oauth2Service.ErrClientSecretRequired,
-				"client_secret required for confidential clients", "invalid client_secret")
-			return
-		}
 	}
 
 	// Verify account is still active BEFORE consuming the old refresh token.
@@ -265,7 +271,8 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 
 func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *TokenRequest) {
 	if req.ClientID == "" || req.ClientSecret == "" {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client_id and client_secret required"})
+		c.clientAuth.DummyAuthenticate()
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}
 
@@ -289,7 +296,7 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 	}
 
 	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "invalid client_secret"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}
 

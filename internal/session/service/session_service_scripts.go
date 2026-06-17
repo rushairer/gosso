@@ -97,12 +97,22 @@ return 'OK'
 // extends the TTL via EXPIRE) from having its session incorrectly deleted by a
 // stale ValidateSession that read the session before the refresh.
 //
+// When an account_sessions key is provided, the script also removes the session
+// ID from the account's session index set, preventing stale entries from
+// accumulating over time.
+//
 // KEYS[1] = session:{sessionID}
+// KEYS[2] = account_sessions:{accountID} (may be empty string to skip cleanup)
+// ARGV[1] = session ID (for SREM member)
 // Returns: 1 if deleted (expired) or already gone, 0 if kept (still valid)
 var deleteIfExpiredScript = redis.NewScript(`
 local data = redis.call('GET', KEYS[1])
 if not data then
-    return 1  -- already gone, treat as deleted
+    -- Session key already gone; clean up stale index reference if available.
+    if KEYS[2] ~= '' then
+        redis.call('SREM', KEYS[2], ARGV[1])
+    end
+    return 1
 end
 
 -- If PTTL > 0, someone recently refreshed the TTL (sliding window).
@@ -113,5 +123,8 @@ if pttl > 0 then
 end
 
 redis.call('DEL', KEYS[1])
+if KEYS[2] ~= '' then
+    redis.call('SREM', KEYS[2], ARGV[1])
+end
 return 1
 `)

@@ -109,9 +109,8 @@ func (c *PasskeyController) RegisterBegin(ctx *gin.Context) {
 
 // RegisterComplete POST /api/auth/passkey/register/complete
 func (c *PasskeyController) RegisterComplete(ctx *gin.Context) {
-	requestID := ctx.Query("request_id")
-	if requestID == "" {
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "request_id is required"))
+	requestID, ok := controllerutil.ValidateUUID(ctx, ctx.Query("request_id"), "request_id")
+	if !ok {
 		return
 	}
 

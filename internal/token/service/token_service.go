@@ -65,6 +65,7 @@ func NewTokenService(
 	if blacklist == nil {
 		return nil, errors.New("token service: blacklist service is required")
 	}
+	// auditor is optional — audit logging is best-effort and nil-safe.
 	if accessExpiry <= 0 {
 		return nil, errors.New("token service: accessExpiry must be positive")
 	}
