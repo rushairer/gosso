@@ -285,7 +285,7 @@ func TestAssignRole(t *testing.T) {
 		WillReturnRows(roleRows)
 
 	mock.ExpectExec("INSERT INTO account_roles").
-		WithArgs("account-001", "role-001").
+		WithArgs("account-001", "role-001", sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 

@@ -30,6 +30,7 @@ func validConfig() GoUnoConfig {
 				Token:      10,
 				Passkey:    10,
 				API:        60,
+				Admin:      30,
 				Introspect: 20,
 				DeviceCode: 10,
 				Password:   3,
