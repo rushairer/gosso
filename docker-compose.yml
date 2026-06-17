@@ -161,6 +161,7 @@ services:
           memory: 64M
 
 # 网络配置
+# NOTE: If you change the subnet here, also update trusted_proxies in config/production.yaml.
 networks:
   gosso-prod-network:
     driver: bridge

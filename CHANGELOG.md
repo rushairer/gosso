@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- `SoftDeleteCredential` (single) now clears `credential_value` on soft delete — consistent with bulk `SoftDeleteCredentialsByAccount` (`internal/account/repository/credential_repository_impl.go`).
+- Production database DSN example now defaults to `sslmode=require` — previously defaulted to `disable` (`config/production.example`).
+- SMTP TLS policy changed from `opportunistic` to `mandatory` in production — prevents MITM downgrade attacks (`config/production.yaml`).
+- Redis password now injected via config file copy instead of CLI `--requirepass` — prevents exposure in `/proc/<pid>/cmdline` (`docker-compose.yml`).
+- Admin endpoints now have dedicated rate limit (default 30/min) — previously shared general API limit of 60/min (`config/config.go`, `router/web.go`).
 - Upgraded `golang.org/x/crypto` from v0.52.0 to v0.53.0 — picks up latest security patches (`go.mod`).
 - `UnbindFederatedIdentity` last-auth-method check now runs inside transaction — prevents TOCTOU race that could lock users out (`internal/account/service/account_service_identity.go`).
 - `SetAccountRevokedAfter` now uses Lua ratchet script — prevents concurrent logout requests from overwriting a later revocation timestamp with an earlier one (`internal/token/service/blacklist_service.go`).
@@ -41,6 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CSP nonce now uses `base64.RawURLEncoding` instead of `StdEncoding` — safer for HTTP header embedding without quoting (`middleware/middleware.go`).
 
 ### Added
+- `ErrPasswordRequired`, `ErrPasswordTooLong`, `ErrEmailRequired`, `ErrInvalidEmailFormat`, `ErrPhoneRequired` sentinel errors in credential domain — enables `errors.Is()` matching for constructor validation errors (`internal/account/domain/credential.go`).
+- `ErrProviderRequired`, `ErrUnsupportedProvider`, `ErrProviderUserIDRequired` sentinel errors in federated identity domain — enables `errors.Is()` matching for constructor validation errors (`internal/account/domain/federated_identity.go`).
+- `ErrMFARateLimited` sentinel error for per-account MFA rate limiting — correct semantics replacing reused `ErrIPLocked` (`internal/auth/service/errors.go`).
 - `Consent.NewConsent()` factory now generates UUID `ID` and sets `CreatedAt`/`UpdatedAt` — consistent with other domain entity factories (`internal/oauth2/domain/consent.go`).
 - `DeviceCode.Authorize()`, `Deny()`, `MarkUsed()` state transition methods — domain layer now defines valid status transitions with sentinel errors for invalid transitions (`internal/oauth2/domain/device_code.go`).
 - `DeviceCode.CreatedAt` field — tracks when the device code was created (`internal/oauth2/domain/device_code.go`).
@@ -64,6 +72,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ErrSessionServiceNotConfigured` sentinel error — returned by `LogoutByAccountID`/`LogoutBySessionID` when session service is nil (`internal/oidc/service/logout_service.go`).
 
 ### Changed
+- `AssignRoleToAccount` repository now accepts `createdAt time.Time` parameter — consistent with all other repository timestamp methods (`internal/account/repository/role_repository_impl.go`).
+- `OAuth2Client.Metadata` JSON tag: removed `omitempty` — consistent with Account/Credential/Role Metadata fields (`internal/oauth2/domain/client.go`).
+- `Consent.CreatedAt` and `Consent.UpdatedAt` JSON tags: removed `omitempty` — consistent with all other entities (`internal/oauth2/domain/consent.go`).
+- `Account.Sanitize()` now trims whitespace from `Username` — catches leading/trailing spaces that would otherwise be persisted as-is (`internal/account/domain/account.go`).
 - `SendVerification` error handling now uses centralized `controllerutil.HandleServiceError` with `ErrorRule` map — consistent with all other controller error paths (`internal/auth/controller/auth_controller.go`).
 - `UpdateClient` error handling now uses centralized `controllerutil.HandleServiceError` with `ErrorRule` map — stops leaking `err.Error()` to clients (`internal/oauth2/controller/client_controller.go`).
 - CSP nonce size extracted to named `cspNonceSize` constant — eliminates magic number in `generateCSPNonce()` (`middleware/middleware.go`).
