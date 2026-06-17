@@ -91,7 +91,7 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     volumes:
       - redis_prod_data:/data
-      - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf.template:ro
     networks:
       - gosso-prod-network
     restart: unless-stopped
@@ -101,10 +101,14 @@ services:
       timeout: 3s
       retries: 3
       start_period: 10s
-    # NOTE: --requirepass is visible in /proc/<pid>/cmdline inside the container.
-    # For high-security deployments, consider setting requirepass in a mounted
-    # config file or using Docker secrets instead.
-    command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD}"]
+    # Password is injected into a copy of redis.conf via the entrypoint command,
+    # avoiding exposure in /proc/<pid>/cmdline.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cp /usr/local/etc/redis/redis.conf.template /tmp/redis.conf
+        printf '\nrequirepass %s\n' "$REDIS_PASSWORD" >> /tmp/redis.conf
+        exec redis-server /tmp/redis.conf
     security_opt:
       - no-new-privileges:true
     cap_drop:

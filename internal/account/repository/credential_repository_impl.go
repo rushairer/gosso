@@ -243,7 +243,7 @@ func (r *credentialRepositoryImpl) SoftDeleteCredentialsByAccount(ctx context.Co
 func (r *credentialRepositoryImpl) SoftDeleteCredential(ctx context.Context, tx *sql.Tx, credentialID string, deletedAt time.Time) error {
 	query := `
 		UPDATE account_credentials
-		SET deleted_at = $1, updated_at = $1
+		SET deleted_at = $1, updated_at = $1, credential_value = NULL
 		WHERE id = $2 AND deleted_at IS NULL
 	`
 

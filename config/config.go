@@ -47,6 +47,7 @@ type RateLimitsConfig struct {
 	Token      int `mapstructure:"token"`       // Token endpoint, default 10
 	Passkey    int `mapstructure:"passkey"`     // Passkey endpoint, default 10
 	API        int `mapstructure:"api"`         // General API, default 60
+	Admin      int `mapstructure:"admin"`       // Admin endpoint, default 30
 	Introspect int `mapstructure:"introspect"`  // Introspect endpoint, default 20
 	DeviceCode int `mapstructure:"device_code"` // Device code endpoint, default 10
 	Password   int `mapstructure:"password"`    // Password reset endpoint, default 3
@@ -302,6 +303,9 @@ func (c *GoUnoConfig) validateWebServer() error {
 	}
 	if rl.API <= 0 {
 		return fmt.Errorf("web_server: rate_limits.api must be positive (got %d)", rl.API)
+	}
+	if rl.Admin <= 0 {
+		return fmt.Errorf("web_server: rate_limits.admin must be positive (got %d)", rl.Admin)
 	}
 	if rl.Introspect <= 0 {
 		return fmt.Errorf("web_server: rate_limits.introspect must be positive (got %d)", rl.Introspect)

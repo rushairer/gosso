@@ -96,7 +96,7 @@ func RegisterWebRouter(deps RouterDeps) {
 
 		// Admin routes (require JWT authentication + admin role + rate limiting)
 		admin := api.Group("/admin")
-		adminLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "admin", middleware.IPKeyFunc, deps.RateLimits.API, time.Minute, false, deps.Logger)
+		adminLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "admin", middleware.IPKeyFunc, deps.RateLimits.Admin, time.Minute, false, deps.Logger)
 		admin.Use(adminLimit, jwtAuth, authMiddleware.AdminRequiredMiddleware())
 		deps.AdminCtrl.RegisterRoutes(admin)
 

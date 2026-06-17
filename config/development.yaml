@@ -19,6 +19,7 @@ web_server:
         token: 30
         passkey: 10
         api: 120
+        admin: 60
         introspect: 20
         device_code: 10
         password: 5

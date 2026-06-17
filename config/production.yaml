@@ -21,6 +21,7 @@ web_server:
         token: 10
         passkey: 10
         api: 60
+        admin: 30
         introspect: 20
         device_code: 10
         password: 3
@@ -51,7 +52,7 @@ smtp:
     username: ""
     password: ""
     from: ""
-    tls_policy: "opportunistic"
+    tls_policy: "mandatory"
 log:
     level: 0 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
     format: json
