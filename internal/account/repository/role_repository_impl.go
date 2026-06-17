@@ -211,14 +211,14 @@ func (r *roleRepositoryImpl) SoftDeleteByID(ctx context.Context, tx *sql.Tx, rol
 }
 
 // AssignRoleToAccount assigns a role to an account
-func (r *roleRepositoryImpl) AssignRoleToAccount(ctx context.Context, tx *sql.Tx, accountID, roleID string) error {
+func (r *roleRepositoryImpl) AssignRoleToAccount(ctx context.Context, tx *sql.Tx, accountID, roleID string, createdAt time.Time) error {
 	query := `
 		INSERT INTO account_roles (account_id, role_id, created_at)
-		VALUES ($1, $2, NOW())
+		VALUES ($1, $2, $3)
 		ON CONFLICT (account_id, role_id) WHERE deleted_at IS NULL DO NOTHING
 	`
 
-	_, err := tx.ExecContext(ctx, query, accountID, roleID)
+	_, err := tx.ExecContext(ctx, query, accountID, roleID, createdAt)
 	if err != nil {
 		return fmt.Errorf("assign role to account: %w", err)
 	}

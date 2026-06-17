@@ -136,7 +136,7 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 		if role.IsDeleted() {
 			return repository.ErrRoleNotFound
 		}
-		return s.roleRepo.AssignRoleToAccount(ctx, tx, accountID, roleID)
+		return s.roleRepo.AssignRoleToAccount(ctx, tx, accountID, roleID, time.Now())
 	})
 	if err != nil {
 		return err

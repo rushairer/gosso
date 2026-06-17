@@ -46,7 +46,7 @@ type Consent struct {
 	ClientID  string     `json:"client_id"`
 	Scopes    []string   `json:"scopes"`
 	GrantedAt time.Time  `json:"granted_at"`
-	CreatedAt time.Time  `json:"created_at,omitempty"`
-	UpdatedAt time.Time  `json:"updated_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }

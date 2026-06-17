@@ -23,7 +23,7 @@ type OAuth2Client struct {
 	GrantTypes             []string       `json:"grant_types"`
 	Scopes                 []string       `json:"scopes"`
 	IsConfidential         bool           `json:"is_confidential"`
-	Metadata               map[string]any `json:"metadata,omitempty"`
+	Metadata               map[string]any `json:"metadata"`
 	CreatedAt              time.Time      `json:"created_at"`
 	UpdatedAt              time.Time      `json:"updated_at"`
 	DeletedAt              *time.Time     `json:"deleted_at,omitempty"`

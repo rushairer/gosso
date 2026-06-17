@@ -87,6 +87,14 @@ func NewAccount(displayName string) (*Account, error) {
 // Must be called before Validate when accepting user input.
 func (a *Account) Sanitize() {
 	a.DisplayName = strings.TrimSpace(a.DisplayName)
+	if a.Username != nil {
+		trimmed := strings.TrimSpace(*a.Username)
+		if trimmed == "" {
+			a.Username = nil
+		} else {
+			a.Username = &trimmed
+		}
+	}
 	a.Locale = strings.TrimSpace(a.Locale)
 	a.Timezone = strings.TrimSpace(a.Timezone)
 }

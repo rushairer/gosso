@@ -38,7 +38,7 @@ type RoleRepository interface {
 	SoftDeleteByID(ctx context.Context, tx *sql.Tx, roleID string, deletedAt time.Time) error
 
 	// AssignRoleToAccount assigns a role to an account (requires transaction)
-	AssignRoleToAccount(ctx context.Context, tx *sql.Tx, accountID, roleID string) error
+	AssignRoleToAccount(ctx context.Context, tx *sql.Tx, accountID, roleID string, createdAt time.Time) error
 
 	// RemoveRoleFromAccount removes a role from an account (soft delete, requires transaction)
 	RemoveRoleFromAccount(ctx context.Context, tx *sql.Tx, accountID, roleID string, deletedAt time.Time) error

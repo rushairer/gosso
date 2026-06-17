@@ -208,7 +208,7 @@ func TestRoleRepo_AssignRoleToAccount(t *testing.T) {
 	repo := NewRoleRepository(sqlDB)
 
 	err = dbPkg.RunInTransaction(context.Background(), sqlDB, func(tx *sql.Tx) error {
-		return repo.AssignRoleToAccount(context.Background(), tx, "account-001", "role-001")
+		return repo.AssignRoleToAccount(context.Background(), tx, "account-001", "role-001", time.Now())
 	})
 
 	require.NoError(t, err)

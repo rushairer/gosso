@@ -129,7 +129,7 @@ func (m *testRoleRepository) SoftDeleteByID(_ context.Context, _ *sql.Tx, _ stri
 	return fmt.Errorf("not implemented")
 }
 
-func (m *testRoleRepository) AssignRoleToAccount(_ context.Context, _ *sql.Tx, _, _ string) error {
+func (m *testRoleRepository) AssignRoleToAccount(_ context.Context, _ *sql.Tx, _, _ string, _ time.Time) error {
 	return fmt.Errorf("not implemented")
 }
 
