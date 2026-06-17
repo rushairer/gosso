@@ -56,6 +56,9 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 
 	client, err := c.clientSvc.FindByClientID(ctx, clientID)
 	if err != nil {
+		if c.clientAuth != nil {
+			c.clientAuth.DummyAuthenticate()
+		}
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
 		return
 	}

@@ -172,7 +172,7 @@ func (s *AuthService) ConfirmVerificationCredential(ctx context.Context, credTyp
 	case "phone":
 		domainCredType = accountDomain.CredentialTypePhone
 	default:
-		return fmt.Errorf("unsupported credential type: %s", credType)
+		return fmt.Errorf("%w: %s", ErrUnsupportedCredentialType, credType)
 	}
 
 	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {

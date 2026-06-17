@@ -90,7 +90,11 @@ func (s *AuthService) handleMFARequirement(ctx context.Context, account *account
 	if err != nil {
 		return nil, fmt.Errorf("generate mfa token: %w", err)
 	}
-	return buildMFAResult(account, mfaToken, s.mfaSvc.GetMFATypes(ctx, account.ID)), nil
+	mfaTypes, err := s.mfaSvc.GetMFATypes(ctx, account.ID)
+	if err != nil {
+		return nil, fmt.Errorf("get mfa types: %w", err)
+	}
+	return buildMFAResult(account, mfaToken, mfaTypes), nil
 }
 
 // CheckMFA implements the MFAChecker interface for use by SocialLoginService.

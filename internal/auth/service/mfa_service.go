@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"time"
 
@@ -126,7 +125,7 @@ func (s *MFAService) SetTOTPEncryptionKey(hexKey string) error {
 		return fmt.Errorf("invalid TOTP encryption key: %w", err)
 	}
 	if len(key) != 32 {
-		return fmt.Errorf("TOTP encryption key must be 32 bytes (got %d)", len(key))
+		return fmt.Errorf("%w: TOTP encryption key must be 32 bytes (got %d)", ErrInvalidConfig, len(key))
 	}
 	s.totpEncryptionKey = key
 	return nil
@@ -166,32 +165,34 @@ func (s *MFAService) IsMFAEnabled(ctx context.Context, accountID string) (bool, 
 	return false, nil
 }
 
-// GetMFATypes gets the list of available MFA types for the account
-func (s *MFAService) GetMFATypes(ctx context.Context, accountID string) []string {
+// GetMFATypes gets the list of available MFA types for the account.
+// Returns an error if credential or passkey queries fail, preventing silent degradation
+// that could omit available MFA types from the login response.
+func (s *MFAService) GetMFATypes(ctx context.Context, accountID string) ([]string, error) {
 	var types []string
 
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
 	if err != nil {
-		s.logger.Warn("Failed to query TOTP credentials for MFA types", zap.String("account_id", accountID), zap.Error(err))
-	} else {
-		for _, c := range creds {
-			if c.Verified && !c.IsDeleted() {
-				types = append(types, "totp")
-				break
-			}
+		return nil, fmt.Errorf("query TOTP credentials: %w", err)
+	}
+	for _, c := range creds {
+		if c.Verified && !c.IsDeleted() {
+			types = append(types, "totp")
+			break
 		}
 	}
 
 	if s.passkeySvc != nil {
 		has, err := s.passkeySvc.HasPasskeys(ctx, accountID)
 		if err != nil {
-			s.logger.Warn("Failed to check passkeys for MFA types", zap.String("account_id", accountID), zap.Error(err))
-		} else if has {
+			return nil, fmt.Errorf("check passkeys: %w", err)
+		}
+		if has {
 			types = append(types, "passkey")
 		}
 	}
 
-	return types
+	return types, nil
 }
 
 // EnrollTOTP starts TOTP enrollment (generates secret, saves to credential, verified=false)
@@ -300,7 +301,7 @@ func (s *MFAService) ActivateTOTP(ctx context.Context, accountID, code string) e
 		return err
 	}
 	if !valid {
-		return errors.New("invalid TOTP code")
+		return ErrInvalidMFACode
 	}
 
 	// Atomically verify the first unverified TOTP credential in a transaction
@@ -315,7 +316,7 @@ func (s *MFAService) ActivateTOTP(ctx context.Context, accountID, code string) e
 		return fmt.Errorf("activate totp credential: %w", err)
 	}
 	if !activated {
-		return errors.New("no pending TOTP enrollment found")
+		return ErrNoPendingTOTPEnrollment
 	}
 
 	return nil
@@ -481,7 +482,7 @@ func decryptSecret(encoded string, key []byte) (string, error) {
 	}
 	nonceSize := gcm.NonceSize()
 	if len(data) < nonceSize {
-		return "", fmt.Errorf("ciphertext too short")
+		return "", fmt.Errorf("%w: %s", ErrCiphertextTooShort, "data shorter than nonce size")
 	}
 	plaintext, err := gcm.Open(nil, data[:nonceSize], data[nonceSize:], nil)
 	if err != nil {

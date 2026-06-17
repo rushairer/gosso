@@ -44,11 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - OAuth2 `Revoke` endpoint now calls `DummyAuthenticate()` on client lookup failure — eliminates timing side-channel that could distinguish "client not found" from "wrong secret" (`internal/oauth2/controller/oauth2_revoke.go`).
 - Credential query errors no longer include raw identifiers (email/phone) — prevents PII leakage into logs (`internal/account/repository/credential_repository_impl.go`).
 - CSP nonce now uses `base64.RawURLEncoding` instead of `StdEncoding` — safer for HTTP header embedding without quoting (`middleware/middleware.go`).
+- OAuth2 `Authorize` endpoint now calls `DummyAuthenticate()` on client lookup failure — eliminates timing side-channel for client ID enumeration, consistent with token/revoke endpoints (`internal/oauth2/controller/oauth2_authorize.go`).
+- `readLimitedBody` now closes the original `io.ReadCloser` body via `defer` — prevents HTTP connection leaks (`internal/auth/service/passkey_service.go`).
 
 ### Added
 - `ErrPasswordRequired`, `ErrPasswordTooLong`, `ErrEmailRequired`, `ErrInvalidEmailFormat`, `ErrPhoneRequired` sentinel errors in credential domain — enables `errors.Is()` matching for constructor validation errors (`internal/account/domain/credential.go`).
 - `ErrProviderRequired`, `ErrUnsupportedProvider`, `ErrProviderUserIDRequired` sentinel errors in federated identity domain — enables `errors.Is()` matching for constructor validation errors (`internal/account/domain/federated_identity.go`).
 - `ErrMFARateLimited` sentinel error for per-account MFA rate limiting — correct semantics replacing reused `ErrIPLocked` (`internal/auth/service/errors.go`).
+- `ErrPasswordCooldown`, `ErrIdentifierNotAssociated`, `ErrVerificationCodeMismatch`, `ErrNoPendingTOTPEnrollment`, `ErrCiphertextTooShort`, `ErrFailedToCreateAccount`, `ErrUnsupportedCredentialType`, `ErrInvalidConfig` sentinel errors — enables `errors.Is()` matching for previously ad-hoc error strings (`internal/auth/service/errors.go`).
 - `Consent.NewConsent()` factory now generates UUID `ID` and sets `CreatedAt`/`UpdatedAt` — consistent with other domain entity factories (`internal/oauth2/domain/consent.go`).
 - `DeviceCode.Authorize()`, `Deny()`, `MarkUsed()` state transition methods — domain layer now defines valid status transitions with sentinel errors for invalid transitions (`internal/oauth2/domain/device_code.go`).
 - `DeviceCode.CreatedAt` field — tracks when the device code was created (`internal/oauth2/domain/device_code.go`).
@@ -122,6 +125,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - SubmitConsent denial redirect now uses `url.Parse` + `q.Set` instead of string concatenation — prevents malformed URLs when redirect_uri already contains query parameters (`internal/oauth2/controller/oauth2_authorize.go`).
 
 ### Fixed
+- MFA controller handlers (`MFAEnroll`, `MFAActivate`, `MFADisable`, `MFAGenerateBackupCodes`) now check for nil `MFAService()` before calling — prevents nil pointer panic when MFA service is not configured (`internal/auth/controller/auth_controller.go`).
+- Ad-hoc `errors.New()` calls in `RequestReset`, `ActivateTOTP`, `VerifyCodeForAccount`, `AssertIdentifierForAccount`, `createAccountWithSocialIdentity`, `ConfirmVerificationCredential` now use canonical sentinel errors — enables reliable `errors.Is()` matching by callers (`internal/auth/service/`).
+- `GetMFATypes` now returns `([]string, error)` instead of silently degrading — prevents database failures from omitting available MFA types in login response (`internal/auth/service/mfa_service.go`).
+- Social login `loginExistingUser` audit log errors now logged instead of silently discarded — consistent with `loginAuditLogsSync` pattern (`internal/auth/service/social_login_service.go`).
+- `RegisterClient` transaction error now wrapped with `"register client"` context (`internal/oauth2/service/client_service.go`).
+- Password reset `CompleteReset` Redis token deletion no longer retries immediately on failure — single attempt with TTL-based expiry fallback, since immediate retry after Redis failure is ineffective (`internal/auth/service/password_reset_service.go`).
+- `SetTOTPEncryptionKey` error now wraps `ErrInvalidConfig` sentinel — enables programmatic matching (`internal/auth/service/mfa_service.go`).
 - `UpdateCredential` repository now updates `updated_at` — was previously stale after credential mutations (`internal/account/repository/credential_repository_impl.go`).
 - WebAuthn `UpdateCredential` repository now updates `updated_at` — was previously stale after WebAuthn credential mutations (`internal/auth/repository/webauthn_repository_impl.go`).
 - `Role.RemovePermission` and `Role.HasPermission` now trim whitespace from input — consistent with `AddPermission` which already trimmed; prevents lookups from failing when input has surrounding spaces (`internal/account/domain/role.go`).

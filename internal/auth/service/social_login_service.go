@@ -285,13 +285,15 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, ip, userAgent string) (result *LoginResult, err error) {
 	defer func() {
 		if err != nil {
-			_ = auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+			if auditErr := auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 				auditDomain.ActionLoginFailure,
 				audit.IPFromContext(ctx),
 				&accountID,
 				utility.MustMarshalJSON(map[string]any{"method": "social", "account_id": accountID}),
 				utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx), "reason": safeAuditReason(err)}),
-			))
+			)); auditErr != nil {
+				s.logger.Error("Failed to write sync audit log for social login failure", zap.Error(auditErr))
+			}
 		}
 	}()
 
@@ -345,7 +347,7 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 			zap.String("provider", provider),
 			zap.String("email", utility.MaskEmail(email)),
 			zap.Error(err))
-		return nil, errors.New("failed to create account")
+		return nil, fmt.Errorf("%w: %s", ErrFailedToCreateAccount, err)
 	}
 
 	// Audit log for social login account creation

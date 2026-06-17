@@ -162,7 +162,8 @@ func TestGetMFATypes_TOTPOnly(t *testing.T) {
 	}
 	svc := newTestMFAService(credRepo)
 
-	types := svc.GetMFATypes(context.Background(), "account-001")
+	types, err := svc.GetMFATypes(context.Background(), "account-001")
+	assert.NoError(t, err)
 	assert.Contains(t, types, "totp")
 	assert.NotContains(t, types, "passkey")
 }
@@ -171,7 +172,8 @@ func TestGetMFATypes_None(t *testing.T) {
 	credRepo := &mockCredentialRepo{credMap: map[string][]*accountDomain.Credential{}}
 	svc := newTestMFAService(credRepo)
 
-	types := svc.GetMFATypes(context.Background(), "account-001")
+	types, err := svc.GetMFATypes(context.Background(), "account-001")
+	assert.NoError(t, err)
 	assert.Empty(t, types)
 }
 
@@ -185,7 +187,8 @@ func TestGetMFATypes_UnverifiedTOTPIgnored(t *testing.T) {
 	}
 	svc := newTestMFAService(credRepo)
 
-	types := svc.GetMFATypes(context.Background(), "account-001")
+	types, err := svc.GetMFATypes(context.Background(), "account-001")
+	assert.NoError(t, err)
 	assert.Empty(t, types)
 }
 
@@ -415,8 +418,7 @@ func TestActivateTOTP_InvalidCode(t *testing.T) {
 	svc := newTestMFAServiceWithDB(t, credRepo, sqlDB)
 
 	err = svc.ActivateTOTP(context.Background(), "account-001", "000000")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid TOTP code")
+	assert.ErrorIs(t, err, ErrInvalidMFACode)
 }
 
 func TestActivateTOTP_NoPendingEnrollment(t *testing.T) {
@@ -741,8 +743,9 @@ func TestGetMFATypes_FindByAccountAndTypeError(t *testing.T) {
 	}
 	svc := newTestMFAService(credRepo)
 
-	types := svc.GetMFATypes(context.Background(), "account-001")
-	assert.Empty(t, types, "repo error should log warning and return empty")
+	types, err := svc.GetMFATypes(context.Background(), "account-001")
+	assert.Error(t, err, "repo error should return error")
+	assert.Empty(t, types, "repo error should return empty types")
 }
 
 func TestGetMFATypes_WithPasskey(t *testing.T) {
@@ -754,7 +757,8 @@ func TestGetMFATypes_WithPasskey(t *testing.T) {
 	}
 	svc := newTestMFAServiceWithPasskeys(t, credRepo, waRepo)
 
-	types := svc.GetMFATypes(context.Background(), "account-001")
+	types, err := svc.GetMFATypes(context.Background(), "account-001")
+	assert.NoError(t, err)
 	assert.Contains(t, types, "passkey")
 	assert.NotContains(t, types, "totp")
 }
@@ -774,7 +778,8 @@ func TestGetMFATypes_WithTOTPAndPasskey(t *testing.T) {
 	}
 	svc := newTestMFAServiceWithPasskeys(t, credRepo, waRepo)
 
-	types := svc.GetMFATypes(context.Background(), "account-001")
+	types, err := svc.GetMFATypes(context.Background(), "account-001")
+	assert.NoError(t, err)
 	assert.Contains(t, types, "totp")
 	assert.Contains(t, types, "passkey")
 }
@@ -786,8 +791,9 @@ func TestGetMFATypes_WithPasskeyError(t *testing.T) {
 	}
 	svc := newTestMFAServiceWithPasskeys(t, credRepo, waRepo)
 
-	types := svc.GetMFATypes(context.Background(), "account-001")
-	assert.Empty(t, types, "passkey error should log warning and not append passkey")
+	types, err := svc.GetMFATypes(context.Background(), "account-001")
+	assert.Error(t, err, "passkey error should return error")
+	assert.Empty(t, types, "passkey error should return empty types")
 }
 
 // ──────────────────────────────────────────────

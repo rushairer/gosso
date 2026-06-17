@@ -39,4 +39,20 @@ var (
 	// Password reset errors
 	ErrPasswordResetInvalidToken = errors.New("invalid or expired reset token")
 	ErrPasswordResetExhausted    = errors.New("reset token exhausted, please request a new one")
+	ErrPasswordCooldown          = errors.New("please wait before requesting another reset")
+
+	// Verification errors
+	ErrIdentifierNotAssociated  = errors.New("identifier not associated with this account")
+	ErrVerificationCodeMismatch = errors.New("verification code does not belong to this account")
+
+	// Registration errors
+	ErrFailedToCreateAccount    = errors.New("failed to create account")
+	ErrUnsupportedCredentialType = errors.New("unsupported credential type")
+
+	// TOTP / crypto errors
+	ErrNoPendingTOTPEnrollment = errors.New("no pending TOTP enrollment found")
+	ErrCiphertextTooShort      = errors.New("ciphertext too short")
+
+	// Configuration errors
+	ErrInvalidConfig = errors.New("invalid configuration")
 )

@@ -122,7 +122,7 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 		return s.clientRepo.Create(ctx, tx, client)
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("register client: %w", err)
 	}
 
 	return client, secretPlaintext, nil

@@ -507,6 +507,7 @@ func (s *PasskeyService) ResolveAccountForRegistration(ctx context.Context, acco
 // readLimitedBody reads the request body with a size limit and replaces it
 // with a new reader so it can be read again.
 func readLimitedBody(body io.ReadCloser, maxSize int64) ([]byte, error) {
+	defer body.Close()
 	data, err := io.ReadAll(io.LimitReader(body, maxSize+1))
 	if err != nil {
 		return nil, fmt.Errorf("read request body: %w", err)

@@ -232,10 +232,10 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 	exists, err := s.redis.Exists(ctx, cooldownKey)
 	if err != nil {
 		s.logger.Error("Failed to check reset cooldown, denying request", zap.Error(err))
-		return errors.New("service temporarily unavailable")
+		return ErrServiceUnavailable
 	}
 	if exists {
-		return errors.New("please wait before requesting another reset")
+		return ErrPasswordCooldown
 	}
 
 	// Find email credential
@@ -378,10 +378,8 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	// This runs synchronously but is fast (single Redis DEL).
 	// If the deletion fails, the token will expire naturally via TTL — a safe fallback.
 	if err := s.redis.Del(ctx, tokenKey); err != nil {
-		if retryErr := s.redis.Del(ctx, tokenKey); retryErr != nil {
-			s.logger.Warn("Failed to delete reset token from Redis after retry, token will expire via TTL",
-				zap.Error(retryErr), zap.String("token_hash", tokenHash))
-		}
+		s.logger.Warn("Failed to delete reset token from Redis, token will expire via TTL",
+			zap.Error(err), zap.String("token_hash", tokenHash))
 	}
 
 	// Clear login rate-limit counters so the account is not locked out

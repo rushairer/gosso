@@ -356,7 +356,7 @@ func (s *VerificationService) ValidateCredentialOwnership(ctx context.Context, a
 			return nil
 		}
 	}
-	return errors.New("identifier not associated with this account")
+	return ErrIdentifierNotAssociated
 }
 
 // VerifyCodeForAccount verifies a code and checks that it belongs to the expected account.
@@ -366,7 +366,7 @@ func (s *VerificationService) VerifyCodeForAccount(ctx context.Context, credType
 		return err
 	}
 	if accountID != expectedAccountID {
-		return errors.New("verification code does not belong to this account")
+		return ErrVerificationCodeMismatch
 	}
 	return nil
 }

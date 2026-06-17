@@ -411,7 +411,13 @@ func (c *AuthController) MFAEnroll(ctx *gin.Context) {
 		return
 	}
 
-	enrollment, err := c.authSvc.MFAService().EnrollTOTP(ctx, tc.AccountID)
+	mfaSvc := c.authSvc.MFAService()
+	if mfaSvc == nil {
+		ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "MFA service not available"))
+		return
+	}
+
+	enrollment, err := mfaSvc.EnrollTOTP(ctx, tc.AccountID)
 	if err != nil {
 		c.logger.Error("MFA enrollment failed", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to enroll MFA"))
@@ -439,7 +445,13 @@ func (c *AuthController) MFAActivate(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.authSvc.MFAService().ActivateTOTP(ctx, tc.AccountID, req.Code); err != nil {
+	mfaSvc := c.authSvc.MFAService()
+	if mfaSvc == nil {
+		ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "MFA service not available"))
+		return
+	}
+
+	if err := mfaSvc.ActivateTOTP(ctx, tc.AccountID, req.Code); err != nil {
 		c.logger.Warn("MFA activation failed", zap.Error(err))
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid activation code"))
 		return
@@ -455,7 +467,13 @@ func (c *AuthController) MFADisable(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.authSvc.MFAService().DisableTOTP(ctx, tc.AccountID); err != nil {
+	mfaSvc := c.authSvc.MFAService()
+	if mfaSvc == nil {
+		ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "MFA service not available"))
+		return
+	}
+
+	if err := mfaSvc.DisableTOTP(ctx, tc.AccountID); err != nil {
 		c.logger.Error("MFA disable failed", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to disable MFA"))
 		return
@@ -471,7 +489,13 @@ func (c *AuthController) MFAGenerateBackupCodes(ctx *gin.Context) {
 		return
 	}
 
-	codes, err := c.authSvc.MFAService().GenerateBackupCodes(ctx, tc.AccountID)
+	mfaSvc := c.authSvc.MFAService()
+	if mfaSvc == nil {
+		ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "MFA service not available"))
+		return
+	}
+
+	codes, err := mfaSvc.GenerateBackupCodes(ctx, tc.AccountID)
 	if err != nil {
 		c.logger.Error("Backup codes generation failed", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to generate backup codes"))
