@@ -19,6 +19,11 @@ import (
 
 var (
 	ErrAccountIDRequired        = errors.New("account ID is required")
+	ErrPasswordRequired         = errors.New("password must not be empty")
+	ErrPasswordTooLong          = errors.New("password exceeds maximum length")
+	ErrEmailRequired            = errors.New("email is required")
+	ErrInvalidEmailFormat       = errors.New("invalid email format")
+	ErrPhoneRequired            = errors.New("phone is required")
 	ErrInvalidPhoneFormat       = errors.New("invalid phone format")
 	ErrCredentialAlreadyDeleted = errors.New("credential is already deleted")
 )
@@ -99,10 +104,10 @@ func NewPasswordCredential(accountID string, plainPassword string) (*Credential,
 		return nil, ErrAccountIDRequired
 	}
 	if len(plainPassword) == 0 {
-		return nil, errors.New("password must not be empty")
+		return nil, ErrPasswordRequired
 	}
 	if len(plainPassword) > utility.MaxPasswordLength {
-		return nil, fmt.Errorf("password must not exceed %d bytes", utility.MaxPasswordLength)
+		return nil, ErrPasswordTooLong
 	}
 	if err := utility.ValidatePasswordStrength(plainPassword); err != nil {
 		return nil, err
@@ -132,10 +137,10 @@ func NewEmailCredential(accountID string, email string) (*Credential, error) {
 	}
 	email = strings.TrimSpace(email)
 	if email == "" {
-		return nil, errors.New("email is required")
+		return nil, ErrEmailRequired
 	}
 	if _, err := mail.ParseAddress(email); err != nil {
-		return nil, fmt.Errorf("invalid email format: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidEmailFormat, err)
 	}
 	return &Credential{
 		ID:         uuid.New().String(),
@@ -157,7 +162,7 @@ func NewPhoneCredential(accountID string, phone string) (*Credential, error) {
 	}
 	phone = strings.TrimSpace(phone)
 	if phone == "" {
-		return nil, errors.New("phone is required")
+		return nil, ErrPhoneRequired
 	}
 	if !utility.ValidatePhoneFormat(phone) {
 		return nil, ErrInvalidPhoneFormat

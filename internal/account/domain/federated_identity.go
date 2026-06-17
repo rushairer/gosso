@@ -32,6 +32,9 @@ type FederatedIdentity struct {
 // FederatedIdentity domain sentinel errors.
 var (
 	ErrFederatedIdentityAlreadyDeleted = errors.New("federated identity is already deleted")
+	ErrProviderRequired                = errors.New("provider is required")
+	ErrUnsupportedProvider             = errors.New("unsupported provider")
+	ErrProviderUserIDRequired          = errors.New("provider user ID is required")
 )
 
 // IsValidProvider reports whether p is a recognized identity provider.
@@ -50,13 +53,13 @@ func NewFederatedIdentity(accountID string, provider Provider, providerUserID st
 		return nil, ErrAccountIDRequired
 	}
 	if provider == "" {
-		return nil, errors.New("provider is required")
+		return nil, ErrProviderRequired
 	}
 	if !IsValidProvider(provider) {
-		return nil, fmt.Errorf("unsupported provider: %s", provider)
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
 	}
 	if providerUserID == "" {
-		return nil, errors.New("provider user ID is required")
+		return nil, ErrProviderUserIDRequired
 	}
 	if profile == nil {
 		profile = make(map[string]any)
