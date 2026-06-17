@@ -110,6 +110,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - SubmitConsent denial redirect now uses `url.Parse` + `q.Set` instead of string concatenation — prevents malformed URLs when redirect_uri already contains query parameters (`internal/oauth2/controller/oauth2_authorize.go`).
 
 ### Fixed
+- `UpdateCredential` repository now updates `updated_at` — was previously stale after credential mutations (`internal/account/repository/credential_repository_impl.go`).
+- WebAuthn `UpdateCredential` repository now updates `updated_at` — was previously stale after WebAuthn credential mutations (`internal/auth/repository/webauthn_repository_impl.go`).
+- `Role.RemovePermission` and `Role.HasPermission` now trim whitespace from input — consistent with `AddPermission` which already trimmed; prevents lookups from failing when input has surrounding spaces (`internal/account/domain/role.go`).
+- `checkMFAAccountRateLimit` now returns `ErrMFARateLimited` instead of reusing `ErrIPLocked` — correct error semantics for per-account MFA rate limiting; `ErrIPLocked` is now properly mapped to HTTP 429 in the login error handler (`internal/auth/service/auth_login_helpers.go`, `internal/auth/controller/auth_controller.go`).
 - `NewConsent` now sets `GrantedAt` to `time.Now()` — previously left as zero value (`internal/oauth2/domain/consent.go`).
 - `PasswordResetService.Wait()` now uses `time.NewTimer` with proper cleanup — prevents goroutine leak when `done` fires before timeout (`internal/auth/service/password_reset_service.go`).
 - `evictOldestSessionsScript` now cleans up corrupted sessions (unparseable JSON or missing `last_active_at`) instead of silently skipping them — prevents corrupted entries from blocking new session creation (`internal/session/service/session_service_scripts.go`).

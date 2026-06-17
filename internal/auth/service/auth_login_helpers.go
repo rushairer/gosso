@@ -30,6 +30,8 @@ func safeAuditReason(err error) string {
 		return "account_locked"
 	case errors.Is(err, ErrIPLocked):
 		return "ip_rate_limited"
+	case errors.Is(err, ErrMFARateLimited):
+		return "mfa_rate_limited"
 	case errors.Is(err, accountService.ErrAccountNotActive):
 		return "account_inactive"
 	case errors.Is(err, ErrInvalidMFACode):
@@ -183,7 +185,7 @@ func (s *AuthService) checkMFAAccountRateLimit(ctx context.Context, accountID st
 		return ErrServiceUnavailable
 	}
 	if count >= int64(mfaAccountMaxAttempts) {
-		return ErrIPLocked
+		return ErrMFARateLimited
 	}
 	return nil
 }

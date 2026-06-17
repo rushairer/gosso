@@ -163,7 +163,7 @@ func (r *credentialRepositoryImpl) UpdateCredential(ctx context.Context, tx *sql
 	query := `
 		UPDATE account_credentials
 		SET identifier = $1, credential_value = $2, verified = $3, primary_credential = $4,
-		    metadata = $5, verified_at = $6, last_used_at = $7
+		    metadata = $5, verified_at = $6, last_used_at = $7, updated_at = NOW()
 		WHERE id = $8 AND deleted_at IS NULL
 	`
 

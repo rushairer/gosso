@@ -113,7 +113,7 @@ func (r *webAuthnCredentialRepositoryImpl) UpdateCredential(ctx context.Context,
 
 	query := `
 		UPDATE webauthn_credentials
-		SET sign_count = $2, transports = $3, last_used_at = $4, name = $5
+		SET sign_count = $2, transports = $3, last_used_at = $4, name = $5, updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 

@@ -24,6 +24,8 @@ import (
 // loginErrorMap maps login service errors to HTTP responses.
 var loginErrorMap = []controllerutil.ErrorRule{
 	{Sentinel: authService.ErrServiceUnavailable, Mapping: controllerutil.ErrorMapping{Status: http.StatusServiceUnavailable, Message: "service temporarily unavailable"}},
+	{Sentinel: authService.ErrIPLocked, Mapping: controllerutil.ErrorMapping{Status: http.StatusTooManyRequests, Message: "too many attempts from this IP, try again later"}},
+	{Sentinel: authService.ErrMFARateLimited, Mapping: controllerutil.ErrorMapping{Status: http.StatusTooManyRequests, Message: "too many MFA attempts, try again later"}},
 }
 
 // revokeSessionErrorMap maps session revocation errors to HTTP responses.

@@ -87,6 +87,7 @@ func (r *Role) AddPermission(permission string) {
 
 // RemovePermission removes a permission from the role.
 func (r *Role) RemovePermission(permission string) {
+	permission = strings.TrimSpace(permission)
 	for i, p := range r.Permissions {
 		if p == permission {
 			r.Permissions = append(r.Permissions[:i], r.Permissions[i+1:]...)
@@ -98,6 +99,7 @@ func (r *Role) RemovePermission(permission string) {
 
 // HasPermission reports whether the role has the given permission.
 func (r *Role) HasPermission(permission string) bool {
+	permission = strings.TrimSpace(permission)
 	for _, p := range r.Permissions {
 		if p == permission {
 			return true
