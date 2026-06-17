@@ -22,12 +22,12 @@ import (
 )
 
 const (
-	VerifyCodeKeyPrefix  = "verify:code:"
-	VerifyCooldownPrefix = "verify:cooldown:"
-	VerifyCodeAttempts   = 5
-	VerifyCodeTTL        = 10 * time.Minute
-	VerifyCooldownTTL    = 60 * time.Second
-	VerifyCodeLength     = 6
+	verifyCodeKeyPrefix  = "verify:code:"
+	verifyCooldownPrefix = "verify:cooldown:"
+	verifyCodeAttempts   = 5
+	verifyCodeTTL        = 10 * time.Minute
+	verifyCooldownTTL    = 60 * time.Second
+	verifyCodeLength     = 6
 )
 
 // Sentinel errors for verification service operations.
@@ -95,10 +95,10 @@ type VerificationService struct {
 // VerificationServiceConfig holds optional configuration for VerificationService.
 // Zero-valued fields use package defaults.
 type VerificationServiceConfig struct {
-	CodeTTL     time.Duration // default: VerifyCodeTTL
-	CooldownTTL time.Duration // default: VerifyCooldownTTL
-	MaxAttempts int           // default: VerifyCodeAttempts
-	CodeLength  int           // default: VerifyCodeLength
+	CodeTTL     time.Duration // default: verifyCodeTTL
+	CooldownTTL time.Duration // default: verifyCooldownTTL
+	MaxAttempts int           // default: verifyCodeAttempts
+	CodeLength  int           // default: verifyCodeLength
 	HashPepper  string        // optional secret prepended to code before hashing
 }
 
@@ -130,10 +130,10 @@ func NewVerificationServiceWithConfig(
 		smsSvc:         smsSvc,
 		credentialRepo: credentialRepo,
 		logger:         logger,
-		codeTTL:        VerifyCodeTTL,
-		cooldownTTL:    VerifyCooldownTTL,
-		maxAttempts:    VerifyCodeAttempts,
-		codeLength:     VerifyCodeLength,
+		codeTTL:        verifyCodeTTL,
+		cooldownTTL:    verifyCooldownTTL,
+		maxAttempts:    verifyCodeAttempts,
+		codeLength:     verifyCodeLength,
 	}
 	if cfg.CodeTTL > 0 {
 		svc.codeTTL = cfg.CodeTTL
@@ -312,11 +312,11 @@ func (s *VerificationService) dummyWork() {
 }
 
 func (s *VerificationService) buildCodeKey(credType, identifier string) string {
-	return fmt.Sprintf("%s%s:%s", VerifyCodeKeyPrefix, credType, identifier)
+	return fmt.Sprintf("%s%s:%s", verifyCodeKeyPrefix, credType, identifier)
 }
 
 func (s *VerificationService) buildCooldownKey(credType, identifier string) string {
-	return fmt.Sprintf("%s%s:%s", VerifyCooldownPrefix, credType, identifier)
+	return fmt.Sprintf("%s%s:%s", verifyCooldownPrefix, credType, identifier)
 }
 
 func generateNumericCode(length int) (string, error) {

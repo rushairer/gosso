@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/audit"
@@ -178,18 +180,31 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 	}
 
 	key := s.buildRefreshTokenKey(tokenString)
-	if err := s.redis.Set(ctx, key, data, s.refreshExpiry); err != nil {
-		s.logger.Error("Failed to store refresh token", zap.Error(err))
-		return nil, fmt.Errorf("store refresh token: %w", err)
+	ttlSecs := int(math.Ceil(s.refreshExpiry.Seconds()))
+	if ttlSecs < 1 {
+		ttlSecs = 1
 	}
 
-	// Maintain session -> tokens index
+	// Atomically store the refresh token and update the session -> tokens index
+	// in a single Lua script to prevent partial state on crash.
+	storeRefreshTokenScript := redis.NewScript(`
+		redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+		if KEYS[2] ~= '' then
+			redis.call('SADD', KEYS[2], ARGV[3])
+			redis.call('EXPIRE', KEYS[2], ARGV[2])
+		end
+		return 1
+	`)
+	sessionKey := ""
 	if sessionID != "" {
-		sessionKey := s.buildSessionTokensKey(sessionID)
-		tokenHash := domain.HashToken(tokenString)
-		if err := s.redis.SAddWithTTL(ctx, sessionKey, tokenHash, s.refreshExpiry); err != nil {
-			s.logger.Warn("Failed to index refresh token by session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
-		}
+		sessionKey = s.buildSessionTokensKey(sessionID)
+	}
+	tokenHash := domain.HashToken(tokenString)
+	if err := s.redis.RunScript(ctx, storeRefreshTokenScript,
+		[]string{key, sessionKey}, data, ttlSecs, tokenHash,
+		).Err(); err != nil {
+		s.logger.Error("Failed to store refresh token (atomic)", zap.Error(err))
+		return nil, fmt.Errorf("store refresh token: %w", err)
 	}
 
 	return rt, nil

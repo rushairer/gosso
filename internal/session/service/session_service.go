@@ -181,16 +181,16 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 	if err := s.EnforceSessionLimit(ctx, session.AccountID); err != nil {
 		if s.indexFailClosed {
 			s.logger.Error("Failed to enforce session limit (fail-closed)",
-				zap.Error(err), zap.String("account_id", session.AccountID))
+				zap.Error(err), zap.String("account_id", utility.MaskOpaqueID(session.AccountID)))
 			return fmt.Errorf("enforce session limit: %w", err)
 		}
 		s.logger.Warn("Failed to enforce session limit (fail-open)",
-			zap.Error(err), zap.String("account_id", session.AccountID))
+			zap.Error(err), zap.String("account_id", utility.MaskOpaqueID(session.AccountID)))
 	}
 
 	s.logger.Info("Session created",
 		zap.String("session_id", maskSessionID(session.ID)),
-		zap.String("account_id", session.AccountID),
+		zap.String("account_id", utility.MaskOpaqueID(session.AccountID)),
 		zap.String("ip", session.IP),
 		zap.Duration("ttl", s.sessionTTL))
 
@@ -313,6 +313,13 @@ func (s *SessionService) RefreshSession(ctx context.Context, sessionID string) e
 	}
 	if !ok {
 		return fmt.Errorf("session %s no longer exists", maskSessionID(sessionID))
+	}
+
+	// Refresh the account sessions index TTL to prevent it from expiring before the session
+	indexKey := s.buildAccountSessionsKey(session.AccountID)
+	if err := s.redis.Expire(ctx, indexKey, s.sessionTTL); err != nil {
+		s.logger.Warn("Failed to refresh account sessions index TTL",
+			zap.String("account_id", utility.MaskOpaqueID(session.AccountID)), zap.Error(err))
 	}
 
 	return nil

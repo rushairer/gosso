@@ -202,13 +202,14 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		account.Username = &username
 	}
 	if req.Locale != "" {
-		account.Locale = req.Locale
+		account.Locale = strings.TrimSpace(req.Locale)
 	}
 	if req.Timezone != "" {
-		if _, err := time.LoadLocation(req.Timezone); err != nil {
-			return nil, fmt.Errorf("invalid timezone: %s", req.Timezone)
+		tz := strings.TrimSpace(req.Timezone)
+		if _, err := time.LoadLocation(tz); err != nil {
+			return nil, fmt.Errorf("invalid timezone: %s", tz)
 		}
-		account.Timezone = req.Timezone
+		account.Timezone = tz
 	}
 	account.Metadata = nonNilMap(req.Metadata)
 

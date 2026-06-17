@@ -182,11 +182,21 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, ac
 	return cred, nil
 }
 
-// BeginLogin starts Passkey login (MFA scenario, known accountID)
+// BeginLogin starts Passkey login (login scenario, known accountID)
 func (s *PasskeyService) BeginLogin(ctx context.Context, accountID string) (*protocol.CredentialAssertion, string, error) {
+	return s.beginLoginInternal(ctx, accountID, redisKeyLoginChallenge, "login")
+}
+
+// BeginMFALogin starts MFA Passkey verification
+func (s *PasskeyService) BeginMFALogin(ctx context.Context, accountID string) (*protocol.CredentialAssertion, string, error) {
+	return s.beginLoginInternal(ctx, accountID, redisKeyMFAChallenge, "mfa")
+}
+
+// beginLoginInternal is the shared implementation for BeginLogin and BeginMFALogin.
+func (s *PasskeyService) beginLoginInternal(ctx context.Context, accountID, keyPrefix, logAction string) (*protocol.CredentialAssertion, string, error) {
 	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil {
-		s.logger.Warn("Failed to find passkey credentials for login", zap.String("account_id", accountID), zap.Error(err))
+		s.logger.Warn("Failed to find passkey credentials for "+logAction, zap.String("account_id", accountID), zap.Error(err))
 		return nil, "", ErrPasskeyNotFound
 	}
 	if len(creds) == 0 {
@@ -197,17 +207,16 @@ func (s *PasskeyService) BeginLogin(ctx context.Context, accountID string) (*pro
 
 	options, sessionData, err := s.web.BeginLogin(user)
 	if err != nil {
-		return nil, "", fmt.Errorf("begin login: %w", err)
+		return nil, "", fmt.Errorf("begin %s login: %w", logAction, err)
 	}
 
-	// Store challenge using random requestID
 	requestID := uuid.New().String()
 	data, err := json.Marshal(sessionData)
 	if err != nil {
 		return nil, "", fmt.Errorf("marshal session data: %w", err)
 	}
 
-	key := fmt.Sprintf(redisKeyLoginChallenge, requestID)
+	key := fmt.Sprintf(keyPrefix, requestID)
 	if err := s.redis.Set(ctx, key, data, s.challengeTTL); err != nil {
 		return nil, "", fmt.Errorf("store challenge: %w", err)
 	}
@@ -238,48 +247,66 @@ func (s *PasskeyService) BeginDiscoverableLogin(ctx context.Context) (*protocol.
 
 // CompleteLogin completes Passkey login verification
 func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, request *http.Request) (string, *domain.WebAuthnCredential, error) {
-	// Get challenge from Redis
-	key := fmt.Sprintf(redisKeyLoginChallenge, requestID)
+	cred, err := s.completeLoginInternal(ctx, requestID, "", redisKeyLoginChallenge, request)
+	if err != nil {
+		return "", nil, err
+	}
+	return cred.AccountID, cred, nil
+}
+
+// CompleteMFALogin completes MFA Passkey verification
+func (s *PasskeyService) CompleteMFALogin(ctx context.Context, requestID string, accountID string, request *http.Request) error {
+	_, err := s.completeLoginInternal(ctx, requestID, accountID, redisKeyMFAChallenge, request)
+	return err
+}
+
+// completeLoginInternal is the shared implementation for CompleteLogin and CompleteMFALogin.
+// When expectedAccountID is non-empty, ownership verification is performed (MFA scenario).
+func (s *PasskeyService) completeLoginInternal(ctx context.Context, requestID, expectedAccountID, keyPrefix string, request *http.Request) (*domain.WebAuthnCredential, error) {
+	key := fmt.Sprintf(keyPrefix, requestID)
 	data, err := s.redis.GetDel(ctx, key)
 	if err != nil {
-		return "", nil, ErrChallengeNotFound
+		return nil, ErrChallengeNotFound
 	}
 
 	var sessionData wa.SessionData
 	if err := json.Unmarshal([]byte(data), &sessionData); err != nil {
-		return "", nil, fmt.Errorf("unmarshal session data: %w", err)
+		return nil, fmt.Errorf("unmarshal session data: %w", err)
 	}
 
 	// Buffer the body so it can be read twice (once for parsing, once by FinishLogin)
 	bodyBytes, err := readLimitedBody(request.Body, maxPasskeyRequestBodySize)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
-	// Parse response to get credential ID
 	parsedResponse, err := protocol.ParseCredentialRequestResponseBody(io.NopCloser(bytes.NewReader(bodyBytes)))
 	if err != nil {
-		return "", nil, fmt.Errorf("parse credential response: %w", err)
+		return nil, fmt.Errorf("parse credential response: %w", err)
 	}
 
 	credID := parsedResponse.RawID
 	cred, err := s.credRepo.FindByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credID))
 	if err != nil {
-		return "", nil, accountRepository.ErrCredentialNotFound
+		return nil, accountRepository.ErrCredentialNotFound
 	}
 
-	// Find all credentials for this account
+	// Ownership check for MFA scenario
+	if expectedAccountID != "" && cred.AccountID != expectedAccountID {
+		return nil, ErrCredentialOwnership
+	}
+
 	allCreds, err := s.credRepo.FindByAccountID(ctx, cred.AccountID)
 	if err != nil {
-		return "", nil, fmt.Errorf("find credentials: %w", err)
+		return nil, fmt.Errorf("find credentials: %w", err)
 	}
 
 	user := domain.NewWebAuthnUser(cred.AccountID, "", "", toCredentialSlice(allCreds))
 
 	waCred, err := s.web.FinishLogin(user, sessionData, request)
 	if err != nil {
-		return "", nil, fmt.Errorf("finish login: %w", err)
+		return nil, fmt.Errorf("finish login: %w", err)
 	}
 
 	// Update sign count for clone detection.
@@ -302,108 +329,7 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 			zap.String("credential_id", cred.ID))
 	}
 
-	return cred.AccountID, cred, nil
-}
-
-// BeginMFALogin starts MFA Passkey verification
-func (s *PasskeyService) BeginMFALogin(ctx context.Context, accountID string) (*protocol.CredentialAssertion, string, error) {
-	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
-	if err != nil {
-		s.logger.Warn("Failed to find passkey credentials for MFA", zap.String("account_id", accountID), zap.Error(err))
-		return nil, "", ErrPasskeyNotFound
-	}
-	if len(creds) == 0 {
-		return nil, "", ErrPasskeyNotFound
-	}
-
-	user := domain.NewWebAuthnUser(accountID, "", "", toCredentialSlice(creds))
-
-	options, sessionData, err := s.web.BeginLogin(user)
-	if err != nil {
-		return nil, "", fmt.Errorf("begin mfa login: %w", err)
-	}
-
-	data, err := json.Marshal(sessionData)
-	if err != nil {
-		return nil, "", fmt.Errorf("marshal session data: %w", err)
-	}
-
-	requestID := uuid.New().String()
-	key := fmt.Sprintf(redisKeyMFAChallenge, requestID)
-	if err := s.redis.Set(ctx, key, data, s.challengeTTL); err != nil {
-		return nil, "", fmt.Errorf("store challenge: %w", err)
-	}
-
-	return options, requestID, nil
-}
-
-// CompleteMFALogin completes MFA Passkey verification
-func (s *PasskeyService) CompleteMFALogin(ctx context.Context, requestID string, accountID string, request *http.Request) error {
-	key := fmt.Sprintf(redisKeyMFAChallenge, requestID)
-	data, err := s.redis.GetDel(ctx, key)
-	if err != nil {
-		return ErrChallengeNotFound
-	}
-
-	var sessionData wa.SessionData
-	if err := json.Unmarshal([]byte(data), &sessionData); err != nil {
-		return fmt.Errorf("unmarshal session data: %w", err)
-	}
-
-	// Buffer the body so it can be read twice (once for parsing, once by FinishLogin)
-	bodyBytes, err := readLimitedBody(request.Body, maxPasskeyRequestBodySize)
-	if err != nil {
-		return err
-	}
-	request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-
-	parsedResponse, err := protocol.ParseCredentialRequestResponseBody(io.NopCloser(bytes.NewReader(bodyBytes)))
-	if err != nil {
-		return fmt.Errorf("parse credential response: %w", err)
-	}
-
-	credID := parsedResponse.RawID
-	cred, err := s.credRepo.FindByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credID))
-	if err != nil {
-		return accountRepository.ErrCredentialNotFound
-	}
-
-	if cred.AccountID != accountID {
-		return ErrCredentialOwnership
-	}
-
-	allCreds, err := s.credRepo.FindByAccountID(ctx, accountID)
-	if err != nil {
-		return fmt.Errorf("find credentials: %w", err)
-	}
-
-	user := domain.NewWebAuthnUser(accountID, "", "", toCredentialSlice(allCreds))
-
-	waCred, err := s.web.FinishLogin(user, sessionData, request)
-	if err != nil {
-		return fmt.Errorf("finish mfa login: %w", err)
-	}
-
-	// Per WebAuthn spec: sign count of 0 means the authenticator does not support
-	// counters. Only update if the new count is non-zero (authenticator supports it).
-	if waCred.Authenticator.SignCount > 0 {
-		cred.SignCount = waCred.Authenticator.SignCount
-	}
-	cred.MarkUsed()
-
-	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.credRepo.UpdateCredential(ctx, tx, cred)
-	})
-	if err != nil {
-		// Per WebAuthn spec, sign count is a best-effort clone detection mechanism.
-		// A database failure should not block a legitimate MFA login.
-		s.logger.Error("Failed to update credential sign count — clone detection may be compromised (MFA login allowed to proceed)",
-			zap.Error(err),
-			zap.String("account_id", cred.AccountID),
-			zap.String("credential_id", cred.ID))
-	}
-
-	return nil
+	return cred, nil
 }
 
 // HasPasskeys checks if the account has any available passkey

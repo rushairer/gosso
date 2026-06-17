@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -200,10 +201,17 @@ func (s *AuthService) TokenService() *tokenService.TokenService {
 	return s.tokenSvc
 }
 
-// ValidateMFAToken validates MFA token and returns claims
+// ValidateMFAToken validates MFA token and returns claims.
+// Distinguishes system errors (e.g., Redis unavailable) from genuine validation failures
+// so callers can retry transient errors rather than rejecting the token outright.
 func (s *AuthService) ValidateMFAToken(ctx context.Context, mfaToken string) (*tokenDomain.AccessTokenClaims, error) {
 	claims, err := s.tokenSvc.ValidateAccessTokenWithContext(ctx, mfaToken)
 	if err != nil {
+		// Preserve system errors (e.g., ErrBlacklistUnavailable) so callers can distinguish
+		// transient failures from genuine invalid tokens and retry accordingly.
+		if errors.Is(err, tokenService.ErrBlacklistUnavailable) {
+			return nil, fmt.Errorf("validate MFA token: %w", err)
+		}
 		return nil, ErrInvalidMFAToken
 	}
 	if claims.Scope != ScopeMFA {

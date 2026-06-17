@@ -462,8 +462,12 @@ func (s *PasswordResetService) buildCooldownKey(email string) string {
 // Call this during graceful shutdown to ensure in-flight operations finish.
 // Returns after the configured timeout even if goroutines are still running, to avoid
 // blocking shutdown indefinitely when Redis is unreachable.
+// NOTE: stopCancel() is called to signal shutdown, but background goroutines currently
+// use context.Background() for their Redis operations. The primary shutdown mechanism
+// is the wg.Wait() with the timer fallback below. stopCtx is reserved for future use
+// where goroutines may check for cancellation.
 func (s *PasswordResetService) Wait() {
-	s.stopCancel() // signal background goroutines to wind down
+	s.stopCancel() // signal background goroutines to wind down (currently reserved for future use)
 	done := make(chan struct{})
 	go func() { s.wg.Wait(); close(done) }()
 	timer := time.NewTimer(s.waitTimeout)

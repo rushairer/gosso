@@ -203,7 +203,8 @@ func (c *Credential) MarkUsed() {
 }
 
 // SoftDelete soft-deletes the credential. Returns an error if already deleted.
-// Clears the Value field to avoid retaining sensitive data (e.g., password hashes) in memory.
+// Clears the Value and Identifier fields to avoid retaining sensitive data
+// (e.g., password hashes, email addresses, phone numbers) in memory.
 func (c *Credential) SoftDelete() error {
 	if c.IsDeleted() {
 		return ErrCredentialAlreadyDeleted
@@ -212,6 +213,7 @@ func (c *Credential) SoftDelete() error {
 	c.DeletedAt = &now
 	c.UpdatedAt = now
 	c.Value = ""
+	c.Identifier = nil
 	return nil
 }
 
@@ -297,8 +299,12 @@ func parseArgon2idHash(encodedHash string) (*argon2idParams, []byte, []byte, err
 	if _, err := fmt.Sscanf(parts[2], "v=%d", &version); err != nil {
 		return nil, nil, nil, fmt.Errorf("invalid version: %w", err)
 	}
-	if version != argon2.Version {
-		return nil, nil, nil, fmt.Errorf("unsupported argon2id version: %d", version)
+	// Accept current and previous argon2id version for forward compatibility.
+	// When the x/crypto library upgrades argon2.Version, existing hashes from
+	// the prior version remain verifiable. They will be re-hashed with the new
+	// version on next password change.
+	if version != argon2.Version && version != argon2.Version-1 {
+		return nil, nil, nil, fmt.Errorf("unsupported argon2id version: %d (expected %d or %d)", version, argon2.Version-1, argon2.Version)
 	}
 
 	p := &argon2idParams{}

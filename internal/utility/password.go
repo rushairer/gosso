@@ -20,8 +20,10 @@ const MaxPasswordLength = 128
 // characters, etc.) that are hard to type on mobile keyboards.
 const allowedSpecialChars = "!@#$%^&*()-_=+[]{}|;:',.<>?/`~\"\\"
 
-// ValidatePasswordStrength checks that a password meets minimum strength requirements:
-// at least 12 bytes, with at least one uppercase letter, one lowercase letter, one digit, and one special character.
+// ValidatePasswordStrength checks that a password meets minimum strength requirements.
+// Length is measured in bytes (not runes) to match Argon2id input behavior.
+// Requirements: at least 12 bytes, with at least one uppercase letter, one lowercase
+// letter, one digit, and one special character from the allowed set.
 func ValidatePasswordStrength(password string) error {
 	if len(password) > MaxPasswordLength {
 		return fmt.Errorf("password must not exceed %d bytes", MaxPasswordLength)

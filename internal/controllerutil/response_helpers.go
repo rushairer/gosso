@@ -15,9 +15,11 @@ func SetNoCacheHeaders(ctx *gin.Context) {
 }
 
 // ValidateUUID validates and returns the UUID string, or sends a 400 error response.
+// Always calls ctx.Abort() on validation failure to prevent handler chain continuation.
 func ValidateUUID(ctx *gin.Context, value, paramName string) (string, bool) {
 	if _, err := uuid.Parse(value); err != nil {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid "+paramName))
+		ctx.Abort()
 		return "", false
 	}
 	return value, true

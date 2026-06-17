@@ -69,7 +69,9 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 			RPOrigins:     []string{cfg.AuthConfig.WebAuthnRPOrigin},
 		})
 		if err != nil {
-			cfg.Logger.Error("Failed to initialize WebAuthn", zap.Error(err))
+			cfg.Logger.Error("Failed to initialize WebAuthn", zap.Error(err),
+				zap.String("rp_id", cfg.AuthConfig.WebAuthnRPID))
+			cfg.Logger.Warn("Passkey/WebAuthn functionality will be unavailable; server will continue without it")
 		} else {
 			webauthnRepo := repository.NewWebAuthnCredentialRepository(cfg.DB)
 			passkeySvc = service.NewPasskeyService(web, webauthnRepo, cfg.Redis, cfg.DB, cfg.AccountSvc, cfg.Logger)
@@ -98,6 +100,7 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 	var socialSvc *service.SocialLoginService
 	var socialErr error
 	if len(cfg.Providers) > 0 {
+		// authSvc implements both SessionTokenCreator (3rd arg) and MFAChecker (9th arg).
 		socialSvc, socialErr = service.NewSocialLoginService(cfg.DB, cfg.AccountSvc, authSvc, cfg.AccountRepo, cfg.CredentialRepo, cfg.FederatedIdentityRepo, cfg.Providers, cfg.Logger, authSvc, cfg.Auditor)
 		if socialErr != nil {
 			return nil, fmt.Errorf("initialize social login service: %w", socialErr)

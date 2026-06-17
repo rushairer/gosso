@@ -35,6 +35,13 @@ func (s *JWKSService) GetJWKS() map[string]any {
 // Reload re-computes the JWKS document from the current RSA key.
 // Call this after a key rotation (e.g., via SIGHUP handler) to update the
 // published key set without restarting the service.
+//
+// IMPORTANT: This replaces the entire JWKS with a single key. During key rotation,
+// ensure the old key remains valid until all tokens signed with it have expired.
+// Recommended rotation procedure:
+//  1. Generate new RSA key
+//  2. Wait for old key's longest-lived token to expire (typically access_token TTL)
+//  3. Call Reload() to publish the new key
 func (s *JWKSService) Reload() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

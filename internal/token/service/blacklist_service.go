@@ -162,19 +162,19 @@ func (s *BlacklistService) SetAccountRevokedAfter(ctx context.Context, accountID
 	).Int64()
 	if err != nil {
 		s.logger.Error("Failed to set account revoked-after timestamp",
-			zap.String("account_id", accountID), zap.Error(err))
+			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
 		return fmt.Errorf("set account revoked after: %w", err)
 	}
 
 	if result == 0 {
 		s.logger.Debug("Account revoked-after timestamp already set to a later value, skipping",
-			zap.String("account_id", accountID),
+			zap.String("account_id", utility.MaskOpaqueID(accountID)),
 			zap.Time("revoked_at", revokedAt))
 		return nil
 	}
 
 	s.logger.Info("Account tokens revoked after timestamp",
-		zap.String("account_id", accountID),
+		zap.String("account_id", utility.MaskOpaqueID(accountID)),
 		zap.Time("revoked_at", revokedAt),
 		zap.Duration("ttl", ttl))
 
@@ -192,14 +192,14 @@ func (s *BlacklistService) GetAccountRevokedAfter(ctx context.Context, accountID
 	}
 	if err != nil {
 		s.logger.Error("Failed to get account revoked-after timestamp",
-			zap.String("account_id", accountID), zap.Error(err))
+			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
 		return time.Time{}, fmt.Errorf("get account revoked after: %w", err)
 	}
 
 	unixTimestamp, parseErr := strconv.ParseInt(val, 10, 64)
 	if parseErr != nil {
 		s.logger.Error("Failed to parse account revoked-after timestamp",
-			zap.String("account_id", accountID), zap.String("value", val), zap.Error(parseErr))
+			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.String("value", val), zap.Error(parseErr))
 		return time.Time{}, fmt.Errorf("parse account revoked after: %w", parseErr)
 	}
 
