@@ -167,11 +167,11 @@ func TestScanCredential(t *testing.T) {
 	rows := sqlmock.NewRows([]string{
 		"id", "account_id", "credential_type", "identifier", "value",
 		"verified", "primary_credential", "metadata",
-		"created_at", "updated_at", "verified_at", "last_used_at", "deleted_at",
+		"created_at", "updated_at", "verified_at", "last_used_at",
 	}).AddRow(
 		"cred-001", "account-001", "email", identifier, "hashed-value",
 		true, true, metadataJSON,
-		createdAt, updatedAt, verifiedAt, lastUsedAt, nil,
+		createdAt, updatedAt, verifiedAt, lastUsedAt,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 

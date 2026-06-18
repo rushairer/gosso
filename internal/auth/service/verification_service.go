@@ -208,7 +208,7 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 		s.logger.Warn("Failed to check cooldown, proceeding anyway", zap.Error(err))
 	}
 	if exists {
-		s.dummyWork()
+		s.dummyWork(ctx)
 		return fmt.Errorf("%w: please wait before requesting another code", ErrCooldownActive)
 	}
 
@@ -304,11 +304,11 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 	}
 }
 
-// dummyWork performs a bcrypt hash to pad the response time of early-return
-// paths (e.g., cooldown active). This mitigates timing side-channel attacks
+// dummyWork performs a sleep-based timing padding to equalise the response time
+// of early-return paths (e.g., cooldown active). This mitigates timing side-channel attacks
 // that could distinguish active cooldown from fresh requests based on latency.
-func (s *VerificationService) dummyWork() {
-	utility.DummyWork()
+func (s *VerificationService) dummyWork(ctx context.Context) {
+	utility.DummyWorkWithContext(ctx)
 }
 
 func (s *VerificationService) buildCodeKey(credType, identifier string) string {

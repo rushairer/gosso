@@ -1,6 +1,7 @@
 package utility
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 )
@@ -22,17 +23,27 @@ func SetDummyWorkDuration(d time.Duration) {
 	dummyWorkDuration.Store(int64(d))
 }
 
-// DummyWork performs a sleep-based timing padding to equalise the response time
-// of early-return paths with the real authentication path. This mitigates timing
-// side-channel attacks that could distinguish "email not found" from "wrong
-// password" based on latency differences.
+// DummyWorkWithContext performs sleep-based timing padding to equalise the response
+// time of early-return paths with the real authentication path. This mitigates timing
+// side-channel attacks that could distinguish "email not found" from "wrong password"
+// based on latency differences.
 //
-// Previous bcrypt-based implementation burned ~100ms of CPU per call, which
-// enabled CPU exhaustion under distributed brute-force from many source IPs.
-// Sleep achieves the same timing protection at zero CPU cost.
-//
-// The duration is configurable via SetDummyWorkDuration to match varying
-// Argon2id parameter configurations.
+// The context allows cancellation during server shutdown, preventing goroutine
+// accumulation when the server is stopping. If the context is cancelled before the
+// duration elapses, the function returns immediately.
+func DummyWorkWithContext(ctx context.Context) {
+	duration := time.Duration(dummyWorkDuration.Load())
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+	}
+}
+
+// DummyWork is a convenience wrapper around DummyWorkWithContext that uses
+// context.Background(). Prefer DummyWorkWithContext when a context is available
+// (e.g. request handlers) to support cancellation during shutdown.
 func DummyWork() {
-	time.Sleep(time.Duration(dummyWorkDuration.Load()))
+	DummyWorkWithContext(context.Background())
 }

@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- `ResetPasswordRequest.NewPassword` binding tag minimum length changed from `min=8` to `min=12` — aligns controller-level validation with `utility.MinPasswordLength` (12 bytes), preventing inconsistent error messages when passwords between 8-11 bytes pass binding but fail service validation (`internal/auth/controller/auth_controller.go`).
+- `IsPlausibleJWT` now verifies the decoded JWT header contains an `"alg"` field — previously any 3-segment base64url string could bypass CSRF protection; the additional JSON structure check significantly reduces the bypass surface (`middleware/csrf.go`).
+- `DummyWork` now supports context cancellation via `DummyWorkWithContext(ctx)` — prevents goroutine accumulation during server shutdown when authentication early-return paths are blocked on sleep; all service-layer callers updated to pass request context (`internal/utility/security.go`, `internal/auth/service/auth_login.go`, `internal/auth/service/password_reset_service.go`, `internal/auth/service/verification_service.go`).
+- Credential queries (`FindByAccountAndType`, `FindByTypeAndIdentifier`, `FindPasswordCredential`) no longer SELECT `deleted_at` — the WHERE clause already filters `deleted_at IS NULL`, making the scanned column always nil; removes unnecessary exposure of the soft-delete timestamp in Go memory (`internal/account/repository/credential_repository_impl.go`, `internal/account/repository/scan_helpers.go`).
+
+### Changed
 - `SoftDeleteCredential` and `SoftDeleteCredentialsByAccount` now NULL out `identifier` column on soft delete — previously only `credential_value` was cleared, leaving PII (emails, phone numbers) in the database after deletion (`internal/account/repository/credential_repository_impl.go`).
 - `DummyWork()` now uses `time.Sleep` instead of `bcrypt.GenerateFromPassword` — eliminates CPU exhaustion vector under distributed brute-force attacks from many source IPs while preserving identical timing side-channel protection (`internal/utility/security.go`).
 - `RegisterAccount` audit log now writes synchronously (`AuditLogSync`) — account creation is a security-critical event and must not be lost on crash, consistent with login failures and account deletion (`internal/account/service/account_service.go`).

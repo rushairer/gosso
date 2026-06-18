@@ -1948,7 +1948,7 @@ func TestResetPassword_ShortPassword(t *testing.T) {
 	tokenMgr := &mockTokenManager{}
 	engine, _ := setupAuthController(authSvc, tokenMgr)
 
-	// Password "short" is 5 chars, below the binding tag min=8
+	// Password "short" is 5 chars, below the binding tag min=12
 	body := `{"token":"some-token","new_password":"short"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/password/reset", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")

@@ -259,8 +259,8 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 	if !account.IsActive() {
 		// Mitigate timing side-channel: inactive accounts must perform the same
 		// dummy work as the not-found path to prevent account existence enumeration.
-		// Passkey login has no password, so use bcrypt dummy work instead of Argon2id.
-		utility.DummyWork()
+		// Passkey login has no password, so use sleep-based dummy work instead of Argon2id.
+		utility.DummyWorkWithContext(ctx)
 		return nil, ErrInvalidCredentials
 	}
 

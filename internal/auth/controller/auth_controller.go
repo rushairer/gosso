@@ -764,7 +764,7 @@ func (c *AuthController) ForgotPassword(ctx *gin.Context) {
 // ResetPasswordRequest reset password request body
 type ResetPasswordRequest struct {
 	Token       string `json:"token" binding:"required"`
-	NewPassword string `json:"new_password" binding:"required,min=8,max=128"`
+	NewPassword string `json:"new_password" binding:"required,min=12,max=128"`
 }
 
 // ResetPassword POST /api/auth/password/reset

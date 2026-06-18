@@ -164,3 +164,43 @@ func TestCSRF_SecureMode_Match_200(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 }
+
+func TestIsPlausibleJWT_ValidJWT_WithAlg(t *testing.T) {
+	// {"alg":"RS256"} base64url = eyJhbGciOiJSUzI1NiJ9
+	validJWT := "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature"
+	assert.True(t, IsPlausibleJWT(validJWT))
+}
+
+func TestIsPlausibleJWT_ValidBase64_NoAlg(t *testing.T) {
+	// {"typ":"JWT"} base64url = eyJ0eXAiOiJKV1QifQ — valid JSON, no "alg" field
+	noAlgJWT := "eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature"
+	assert.False(t, IsPlausibleJWT(noAlgJWT))
+}
+
+func TestIsPlausibleJWT_InvalidJSON(t *testing.T) {
+	// "not-json" base64url = bm90LWpzb24 — valid base64url, not valid JSON
+	badJSON := "bm90LWpzb24.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature"
+	assert.False(t, IsPlausibleJWT(badJSON))
+}
+
+func TestIsPlausibleJWT_EmptyAlg(t *testing.T) {
+	// {"alg":""} base64url = eyJhbGciOiIifQ — valid JSON, empty alg
+	emptyAlgJWT := "eyJhbGciOiIifQ.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature"
+	assert.False(t, IsPlausibleJWT(emptyAlgJWT))
+}
+
+func TestCSRF_BearerAuth_NoAlg_Blocked(t *testing.T) {
+	r := setupCSRFTestRouter(false)
+	r.POST("/test", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	// A token with valid base64url header but no "alg" field should NOT bypass CSRF
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/test", nil)
+	req.Header.Set("Authorization", "Bearer eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "CSRF token missing")
+}

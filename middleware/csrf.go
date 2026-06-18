@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -167,15 +168,28 @@ func generateCSRFToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// IsPlausibleJWT checks if a token has the basic JWT format (three non-empty dot-separated segments)
-// and validates that the header segment is valid base64url encoding.
-// Export for use by other packages that need to validate Bearer token format (e.g. CSRF bypass checks).
+// IsPlausibleJWT checks if a token has the basic JWT format (three non-empty dot-separated segments),
+// validates that the header segment is valid base64url encoding, and verifies the decoded header
+// JSON contains an "alg" field (standard in all JOSE headers). This additional check prevents
+// arbitrary base64url strings from bypassing CSRF protection.
+// Exported for use by other packages that need to validate Bearer token format (e.g. CSRF bypass checks).
 func IsPlausibleJWT(token string) bool {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 || len(parts[0]) == 0 || len(parts[1]) == 0 || len(parts[2]) == 0 {
 		return false
 	}
 	// Validate the header segment is valid base64url encoding
-	_, err := base64.RawURLEncoding.DecodeString(parts[0])
-	return err == nil
+	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return false
+	}
+	// Verify the header contains an "alg" field — present in all standard JWT/JOSE headers.
+	// This prevents arbitrary base64url strings (e.g. "aaaa.bbbb.cccc") from bypassing CSRF.
+	var header struct {
+		Alg string `json:"alg"`
+	}
+	if err := json.Unmarshal(headerBytes, &header); err != nil || header.Alg == "" {
+		return false
+	}
+	return true
 }

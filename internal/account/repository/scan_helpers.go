@@ -108,6 +108,9 @@ func scanRoles(rows *sql.Rows) ([]*domain.Role, error) {
 }
 
 // scanCredential scans a single Credential from a scannable row.
+// The SELECT must not include deleted_at — queries filter with deleted_at IS NULL,
+// so the scanned value is always nil. The domain's DeletedAt field is left as its
+// zero value and only set by in-memory SoftDelete() before an UPDATE.
 func scanCredential(s dbPkg.Scannable) (*domain.Credential, error) {
 	cred := &domain.Credential{}
 	var metadataJSON []byte
@@ -125,7 +128,6 @@ func scanCredential(s dbPkg.Scannable) (*domain.Credential, error) {
 		&cred.UpdatedAt,
 		&cred.VerifiedAt,
 		&cred.LastUsedAt,
-		&cred.DeletedAt,
 	)
 	if err != nil {
 		return nil, err

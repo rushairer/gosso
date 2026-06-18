@@ -22,17 +22,19 @@ func NewCredentialRepository(db *sql.DB) CredentialRepository {
 }
 
 // credentialsByAccountAndTypeQuery is the base SELECT for querying credentials by account and type.
+// Note: deleted_at is excluded because the WHERE clause guarantees only non-deleted rows are returned.
 const credentialsByAccountAndTypeQuery = `
 	SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
-	       metadata, created_at, updated_at, verified_at, last_used_at, deleted_at
+	       metadata, created_at, updated_at, verified_at, last_used_at
 	FROM account_credentials
 	WHERE account_id = $1 AND credential_type = $2 AND deleted_at IS NULL
 	ORDER BY primary_credential DESC, created_at ASC`
 
 // findByTypeAndIdentifierQuery is the base SELECT for querying a credential by type and identifier.
+// Note: deleted_at is excluded because the WHERE clause guarantees only non-deleted rows are returned.
 const findByTypeAndIdentifierQuery = `
 	SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
-	       metadata, created_at, updated_at, verified_at, last_used_at, deleted_at
+	       metadata, created_at, updated_at, verified_at, last_used_at
 	FROM account_credentials
 	WHERE credential_type = $1 AND identifier = $2 AND deleted_at IS NULL
 	LIMIT 1`
@@ -141,7 +143,7 @@ func findByTypeAndIdentifier(ctx context.Context, queryRow func(context.Context,
 func (r *credentialRepositoryImpl) FindPasswordCredential(ctx context.Context, accountID string) (*domain.Credential, error) {
 	query := `
 		SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
-		       metadata, created_at, updated_at, verified_at, last_used_at, deleted_at
+		       metadata, created_at, updated_at, verified_at, last_used_at
 		FROM account_credentials
 		WHERE account_id = $1 AND credential_type = $2 AND deleted_at IS NULL
 		ORDER BY primary_credential DESC, created_at ASC
