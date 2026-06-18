@@ -152,7 +152,7 @@ func (m *mockClientRepo) FindByClientIDTx(_ context.Context, _ *sql.Tx, _ string
 func (m *mockClientRepo) FindByAccountID(_ context.Context, _ string) ([]*oauth2Domain.OAuth2Client, error) {
 	return nil, nil
 }
-func (m *mockClientRepo) Update(_ context.Context, _ *sql.Tx, _ *oauth2Domain.OAuth2Client) error {
+func (m *mockClientRepo) Update(_ context.Context, _ *sql.Tx, _ *oauth2Domain.OAuth2Client, _ time.Time) error {
 	return nil
 }
 func (m *mockClientRepo) SoftDelete(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {

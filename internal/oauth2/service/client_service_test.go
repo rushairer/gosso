@@ -92,15 +92,33 @@ func TestUpdateClient(t *testing.T) {
 
 	ctx := context.Background()
 	now := time.Now()
+	updatedAt := now.Add(-1 * time.Hour)
 
 	mock.ExpectBegin()
+
+	// FindByClientIDTx — re-read inside transaction for optimistic locking
+	clientRows := sqlmock.NewRows([]string{
+		"id", "account_id", "client_id", "client_secret_hash", "name", "description",
+		"redirect_uris", "post_logout_redirect_uris", "grant_types", "scopes",
+		"is_confidential", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		"uuid-001", "account-001", "cid-abc", "$2a$10$hash", "Old Name", "",
+		[]byte(`["http://localhost/callback"]`), []byte("null"), []byte(`["authorization_code"]`), []byte(`["openid"]`),
+		true, []byte("{}"), now, updatedAt, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").
+		WithArgs("cid-abc").
+		WillReturnRows(clientRows)
+
+	// Update with optimistic locking
 	mock.ExpectQuery("UPDATE oauth2_clients").
-		WithArgs("Updated App", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "uuid-001").
+		WithArgs("Updated App", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "uuid-001", updatedAt).
 		WillReturnRows(sqlmock.NewRows([]string{"updated_at"}).AddRow(now))
 	mock.ExpectCommit()
 
 	client := &domain.OAuth2Client{
 		ID:           "uuid-001",
+		ClientID:     "cid-abc",
 		Name:         "Updated App",
 		RedirectURIs: []string{"http://localhost/callback"},
 		GrantTypes:   []string{domain.GrantTypeAuthorizationCode},
@@ -121,12 +139,16 @@ func TestUpdateClient_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("UPDATE oauth2_clients").
+
+	// FindByClientIDTx — client not found
+	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").
+		WithArgs("nonexistent-cid").
 		WillReturnError(sql.ErrNoRows)
 	mock.ExpectRollback()
 
 	client := &domain.OAuth2Client{
 		ID:           "nonexistent",
+		ClientID:     "nonexistent-cid",
 		Name:         "Updated App",
 		RedirectURIs: []string{"http://localhost/callback"},
 		GrantTypes:   []string{domain.GrantTypeAuthorizationCode},

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
@@ -160,11 +161,11 @@ func TestUpdateAccount_Success(t *testing.T) {
 	a.DisplayName = "Updated Name"
 	mock.ExpectExec("UPDATE accounts").
 		WithArgs(a.Username, a.DisplayName, a.AvatarURL, string(a.Status),
-			a.Locale, a.Timezone, sqlmock.AnyArg(), sqlmock.AnyArg(), a.ID).
+			a.Locale, a.Timezone, sqlmock.AnyArg(), sqlmock.AnyArg(), a.ID, a.UpdatedAt).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewAccountRepository(db)
-	err = repo.UpdateAccount(context.Background(), tx, a)
+	err = repo.UpdateAccount(context.Background(), tx, a, a.UpdatedAt)
 
 	require.NoError(t, err)
 }
@@ -180,11 +181,16 @@ func TestUpdateAccount_NotFound(t *testing.T) {
 	a := newTestAccount()
 	mock.ExpectExec("UPDATE accounts").
 		WithArgs(a.Username, a.DisplayName, a.AvatarURL, string(a.Status),
-			a.Locale, a.Timezone, sqlmock.AnyArg(), sqlmock.AnyArg(), a.ID).
+			a.Locale, a.Timezone, sqlmock.AnyArg(), sqlmock.AnyArg(), a.ID, a.UpdatedAt).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
+	// When rowsAffected == 0, the code re-reads to distinguish not-found from concurrent modification
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs(a.ID).
+		WillReturnError(sql.ErrNoRows)
+
 	repo := NewAccountRepository(db)
-	err = repo.UpdateAccount(context.Background(), tx, a)
+	err = repo.UpdateAccount(context.Background(), tx, a, a.UpdatedAt)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "account not found")

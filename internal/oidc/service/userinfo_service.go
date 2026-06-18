@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.uber.org/zap"
@@ -60,35 +61,45 @@ func (s *UserInfoService) GetUserInfo(ctx context.Context, accountID string, sco
 			}
 			info["locale"] = account.Locale
 		case "email":
-			s.addEmailInfo(ctx, accountID, info)
+			if err := s.addEmailInfo(ctx, accountID, info); err != nil {
+				return nil, err
+			}
 		case "phone":
-			s.addPhoneInfo(ctx, accountID, info)
+			if err := s.addPhoneInfo(ctx, accountID, info); err != nil {
+				return nil, err
+			}
 		}
 	}
 
 	return info, nil
 }
 
-func (s *UserInfoService) addEmailInfo(ctx context.Context, accountID string, info map[string]any) {
+func (s *UserInfoService) addEmailInfo(ctx context.Context, accountID string, info map[string]any) error {
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeEmail)
 	if err != nil {
-		s.logger.Warn("Failed to query email credentials for userinfo", zap.String("account_id", accountID), zap.Error(err))
-		return
+		if errors.Is(err, accountRepo.ErrCredentialNotFound) {
+			return nil // no email credential is not an error
+		}
+		return fmt.Errorf("find email credential: %w", err)
 	}
 	if len(creds) > 0 && creds[0].Identifier != nil {
 		info["email"] = *creds[0].Identifier
 		info["email_verified"] = creds[0].IsVerified()
 	}
+	return nil
 }
 
-func (s *UserInfoService) addPhoneInfo(ctx context.Context, accountID string, info map[string]any) {
+func (s *UserInfoService) addPhoneInfo(ctx context.Context, accountID string, info map[string]any) error {
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypePhone)
 	if err != nil {
-		s.logger.Warn("Failed to query phone credentials for userinfo", zap.String("account_id", accountID), zap.Error(err))
-		return
+		if errors.Is(err, accountRepo.ErrCredentialNotFound) {
+			return nil // no phone credential is not an error
+		}
+		return fmt.Errorf("find phone credential: %w", err)
 	}
 	if len(creds) > 0 && creds[0].Identifier != nil {
 		info["phone_number"] = *creds[0].Identifier
 		info["phone_number_verified"] = creds[0].IsVerified()
 	}
+	return nil
 }

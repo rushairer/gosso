@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
@@ -164,12 +165,13 @@ func TestUpdate_Success(t *testing.T) {
 
 	c := newTestOAuth2Client()
 	c.Name = "Updated App"
+	expectedUpdatedAt := time.Now().Add(-1 * time.Hour)
 	mock.ExpectQuery("UPDATE oauth2_clients").
-		WithArgs(c.Name, c.Description, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), c.ID).
+		WithArgs(c.Name, c.Description, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), c.ID, expectedUpdatedAt).
 		WillReturnRows(sqlmock.NewRows([]string{"updated_at"}).AddRow(time.Now()))
 
 	repo := NewOAuth2ClientRepository(db)
-	err = repo.Update(context.Background(), tx, c)
+	err = repo.Update(context.Background(), tx, c, expectedUpdatedAt)
 
 	require.NoError(t, err)
 }
@@ -183,11 +185,17 @@ func TestUpdate_NotFound(t *testing.T) {
 	tx, _ := db.Begin()
 
 	c := newTestOAuth2Client()
+	expectedUpdatedAt := time.Now().Add(-1 * time.Hour)
 	mock.ExpectQuery("UPDATE oauth2_clients").
 		WillReturnRows(sqlmock.NewRows([]string{"updated_at"}))
 
+	// When RETURNING returns no rows, the code re-reads to distinguish not-found from concurrent modification
+	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").
+		WithArgs(c.ClientID).
+		WillReturnError(sql.ErrNoRows)
+
 	repo := NewOAuth2ClientRepository(db)
-	err = repo.Update(context.Background(), tx, c)
+	err = repo.Update(context.Background(), tx, c, expectedUpdatedAt)
 
 	assert.ErrorIs(t, err, domain.ErrClientNotFound)
 }
@@ -477,11 +485,12 @@ func TestUpdate_DBError(t *testing.T) {
 	tx, _ := db.Begin()
 
 	c := newTestOAuth2Client()
+	expectedUpdatedAt := time.Now().Add(-1 * time.Hour)
 	mock.ExpectQuery("UPDATE oauth2_clients").
 		WillReturnError(fmt.Errorf("connection lost"))
 
 	repo := NewOAuth2ClientRepository(db)
-	err = repo.Update(context.Background(), tx, c)
+	err = repo.Update(context.Background(), tx, c, expectedUpdatedAt)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "update oauth2_client")

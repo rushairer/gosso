@@ -66,6 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - JWKS `Reload()` method documentation now includes key rotation procedure — warns that the entire JWKS is replaced and recommends waiting for old tokens to expire before rotation (`internal/oidc/service/jwks_service.go`).
 - MFA `EnrollTOTP` response now sets no-cache headers — prevents TOTP secret from being cached by proxies or browsers (`internal/auth/controller/auth_controller.go`).
 - `ValidateAccessTokenWithContext` now enforces `NotBefore` claim with 30s clock skew tolerance — closes gap where tokens with future `nbf` were accepted by resource servers but rejected by introspection (`internal/token/service/token_service_validate.go`).
+- `VerifyContactCredential` now performs the entire read-verify-update cycle inside a single transaction with `FOR UPDATE` row-level locking — eliminates TOCTOU race condition where concurrent requests could modify the same credential between read and write (`internal/account/service/account_service_manage.go`).
+- `UpdateAccount` now uses optimistic locking with `updated_at` version check — prevents concurrent updates from silently overwriting each other; returns `ErrConcurrentModification` on conflict (`internal/account/service/account_service.go`, `internal/account/repository/`).
+- OAuth2 `UpdateClientByAccountID` and `UpdateClient` now use optimistic locking with `updated_at` version check — prevents concurrent client metadata updates from silently overwriting each other; returns `ErrClientConcurrentModification` on conflict (`internal/oauth2/service/client_service.go`, `internal/oauth2/repository/`).
+- Session management endpoints (`GET /api/auth/sessions`, `DELETE /api/auth/sessions/:id`) now have dedicated rate limiting — previously only covered by the general API rate limit (`internal/auth/controller/auth_controller.go`, `router/web.go`).
 - Passkey `LoginBegin` error message generalized to "login failed" — prevents account passkey registration status enumeration (`internal/auth/controller/passkey_controller.go`).
 - OAuth2 `device_code` values now masked with `MaskOpaqueID()` in all log statements — prevents bearer-equivalent secret leakage via logs (`internal/oauth2/controller/oauth2_device.go`).
 
@@ -95,6 +99,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `renderConsentTemplate()` helper — consolidates duplicate consent page rendering in `Authorize` (`internal/oauth2/controller/oauth2_authorize.go`).
 - `auditLogSync()` helper on `accountServiceImpl` — wraps `AuditLogSync` with error logging, replacing silent `_ =` discard pattern at 7 call sites (`internal/account/service/account_service.go`).
 - `ErrSessionServiceNotConfigured` sentinel error — returned by `LogoutByAccountID`/`LogoutBySessionID` when session service is nil (`internal/oidc/service/logout_service.go`).
+- `ErrConcurrentModification` sentinel error in account repository — returned when an `UpdateAccount` detects a stale `updated_at` version (`internal/account/repository/account_repository.go`).
+- `ErrClientConcurrentModification` sentinel error in OAuth2 domain — returned when an `Update` detects a stale `updated_at` version (`internal/oauth2/domain/client.go`).
+- `FindByIDTx(ctx, tx, accountID)` repository method — transaction-scoped read of non-deleted accounts, enables optimistic locking inside `RunInTransaction` (`internal/account/repository/account_repository.go`).
 - OAuth2 client management audit logging — `RegisterClient`, `UpdateClientByAccountID`, and `DeleteClient` now emit async audit records (`AuditLog`) with action constants `oauth2.client.register`, `oauth2.client.update`, `oauth2.client.delete` (`internal/oauth2/service/client_service.go`, `internal/audit/domain/actions.go`).
 
 ### Removed
@@ -107,6 +114,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Admin rate limit now has a default of 30/min via `config_manager.go` — was missing from Viper defaults, causing validation failure when not explicitly configured (`config/config_manager.go`).
 - Refresh token TTL calculation in `RotateRefreshToken` now uses `math.Ceil` consistently with `GenerateRefreshToken` — prevents up to 1 second TTL discrepancy on rotation (`internal/token/service/token_service_revoke.go`).
 - `Permissions-Policy` header now additionally restricts `payment`, `usb`, `midi`, `autoplay`, `fullscreen` — defense-in-depth beyond the previous `geolocation`, `camera`, `microphone` (`middleware/middleware.go`).
+- `UserInfoService.addEmailInfo` and `addPhoneInfo` now return errors to callers instead of silently swallowing them — consistent with `IDTokenService` behavior; prevents incomplete UserInfo responses from going unnoticed (`internal/oidc/service/userinfo_service.go`).
+- Deny button color contrast in consent and device templates improved to WCAG AA standard — `#d1d5db`/`#1f2937` replaces `#e5e7eb`/`#374151` (`internal/oauth2/controller/template/consent.html`, `device.html`).
+- Error messages in device authorization template now have `role="alert"` for screen reader accessibility (`internal/oauth2/controller/template/device.html`).
+- Result page message now has `role="status"` for screen reader accessibility (`internal/oauth2/controller/template/result.html`).
+- `SessionService` setter methods (`SetTokenRevoker`, `SetMaxSessions`, `SetSessionTTL`, `SetMaxSessionAge`) now marked as deprecated — use `NewSessionServiceWithConfig` with `SessionConfig` instead (`internal/session/service/session_service.go`).
+- Custom 404 handler now returns JSON for API/OAuth2/OIDC paths and HTML for browser requests — replaces Gin's default plain-text 404 (`router/web.go`).
 - Admin controller now uses shared `controllerutil.ValidateUUID` instead of a local duplicate — ensures consistent `ctx.Abort()` on validation failure (`internal/admin/controller/admin_controller.go`).
 - `ConsentService.GetConsent` now logs a warning on cache JSON corruption before falling back to DB — enables detection of cache integrity issues in production (`internal/oauth2/service/consent_service.go`).
 - WebAuthn configuration (`webauthn_rp_id`, `webauthn_rp_name`, `webauthn_rp_origin`) now included in development and production YAML templates — improves discoverability for operators (`config/development.yaml`, `config/production.yaml`).

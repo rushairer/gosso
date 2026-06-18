@@ -82,6 +82,26 @@ func (r *accountRepositoryImpl) FindByID(ctx context.Context, accountID string) 
 	return account, nil
 }
 
+// FindByIDTx finds an account by ID within a transaction (non-deleted only).
+func (r *accountRepositoryImpl) FindByIDTx(ctx context.Context, tx *sql.Tx, accountID string) (*domain.Account, error) {
+	query := `
+		SELECT id, username, display_name, avatar_url, status, locale, timezone, metadata, created_at, updated_at, deleted_at
+		FROM accounts
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+
+	account, err := scanAccount(tx.QueryRowContext(ctx, query, accountID))
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, accountID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query account: %w", err)
+	}
+
+	return account, nil
+}
+
 // FindByIDIncludingDeletedTx finds an account by ID within a transaction, including soft-deleted rows.
 func (r *accountRepositoryImpl) FindByIDIncludingDeletedTx(ctx context.Context, tx *sql.Tx, accountID string) (*domain.Account, error) {
 	query := `
@@ -122,13 +142,13 @@ func (r *accountRepositoryImpl) FindByUsername(ctx context.Context, username str
 	return account, nil
 }
 
-// UpdateAccount updates an account
-func (r *accountRepositoryImpl) UpdateAccount(ctx context.Context, tx *sql.Tx, account *domain.Account) error {
+// UpdateAccount updates an account with optimistic locking.
+func (r *accountRepositoryImpl) UpdateAccount(ctx context.Context, tx *sql.Tx, account *domain.Account, expectedUpdatedAt time.Time) error {
 	query := `
 		UPDATE accounts
 		SET username = $1, display_name = $2, avatar_url = $3, status = $4,
 		    locale = $5, timezone = $6, metadata = $7, updated_at = $8
-		WHERE id = $9 AND deleted_at IS NULL
+		WHERE id = $9 AND deleted_at IS NULL AND updated_at = $10
 	`
 
 	metadataJSON, err := json.Marshal(account.Metadata)
@@ -146,6 +166,7 @@ func (r *accountRepositoryImpl) UpdateAccount(ctx context.Context, tx *sql.Tx, a
 		metadataJSON,
 		account.UpdatedAt,
 		account.ID,
+		expectedUpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("update account: %w", err)
@@ -156,7 +177,12 @@ func (r *accountRepositoryImpl) UpdateAccount(ctx context.Context, tx *sql.Tx, a
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("%w: %s", ErrAccountNotFound, account.ID)
+		// Distinguish "not found" from "concurrent modification"
+		_, findErr := r.FindByIDTx(ctx, tx, account.ID)
+		if findErr != nil {
+			return findErr // ErrAccountNotFound
+		}
+		return fmt.Errorf("%w: %s", ErrConcurrentModification, account.ID)
 	}
 
 	return nil

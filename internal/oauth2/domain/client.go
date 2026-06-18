@@ -109,6 +109,7 @@ var (
 	ErrClientNameRequired       = errors.New("oauth2 client: name is required")
 	ErrClientGrantTypesRequired = errors.New("oauth2 client: grant_types must not be empty")
 	ErrAccountIDRequired        = errors.New("oauth2 client: account_id is required")
+	ErrClientConcurrentModification = errors.New("oauth2 client was modified concurrently")
 )
 
 // NewOAuth2Client creates a new OAuth2Client with the required fields validated.

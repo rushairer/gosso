@@ -159,7 +159,7 @@ func (r *oauth2ClientRepositoryImpl) FindByAccountID(ctx context.Context, accoun
 	return scanOAuth2Clients(rows)
 }
 
-func (r *oauth2ClientRepositoryImpl) Update(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client) error {
+func (r *oauth2ClientRepositoryImpl) Update(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client, expectedUpdatedAt time.Time) error {
 	f, err := marshalClientJSONFields(client)
 	if err != nil {
 		return err
@@ -168,15 +168,20 @@ func (r *oauth2ClientRepositoryImpl) Update(ctx context.Context, tx *sql.Tx, cli
 	query := `
 		UPDATE oauth2_clients
 		SET name = $1, description = $2, redirect_uris = $3, post_logout_redirect_uris = $4, grant_types = $5, scopes = $6, metadata = $7, updated_at = $8
-		WHERE id = $9 AND deleted_at IS NULL
+		WHERE id = $9 AND deleted_at IS NULL AND updated_at = $10
 		RETURNING updated_at`
 
 	err = tx.QueryRowContext(ctx, query,
-		client.Name, client.Description, f.redirectURIs, f.postLogoutURIs, f.grantTypes, f.scopes, f.metadata, time.Now(), client.ID,
+		client.Name, client.Description, f.redirectURIs, f.postLogoutURIs, f.grantTypes, f.scopes, f.metadata, time.Now(), client.ID, expectedUpdatedAt,
 	).Scan(&client.UpdatedAt)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("%w: %s", domain.ErrClientNotFound, client.ID)
+		// Distinguish not-found from concurrent modification
+		_, findErr := findByClientID(ctx, tx.QueryRowContext, client.ClientID)
+		if findErr != nil {
+			return findErr // ErrClientNotFound
+		}
+		return fmt.Errorf("%w: %s", domain.ErrClientConcurrentModification, client.ID)
 	}
 	if err != nil {
 		return fmt.Errorf("update oauth2_client: %w", err)

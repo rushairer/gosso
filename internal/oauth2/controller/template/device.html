@@ -17,8 +17,8 @@
         .btn { flex: 1; padding: 12px; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; }
         .btn-approve { background: #2563eb; color: #fff; }
         .btn-approve:hover { background: #1d4ed8; }
-        .btn-deny { background: #e5e7eb; color: #374151; }
-        .btn-deny:hover { background: #d1d5db; }
+        .btn-deny { background: #d1d5db; color: #1f2937; }
+        .btn-deny:hover { background: #9ca3af; }
         .input-group { margin-bottom: 24px; }
         .input-group label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
         .input-group input { width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 18px; text-align: center; letter-spacing: 4px; text-transform: uppercase; }
@@ -53,7 +53,7 @@
     <div class="card">
         <h1>Device Authorization</h1>
         <p class="subtitle">Enter the code displayed on your device to authorize it.</p>
-        {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+        {{if .Error}}<div class="error" role="alert">{{.Error}}</div>{{end}}
         <form method="GET" action="/oauth2/device">
             <div class="input-group">
                 <label for="user_code">Authorization Code</label>

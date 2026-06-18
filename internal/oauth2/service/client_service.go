@@ -155,7 +155,13 @@ func (s *oauth2ClientServiceImpl) FindByAccountID(ctx context.Context, accountID
 
 func (s *oauth2ClientServiceImpl) UpdateClient(ctx context.Context, client *domain.OAuth2Client) error {
 	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.clientRepo.Update(ctx, tx, client)
+		current, err := s.clientRepo.FindByClientIDTx(ctx, tx, client.ClientID)
+		if err != nil {
+			return err
+		}
+		expectedUpdatedAt := current.UpdatedAt
+		client.UpdatedAt = time.Now()
+		return s.clientRepo.Update(ctx, tx, client, expectedUpdatedAt)
 	})
 }
 
@@ -170,7 +176,7 @@ type UpdateClientRequest struct {
 }
 
 // UpdateClientByAccountID loads a client by ID, verifies ownership, applies partial updates with
-// validation, and persists the result in a single transaction.
+// validation, and persists the result in a single transaction with optimistic locking.
 func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, accountID, clientID string, req *UpdateClientRequest) (*domain.OAuth2Client, error) {
 	client, err := s.clientRepo.FindByClientID(ctx, clientID)
 	if err != nil {
@@ -216,10 +222,16 @@ func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, a
 	if req.Scopes != nil {
 		client.Scopes = req.Scopes
 	}
-	client.UpdatedAt = time.Now()
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.clientRepo.Update(ctx, tx, client)
+		// Re-read inside the transaction to get a consistent snapshot for optimistic locking
+		current, err := s.clientRepo.FindByClientIDTx(ctx, tx, clientID)
+		if err != nil {
+			return fmt.Errorf("%w: %s", domain.ErrClientNotFound, clientID)
+		}
+		expectedUpdatedAt := current.UpdatedAt
+		client.UpdatedAt = time.Now()
+		return s.clientRepo.Update(ctx, tx, client, expectedUpdatedAt)
 	})
 	if err != nil {
 		return nil, err

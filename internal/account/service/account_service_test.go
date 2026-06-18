@@ -689,6 +689,7 @@ func TestUpdateAccount(t *testing.T) {
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	now := time.Now()
+	updatedAt := now.Add(-1 * time.Hour)
 	username := "updateduser"
 	account := &domain.Account{
 		ID:          "account-001",
@@ -699,10 +700,24 @@ func TestUpdateAccount(t *testing.T) {
 		Timezone:    "UTC",
 		Metadata:    map[string]any{},
 		CreatedAt:   now,
-		UpdatedAt:   now,
+		UpdatedAt:   updatedAt,
 	}
 
 	mock.ExpectBegin()
+
+	// FindByIDTx — returns the current account (re-read inside transaction)
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		account.ID, account.Username, account.DisplayName, account.AvatarURL, string(account.Status),
+		account.Locale, account.Timezone, []byte("{}"), account.CreatedAt, updatedAt, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs(account.ID).
+		WillReturnRows(accountRows)
+
+	// UpdateAccount with optimistic locking (expectedUpdatedAt = updatedAt)
 	mock.ExpectExec("UPDATE accounts").
 		WithArgs(
 			account.Username,
@@ -712,8 +727,9 @@ func TestUpdateAccount(t *testing.T) {
 			account.Locale,
 			account.Timezone,
 			sqlmock.AnyArg(), // metadata JSON
-			sqlmock.AnyArg(), // updated_at
+			sqlmock.AnyArg(), // new updated_at (time.Now())
 			account.ID,
+			updatedAt, // expectedUpdatedAt for optimistic lock
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -752,8 +768,11 @@ func TestUpdateAccount_NotFound(t *testing.T) {
 	}
 
 	mock.ExpectBegin()
-	mock.ExpectExec("UPDATE accounts").
-		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	// FindByIDTx — returns ErrAccountNotFound (account does not exist)
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs(account.ID).
+		WillReturnError(sql.ErrNoRows)
 	mock.ExpectRollback()
 
 	err = accountService.UpdateAccount(context.Background(), account)
@@ -790,7 +809,10 @@ func TestVerifyContactCredential_Email(t *testing.T) {
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
 
-	// FindByAccountAndType for email — returns one unverified credential
+	// All credential operations happen inside a single transaction to prevent TOCTOU
+	mock.ExpectBegin()
+
+	// FindByAccountAndTypeForUpdate for email — returns one unverified credential
 	emailRows := sqlmock.NewRows([]string{
 		"id", "account_id", "credential_type", "identifier",
 		"credential_value", "verified", "primary_credential", "metadata",
@@ -800,13 +822,11 @@ func TestVerifyContactCredential_Email(t *testing.T) {
 		"", false, true, []byte("{}"),
 		now, now, nil, nil, nil,
 	)
-
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
 		WithArgs(accountID, domain.CredentialTypeEmail).
 		WillReturnRows(emailRows)
 
-	// UpdateCredential in transaction
-	mock.ExpectBegin()
+	// UpdateCredential within the same transaction
 	mock.ExpectExec("UPDATE account_credentials").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -845,12 +865,15 @@ func TestVerifyContactCredential_PhoneFallback(t *testing.T) {
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
 
-	// FindByAccountAndType for email — not found
+	// All credential operations happen inside a single transaction to prevent TOCTOU
+	mock.ExpectBegin()
+
+	// FindByAccountAndTypeForUpdate for email — not found
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
 		WithArgs(accountID, domain.CredentialTypeEmail).
 		WillReturnError(repository.ErrCredentialNotFound)
 
-	// FindByAccountAndType for phone — returns one unverified credential
+	// FindByAccountAndTypeForUpdate for phone — returns one unverified credential
 	phoneRows := sqlmock.NewRows([]string{
 		"id", "account_id", "credential_type", "identifier",
 		"credential_value", "verified", "primary_credential", "metadata",
@@ -860,13 +883,11 @@ func TestVerifyContactCredential_PhoneFallback(t *testing.T) {
 		"", false, true, []byte("{}"),
 		now, now, nil, nil, nil,
 	)
-
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
 		WithArgs(accountID, domain.CredentialTypePhone).
 		WillReturnRows(phoneRows)
 
-	// UpdateCredential in transaction
-	mock.ExpectBegin()
+	// UpdateCredential within the same transaction
 	mock.ExpectExec("UPDATE account_credentials").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -905,15 +926,21 @@ func TestVerifyContactCredential_NoCredentialFound(t *testing.T) {
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
 
-	// Email not found
+	// All credential operations happen inside a single transaction to prevent TOCTOU
+	mock.ExpectBegin()
+
+	// FindByAccountAndTypeForUpdate for email — not found
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
 		WithArgs(accountID, domain.CredentialTypeEmail).
 		WillReturnError(repository.ErrCredentialNotFound)
 
-	// Phone not found
+	// FindByAccountAndTypeForUpdate for phone — not found
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
 		WithArgs(accountID, domain.CredentialTypePhone).
 		WillReturnError(repository.ErrCredentialNotFound)
+
+	// Transaction rolls back because the inner function returned ErrCredentialNotFound
+	mock.ExpectRollback()
 
 	err = accountService.VerifyContactCredential(context.Background(), accountID)
 

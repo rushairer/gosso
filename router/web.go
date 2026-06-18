@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -72,6 +73,7 @@ func RegisterWebRouter(deps RouterDeps) {
 	verifyLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "verify", middleware.IPKeyFunc, deps.RateLimits.Verify, time.Minute, false, deps.Logger)
 	// Non-security endpoints fail-open (allow if Redis is unavailable)
 	socialLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "social", middleware.IPKeyFunc, deps.RateLimits.API, time.Minute, true, deps.Logger)
+	sessionLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "session", middleware.IPKeyFunc, deps.RateLimits.API, time.Minute, true, deps.Logger)
 
 	// /api/* routes
 	api := deps.Server.Group("/api")
@@ -86,6 +88,7 @@ func RegisterWebRouter(deps RouterDeps) {
 			RefreshLimit:  refreshLimit,
 			VerifyLimit:   verifyLimit,
 			SocialLimit:   socialLimit,
+			SessionLimit:  sessionLimit,
 		})
 
 		// Client management routes (require JWT authentication + fail-closed rate limiting)
@@ -129,6 +132,16 @@ func RegisterWebRouter(deps RouterDeps) {
 	oidc := deps.Server.Group("/oidc")
 	oidc.Use(oidcLimit, authMiddleware.AuditMetadataMiddleware())
 	deps.OIDCCtrl.RegisterRoutes(oidc, jwtAuth)
+
+	// Custom 404 handler: JSON for API/OAuth2 paths, HTML for browser requests
+	deps.Server.NoRoute(func(ctx *gin.Context) {
+		path := ctx.Request.URL.Path
+		if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/oauth2/") || strings.HasPrefix(path, "/oidc/") {
+			ctx.JSON(http.StatusNotFound, gouno.NewNotFoundResponse())
+			return
+		}
+		ctx.Data(http.StatusNotFound, "text/html; charset=utf-8", []byte(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>404 Not Found</title></head><body><h1>404 - Page Not Found</h1><p>The requested resource was not found on this server.</p></body></html>`))
+	})
 }
 
 func registerWebTestRouter(server *gin.Engine) {

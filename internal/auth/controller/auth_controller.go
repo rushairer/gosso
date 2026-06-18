@@ -127,6 +127,7 @@ type AuthRouteConfig struct {
 	RefreshLimit  gin.HandlerFunc // Rate limiter for token refresh
 	VerifyLimit   gin.HandlerFunc // Rate limiter for verification
 	SocialLimit   gin.HandlerFunc // Rate limiter for social login
+	SessionLimit  gin.HandlerFunc // Rate limiter for session management
 }
 
 // RegisterRoutes registers authentication routes
@@ -183,9 +184,15 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, cfg AuthRouteConfig
 			protected.POST("/logout", c.Logout)
 			protected.GET("/session", c.GetSession)
 
-			// Session management
-			protected.GET("/sessions", c.ListSessions)
-			protected.DELETE("/sessions/:id", c.RevokeSession)
+			// Session management (JWT + optional rate limiting)
+			sessionMgmtHandlers := func() []gin.HandlerFunc {
+				if cfg.SessionLimit != nil {
+					return []gin.HandlerFunc{cfg.SessionLimit}
+				}
+				return nil
+			}
+			protected.GET("/sessions", append(sessionMgmtHandlers(), c.ListSessions)...)
+			protected.DELETE("/sessions/:id", append(sessionMgmtHandlers(), c.RevokeSession)...)
 
 			// Verification endpoints (require JWT)
 			verifyHandlers := []gin.HandlerFunc{c.SendVerification}

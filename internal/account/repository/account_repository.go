@@ -11,8 +11,9 @@ import (
 
 // Sentinel errors for repository operations
 var (
-	ErrAccountNotFound         = errors.New("account not found")
-	ErrInvalidStatusTransition = errors.New("invalid account status transition")
+	ErrAccountNotFound          = errors.New("account not found")
+	ErrInvalidStatusTransition  = errors.New("invalid account status transition")
+	ErrConcurrentModification   = errors.New("account was modified concurrently")
 )
 
 // AccountRepository defines the interface for account repository
@@ -23,6 +24,11 @@ type AccountRepository interface {
 	// FindByID finds an account by ID
 	FindByID(ctx context.Context, accountID string) (*domain.Account, error)
 
+	// FindByIDTx finds an account by ID within a transaction (non-deleted only).
+	// Use this when you need to read account data inside an existing transaction,
+	// e.g., for optimistic locking before an update.
+	FindByIDTx(ctx context.Context, tx *sql.Tx, accountID string) (*domain.Account, error)
+
 	// FindByIDIncludingDeletedTx finds an account by ID within a transaction,
 	// including soft-deleted rows. Use this for idempotency checks in
 	// soft-delete flows where the caller must distinguish "not found" from
@@ -32,8 +38,12 @@ type AccountRepository interface {
 	// FindByUsername finds an account by username
 	FindByUsername(ctx context.Context, username string) (*domain.Account, error)
 
-	// UpdateAccount updates an account (requires transaction)
-	UpdateAccount(ctx context.Context, tx *sql.Tx, account *domain.Account) error
+	// UpdateAccount updates an account with optimistic locking.
+	// expectedUpdatedAt is the value of updated_at that was read earlier in the same
+	// transaction; the UPDATE will only succeed if the row still matches.
+	// Returns ErrConcurrentModification if another writer changed the row,
+	// or ErrAccountNotFound if the row no longer exists.
+	UpdateAccount(ctx context.Context, tx *sql.Tx, account *domain.Account, expectedUpdatedAt time.Time) error
 
 	// SoftDeleteAccount soft deletes an account (requires transaction)
 	SoftDeleteAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error

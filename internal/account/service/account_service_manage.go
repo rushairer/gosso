@@ -106,38 +106,37 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 }
 
 // VerifyContactCredential verifies the account's primary contact credential.
+//
+// The entire read-verify-update cycle runs inside a single transaction with
+// FOR UPDATE row-level locking to prevent TOCTOU race conditions.
 func (s *accountServiceImpl) VerifyContactCredential(ctx context.Context, accountID string) error {
 	// 0. Ensure account is active
 	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
 		return err
 	}
 
-	// 1. Find credential
-	credentials, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, domain.CredentialTypeEmail)
-	if err != nil {
-		if !errors.Is(err, repository.ErrCredentialNotFound) {
+	var credential *domain.Credential
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// 1. Find credential with row-level locking to prevent concurrent modification
+		credentials, err := s.credentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, domain.CredentialTypeEmail)
+		if err != nil && !errors.Is(err, repository.ErrCredentialNotFound) {
 			return fmt.Errorf("find email credential: %w", err)
 		}
-	}
-	if len(credentials) == 0 {
-		// Try phone credential as fallback
-		credentials, err = s.credentialRepo.FindByAccountAndType(ctx, accountID, domain.CredentialTypePhone)
-		if err != nil {
-			if !errors.Is(err, repository.ErrCredentialNotFound) {
+		if len(credentials) == 0 {
+			// Try phone credential as fallback
+			credentials, err = s.credentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, domain.CredentialTypePhone)
+			if err != nil && !errors.Is(err, repository.ErrCredentialNotFound) {
 				return fmt.Errorf("find phone credential: %w", err)
 			}
+			if len(credentials) == 0 {
+				return repository.ErrCredentialNotFound
+			}
 		}
-		if len(credentials) == 0 {
-			return repository.ErrCredentialNotFound
-		}
-	}
 
-	credential := credentials[0]
+		credential = credentials[0]
 
-	// 2. Mark as verified
-	credential.Verify()
-
-	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// 2. Mark as verified and persist atomically within the same transaction
+		credential.Verify()
 		return s.credentialRepo.UpdateCredential(ctx, tx, credential)
 	})
 	if err != nil {

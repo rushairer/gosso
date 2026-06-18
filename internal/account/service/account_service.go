@@ -289,17 +289,24 @@ func (s *accountServiceImpl) FindAccountByUsername(ctx context.Context, username
 	return s.accountRepo.FindByUsername(ctx, username)
 }
 
-// UpdateAccount updates account information.
+// UpdateAccount updates account information with optimistic locking.
+// The update only succeeds if the account has not been modified since it was
+// last read by the caller. Returns ErrConcurrentModification on races.
 func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.Account) error {
 	account.Sanitize()
 	if err := account.Validate(); err != nil {
 		return fmt.Errorf("invalid account: %w", err)
 	}
 
-	account.UpdatedAt = time.Now()
-
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.accountRepo.UpdateAccount(ctx, tx, account)
+		// Re-read inside the transaction to get a consistent snapshot of updated_at
+		current, err := s.accountRepo.FindByIDTx(ctx, tx, account.ID)
+		if err != nil {
+			return err
+		}
+		expectedUpdatedAt := current.UpdatedAt
+		account.UpdatedAt = time.Now()
+		return s.accountRepo.UpdateAccount(ctx, tx, account, expectedUpdatedAt)
 	})
 	if err != nil {
 		return err
