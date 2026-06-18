@@ -118,29 +118,21 @@ func (r *oauth2ClientRepositoryImpl) Create(ctx context.Context, tx *sql.Tx, cli
 }
 
 func (r *oauth2ClientRepositoryImpl) FindByClientID(ctx context.Context, clientID string) (*domain.OAuth2Client, error) {
-	query := `
-		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at, deleted_at
-		FROM oauth2_clients
-		WHERE client_id = $1 AND deleted_at IS NULL`
-
-	client, err := scanOAuth2Client(r.db.QueryRowContext(ctx, query, clientID))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: %s", domain.ErrClientNotFound, clientID)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("find oauth2_client by client_id: %w", err)
-	}
-
-	return client, nil
+	return findByClientID(ctx, r.db.QueryRowContext, clientID)
 }
 
 func (r *oauth2ClientRepositoryImpl) FindByClientIDTx(ctx context.Context, tx *sql.Tx, clientID string) (*domain.OAuth2Client, error) {
-	query := `
+	return findByClientID(ctx, tx.QueryRowContext, clientID)
+}
+
+// findByClientID is the shared implementation for both transactional and non-transactional variants.
+func findByClientID(ctx context.Context, queryRow func(context.Context, string, ...any) *sql.Row, clientID string) (*domain.OAuth2Client, error) {
+	const query = `
 		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at, deleted_at
 		FROM oauth2_clients
 		WHERE client_id = $1 AND deleted_at IS NULL`
 
-	client, err := scanOAuth2Client(tx.QueryRowContext(ctx, query, clientID))
+	client, err := scanOAuth2Client(queryRow(ctx, query, clientID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", domain.ErrClientNotFound, clientID)
 	}

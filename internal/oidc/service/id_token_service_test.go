@@ -132,7 +132,7 @@ func setupTestIDTokenService(t *testing.T) (*IDTokenService, func()) {
 
 	blacklist, errBS := tokenService.NewBlacklistService(redisClient, logger)
 	require.NoError(t, errBS)
-	keySvc, err := tokenService.NewKeyService("", "", false, logger)
+	keySvc, err := tokenService.NewKeyService("", "", false, 0, logger)
 	require.NoError(t, err)
 	tokenSvc, err := tokenService.NewTokenService(
 		keySvc,

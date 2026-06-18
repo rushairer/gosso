@@ -194,6 +194,8 @@ func (c *OAuth2Controller) RegisterRoutes(rg *gin.RouterGroup, authMiddleware, t
 	rg.POST("/device", deviceUserHandlers...)
 }
 
+// redirectWithCode builds the OAuth2 authorization redirect URL with the
+// authorization code, optional state, and optional OIDC iss parameter.
 func redirectWithCode(ctx *gin.Context, redirectURI, code, state, issuer string) {
 	parsedURL, err := url.Parse(redirectURI)
 	if err != nil {
@@ -213,6 +215,8 @@ func redirectWithCode(ctx *gin.Context, redirectURI, code, state, issuer string)
 	ctx.Redirect(http.StatusFound, parsedURL.String())
 }
 
+// splitScope splits a space-delimited scope string into individual scope tokens.
+// Empty input returns nil; consecutive spaces are collapsed.
 func splitScope(scope string) []string {
 	if scope == "" {
 		return nil

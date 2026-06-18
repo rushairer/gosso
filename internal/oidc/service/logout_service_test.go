@@ -19,7 +19,7 @@ import (
 func setupTestLogoutService(t *testing.T) (*LogoutService, *tokenService.KeyService) {
 	t.Helper()
 	logger := zap.NewNop()
-	keySvc, err := tokenService.NewKeyService("", "", false, logger)
+	keySvc, err := tokenService.NewKeyService("", "", false, 0, logger)
 	require.NoError(t, err)
 
 	redisClient, _ := testutil.SetupTestRedis(t)
@@ -114,7 +114,7 @@ func TestValidateIDTokenHint_BadSignature(t *testing.T) {
 	svc, _ := setupTestLogoutService(t)
 
 	// Sign with a different key
-	otherKeySvc, err := tokenService.NewKeyService("", "", false, zap.NewNop())
+	otherKeySvc, err := tokenService.NewKeyService("", "", false, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	tokenString := signTestIDToken(t, otherKeySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
@@ -152,7 +152,7 @@ func setupTestLogoutServiceWithSession(t *testing.T) (*LogoutService, *tokenServ
 	t.Helper()
 	logger := zap.NewNop()
 
-	keySvc, err := tokenService.NewKeyService("", "", false, logger)
+	keySvc, err := tokenService.NewKeyService("", "", false, 0, logger)
 	require.NoError(t, err)
 
 	redisClient, _ := testutil.SetupTestRedis(t)
@@ -212,7 +212,7 @@ func TestLogoutByAccountID_Success(t *testing.T) {
 
 func TestLogoutByAccountID_SessionServiceError(t *testing.T) {
 	logger := zap.NewNop()
-	keySvc, err := tokenService.NewKeyService("", "", false, logger)
+	keySvc, err := tokenService.NewKeyService("", "", false, 0, logger)
 	require.NoError(t, err)
 
 	redisClient, _ := testutil.SetupTestRedis(t)

@@ -13,7 +13,7 @@ import (
 
 func newTestJWKSService(t *testing.T) *JWKSService {
 	t.Helper()
-	keySvc, err := tokenService.NewKeyService("", "test-kid", false, zap.NewNop())
+	keySvc, err := tokenService.NewKeyService("", "test-kid", false, 0, zap.NewNop())
 	require.NoError(t, err)
 	return NewJWKSService(keySvc)
 }

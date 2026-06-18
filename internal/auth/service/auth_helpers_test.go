@@ -242,7 +242,7 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 	sessSvc := sessionService.NewSessionService(redisClient, logger)
 
 	// Real TokenService backed by miniredis + in-memory RSA key
-	keySvc, err := tokenService.NewKeyService("", "test-key", false, logger)
+	keySvc, err := tokenService.NewKeyService("", "test-key", false, 0, logger)
 	if err != nil {
 		mr.Close()
 		sqlDB.Close()

@@ -24,7 +24,7 @@ func setupTestTokenService(t *testing.T) (*TokenService, func()) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	cleanup := mr.Close
 
-	keySvc, err := NewKeyService("", "", false, logger)
+	keySvc, err := NewKeyService("", "", false, 0, logger)
 	require.NoError(t, err)
 
 	blacklist, errBS := NewBlacklistService(redisClient, logger)

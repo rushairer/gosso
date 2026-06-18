@@ -40,7 +40,7 @@ func setupRealTokenService(t *testing.T) (*tokenService.TokenService, func()) {
 	t.Helper()
 	logger := zap.NewNop()
 	redisClient, mr := testutil.SetupTestRedis(t)
-	keySvc, err := tokenService.NewKeyService("", "", false, logger)
+	keySvc, err := tokenService.NewKeyService("", "", false, 0, logger)
 	require.NoError(t, err)
 	blacklist, err := tokenService.NewBlacklistService(redisClient, logger)
 	require.NoError(t, err)

@@ -10,31 +10,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync/atomic"
 
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/utility"
 )
 
-// rsaKeyBits is the key size for new RSA key generation.
-// NOTE: Existing keys are not affected; rotate keys to upgrade.
-var rsaKeyBits atomic.Int32
+const defaultRSAKeyBits = 3072
 
-func init() {
-	rsaKeyBits.Store(3072)
-}
-
-// SetRSAKeyBits overrides the default RSA key size for new key generation.
-// Must be called before NewKeyService. Panics if called with a value < 2048.
-func SetRSAKeyBits(bits int) {
-	if bits > 0 {
-		if bits < 2048 {
-			panic("rsa_key_bits must be at least 2048")
-		}
-		rsaKeyBits.Store(int32(bits))
-	}
-}
+// SetRSAKeyBits is a no-op kept for backward compatibility.
+// Deprecated: pass keyBits directly to NewKeyService instead.
+func SetRSAKeyBits(_ int) {}
 
 // KeyService manages RSA key pairs for RS256 JWT signing.
 type KeyService struct {
@@ -49,7 +35,17 @@ type KeyService struct {
 //     - isProduction = true → return error (do not auto-generate new key)
 //     - isProduction = false → generate and write PEM
 //  3. privateKeyPath empty → generate in-memory (dev mode, keys lost on restart)
-func NewKeyService(privateKeyPath string, keyID string, isProduction bool, logger *zap.Logger) (*KeyService, error) {
+//
+// keyBits specifies the RSA key size for new key generation. If 0, defaults to 3072.
+// Panics if keyBits is non-zero and less than 2048.
+func NewKeyService(privateKeyPath string, keyID string, isProduction bool, keyBits int, logger *zap.Logger) (*KeyService, error) {
+	if keyBits == 0 {
+		keyBits = defaultRSAKeyBits
+	}
+	if keyBits < 2048 {
+		panic("rsa_key_bits must be at least 2048")
+	}
+
 	logger = utility.EnsureLogger(logger)
 
 	var privateKey *rsa.PrivateKey
@@ -76,7 +72,7 @@ func NewKeyService(privateKeyPath string, keyID string, isProduction bool, logge
 			if isProduction {
 				return nil, fmt.Errorf("RSA private key file not found at %s in production mode", privateKeyPath)
 			}
-			privateKey, err = generateAndSaveKey(privateKeyPath)
+			privateKey, err = generateAndSaveKey(privateKeyPath, keyBits)
 			if err != nil {
 				return nil, fmt.Errorf("generate and save key: %w", err)
 			}
@@ -84,7 +80,7 @@ func NewKeyService(privateKeyPath string, keyID string, isProduction bool, logge
 				zap.String("path", privateKeyPath))
 		}
 	} else {
-		privateKey, err = generateKey()
+		privateKey, err = generateKey(keyBits)
 		if err != nil {
 			return nil, fmt.Errorf("generate key: %w", err)
 		}
@@ -119,12 +115,12 @@ func (s *KeyService) KeyID() string {
 	return s.keyID
 }
 
-func generateKey() (*rsa.PrivateKey, error) {
-	return rsa.GenerateKey(rand.Reader, int(rsaKeyBits.Load()))
+func generateKey(bits int) (*rsa.PrivateKey, error) {
+	return rsa.GenerateKey(rand.Reader, bits)
 }
 
-func generateAndSaveKey(path string) (*rsa.PrivateKey, error) {
-	key, err := generateKey()
+func generateAndSaveKey(path string, bits int) (*rsa.PrivateKey, error) {
+	key, err := generateKey(bits)
 	if err != nil {
 		return nil, err
 	}

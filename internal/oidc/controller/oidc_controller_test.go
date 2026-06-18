@@ -389,7 +389,7 @@ func TestUserInfo_PhoneScope(t *testing.T) {
 
 func setupTestKeyService(t *testing.T) *tokenService.KeyService {
 	t.Helper()
-	keySvc, err := tokenService.NewKeyService("", "", false, zap.NewNop())
+	keySvc, err := tokenService.NewKeyService("", "", false, 0, zap.NewNop())
 	require.NoError(t, err)
 	return keySvc
 }
@@ -592,7 +592,7 @@ func TestLogout_IDTokenHint_WrongSignature(t *testing.T) {
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 
 	// Sign with a DIFFERENT key service
-	otherKeySvc, err := tokenService.NewKeyService("", "", false, zap.NewNop())
+	otherKeySvc, err := tokenService.NewKeyService("", "", false, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
@@ -628,7 +628,7 @@ func TestLogout_BearerToken_InvalidSignature(t *testing.T) {
 	sessionSvc.SetTokenRevoker(tokenSvc)
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 
-	otherKeySvc, err := tokenService.NewKeyService("", "", false, zap.NewNop())
+	otherKeySvc, err := tokenService.NewKeyService("", "", false, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())

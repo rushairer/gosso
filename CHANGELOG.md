@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CSP header now includes `frame-ancestors 'none'` directive — provides defense-in-depth against clickjacking beyond the existing `X-Frame-Options: DENY` (`middleware/middleware.go`).
 - MFA token blacklist now executes immediately after verification instead of via `defer` — closes the race window between MFA verification and session creation where a concurrent request could reuse the same MFA token (`internal/auth/service/auth_login.go`).
 - Empty username/password login attempts now count against rate limits — prevents unlimited probing with empty credentials (`internal/auth/service/auth_login.go`).
+- Consent cache now uses 5-minute fallback TTL when primary Redis write fails — prevents stale consent data from persisting up to 90 days in cache; `DeleteConsent` writes a short-lived tombstone when Redis delete fails to prevent revoked consent from being served (`internal/oauth2/service/consent_service.go`).
 - Sensitive config fields (`SMTPConfig.Password`, `OAuthProviderConfig.ClientSecret`, `AuthConfig.TOTPEncryptionKey`) now have `json:"-"` tags — prevents accidental serialization of secrets (`config/config.go`).
 - OAuth2 `Revoke` endpoint now calls `DummyAuthenticate()` on client lookup failure — eliminates timing side-channel that could distinguish "client not found" from "wrong secret" (`internal/oauth2/controller/oauth2_revoke.go`).
 - Credential query errors no longer include raw identifiers (email/phone) — prevents PII leakage into logs (`internal/account/repository/credential_repository_impl.go`).
@@ -105,6 +106,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Admin controller now uses shared `controllerutil.ValidateUUID` instead of a local duplicate — ensures consistent `ctx.Abort()` on validation failure (`internal/admin/controller/admin_controller.go`).
 - `ConsentService.GetConsent` now logs a warning on cache JSON corruption before falling back to DB — enables detection of cache integrity issues in production (`internal/oauth2/service/consent_service.go`).
 - WebAuthn configuration (`webauthn_rp_id`, `webauthn_rp_name`, `webauthn_rp_origin`) now included in development and production YAML templates — improves discoverability for operators (`config/development.yaml`, `config/production.yaml`).
+- `NewKeyService` now accepts `keyBits int` parameter for RSA key size — previously relied on global `SetRSAKeyBits()` side-effect; global function retained as deprecated no-op (`internal/token/service/key_service.go`).
+- `DummyWork()` sleep duration now configurable via `SetDummyWorkDuration()` — previously hardcoded at 100ms, now adjustable to match varying Argon2id parameter configurations (`internal/utility/security.go`).
+- `FindByClientID` and `FindByClientIDTx` now share a common `findByClientID` helper — eliminates duplicated SQL query and scan logic, consistent with the pattern used in other repositories (`internal/oauth2/repository/client_repository_impl.go`).
 - Global coverage threshold raised from 50% to 60% — aligns with documented invariant T1 in `ARCHITECTURE_INVARIANTS.md` (`Makefile`).
 - `session/service` minimum coverage threshold raised from 6.6% to 20% — security-critical session lifecycle management requires higher coverage (`script/check-critical-coverage.sh`).
 - `ARCHITECTURE_INVARIANTS.md` D1 invariant: removed stale reference to `BindSessionRevoker` / `BindOAuth2ClientDeleter` — these legacy patterns no longer exist in the codebase (`doc/ARCHITECTURE_INVARIANTS.md`).

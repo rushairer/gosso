@@ -13,7 +13,7 @@ import (
 )
 
 func TestNewKeyService_Generate(t *testing.T) {
-	svc, err := NewKeyService("", "", false, zap.NewNop())
+	svc, err := NewKeyService("", "", false, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	assert.NotNil(t, svc.PrivateKey())
@@ -26,7 +26,7 @@ func TestNewKeyService_CreateFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "keys", "private.pem")
 
-	svc, err := NewKeyService(path, "", false, zap.NewNop())
+	svc, err := NewKeyService(path, "", false, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	// The file should have been created
@@ -34,7 +34,7 @@ func TestNewKeyService_CreateFile(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Loading from the same file should succeed
-	svc2, err := NewKeyService(path, "", false, zap.NewNop())
+	svc2, err := NewKeyService(path, "", false, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	// The kid of both instances should be the same (the same key)
@@ -46,11 +46,11 @@ func TestNewKeyService_LoadFromFile(t *testing.T) {
 	path := filepath.Join(dir, "private.pem")
 
 	// First creation
-	svc1, err := NewKeyService(path, "", false, zap.NewNop())
+	svc1, err := NewKeyService(path, "", false, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	// Second loading
-	svc2, err := NewKeyService(path, "", false, zap.NewNop())
+	svc2, err := NewKeyService(path, "", false, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	assert.Equal(t, svc1.KeyID(), svc2.KeyID())
@@ -62,13 +62,13 @@ func TestNewKeyService_ProductionMissingFile(t *testing.T) {
 	path := filepath.Join(dir, "nonexistent", "private.pem")
 
 	// In production, loading a missing file should return an error
-	_, err := NewKeyService(path, "", true, zap.NewNop())
+	_, err := NewKeyService(path, "", true, 0, zap.NewNop())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "production mode")
 }
 
 func TestNewKeyService_CustomKeyID(t *testing.T) {
-	svc, err := NewKeyService("", "my-custom-kid", false, zap.NewNop())
+	svc, err := NewKeyService("", "my-custom-kid", false, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	assert.Equal(t, "my-custom-kid", svc.KeyID())
@@ -78,10 +78,10 @@ func TestKeyID_Stable(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "private.pem")
 
-	svc1, err := NewKeyService(path, "", false, zap.NewNop())
+	svc1, err := NewKeyService(path, "", false, 0, zap.NewNop())
 	require.NoError(t, err)
 
-	svc2, err := NewKeyService(path, "", false, zap.NewNop())
+	svc2, err := NewKeyService(path, "", false, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	assert.Equal(t, svc1.KeyID(), svc2.KeyID())

@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	ConsentKeyPrefix = "consent:"
-	ConsentTTL       = 90 * 24 * time.Hour // 90 days
+	ConsentKeyPrefix       = "consent:"
+	ConsentTTL             = 90 * 24 * time.Hour // 90 days
+	ConsentCacheFallbackTTL = 5 * time.Minute    // short TTL when primary cache write fails
 )
 
 // ConsentService handles user consent for OAuth2 authorization.
@@ -101,7 +102,9 @@ func (s *ConsentService) SaveConsent(ctx context.Context, consent *domain.Consen
 	} else {
 		key := s.buildConsentKey(consent.AccountID, consent.ClientID)
 		if setErr := s.redis.Set(ctx, key, data, ConsentTTL); setErr != nil {
-			s.logger.Warn("Failed to update consent cache", zap.Error(setErr))
+			s.logger.Warn("Failed to update consent cache, setting fallback TTL", zap.Error(setErr))
+			// Use a short fallback TTL so stale data expires quickly instead of 90 days.
+			_ = s.redis.Set(ctx, key, data, ConsentCacheFallbackTTL)
 		}
 	}
 
@@ -123,7 +126,11 @@ func (s *ConsentService) DeleteConsent(ctx context.Context, accountID, clientID 
 
 	key := s.buildConsentKey(accountID, clientID)
 	if err := s.redis.Del(ctx, key); err != nil {
-		s.logger.Warn("Failed to delete consent from Redis cache", zap.Error(err))
+		s.logger.Warn("Failed to delete consent from Redis cache, setting fallback TTL", zap.Error(err))
+		// If delete fails, the stale positive consent in cache could survive up to
+		// 90 days. Overwrite with a tombstone that expires quickly, so the next
+		// GetConsent falls through to the database.
+		_ = s.redis.Set(ctx, key, "revoked", ConsentCacheFallbackTTL)
 	}
 
 	return nil
