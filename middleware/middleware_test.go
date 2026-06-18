@@ -268,46 +268,46 @@ func TestMaxBodySizeMiddleware_OverLimit(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────
-// GetAccountID
+// RequireAccountID
 // ──────────────────────────────────────────────
 
-func TestGetAccountID_Success(t *testing.T) {
+func TestRequireAccountID_Success(t *testing.T) {
 	w := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(w)
 	ctx.Set(ContextKeyAccountID, "account-123")
 
-	id, ok := GetAccountID(ctx)
+	id, ok := RequireAccountID(ctx)
 	assert.True(t, ok)
 	assert.Equal(t, "account-123", id)
 }
 
-func TestGetAccountID_Missing(t *testing.T) {
+func TestRequireAccountID_Missing(t *testing.T) {
 	w := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(w)
 
-	id, ok := GetAccountID(ctx)
+	id, ok := RequireAccountID(ctx)
 	assert.False(t, ok)
 	assert.Empty(t, id)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
-func TestGetAccountID_Empty(t *testing.T) {
+func TestRequireAccountID_Empty(t *testing.T) {
 	w := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(w)
 	ctx.Set(ContextKeyAccountID, "")
 
-	id, ok := GetAccountID(ctx)
+	id, ok := RequireAccountID(ctx)
 	assert.False(t, ok)
 	assert.Empty(t, id)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
-func TestGetAccountID_WrongType(t *testing.T) {
+func TestRequireAccountID_WrongType(t *testing.T) {
 	w := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(w)
 	ctx.Set(ContextKeyAccountID, 12345)
 
-	id, ok := GetAccountID(ctx)
+	id, ok := RequireAccountID(ctx)
 	assert.False(t, ok)
 	assert.Empty(t, id)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)

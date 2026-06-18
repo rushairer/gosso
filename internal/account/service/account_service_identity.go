@@ -273,6 +273,12 @@ func nonNilMap(m map[string]any) map[string]any {
 // classifyRegistrationConflict determines the specific conflict cause when a
 // registration unique constraint violation occurs. It checks credential
 // existence to return a precise business error.
+//
+// NOTE: This method queries outside the failed transaction, so under concurrent
+// registrations the classified error type may be slightly imprecise (e.g., a
+// phone conflict could be reported as a username conflict if the concurrent
+// insert commits between the transaction failure and this query). The impact is
+// limited to the user-facing error message — no data integrity is affected.
 func (s *accountServiceImpl) classifyRegistrationConflict(ctx context.Context, req *RegisterAccountRequest) error {
 	// Check email credential first (most common conflict)
 	if req.Email != "" {

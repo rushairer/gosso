@@ -80,7 +80,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
-	accountIDStr, ok := middleware.GetAccountID(ctx)
+	accountIDStr, ok := middleware.RequireAccountID(ctx)
 	if !ok {
 		return
 	}

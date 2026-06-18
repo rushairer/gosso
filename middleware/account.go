@@ -23,9 +23,3 @@ func RequireAccountID(ctx *gin.Context) (string, bool) {
 	}
 	return accountID, true
 }
-
-// GetAccountID is an alias for RequireAccountID.
-// Deprecated: Use RequireAccountID instead.
-func GetAccountID(ctx *gin.Context) (string, bool) {
-	return RequireAccountID(ctx)
-}

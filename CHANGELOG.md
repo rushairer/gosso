@@ -95,6 +95,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `renderConsentTemplate()` helper — consolidates duplicate consent page rendering in `Authorize` (`internal/oauth2/controller/oauth2_authorize.go`).
 - `auditLogSync()` helper on `accountServiceImpl` — wraps `AuditLogSync` with error logging, replacing silent `_ =` discard pattern at 7 call sites (`internal/account/service/account_service.go`).
 - `ErrSessionServiceNotConfigured` sentinel error — returned by `LogoutByAccountID`/`LogoutBySessionID` when session service is nil (`internal/oidc/service/logout_service.go`).
+- OAuth2 client management audit logging — `RegisterClient`, `UpdateClientByAccountID`, and `DeleteClient` now emit async audit records (`AuditLog`) with action constants `oauth2.client.register`, `oauth2.client.update`, `oauth2.client.delete` (`internal/oauth2/service/client_service.go`, `internal/audit/domain/actions.go`).
+
+### Removed
+- `VerifyCredential` dead code on `accountServiceImpl` — was not declared on the `AccountService` interface and had zero callers (`internal/account/service/account_service_manage.go`).
 
 ### Changed
 - `PasswordResetService` setter methods (`SetWaitTimeout`, `SetTokenTTL`, `SetCooldownTTL`, `SetMaxAttempts`, `SetRevokeConcurrency`, `SetLoginRateLimitClearer`) now marked as deprecated — use `NewPasswordResetServiceWithConfig` to set all options at construction time (`internal/auth/service/password_reset_service.go`).
@@ -113,6 +117,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `session/service` minimum coverage threshold raised from 6.6% to 20% — security-critical session lifecycle management requires higher coverage (`script/check-critical-coverage.sh`).
 - `ARCHITECTURE_INVARIANTS.md` D1 invariant: removed stale reference to `BindSessionRevoker` / `BindOAuth2ClientDeleter` — these legacy patterns no longer exist in the codebase (`doc/ARCHITECTURE_INVARIANTS.md`).
 - `controllerutil.ValidateUUID` helper added as shared UUID validation for path/query parameters — extracted from `admin/controller` pattern for reuse across modules (`internal/controllerutil/response_helpers.go`).
+- Deprecated `GetAccountID` alias removed from `middleware/account.go` — all 11 call sites migrated to `RequireAccountID` (`middleware/account.go`, `internal/auth/controller/passkey_controller.go`, `internal/oauth2/controller/client_controller.go`, `internal/oauth2/controller/oauth2_authorize.go`).
+- `ZapLoggerMiddleware` now stores a request-scoped child logger enriched with `request_id` in gin context — downstream service and controller layers can retrieve it via `LoggerFromContext(ctx, fallback)` to automatically include `request_id` in all log entries (`middleware/zaplogger.go`, `middleware/context_keys.go`).
 - `LoginRateLimitClearer` interface now returns `error` from `ClearLoginRateLimitsByUsername` — enables callers to detect and handle Redis failures after password reset (`internal/auth/service/password_reset_service.go`).
 - `AssignRoleToAccount` repository now accepts `createdAt time.Time` parameter — consistent with all other repository timestamp methods (`internal/account/repository/role_repository_impl.go`).
 - `OAuth2Client.Metadata` JSON tag: removed `omitempty` — consistent with Account/Credential/Role Metadata fields (`internal/oauth2/domain/client.go`).

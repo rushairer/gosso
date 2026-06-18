@@ -155,13 +155,6 @@ func (s *accountServiceImpl) VerifyContactCredential(ctx context.Context, accoun
 	return nil
 }
 
-// VerifyCredential is kept for compatibility with older internal callers.
-//
-// Deprecated: use VerifyContactCredential.
-func (s *accountServiceImpl) VerifyCredential(ctx context.Context, accountID string) error {
-	return s.VerifyContactCredential(ctx, accountID)
-}
-
 // ChangePassword changes the account password.
 func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error {
 	// 0. Ensure account is active

@@ -60,6 +60,16 @@ func ZapLoggerMiddleware(logger *zap.Logger) gin.HandlerFunc {
 		path := ctx.Request.URL.Path
 		query := ctx.Request.URL.RawQuery
 
+		// Create a request-scoped child logger enriched with request_id and store it
+		// in the gin context so that downstream service/controller layers can retrieve
+		// it via LoggerFromContext(ctx) and automatically include request_id in their logs.
+		if requestID, exists := ctx.Get(ContextKeyRequestID); exists {
+			if rid, ok := requestID.(string); ok && rid != "" {
+				requestLogger := logger.With(zap.String("request_id", rid))
+				ctx.Set(ContextKeyLogger, requestLogger)
+			}
+		}
+
 		ctx.Next()
 
 		latency := time.Since(start)
@@ -100,4 +110,16 @@ func ZapLoggerMiddleware(logger *zap.Logger) gin.HandlerFunc {
 			logger.Info("HTTP", fields...)
 		}
 	}
+}
+
+// LoggerFromContext returns the request-scoped zap.Logger enriched with request_id
+// from the gin context. Returns the fallback logger if no request-scoped logger is
+// available (e.g., outside of an HTTP request or if the ZapLoggerMiddleware was not used).
+func LoggerFromContext(ctx *gin.Context, fallback *zap.Logger) *zap.Logger {
+	if l, exists := ctx.Get(ContextKeyLogger); exists {
+		if requestLogger, ok := l.(*zap.Logger); ok {
+			return requestLogger
+		}
+	}
+	return fallback
 }

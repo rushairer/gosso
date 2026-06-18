@@ -7,6 +7,7 @@ import (
 
 	"github.com/rushairer/gosso/config"
 	"github.com/rushairer/gosso/internal/cache"
+	auditService "github.com/rushairer/gosso/internal/audit/service"
 	"github.com/rushairer/gosso/internal/oauth2/repository"
 	"github.com/rushairer/gosso/internal/oauth2/service"
 )
@@ -26,10 +27,11 @@ func InitializeOAuth2Module(
 	redis *cache.RedisClient,
 	logger *zap.Logger,
 	authConfig config.AuthConfig,
+	auditor *auditService.Auditor,
 ) *OAuth2Module {
 	clientRepo := repository.NewOAuth2ClientRepository(db)
 	consentRepo := repository.NewConsentRepository(db)
-	clientSvc := service.NewOAuth2ClientService(db, clientRepo)
+	clientSvc := service.NewOAuth2ClientService(db, clientRepo, auditor, logger)
 	authCodeSvc := service.NewAuthCodeService(redis, logger, authConfig.AuthorizationCodeExpiry)
 	consentSvc := service.NewConsentService(db, consentRepo, redis, logger)
 	deviceCodeSvc := service.NewDeviceCodeService(redis, logger, authConfig.DeviceCodeExpiry, authConfig.DeviceCodeInterval)

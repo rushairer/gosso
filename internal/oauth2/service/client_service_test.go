@@ -21,7 +21,7 @@ func setupTestClientService(t *testing.T) (*sql.DB, sqlmock.Sqlmock, OAuth2Clien
 	require.NoError(t, err)
 
 	clientRepo := repository.NewOAuth2ClientRepository(db)
-	svc := NewOAuth2ClientService(db, clientRepo)
+	svc := NewOAuth2ClientService(db, clientRepo, nil, nil)
 
 	return db, mock, svc
 }

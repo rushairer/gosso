@@ -12,10 +12,15 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	"go.uber.org/zap"
 
+	"github.com/rushairer/gosso/internal/audit"
+	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
+	auditService "github.com/rushairer/gosso/internal/audit/service"
 	dbutil "github.com/rushairer/gosso/internal/db"
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 	"github.com/rushairer/gosso/internal/oauth2/repository"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // RegisterClientRequest represents a request to register an OAuth2 client
@@ -44,13 +49,17 @@ type OAuth2ClientService interface {
 type oauth2ClientServiceImpl struct {
 	db         *sql.DB
 	clientRepo repository.OAuth2ClientRepository
+	auditor    *auditService.Auditor
+	logger     *zap.Logger
 }
 
 // NewOAuth2ClientService creates a new OAuth2 client service instance
-func NewOAuth2ClientService(db *sql.DB, clientRepo repository.OAuth2ClientRepository) OAuth2ClientService {
+func NewOAuth2ClientService(db *sql.DB, clientRepo repository.OAuth2ClientRepository, auditor *auditService.Auditor, logger *zap.Logger) OAuth2ClientService {
 	return &oauth2ClientServiceImpl{
 		db:         db,
 		clientRepo: clientRepo,
+		auditor:    auditor,
+		logger:     logger,
 	}
 }
 
@@ -124,6 +133,14 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 	if err != nil {
 		return nil, "", fmt.Errorf("register client: %w", err)
 	}
+
+	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+		auditDomain.ActionOAuth2ClientRegister,
+		audit.IPFromContext(ctx),
+		&req.AccountID,
+		utility.MustMarshalJSON(map[string]any{"client_id": client.ClientID, "name": client.Name}),
+		nil,
+	))
 
 	return client, secretPlaintext, nil
 }
@@ -208,6 +225,14 @@ func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, a
 		return nil, err
 	}
 
+	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+		auditDomain.ActionOAuth2ClientUpdate,
+		audit.IPFromContext(ctx),
+		&accountID,
+		utility.MustMarshalJSON(map[string]any{"client_id": client.ClientID, "name": client.Name}),
+		nil,
+	))
+
 	return client, nil
 }
 
@@ -260,7 +285,7 @@ func isLoopbackHost(host string) bool {
 var ErrClientAccessDenied = errors.New("access denied: client does not belong to this account")
 
 func (s *oauth2ClientServiceImpl) DeleteClient(ctx context.Context, accountID, clientID string) error {
-	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		client, err := s.clientRepo.FindByClientIDTx(ctx, tx, clientID)
 		if err != nil {
 			return err
@@ -270,6 +295,19 @@ func (s *oauth2ClientServiceImpl) DeleteClient(ctx context.Context, accountID, c
 		}
 		return s.clientRepo.SoftDelete(ctx, tx, client.ID, time.Now())
 	})
+	if err != nil {
+		return err
+	}
+
+	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+		auditDomain.ActionOAuth2ClientDelete,
+		audit.IPFromContext(ctx),
+		&accountID,
+		utility.MustMarshalJSON(map[string]any{"client_id": clientID}),
+		nil,
+	))
+
+	return nil
 }
 
 // generateClientID generates a 24-byte client_id (48 hex characters)

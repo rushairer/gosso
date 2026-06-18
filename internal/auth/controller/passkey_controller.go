@@ -134,7 +134,7 @@ func (c *PasskeyController) RegisterComplete(ctx *gin.Context) {
 
 // resolveAccountForPasskey extracts the authenticated account's ID, username, and display name.
 func (c *PasskeyController) resolveAccountForPasskey(ctx *gin.Context) (accountID, username, displayName string, ok bool) {
-	accountID, ok = middleware.GetAccountID(ctx)
+	accountID, ok = middleware.RequireAccountID(ctx)
 	if !ok {
 		return "", "", "", false
 	}
@@ -328,7 +328,7 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 
 // ListCredentials GET /api/auth/passkeys
 func (c *PasskeyController) ListCredentials(ctx *gin.Context) {
-	accountID, ok := middleware.GetAccountID(ctx)
+	accountID, ok := middleware.RequireAccountID(ctx)
 	if !ok {
 		return
 	}
@@ -345,7 +345,7 @@ func (c *PasskeyController) ListCredentials(ctx *gin.Context) {
 
 // DeleteCredential DELETE /api/auth/passkeys/:id
 func (c *PasskeyController) DeleteCredential(ctx *gin.Context) {
-	accountID, ok := middleware.GetAccountID(ctx)
+	accountID, ok := middleware.RequireAccountID(ctx)
 	if !ok {
 		return
 	}

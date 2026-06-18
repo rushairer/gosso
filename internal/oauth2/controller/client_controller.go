@@ -75,7 +75,7 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 		return
 	}
 
-	accountID, ok := middleware.GetAccountID(ctx)
+	accountID, ok := middleware.RequireAccountID(ctx)
 	if !ok {
 		return
 	}
@@ -109,7 +109,7 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 
 // ListClients GET /api/oauth2/clients
 func (c *ClientController) ListClients(ctx *gin.Context) {
-	accountID, ok := middleware.GetAccountID(ctx)
+	accountID, ok := middleware.RequireAccountID(ctx)
 	if !ok {
 		return
 	}
@@ -135,7 +135,7 @@ func (c *ClientController) GetClient(ctx *gin.Context) {
 		return
 	}
 
-	accountID, ok := middleware.GetAccountID(ctx)
+	accountID, ok := middleware.RequireAccountID(ctx)
 	if !ok {
 		return
 	}
@@ -162,7 +162,7 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 		return
 	}
 
-	accountID, ok := middleware.GetAccountID(ctx)
+	accountID, ok := middleware.RequireAccountID(ctx)
 	if !ok {
 		return
 	}
@@ -209,7 +209,7 @@ func (c *ClientController) DeleteClient(ctx *gin.Context) {
 		return
 	}
 
-	accountID, ok := middleware.GetAccountID(ctx)
+	accountID, ok := middleware.RequireAccountID(ctx)
 	if !ok {
 		return
 	}

@@ -39,4 +39,9 @@ const (
 	ActionTokenRefresh = "auth.token.refresh"
 	ActionTokenRotate  = "auth.token.rotate"
 	ActionTokenRevoke  = "auth.token.revoke"
+
+	// OAuth2 client management audit actions
+	ActionOAuth2ClientRegister = "oauth2.client.register"
+	ActionOAuth2ClientUpdate   = "oauth2.client.update"
+	ActionOAuth2ClientDelete   = "oauth2.client.delete"
 )
