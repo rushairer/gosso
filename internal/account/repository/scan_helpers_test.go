@@ -165,7 +165,7 @@ func TestScanCredential(t *testing.T) {
 	metadataJSON := `{"source":"signup"}`
 
 	rows := sqlmock.NewRows([]string{
-		"id", "account_id", "type", "identifier", "value",
+		"id", "account_id", "credential_type", "identifier", "value",
 		"verified", "primary_credential", "metadata",
 		"created_at", "updated_at", "verified_at", "last_used_at", "deleted_at",
 	}).AddRow(

@@ -267,8 +267,8 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		return nil, err
 	}
 
-	// 3. Audit log
-	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+	// 3. Audit log (sync: account creation is a security-critical event)
+	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountRegister,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(account.ID),

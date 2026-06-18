@@ -107,6 +107,11 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 
 // VerifyContactCredential verifies the account's primary contact credential.
 func (s *accountServiceImpl) VerifyContactCredential(ctx context.Context, accountID string) error {
+	// 0. Ensure account is active
+	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
+		return err
+	}
+
 	// 1. Find credential
 	credentials, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, domain.CredentialTypeEmail)
 	if err != nil {

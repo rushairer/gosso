@@ -1,13 +1,15 @@
 package utility
 
-import "golang.org/x/crypto/bcrypt"
+import "time"
 
-// DummyWork performs a bcrypt hash to pad the response time of early-return
-// paths. This mitigates timing side-channel attacks that could distinguish
-// different outcomes based on response latency (e.g., "email not found" vs
-// "email found" or "cooldown active" vs "fresh request").
-// bcrypt at DefaultCost (~100ms) overlaps with the DB + Redis + SMTP overhead
-// on the real path, making the two indistinguishable.
+// DummyWork performs a sleep-based timing padding to equalise the response time
+// of early-return paths with the real authentication path. This mitigates timing
+// side-channel attacks that could distinguish "email not found" from "wrong
+// password" based on latency differences.
+//
+// Previous bcrypt-based implementation burned ~100ms of CPU per call, which
+// enabled CPU exhaustion under distributed brute-force from many source IPs.
+// Sleep achieves the same timing protection at zero CPU cost.
 func DummyWork() {
-	_, _ = bcrypt.GenerateFromPassword([]byte("dummy-work-padding"), bcrypt.DefaultCost)
+	time.Sleep(100 * time.Millisecond)
 }

@@ -366,6 +366,9 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 // email credential, and federated identity in one atomic operation.
 func (s *SocialLoginService) createAccountWithIdentity(ctx context.Context, account *accountDomain.Account, provider, providerUserID, email string, emailVerified bool) error {
 	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// Defense-in-depth: Sanitize again inside the transaction in case the
+		// account was mutated between NewAccount() and this point.
+		account.Sanitize()
 		if err := s.accountRepo.CreateAccount(ctx, tx, account); err != nil {
 			return fmt.Errorf("create account: %w", err)
 		}

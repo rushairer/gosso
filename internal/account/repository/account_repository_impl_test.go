@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/rushairer/gosso/internal/account/domain"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 func newTestAccount() *domain.Account {
@@ -246,7 +247,7 @@ func TestFindAll_Success(t *testing.T) {
 
 	a1 := newTestAccount()
 	a2 := &domain.Account{
-		ID: "account-002", Username: strPtr("user2"), DisplayName: "User Two",
+		ID: "account-002", Username: utility.StringPtr("user2"), DisplayName: "User Two",
 		Status: domain.AccountStatusActive, Locale: "en", Timezone: "UTC",
 		Metadata: map[string]any{}, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
@@ -320,10 +321,6 @@ func TestFindAll_DefaultPagination(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, total)
 	assert.Len(t, accounts, 1)
-}
-
-func strPtr(s string) *string {
-	return &s
 }
 
 // ──────────────────────────────────────────────

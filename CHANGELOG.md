@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- `SoftDeleteCredential` and `SoftDeleteCredentialsByAccount` now NULL out `identifier` column on soft delete — previously only `credential_value` was cleared, leaving PII (emails, phone numbers) in the database after deletion (`internal/account/repository/credential_repository_impl.go`).
+- `DummyWork()` now uses `time.Sleep` instead of `bcrypt.GenerateFromPassword` — eliminates CPU exhaustion vector under distributed brute-force attacks from many source IPs while preserving identical timing side-channel protection (`internal/utility/security.go`).
+- `RegisterAccount` audit log now writes synchronously (`AuditLogSync`) — account creation is a security-critical event and must not be lost on crash, consistent with login failures and account deletion (`internal/account/service/account_service.go`).
 - `deleteIfExpiredScript` now removes expired session IDs from the `account_sessions` index set — prevents stale entries from accumulating and causing Redis memory growth and increasing latency for session operations (`internal/session/service/session_service_scripts.go`, `internal/session/service/session_service.go`).
 - OAuth2 `handleRefreshTokenGrant` now authenticates the client before validating the refresh token — prevents unauthenticated callers from probing token existence via differing error responses (`internal/oauth2/controller/oauth2_token.go`).
 - OAuth2 `handleClientCredentialsGrant` now returns identical `"invalid_client"` error for all authentication failures — prevents client_id enumeration via error description differentiation (`internal/oauth2/controller/oauth2_token.go`).
@@ -93,6 +96,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ErrSessionServiceNotConfigured` sentinel error — returned by `LogoutByAccountID`/`LogoutBySessionID` when session service is nil (`internal/oidc/service/logout_service.go`).
 
 ### Changed
+- `PasswordResetService` setter methods (`SetWaitTimeout`, `SetTokenTTL`, `SetCooldownTTL`, `SetMaxAttempts`, `SetRevokeConcurrency`, `SetLoginRateLimitClearer`) now marked as deprecated — use `NewPasswordResetServiceWithConfig` to set all options at construction time (`internal/auth/service/password_reset_service.go`).
+- `passwordResetData.Email` field documentation now explains the design trade-off — stored to avoid extra DB round-trip during `VerifyAndReset`, protected by SHA-256 hash key and TTL (`internal/auth/service/password_reset_service.go`).
+- Social login `createAccountWithIdentity` now calls `account.Sanitize()` inside the transaction — defense-in-depth against unsanitized data if the account object is mutated between `NewAccount()` and the transaction (`internal/auth/service/social_login_service.go`).
 - Admin rate limit now has a default of 30/min via `config_manager.go` — was missing from Viper defaults, causing validation failure when not explicitly configured (`config/config_manager.go`).
 - Refresh token TTL calculation in `RotateRefreshToken` now uses `math.Ceil` consistently with `GenerateRefreshToken` — prevents up to 1 second TTL discrepancy on rotation (`internal/token/service/token_service_revoke.go`).
 - `Permissions-Policy` header now additionally restricts `payment`, `usb`, `midi`, `autoplay`, `fullscreen` — defense-in-depth beyond the previous `geolocation`, `camera`, `microphone` (`middleware/middleware.go`).
@@ -154,6 +160,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - SubmitConsent denial redirect now uses `url.Parse` + `q.Set` instead of string concatenation — prevents malformed URLs when redirect_uri already contains query parameters (`internal/oauth2/controller/oauth2_authorize.go`).
 
 ### Fixed
+- `VerifyContactCredential` now checks account is active before verifying credentials — previously suspended or deleted accounts could have their contact credentials marked as verified (`internal/account/service/account_service_manage.go`).
+- `scanCredential` test now uses correct column name `credential_type` instead of `type` — matches production SQL and migration schema, eliminates false-positive test confidence (`internal/account/repository/scan_helpers_test.go`).
 - `ClearLoginRateLimitsByUsername` now returns an `error` instead of silently swallowing Redis failures — callers can now detect and log rate-limit cleanup failures after password reset (`internal/auth/service/auth_login.go`, `internal/auth/service/password_reset_service.go`).
 - `production.yaml` now explicitly sets `shutdown_timeout: 30s` — previously relied on Viper default, which is correct but less transparent for production deployments (`config/production.yaml`).
 - `IntrospectToken` NotBefore check now allows 30 seconds of clock skew — prevents tokens from being rejected due to minor time differences between servers (`internal/token/service/token_service_validate.go`).

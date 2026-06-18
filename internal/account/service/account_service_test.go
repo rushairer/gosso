@@ -778,6 +778,18 @@ func TestVerifyContactCredential_Email(t *testing.T) {
 	accountID := "account-001"
 	now := time.Now()
 
+	// Mock FindByID for requireActiveAccount
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		accountID, "testuser", "Test User", nil, domain.AccountStatusActive,
+		"en", "UTC", []byte("{}"), now, now, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs(accountID).
+		WillReturnRows(accountRows)
+
 	// FindByAccountAndType for email — returns one unverified credential
 	emailRows := sqlmock.NewRows([]string{
 		"id", "account_id", "credential_type", "identifier",
@@ -820,6 +832,18 @@ func TestVerifyContactCredential_PhoneFallback(t *testing.T) {
 
 	accountID := "account-001"
 	now := time.Now()
+
+	// Mock FindByID for requireActiveAccount
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		accountID, "testuser", "Test User", nil, domain.AccountStatusActive,
+		"en", "UTC", []byte("{}"), now, now, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs(accountID).
+		WillReturnRows(accountRows)
 
 	// FindByAccountAndType for email — not found
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
@@ -867,6 +891,19 @@ func TestVerifyContactCredential_NoCredentialFound(t *testing.T) {
 	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
 
 	accountID := "account-no-creds"
+	now := time.Now()
+
+	// Mock FindByID for requireActiveAccount
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		accountID, "testuser", "Test User", nil, domain.AccountStatusActive,
+		"en", "UTC", []byte("{}"), now, now, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs(accountID).
+		WillReturnRows(accountRows)
 
 	// Email not found
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
