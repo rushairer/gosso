@@ -51,6 +51,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Empty username/password login attempts now count against rate limits — prevents unlimited probing with empty credentials (`internal/auth/service/auth_login.go`).
 - Consent cache now uses 5-minute fallback TTL when primary Redis write fails — prevents stale consent data from persisting up to 90 days in cache; `DeleteConsent` writes a short-lived tombstone when Redis delete fails to prevent revoked consent from being served (`internal/oauth2/service/consent_service.go`).
 - Sensitive config fields (`SMTPConfig.Password`, `OAuthProviderConfig.ClientSecret`, `AuthConfig.TOTPEncryptionKey`) now have `json:"-"` tags — prevents accidental serialization of secrets (`config/config.go`).
+- CSP header now includes `upgrade-insecure-requests` directive — upgrades HTTP sub-resource loads to HTTPS, defense-in-depth against mixed content when behind a non-HTTPS-terminating proxy (`middleware/middleware.go`).
+- CSRF cookie `maxAge` now capped at 24 hours (`maxCSRFMaxAge`) — prevents overly long-lived CSRF tokens from misconfiguration (`middleware/csrf.go`).
+- OAuth2 `DeviceCodeRequest` now returns HTTP 401 for `invalid_client` — consistent with all other token endpoints that return 401 for client authentication failures (`internal/oauth2/controller/oauth2_device.go`).
+- `account_id` values in `session_service_manage.go` log statements now masked with `MaskOpaqueID()` — consistent PII protection matching `session_service.go` (`internal/session/service/session_service_manage.go`).
+- OAuth2 `Authorize` and `SubmitConsent` now log `GenerateCode` failures at Error level — previously returned `server_error` to client without server-side logging (`internal/oauth2/controller/oauth2_authorize.go`).
 - OAuth2 `Revoke` endpoint now calls `DummyAuthenticate()` on client lookup failure — eliminates timing side-channel that could distinguish "client not found" from "wrong secret" (`internal/oauth2/controller/oauth2_revoke.go`).
 - Credential query errors no longer include raw identifiers (email/phone) — prevents PII leakage into logs (`internal/account/repository/credential_repository_impl.go`).
 - CSP nonce now uses `base64.RawURLEncoding` instead of `StdEncoding` — safer for HTTP header embedding without quoting (`middleware/middleware.go`).
@@ -181,6 +186,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `RevokeSession` no longer returns `ErrTokenRevokerNotConfigured` — logs a warning and continues with session deletion, consistent with `RevokeAllForAccount` behavior (`internal/session/service/session_service.go`).
 - `deleteIfExpiredScript` Lua script simplified — removed dead ISO 8601 parsing code that was never used (`internal/session/service/session_service.go`).
 - SubmitConsent denial redirect now uses `url.Parse` + `q.Set` instead of string concatenation — prevents malformed URLs when redirect_uri already contains query parameters (`internal/oauth2/controller/oauth2_authorize.go`).
+- `ErrUnsupportedProvider` sentinel error deduplicated — canonical location is now `account/domain/federated_identity.go` only; `auth/service` removed its duplicate and uses `accountDomain.ErrUnsupportedProvider` (`internal/auth/service/errors.go`, `internal/auth/service/social_login_service.go`).
+- `validateRegistrationRequest` now uses `domain.ErrInvalidEmailFormat` sentinel instead of inline `errors.New("invalid email format")` — consistent with phone validation that already uses `domain.ErrInvalidPhoneFormat` (`internal/account/service/account_service_identity.go`).
+- CI `COVERAGE_MIN` raised from 50% to 60% — aligns with documented invariant T3 in `ARCHITECTURE_INVARIANTS.md` (`.github/workflows/ci.yml`).
 
 ### Fixed
 - `VerifyContactCredential` now checks account is active before verifying credentials — previously suspended or deleted accounts could have their contact credentials marked as verified (`internal/account/service/account_service_manage.go`).
@@ -194,6 +202,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `RefreshSession` now refreshes the `account_sessions` index key TTL after extending the session — previously the index key could expire before the session key, causing sessions to become orphaned (existing in Redis but not listable) (`internal/session/service/session_service.go`).
 - `PasswordResetService.Wait()` now documents that `stopCtx` is reserved for future use and not currently consumed by background goroutines — clarifies the actual shutdown mechanism (`internal/auth/service/password_reset_service.go`).
 - `HandleServiceError` fallback response now uses consistent format with a single `ctx.Abort()` call — previously had two separate `ctx.Abort()` calls with different response shapes depending on `request_id` presence (`internal/controllerutil/error_handler.go`).
+- `Refresh` and `MFAVerify` handlers now use `HandleServiceError` for proper error classification — previously all service errors collapsed to HTTP 401, ignoring rate-limit (429) and service-unavailable (503) distinctions (`internal/auth/controller/auth_controller.go`).
+- `HandleServiceError` fallback response now uses consistent `{"code", "message"}` format with optional `request_id` — previously had two different JSON shapes (`gin.H` vs `gouno.NewErrorResponse`) depending on whether `request_id` was present (`internal/controllerutil/error_handler.go`).
 - `auth_session.go` now uses `account.IsActive()` instead of raw status comparison — ensures soft-deleted accounts are also rejected during token refresh, not just non-active ones (`internal/auth/service/auth_session.go`).
 - Verification service internal constants (`VerifyCodeKeyPrefix`, `VerifyCodeAttempts`, etc.) now unexported — these were implementation details accidentally exported (`internal/auth/service/verification_service.go`).
 - Password strength validation comment now explicitly documents byte-based length check — clarifies that `len(password)` measures bytes, not runes, consistent with Argon2id input behavior (`internal/utility/password.go`).

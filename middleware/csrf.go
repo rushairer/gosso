@@ -21,6 +21,7 @@ const (
 	csrfHeaderName       = "X-CSRF-Token"
 	csrfTokenLen         = 32
 	defaultCSRFMaxAge    = 4 * time.Hour
+	maxCSRFMaxAge        = 24 * time.Hour
 )
 
 // CSRFMiddleware double-submit cookie CSRF protection middleware.
@@ -30,6 +31,7 @@ const (
 // which enforces Secure, Path=/, and no Domain via the browser.
 //
 // maxAge controls the CSRF cookie lifetime. If zero, defaults to 4 hours.
+// Capped at 24 hours to prevent overly long-lived CSRF tokens.
 //
 // IMPORTANT: CSRFMiddleware must run BEFORE JWTAuthMiddleware in the middleware chain.
 // The Bearer skip relies on the raw Authorization header — if JWTAuthMiddleware
@@ -38,6 +40,9 @@ const (
 func CSRFMiddleware(secure bool, logger *zap.Logger, maxAge time.Duration, skipPaths ...string) gin.HandlerFunc {
 	if maxAge <= 0 {
 		maxAge = defaultCSRFMaxAge
+	}
+	if maxAge > maxCSRFMaxAge {
+		maxAge = maxCSRFMaxAge
 	}
 
 	cookieName := csrfCookieName

@@ -33,9 +33,6 @@ var (
 	ErrRequestBodyTooLarge = errors.New("request body too large")
 	ErrCredentialOwnership = errors.New("credential does not belong to account")
 
-	// Social login errors
-	ErrUnsupportedProvider = errors.New("unsupported provider")
-
 	// Password reset errors
 	ErrPasswordResetInvalidToken = errors.New("invalid or expired reset token")
 	ErrPasswordResetExhausted    = errors.New("reset token exhausted, please request a new one")

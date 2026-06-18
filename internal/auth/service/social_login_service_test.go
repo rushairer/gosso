@@ -628,7 +628,7 @@ func TestFetchUserInfo_UnsupportedProvider(t *testing.T) {
 
 	_, _, _, _, err := svc.fetchUserInfo(context.Background(), "twitter", p, "tok")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrUnsupportedProvider)
+	assert.ErrorIs(t, err, accountDomain.ErrUnsupportedProvider)
 }
 
 // ──────────────────────────────────────────────
@@ -639,7 +639,7 @@ func TestHandleCallback_UnsupportedProvider(t *testing.T) {
 	svc := newTestSocialLoginService()
 	_, err := svc.HandleCallback(context.Background(), "twitter", "code", "127.0.0.1", "test-agent")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrUnsupportedProvider)
+	assert.ErrorIs(t, err, accountDomain.ErrUnsupportedProvider)
 }
 
 func TestHandleCallback_ExchangeFailure(t *testing.T) {

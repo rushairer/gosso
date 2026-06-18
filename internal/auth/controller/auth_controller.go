@@ -46,6 +46,18 @@ var sendVerificationErrorMap = []controllerutil.ErrorRule{
 	{Sentinel: authService.ErrUnsupportedType, Mapping: controllerutil.ErrorMapping{Status: http.StatusBadRequest, Message: "unsupported credential type"}},
 }
 
+// refreshErrorMap maps token refresh service errors to HTTP responses.
+var refreshErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: authService.ErrServiceUnavailable, Mapping: controllerutil.ErrorMapping{Status: http.StatusServiceUnavailable, Message: "service temporarily unavailable"}},
+	{Sentinel: authService.ErrIPLocked, Mapping: controllerutil.ErrorMapping{Status: http.StatusTooManyRequests, Message: "too many attempts from this IP, try again later"}},
+}
+
+// mfaVerifyErrorMap maps MFA verification service errors to HTTP responses.
+var mfaVerifyErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: authService.ErrServiceUnavailable, Mapping: controllerutil.ErrorMapping{Status: http.StatusServiceUnavailable, Message: "service temporarily unavailable"}},
+	{Sentinel: authService.ErrMFARateLimited, Mapping: controllerutil.ErrorMapping{Status: http.StatusTooManyRequests, Message: "too many MFA attempts, try again later"}},
+}
+
 // authServiceDeps defines the auth service methods used by AuthController.
 type authServiceDeps interface {
 	LoginByUsernamePassword(ctx context.Context, req *authService.LoginRequest) (*authService.LoginResult, error)
@@ -283,8 +295,8 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 
 	result, err := c.authSvc.RefreshTokens(ctx, req.RefreshToken)
 	if err != nil {
-		c.logger.Warn("Token refresh failed", zap.Error(err))
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid refresh token"))
+		controllerutil.HandleServiceError(ctx, c.logger, err, refreshErrorMap,
+			http.StatusUnauthorized, "Token refresh failed")
 		return
 	}
 
@@ -404,8 +416,8 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 
 	result, err := c.authSvc.VerifyMFALogin(ctx, req.MFAToken, req.Code, req.Type, ctx.ClientIP(), ctx.Request.UserAgent())
 	if err != nil {
-		c.logger.Warn("MFA verification failed", zap.Error(err))
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid or expired MFA token"))
+		controllerutil.HandleServiceError(ctx, c.logger, err, mfaVerifyErrorMap,
+			http.StatusUnauthorized, "MFA verification failed")
 		return
 	}
 

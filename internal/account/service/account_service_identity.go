@@ -198,7 +198,7 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 	if req.Email != "" {
 		addr, err := mail.ParseAddress(req.Email)
 		if err != nil || addr.Address != req.Email {
-			return errors.New("invalid email format")
+			return domain.ErrInvalidEmailFormat
 		}
 	}
 

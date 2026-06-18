@@ -138,6 +138,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		}
 		code, err := c.authCodeSvc.GenerateCode(ctx, clientID, accountIDStr, redirectURI, allowedScopes, codeChallenge, codeChallengeMethod, nonce)
 		if err != nil {
+			c.logger.Error("Failed to generate authorization code for existing consent", zap.Error(err))
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
@@ -290,6 +291,7 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 
 	code, err := c.authCodeSvc.GenerateCode(ctx, req.ClientID, accountIDStr, req.RedirectURI, scopes, req.CodeChallenge, req.CodeChallengeMethod, req.Nonce)
 	if err != nil {
+		c.logger.Error("Failed to generate authorization code after consent approval", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
 	}

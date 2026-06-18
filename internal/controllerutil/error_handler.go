@@ -38,18 +38,15 @@ func HandleServiceError(ctx *gin.Context, logger *zap.Logger, err error,
 		}
 	}
 	logger.Error(fallbackMsg, zap.Error(err))
-	// Use a consistent response format with request ID when available,
-	// so clients can reference it in support tickets.
-	reqID, hasReqID := ctx.Get("request_id")
-	if hasReqID {
-		ctx.JSON(fallbackStatus, gin.H{
-			"code":       fallbackStatus,
-			"message":    fallbackMsg,
-			"request_id": reqID,
-		})
-	} else {
-		ctx.JSON(fallbackStatus, gouno.NewErrorResponse(fallbackStatus, fallbackMsg))
+	// Use a consistent response format; include request_id when available.
+	resp := gin.H{
+		"code":    fallbackStatus,
+		"message": fallbackMsg,
 	}
+	if reqID, ok := ctx.Get("request_id"); ok {
+		resp["request_id"] = reqID
+	}
+	ctx.JSON(fallbackStatus, resp)
 	ctx.Abort()
 }
 

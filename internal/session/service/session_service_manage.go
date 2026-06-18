@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/session/domain"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // RevokeSession revokes a specific session (with ownership check).
@@ -46,13 +47,13 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 	if err := s.redis.SRem(ctx, indexKey, sessionID); err != nil {
 		s.logger.Warn("Failed to remove session from account index during revocation",
 			zap.String("session_id", maskSessionID(sessionID)),
-			zap.String("account_id", accountID),
+			zap.String("account_id", utility.MaskOpaqueID(accountID)),
 			zap.Error(err))
 	}
 
 	s.logger.Info("Session revoked",
 		zap.String("session_id", maskSessionID(sessionID)),
-		zap.String("account_id", accountID))
+		zap.String("account_id", utility.MaskOpaqueID(accountID)))
 	return nil
 }
 
@@ -68,7 +69,7 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 	result, err := s.redis.RunScript(ctx, revokeAccountSessionsScript, []string{indexKey}).StringSlice()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		s.logger.Error("Failed to atomically read and delete account sessions index",
-			zap.String("account_id", accountID), zap.Error(err))
+			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
 		return fmt.Errorf("revoke account sessions: %w", err)
 	}
 
@@ -85,7 +86,7 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 		}
 	} else {
 		s.logger.Warn("Token revoker not configured, skipping token revocation for account sessions",
-			zap.String("account_id", accountID), zap.Int("count", len(sessionIDs)))
+			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Int("count", len(sessionIDs)))
 	}
 
 	// Delete individual session keys.
@@ -96,13 +97,13 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 			keys[i] = SessionKeyPrefix + sid
 		}
 		if err := s.redis.Del(ctx, keys...); err != nil {
-			s.logger.Error("Failed to delete account sessions", zap.String("account_id", accountID), zap.Error(err))
+			s.logger.Error("Failed to delete account sessions", zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
 			return fmt.Errorf("delete account sessions: %w", err)
 		}
 	}
 
 	s.logger.Info("All sessions revoked for account",
-		zap.String("account_id", accountID),
+		zap.String("account_id", utility.MaskOpaqueID(accountID)),
 		zap.Int("count", len(sessionIDs)))
 
 	return nil
@@ -146,7 +147,7 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 	// but individual command results are checked below. A non-redis.Nil error
 	// here typically means a network/connection problem affecting all commands.
 	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
-		s.logger.Error("Pipeline session fetch failed", zap.Error(err), zap.String("account_id", accountID))
+		s.logger.Error("Pipeline session fetch failed", zap.Error(err), zap.String("account_id", utility.MaskOpaqueID(accountID)))
 		return nil, fmt.Errorf("pipeline session fetch: %w", err)
 	}
 
@@ -222,7 +223,7 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 		}
 		s.logger.Info("Evicted oldest session due to limit",
 			zap.String("session_id", maskSessionID(sid)),
-			zap.String("account_id", accountID))
+			zap.String("account_id", utility.MaskOpaqueID(accountID)))
 
 		if err := s.tokenRevoker.RevokeAllForSession(ctx, sid); err != nil {
 			s.logger.Warn("Failed to revoke tokens for evicted session",

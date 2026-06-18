@@ -126,7 +126,7 @@ func GenerateAuthState() (string, error) {
 func (s *SocialLoginService) GetAuthURL(ctx context.Context, provider, state string) (string, error) {
 	p, ok := s.providers[provider]
 	if !ok {
-		return "", fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
+		return "", fmt.Errorf("%w: %s", accountDomain.ErrUnsupportedProvider, provider)
 	}
 
 	if p.AuthURL == "" {
@@ -151,7 +151,7 @@ func (s *SocialLoginService) GetAuthURL(ctx context.Context, provider, state str
 func (s *SocialLoginService) HandleCallback(ctx context.Context, provider, code, ip, userAgent string) (*LoginResult, error) {
 	p, ok := s.providers[provider]
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
+		return nil, fmt.Errorf("%w: %s", accountDomain.ErrUnsupportedProvider, provider)
 	}
 
 	// 1. Exchange code for access_token
@@ -276,7 +276,7 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 		name = nickname
 		// WeChat does not provide email_verified; default false
 	default:
-		return "", "", "", false, fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
+		return "", "", "", false, fmt.Errorf("%w: %s", accountDomain.ErrUnsupportedProvider, provider)
 	}
 
 	return providerUserID, email, name, emailVerified, nil

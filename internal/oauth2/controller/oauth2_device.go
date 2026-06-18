@@ -66,7 +66,7 @@ func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
 	if err != nil {
 		c.clientAuth.DummyAuthenticate()
 		c.logger.Warn("Client lookup failed for device code request", zap.Error(err), zap.String("client_id", req.ClientID))
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}
 
