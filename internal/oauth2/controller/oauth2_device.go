@@ -183,14 +183,16 @@ func (c *OAuth2Controller) DeviceUserSubmit(ctx *gin.Context) {
 		return
 	}
 
-	// Look up device code by user_code if device_code is not provided
+	// Look up device code by user_code if device_code is not provided.
+	// Use the hash-based methods since the raw device code is not stored in Redis.
+	dcHash := ""
 	if req.DeviceCode == "" && req.UserCode != "" {
 		dc, err := c.deviceCodeSvc.GetDeviceCodeByUserCode(ctx, req.UserCode)
 		if err != nil {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid or expired user code"})
 			return
 		}
-		req.DeviceCode = dc.DeviceCode
+		dcHash = dc.Hash
 	}
 
 	accountIDStr, ok := c.authenticateRequest(ctx)
@@ -198,17 +200,35 @@ func (c *OAuth2Controller) DeviceUserSubmit(ctx *gin.Context) {
 		return
 	}
 
-	if req.Approved == "true" {
-		if err := c.deviceCodeSvc.AuthorizeDeviceCode(ctx, req.DeviceCode, accountIDStr); err != nil {
-			c.logger.Warn("Device code authorization failed", zap.Error(err), zap.String("device_code", utility.MaskOpaqueID(req.DeviceCode)))
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "device code authorization failed"})
-			return
+	if dcHash != "" {
+		// Use hash-based methods (from user code lookup — raw device code not available)
+		if req.Approved == "true" {
+			if err := c.deviceCodeSvc.AuthorizeDeviceCodeByHash(ctx, dcHash, accountIDStr); err != nil {
+				c.logger.Warn("Device code authorization failed", zap.Error(err), zap.String("device_code_hash", utility.MaskOpaqueID(dcHash)))
+				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "device code authorization failed"})
+				return
+			}
+		} else {
+			if err := c.deviceCodeSvc.DenyDeviceCodeByHash(ctx, dcHash); err != nil {
+				c.logger.Warn("Device code denial failed", zap.Error(err), zap.String("device_code_hash", utility.MaskOpaqueID(dcHash)))
+				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "device code denial failed"})
+				return
+			}
 		}
 	} else {
-		if err := c.deviceCodeSvc.DenyDeviceCode(ctx, req.DeviceCode); err != nil {
-			c.logger.Warn("Device code denial failed", zap.Error(err), zap.String("device_code", utility.MaskOpaqueID(req.DeviceCode)))
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "device code denial failed"})
-			return
+		// Fallback: raw device code was provided in the form submission
+		if req.Approved == "true" {
+			if err := c.deviceCodeSvc.AuthorizeDeviceCode(ctx, req.DeviceCode, accountIDStr); err != nil {
+				c.logger.Warn("Device code authorization failed", zap.Error(err), zap.String("device_code", utility.MaskOpaqueID(req.DeviceCode)))
+				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "device code authorization failed"})
+				return
+			}
+		} else {
+			if err := c.deviceCodeSvc.DenyDeviceCode(ctx, req.DeviceCode); err != nil {
+				c.logger.Warn("Device code denial failed", zap.Error(err), zap.String("device_code", utility.MaskOpaqueID(req.DeviceCode)))
+				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "device code denial failed"})
+				return
+			}
 		}
 	}
 
@@ -326,11 +346,16 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		return
 	}
 
-	refreshToken, err := c.tokenSvc.GenerateRefreshToken(ctx, dc.AccountID, dc.ClientID, "", strings.Join(dc.Scopes, " "))
-	if err != nil {
-		c.logger.Error("Failed to generate refresh token for device code", zap.Error(err), zap.String("client_id", dc.ClientID))
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-		return
+	var refreshToken *tokenDomain.RefreshToken
+	var refreshTokenStr string
+	if client.HasGrantType(oauth2Domain.GrantTypeRefreshToken) {
+		refreshToken, err = c.tokenSvc.GenerateRefreshToken(ctx, dc.AccountID, dc.ClientID, "", strings.Join(dc.Scopes, " "))
+		if err != nil {
+			c.logger.Error("Failed to generate refresh token for device code", zap.Error(err), zap.String("client_id", dc.ClientID))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		refreshTokenStr = refreshToken.Token
 	}
 
 	idToken, ok := c.maybeGenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", dc.AuthorizedAt, accessToken, nil)
@@ -340,13 +365,15 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 
 	response := gin.H{
 		"access_token":  accessToken,
-		"refresh_token": refreshToken.Token,
 		"token_type":    "Bearer",
 		"expires_in":    int(c.tokenSvc.AccessExpiry().Seconds()),
 		"scope":         strings.Join(dc.Scopes, " "),
 	}
 	if idToken != "" {
 		response["id_token"] = idToken
+	}
+	if refreshTokenStr != "" {
+		response["refresh_token"] = refreshTokenStr
 	}
 
 	controllerutil.SetNoCacheHeaders(ctx)

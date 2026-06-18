@@ -213,6 +213,20 @@ func (m *mockDeviceCodeMgr) ClaimAuthorizedDeviceCode(_ context.Context, _ strin
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *mockDeviceCodeMgr) AuthorizeDeviceCodeByHash(_ context.Context, _ string, _ string) error {
+	if m.authorizeFn != nil {
+		return m.authorizeFn()
+	}
+	return nil
+}
+
+func (m *mockDeviceCodeMgr) DenyDeviceCodeByHash(_ context.Context, _ string) error {
+	if m.denyFn != nil {
+		return m.denyFn()
+	}
+	return nil
+}
+
 // setupOAuth2Router builds a gin.Engine with the OAuth2 controller routes.
 // Since authCodeSvc/consentSvc/idTokenSvc require Redis, we only test
 // endpoints that rely on clientSvc and tokenSvc (mockable interfaces).

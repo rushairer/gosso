@@ -631,7 +631,7 @@ func TestLogout_BearerToken_InvalidSignature(t *testing.T) {
 	otherKeySvc, err := tokenService.NewKeyService("", "", false, 0, zap.NewNop())
 	require.NoError(t, err)
 
-	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -949,7 +949,7 @@ func setupLogoutEngineWithBlacklist(t *testing.T, clientRepo *mockClientRepo) (*
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 	discoverySvc := oidcService.NewDiscoveryService("https://sso.example.com")
 
-	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, clientRepo, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(discoverySvc, nil, nil, logoutSvc, clientRepo, tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 
 	engine := gin.New()
 	engine.GET("/.well-known/openid-configuration", ctrl.Discovery)
@@ -1074,7 +1074,7 @@ func TestLogout_BearerToken_WithIDTokenHint_SameAccount(t *testing.T) {
 	}))
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 
-	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -1107,9 +1107,14 @@ func TestLogout_BearerToken_WithIDTokenHint_AccountMismatch(t *testing.T) {
 	blacklistSvc, err := tokenService.NewBlacklistService(redisClient, zap.NewNop())
 	require.NoError(t, err)
 	tokenSvc := setupTestTokenService(t, keySvc, "https://sso.example.com", redisClient, blacklistSvc)
-	logoutSvc := oidcService.NewLogoutService(tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	sessionSvc := sessionService.NewSessionService(redisClient, zap.NewNop())
+	sessionSvc.SetTokenRevoker(tokenSvc)
+	require.NoError(t, sessionSvc.CreateSession(context.Background(), &sessionDomain.Session{
+		ID: "session-002", AccountID: "account-002", IP: "127.0.0.1", UserAgent: "test",
+	}))
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 
-	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, nil, "https://sso.example.com", zap.NewNop())
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, tokenSvc, sessionSvc, "https://sso.example.com", zap.NewNop())
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()

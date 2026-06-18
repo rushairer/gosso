@@ -76,8 +76,9 @@ func NewKeyService(privateKeyPath string, keyID string, isProduction bool, keyBi
 			if err != nil {
 				return nil, fmt.Errorf("generate and save key: %w", err)
 			}
-			logger.Warn("RSA private key file not found — generating NEW key. All previously issued tokens will be INVALID.",
+			logger.Error("!!! RSA private key file not found — generating NEW key. All previously issued tokens will be INVALID. !!!",
 				zap.String("path", privateKeyPath))
+			logger.Error("!!! This should NEVER happen in production. Ensure private_key_path is correctly configured. !!!")
 		}
 	} else {
 		privateKey, err = generateKey(keyBits)

@@ -51,8 +51,12 @@ func ValidateBearerToken(ctx *gin.Context, tokenSvc TokenValidator, sessionValid
 		return nil, ErrTokenScopeNotAllowed
 	}
 
-	// Verify the session still exists (invalidates tokens after account deletion/suspension)
-	if sessionValidator != nil && claims.SessionID != "" {
+	// Verify the session still exists (invalidates tokens after account deletion/suspension).
+	// If sessionValidator is nil but the token has a SessionID, reject to prevent bypass.
+	if claims.SessionID != "" {
+		if sessionValidator == nil {
+			return nil, errUnauthorized
+		}
 		if _, err := sessionValidator.ValidateSession(ctx.Request.Context(), claims.SessionID); err != nil {
 			return nil, errUnauthorized
 		}

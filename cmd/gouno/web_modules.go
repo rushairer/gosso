@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -27,6 +28,7 @@ import (
 	oidcController "github.com/rushairer/gosso/internal/oidc/controller"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // appModules aggregates all initialized modules and controllers
@@ -186,14 +188,30 @@ type accountValidatorCacheEntry struct {
 
 // accountValidatorAdapter implements oauth2Controller.AccountValidator using the account service.
 // Results are cached for a short TTL to avoid a DB round-trip on every token exchange.
+// Expired entries are lazily evicted every 1000 calls to prevent unbounded memory growth.
 type accountValidatorAdapter struct {
-	accountSvc accountService.AccountService
-	logger     *zap.Logger
-	cache      sync.Map // map[string]*accountValidatorCacheEntry
-	cacheTTL   time.Duration
+	accountSvc  accountService.AccountService
+	logger      *zap.Logger
+	cache       sync.Map // map[string]*accountValidatorCacheEntry
+	cacheTTL    time.Duration
+	callCounter atomic.Int64
 }
 
+// cacheCleanupInterval is how many IsAccountActive calls between lazy cache cleanups.
+const cacheCleanupInterval = 1000
+
 func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID string) bool {
+	// Lazy cleanup of expired entries to prevent unbounded memory growth.
+	if a.callCounter.Add(1)%cacheCleanupInterval == 0 {
+		now := time.Now()
+		a.cache.Range(func(key, value any) bool {
+			if entry, ok := value.(*accountValidatorCacheEntry); ok && now.After(entry.expiresAt) {
+				a.cache.Delete(key)
+			}
+			return true
+		})
+	}
+
 	// Check cache first
 	if entry, ok := a.cache.Load(accountID); ok {
 		cached := entry.(*accountValidatorCacheEntry)
@@ -209,7 +227,7 @@ func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID
 		// Fail-closed: log the error for diagnostics rather than silently returning false.
 		if a.logger != nil {
 			a.logger.Warn("IsAccountActive: failed to look up account, treating as inactive",
-				zap.String("account_id", accountID), zap.Error(err))
+				zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
 		}
 		// Cache negative results briefly to avoid hammering DB on repeated failures
 		a.cache.Store(accountID, &accountValidatorCacheEntry{

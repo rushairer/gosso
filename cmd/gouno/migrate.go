@@ -79,6 +79,7 @@ func init() {
 	// Safety flag for destructive operations
 	migrateDownCmd.Flags().Bool("force", false, "required to confirm destructive down migration")
 	migrateDropCmd.Flags().Bool("force", false, "required to confirm database drop")
+	migrateForceCmd.Flags().Bool("force", false, "required to confirm force version change")
 
 	// Add subcommands
 	migrateCmd.AddCommand(migrateUpCmd)
@@ -244,6 +245,12 @@ func runMigrateDrop(cmd *cobra.Command, args []string) {
 }
 
 func runMigrateForce(cmd *cobra.Command, args []string) {
+	force, _ := cmd.Flags().GetBool("force")
+	if !force {
+		fmt.Fprintln(os.Stderr, "Refusing to force migration version without --force flag. Use: migrate force VERSION --force")
+		os.Exit(1)
+	}
+
 	withMigrateResources(cmd, func(m *migrate.Migrate) error {
 		version, err := parseVersion(args[0])
 		if err != nil {

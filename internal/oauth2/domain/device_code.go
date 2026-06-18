@@ -73,6 +73,10 @@ type DeviceCode struct {
 	LastPollAt   time.Time        `json:"last_poll_at"`
 	Interval     int              `json:"interval"` // Minimum seconds between poll requests
 	CreatedAt    time.Time        `json:"created_at"`
+	// Hash is the SHA-256 hash of the raw device code, used as the Redis key.
+	// It is populated when reading from Redis (via GetDeviceCodeByUserCode) and
+	// is NOT serialized to Redis or JSON responses (json:"-").
+	Hash string `json:"-"`
 }
 
 // IsExpired returns true if the device code has passed its expiration time.

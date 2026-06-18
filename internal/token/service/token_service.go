@@ -33,6 +33,16 @@ const (
 	MaxShortLivedExpiry = 1 * time.Hour
 )
 
+// storeRefreshTokenScript atomically stores a refresh token and updates the session→tokens index.
+var storeRefreshTokenScript = redis.NewScript(`
+	redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+	if KEYS[2] ~= '' then
+		redis.call('SADD', KEYS[2], ARGV[3])
+		redis.call('EXPIRE', KEYS[2], ARGV[2])
+	end
+	return 1
+`)
+
 // TokenService JWT and refresh token service
 type TokenService struct {
 	keySvc        *KeyService
@@ -187,14 +197,6 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 
 	// Atomically store the refresh token and update the session -> tokens index
 	// in a single Lua script to prevent partial state on crash.
-	storeRefreshTokenScript := redis.NewScript(`
-		redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
-		if KEYS[2] ~= '' then
-			redis.call('SADD', KEYS[2], ARGV[3])
-			redis.call('EXPIRE', KEYS[2], ARGV[2])
-		end
-		return 1
-	`)
 	sessionKey := ""
 	if sessionID != "" {
 		sessionKey = s.buildSessionTokensKey(sessionID)

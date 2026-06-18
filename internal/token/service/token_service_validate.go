@@ -62,7 +62,7 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 		revokedAfter, err := s.blacklist.GetAccountRevokedAfter(ctx, claims.AccountID)
 		if err != nil {
 			s.logger.Error("Failed to check account revoked-after, rejecting token",
-				zap.Error(err), zap.String("account_id", claims.AccountID))
+				zap.Error(err), zap.String("account_id", utility.MaskOpaqueID(claims.AccountID)))
 			return nil, ErrBlacklistUnavailable
 		}
 		if !revokedAfter.IsZero() && claims.IssuedAt.Before(revokedAfter) {
@@ -92,6 +92,20 @@ func (s *TokenService) ValidateRefreshToken(ctx context.Context, token string) (
 	// Defense-in-depth: explicit expiry check in addition to Redis TTL.
 	if !rt.ExpiresAt.IsZero() && time.Now().After(rt.ExpiresAt) {
 		return nil, fmt.Errorf("refresh token expired")
+	}
+
+	// Account-level revocation check — rejects refresh tokens issued before the
+	// account's revocation timestamp (e.g., after OIDC logout or password change).
+	if rt.AccountID != "" {
+		revokedAfter, err := s.blacklist.GetAccountRevokedAfter(ctx, rt.AccountID)
+		if err != nil {
+			s.logger.Error("Failed to check account revoked-after for refresh token, rejecting",
+				zap.Error(err), zap.String("account_id", utility.MaskOpaqueID(rt.AccountID)))
+			return nil, ErrBlacklistUnavailable
+		}
+		if !revokedAfter.IsZero() && rt.CreatedAt.Before(revokedAfter) {
+			return nil, ErrTokenRevoked
+		}
 	}
 
 	return &rt, nil

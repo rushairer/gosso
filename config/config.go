@@ -359,6 +359,9 @@ func (c *GoUnoConfig) validateDatabase() error {
 		return fmt.Errorf("database: max_idle_conns (%d) must not exceed max_open_conns (%d)",
 			c.DatabaseConfig.MaxIdleConns, c.DatabaseConfig.MaxOpenConns)
 	}
+	if c.DatabaseConfig.PoolStatsIntervalSec < 0 {
+		return fmt.Errorf("database: pool_stats_interval_sec must not be negative (got %d)", c.DatabaseConfig.PoolStatsIntervalSec)
+	}
 	return nil
 }
 
@@ -460,6 +463,40 @@ func (c *GoUnoConfig) validateAuth() error {
 	}
 	if c.AuthConfig.VerifyCooldownTTL < 0 {
 		return fmt.Errorf("auth: verify_cooldown_ttl must not be negative (got %s)", c.AuthConfig.VerifyCooldownTTL)
+	}
+	// Additional numeric field validation — negative values are always wrong.
+	if c.AuthConfig.ChallengeTTL < 0 {
+		return fmt.Errorf("auth: challenge_ttl must not be negative (got %s)", c.AuthConfig.ChallengeTTL)
+	}
+	if c.AuthConfig.LoginRateLimitWindow < 0 {
+		return fmt.Errorf("auth: login_rate_limit_window must not be negative (got %s)", c.AuthConfig.LoginRateLimitWindow)
+	}
+	if c.AuthConfig.LoginMaxAttempts < 0 {
+		return fmt.Errorf("auth: login_max_attempts must not be negative (got %d)", c.AuthConfig.LoginMaxAttempts)
+	}
+	if c.AuthConfig.LoginMaxAttemptsPerIP < 0 {
+		return fmt.Errorf("auth: login_max_attempts_per_ip must not be negative (got %d)", c.AuthConfig.LoginMaxAttemptsPerIP)
+	}
+	if c.AuthConfig.BackupCodeCount < 0 {
+		return fmt.Errorf("auth: backup_code_count must not be negative (got %d)", c.AuthConfig.BackupCodeCount)
+	}
+	if c.AuthConfig.BackupCodeLength < 0 {
+		return fmt.Errorf("auth: backup_code_length must not be negative (got %d)", c.AuthConfig.BackupCodeLength)
+	}
+	if c.AuthConfig.PasswordResetWaitTimeout < 0 {
+		return fmt.Errorf("auth: password_reset_wait_timeout must not be negative (got %s)", c.AuthConfig.PasswordResetWaitTimeout)
+	}
+	if c.AuthConfig.PasswordResetMaxAttempts < 0 {
+		return fmt.Errorf("auth: password_reset_max_attempts must not be negative (got %d)", c.AuthConfig.PasswordResetMaxAttempts)
+	}
+	if c.AuthConfig.PasswordResetRevokeConcurrency < 0 {
+		return fmt.Errorf("auth: password_reset_revoke_concurrency must not be negative (got %d)", c.AuthConfig.PasswordResetRevokeConcurrency)
+	}
+	if c.AuthConfig.VerifyCodeMaxAttempts < 0 {
+		return fmt.Errorf("auth: verify_code_max_attempts must not be negative (got %d)", c.AuthConfig.VerifyCodeMaxAttempts)
+	}
+	if c.AuthConfig.RSAKeyBits != 0 && c.AuthConfig.RSAKeyBits < 2048 {
+		return fmt.Errorf("auth: rsa_key_bits must be 0 (use default) or at least 2048 (got %d)", c.AuthConfig.RSAKeyBits)
 	}
 	if c.AuthConfig.WebAuthnRPID != "" {
 		if c.AuthConfig.WebAuthnRPName == "" {

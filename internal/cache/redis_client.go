@@ -218,6 +218,40 @@ func (r *RedisClient) SAdd(ctx context.Context, key string, members ...any) erro
 	return nil
 }
 
+// Package-level Lua scripts — redis.Script is safe for concurrent use and caches
+// the script SHA after the first EVALSHA, avoiding repeated script body transmission.
+var (
+	saddWithTTLLuaScript = redis.NewScript(`redis.call('SADD', KEYS[1], ARGV[1]); return redis.call('EXPIRE', KEYS[1], ARGV[2])`)
+
+	incrWithExpiryLuaScript = redis.NewScript(`
+		local current = redis.call('INCR', KEYS[1])
+		if current == 1 then
+			redis.call('EXPIRE', KEYS[1], ARGV[1])
+		end
+		return current
+	`)
+
+	checkAndIncrLuaScript = redis.NewScript(`
+		local current = tonumber(redis.call('GET', KEYS[1]) or '0')
+		if current >= tonumber(ARGV[1]) then
+			return current
+		end
+		local new = redis.call('INCR', KEYS[1])
+		if new == 1 then
+			redis.call('EXPIRE', KEYS[1], ARGV[2])
+		end
+		return new
+	`)
+
+	setIfExistsLuaScript = redis.NewScript(`
+		if redis.call('EXISTS', KEYS[1]) == 1 then
+			redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+			return 1
+		end
+		return 0
+	`)
+)
+
 // SAddWithTTL atomically adds a member to a set and sets a TTL using a Lua script.
 // The Lua script ensures SADD and EXPIRE execute atomically within Redis,
 // eliminating any window for partial execution.
@@ -225,12 +259,11 @@ func (r *RedisClient) SAddWithTTL(ctx context.Context, key string, member string
 	if ttl <= 0 {
 		return fmt.Errorf("sadd_with_ttl: TTL must be positive, got %v", ttl)
 	}
-	script := redis.NewScript(`redis.call('SADD', KEYS[1], ARGV[1]); return redis.call('EXPIRE', KEYS[1], ARGV[2])`)
 	secs := int(math.Ceil(ttl.Seconds()))
 	if secs < 1 {
 		secs = 1
 	}
-	_, err := script.Run(ctx, r.client, []string{key}, member, secs).Result()
+	_, err := saddWithTTLLuaScript.Run(ctx, r.client, []string{key}, member, secs).Result()
 	if err != nil {
 		r.logger.Error("Redis SADD+EXPIRE failed", zap.String("key", maskKey(key)), zap.Error(err))
 		return fmt.Errorf("sadd_with_ttl: %w", err)
@@ -292,14 +325,7 @@ func (r *RedisClient) RunScript(ctx context.Context, script *redis.Script, keys 
 // IncrWithExpiry atomically increments a counter and sets an expiration time (only on first creation)
 // Avoids race conditions between Incr and Expire
 func (r *RedisClient) IncrWithExpiry(ctx context.Context, key string, expiry time.Duration) (int64, error) {
-	script := redis.NewScript(`
-		local current = redis.call('INCR', KEYS[1])
-		if current == 1 then
-			redis.call('EXPIRE', KEYS[1], ARGV[1])
-		end
-		return current
-	`)
-	result, err := script.Run(ctx, r.client, []string{key}, int(math.Ceil(expiry.Seconds()))).Int64()
+	result, err := incrWithExpiryLuaScript.Run(ctx, r.client, []string{key}, int(math.Ceil(expiry.Seconds()))).Int64()
 	if err != nil {
 		r.logger.Error("Redis IncrWithExpiry failed", zap.String("key", maskKey(key)), zap.Error(err))
 		return 0, fmt.Errorf("incrWithExpiry: %w", err)
@@ -311,18 +337,7 @@ func (r *RedisClient) IncrWithExpiry(ctx context.Context, key string, expiry tim
 // Returns the current count. If the count is already >= limit, the counter is NOT incremented.
 // This prevents the counter from growing unboundedly past the limit.
 func (r *RedisClient) CheckAndIncr(ctx context.Context, key string, limit int, expiry time.Duration) (int64, error) {
-	script := redis.NewScript(`
-		local current = tonumber(redis.call('GET', KEYS[1]) or '0')
-		if current >= tonumber(ARGV[1]) then
-			return current
-		end
-		local new = redis.call('INCR', KEYS[1])
-		if new == 1 then
-			redis.call('EXPIRE', KEYS[1], ARGV[2])
-		end
-		return new
-	`)
-	result, err := script.Run(ctx, r.client, []string{key}, limit, int(math.Ceil(expiry.Seconds()))).Int64()
+	result, err := checkAndIncrLuaScript.Run(ctx, r.client, []string{key}, limit, int(math.Ceil(expiry.Seconds()))).Int64()
 	if err != nil {
 		r.logger.Error("Redis CheckAndIncr failed", zap.String("key", maskKey(key)), zap.Error(err))
 		return 0, fmt.Errorf("checkAndIncr: %w", err)
@@ -337,14 +352,7 @@ func (r *RedisClient) SetIfExists(ctx context.Context, key string, value any, ex
 	if expirySec <= 0 {
 		expirySec = 1 // Minimum 1 second to prevent persistent keys
 	}
-	script := redis.NewScript(`
-		if redis.call('EXISTS', KEYS[1]) == 1 then
-			redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
-			return 1
-		end
-		return 0
-	`)
-	result, err := script.Run(ctx, r.client, []string{key}, value, expirySec).Int64()
+	result, err := setIfExistsLuaScript.Run(ctx, r.client, []string{key}, value, expirySec).Int64()
 	if err != nil {
 		r.logger.Error("Redis SetIfExists failed", zap.String("key", maskKey(key)), zap.Error(err))
 		return false, fmt.Errorf("setIfExists: %w", err)

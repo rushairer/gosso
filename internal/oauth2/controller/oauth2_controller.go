@@ -29,7 +29,9 @@ type DeviceCodeManager interface {
 	GetDeviceCode(ctx context.Context, deviceCode string) (*oauth2Domain.DeviceCode, error)
 	GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*oauth2Domain.DeviceCode, error)
 	AuthorizeDeviceCode(ctx context.Context, deviceCode, accountID string) error
+	AuthorizeDeviceCodeByHash(ctx context.Context, dcHash, accountID string) error
 	DenyDeviceCode(ctx context.Context, deviceCode string) error
+	DenyDeviceCodeByHash(ctx context.Context, dcHash string) error
 	CheckAndUpdatePollRate(ctx context.Context, deviceCode string) error
 	ClaimAuthorizedDeviceCode(ctx context.Context, deviceCode string, clientID string) (*oauth2Domain.DeviceCode, error)
 }

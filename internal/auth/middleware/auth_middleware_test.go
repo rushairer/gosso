@@ -370,9 +370,9 @@ func TestValidateBearerToken_NilSessionValidator(t *testing.T) {
 				SessionID: "sess-001",
 			},
 		}, nil)
-		assert.NoError(t, err)
-		assert.NotNil(t, claims)
-		assert.Equal(t, "acct-001", claims.AccountID)
+		assert.Nil(t, claims)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unauthorized")
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)

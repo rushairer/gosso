@@ -157,6 +157,9 @@ func (s *DeviceCodeService) GetDeviceCodeByUserCode(ctx context.Context, userCod
 	if err := json.Unmarshal([]byte(data), &dc); err != nil {
 		return nil, fmt.Errorf("unmarshal device code: %w", err)
 	}
+	// Populate the Hash field so callers can reference this device code
+	// without needing the raw plaintext device code (which is not stored in Redis).
+	dc.Hash = dcHash
 	return &dc, nil
 }
 
@@ -176,13 +179,61 @@ func (s *DeviceCodeService) AuthorizeDeviceCode(ctx context.Context, deviceCode,
 	}
 
 	s.logger.Info("Device code authorized",
-		zap.String("account_id", accountID))
+		zap.String("account_id", utility.MaskOpaqueID(accountID)))
 	return nil
 }
 
 // DenyDeviceCode atomically marks a device code as denied.
 func (s *DeviceCodeService) DenyDeviceCode(ctx context.Context, deviceCode string) error {
 	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
+
+	result, err := s.redis.RunScript(ctx, denyDeviceCodeScript, []string{key}).Result()
+	if errors.Is(err, redis.Nil) || result == nil {
+		return domain.ErrDeviceCodeNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("deny device code: %w", err)
+	}
+
+	// Parse result for audit logging
+	var dc domain.DeviceCode
+	if data, ok := result.(string); ok {
+		if err := json.Unmarshal([]byte(data), &dc); err != nil {
+			s.logger.Warn("Failed to unmarshal denied device code for audit log", zap.Error(err))
+		}
+	}
+
+	s.logger.Info("Device code denied",
+		zap.String("client_id", dc.ClientID),
+		zap.String("user_code_prefix", safeUserCodePrefix(dc.UserCode)))
+	return nil
+}
+
+// AuthorizeDeviceCodeByHash atomically marks a device code as authorized using its Redis key hash.
+// This is the preferred method when the raw device code is not available (e.g., user code consent flow).
+func (s *DeviceCodeService) AuthorizeDeviceCodeByHash(ctx context.Context, dcHash, accountID string) error {
+	key := DeviceCodeKeyPrefix + dcHash
+
+	authorizedAt := time.Now().Format(time.RFC3339)
+	result, err := s.redis.RunScript(ctx, authorizeDeviceCodeScript, []string{key},
+		accountID, authorizedAt,
+	).Result()
+	if errors.Is(err, redis.Nil) || result == nil {
+		return domain.ErrDeviceCodeNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("authorize device code: %w", err)
+	}
+
+	s.logger.Info("Device code authorized",
+		zap.String("account_id", utility.MaskOpaqueID(accountID)))
+	return nil
+}
+
+// DenyDeviceCodeByHash atomically marks a device code as denied using its Redis key hash.
+// This is the preferred method when the raw device code is not available (e.g., user code consent flow).
+func (s *DeviceCodeService) DenyDeviceCodeByHash(ctx context.Context, dcHash string) error {
+	key := DeviceCodeKeyPrefix + dcHash
 
 	result, err := s.redis.RunScript(ctx, denyDeviceCodeScript, []string{key}).Result()
 	if errors.Is(err, redis.Nil) || result == nil {
