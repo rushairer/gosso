@@ -128,6 +128,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("database.max_idle_conns", 15)
 	v.SetDefault("database.conn_max_lifetime_sec", 300)  // 5 minutes
 	v.SetDefault("database.conn_max_idle_time_sec", 180) // 3 minutes
+	v.SetDefault("database.pool_stats_interval_sec", 60) // 1 minute; 0 disables
 
 	// Auth configuration
 	v.SetDefault("auth.access_token_expiry", "15m")

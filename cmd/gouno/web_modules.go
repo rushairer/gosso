@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -110,7 +111,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	})
 
 	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, !cfg.WebServerConfig.Debug, logger)
-	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &oauth2Service.ClientAuthenticator{}, &accountValidatorAdapter{accountSvc: accountMod.Service, logger: logger}, authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)
+	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &oauth2Service.ClientAuthenticator{}, &accountValidatorAdapter{accountSvc: accountMod.Service, logger: logger, cacheTTL: 5 * time.Second}, authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
 	}
@@ -177,13 +178,32 @@ func defaultIfEmpty(value, defaultValue string) string {
 	return value
 }
 
+// accountValidatorCacheEntry holds a cached IsAccountActive result.
+type accountValidatorCacheEntry struct {
+	active    bool
+	expiresAt time.Time
+}
+
 // accountValidatorAdapter implements oauth2Controller.AccountValidator using the account service.
+// Results are cached for a short TTL to avoid a DB round-trip on every token exchange.
 type accountValidatorAdapter struct {
 	accountSvc accountService.AccountService
 	logger     *zap.Logger
+	cache      sync.Map // map[string]*accountValidatorCacheEntry
+	cacheTTL   time.Duration
 }
 
 func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID string) bool {
+	// Check cache first
+	if entry, ok := a.cache.Load(accountID); ok {
+		cached := entry.(*accountValidatorCacheEntry)
+		if time.Now().Before(cached.expiresAt) {
+			return cached.active
+		}
+		// Expired — evict and fall through to DB lookup
+		a.cache.Delete(accountID)
+	}
+
 	account, err := a.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
 		// Fail-closed: log the error for diagnostics rather than silently returning false.
@@ -191,9 +211,20 @@ func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID
 			a.logger.Warn("IsAccountActive: failed to look up account, treating as inactive",
 				zap.String("account_id", accountID), zap.Error(err))
 		}
+		// Cache negative results briefly to avoid hammering DB on repeated failures
+		a.cache.Store(accountID, &accountValidatorCacheEntry{
+			active:    false,
+			expiresAt: time.Now().Add(a.cacheTTL),
+		})
 		return false
 	}
-	return account.IsActive()
+
+	active := account.IsActive()
+	a.cache.Store(accountID, &accountValidatorCacheEntry{
+		active:    active,
+		expiresAt: time.Now().Add(a.cacheTTL),
+	})
+	return active
 }
 
 // oauth2ClientDeleterAdapter implements accountService.OAuth2ClientDeleter using the OAuth2 client repository.

@@ -40,27 +40,30 @@ func initDatabase(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logge
 	logger.Info("database connected")
 
 	// Start background goroutine to periodically log connection pool stats.
-	go func() {
-		ticker := time.NewTicker(60 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				stats := db.Stats()
-				logger.Info("db pool stats",
-					zap.Int("open", stats.OpenConnections),
-					zap.Int("in_use", stats.InUse),
-					zap.Int("idle", stats.Idle),
-					zap.Int64("wait_count", stats.WaitCount),
-					zap.Duration("wait_duration", stats.WaitDuration),
-					zap.Int64("max_idle_closed", stats.MaxIdleClosed),
-					zap.Int64("max_lifetime_closed", stats.MaxLifetimeClosed),
-				)
-			case <-ctx.Done():
-				return
+	if cfg.DatabaseConfig.PoolStatsIntervalSec > 0 {
+		interval := time.Duration(cfg.DatabaseConfig.PoolStatsIntervalSec) * time.Second
+		go func() {
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					stats := db.Stats()
+					logger.Info("db pool stats",
+						zap.Int("open", stats.OpenConnections),
+						zap.Int("in_use", stats.InUse),
+						zap.Int("idle", stats.Idle),
+						zap.Int64("wait_count", stats.WaitCount),
+						zap.Duration("wait_duration", stats.WaitDuration),
+						zap.Int64("max_idle_closed", stats.MaxIdleClosed),
+						zap.Int64("max_lifetime_closed", stats.MaxLifetimeClosed),
+					)
+				case <-ctx.Done():
+					return
+				}
 			}
-		}
-	}()
+		}()
+	}
 
 	return db, nil
 }

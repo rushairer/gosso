@@ -77,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Session management endpoints (`GET /api/auth/sessions`, `DELETE /api/auth/sessions/:id`) now have dedicated rate limiting — previously only covered by the general API rate limit (`internal/auth/controller/auth_controller.go`, `router/web.go`).
 - Passkey `LoginBegin` error message generalized to "login failed" — prevents account passkey registration status enumeration (`internal/auth/controller/passkey_controller.go`).
 - OAuth2 `device_code` values now masked with `MaskOpaqueID()` in all log statements — prevents bearer-equivalent secret leakage via logs (`internal/oauth2/controller/oauth2_device.go`).
+- `/health` endpoint no longer exposes `uptime` — prevents attackers from inferring deployment patterns and restart frequency (`router/web.go`).
+- OAuth2 `Revoke` endpoint now validates `Content-Type` header (accepts `application/x-www-form-urlencoded` and `application/json`) — consistent with `Introspect` endpoint, prevents unexpected content type processing (`internal/oauth2/controller/oauth2_revoke.go`).
 
 ### Added
 - `ErrPasswordRequired`, `ErrPasswordTooLong`, `ErrEmailRequired`, `ErrInvalidEmailFormat`, `ErrPhoneRequired` sentinel errors in credential domain — enables `errors.Is()` matching for constructor validation errors (`internal/account/domain/credential.go`).
@@ -189,6 +191,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ErrUnsupportedProvider` sentinel error deduplicated — canonical location is now `account/domain/federated_identity.go` only; `auth/service` removed its duplicate and uses `accountDomain.ErrUnsupportedProvider` (`internal/auth/service/errors.go`, `internal/auth/service/social_login_service.go`).
 - `validateRegistrationRequest` now uses `domain.ErrInvalidEmailFormat` sentinel instead of inline `errors.New("invalid email format")` — consistent with phone validation that already uses `domain.ErrInvalidPhoneFormat` (`internal/account/service/account_service_identity.go`).
 - CI `COVERAGE_MIN` raised from 50% to 60% — aligns with documented invariant T3 in `ARCHITECTURE_INVARIANTS.md` (`.github/workflows/ci.yml`).
+- DB pool stats logging interval now configurable via `database.pool_stats_interval_sec` (default 60s, 0 disables) — was hardcoded to 60 seconds (`config/config.go`, `config/config_manager.go`, `cmd/gouno/web_infra.go`).
+- `accountValidatorAdapter` now caches `IsAccountActive` results for 5 seconds via `sync.Map` — avoids a DB round-trip on every OAuth2 token exchange (`cmd/gouno/web_modules.go`).
+- `/health` endpoint no longer accepts `startTime` parameter — removed `RouterDeps.StartTime` field and `registerHealthRoutes` time argument (`router/web.go`, `cmd/gouno/web_engine.go`, `cmd/gouno/web.go`).
 
 ### Fixed
 - `VerifyContactCredential` now checks account is active before verifying credentials — previously suspended or deleted accounts could have their contact credentials marked as verified (`internal/account/service/account_service_manage.go`).
@@ -239,6 +244,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Account.Validate()` now checks `Username` length (max 64 chars) — catches invalid usernames from paths that bypass service-level validation (`internal/account/domain/account.go`).
 - `UpdateSession` error message now masks session ID — consistent with all other session logging (`internal/session/service/session_service.go`).
 - `NewTokenService` now validates `accessExpiry` and `refreshExpiry` are positive — prevents zero/negative TTL tokens (`internal/token/service/token_service.go`).
+- `validateUsername` max length now 64 characters to match `domain.ErrUsernameTooLong` — was 50, causing inconsistency between service and domain validation (`internal/account/service/account_service_identity.go`).
 
 ### Removed
 - `Session.Valid` field and `Invalidate()` method — never read, validity determined by TTL/max-age checks in session service (`internal/session/domain/session.go`).

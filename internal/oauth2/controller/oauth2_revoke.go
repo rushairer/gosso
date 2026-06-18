@@ -19,9 +19,27 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 		ClientID     string `json:"client_id" form:"client_id" binding:"max=128"`
 		ClientSecret string `json:"client_secret" form:"client_secret" binding:"max=256"`
 	}
-	if err := ctx.ShouldBind(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
-		return
+
+	// RFC 7009: accept both JSON and application/x-www-form-urlencoded
+	if contentType := ctx.GetHeader("Content-Type"); contentType != "" {
+		mediaType, _, _ := mime.ParseMediaType(contentType)
+		if mediaType == "application/json" {
+			if err := ctx.ShouldBindJSON(&req); err != nil {
+				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+				return
+			}
+		} else {
+			if err := ctx.ShouldBind(&req); err != nil {
+				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+				return
+			}
+		}
+	} else {
+		// Default to form binding when Content-Type is not specified
+		if err := ctx.ShouldBind(&req); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+			return
+		}
 	}
 
 	// RFC 7009 requires client authentication where applicable. Basic auth

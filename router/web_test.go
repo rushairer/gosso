@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
@@ -21,7 +20,7 @@ func TestHealthRoutes(t *testing.T) {
 
 	t.Run("health endpoint returns status ok", func(t *testing.T) {
 		server := gin.New()
-		registerHealthRoutes(server, nil, nil, time.Now())
+		registerHealthRoutes(server, nil, nil)
 
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest(http.MethodGet, "/health", nil)
@@ -46,7 +45,7 @@ func TestHealthRoutes(t *testing.T) {
 
 		sqlMock.ExpectPing()
 
-		registerHealthRoutes(server, db, redisClient, time.Now())
+		registerHealthRoutes(server, db, redisClient)
 
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest(http.MethodGet, "/readiness", nil)
@@ -77,7 +76,7 @@ func TestHealthRoutes(t *testing.T) {
 
 		sqlMock.ExpectPing().WillReturnError(sql.ErrConnDone)
 
-		registerHealthRoutes(server, db, redisClient, time.Now())
+		registerHealthRoutes(server, db, redisClient)
 
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest(http.MethodGet, "/readiness", nil)

@@ -70,12 +70,13 @@ type DatabaseConfigDriver struct {
 // DatabaseConfig holds connection-pool tuning and the set of named database
 // drivers. Exactly one driver must be marked as Default.
 type DatabaseConfig struct {
-	Default            DatabaseConfigDriverName                          `mapstructure:"default"`
-	Drivers            map[DatabaseConfigDriverName]DatabaseConfigDriver `mapstructure:"drivers"`
-	MaxOpenConns       int                                               `mapstructure:"max_open_conns"`
-	MaxIdleConns       int                                               `mapstructure:"max_idle_conns"`
-	ConnMaxLifetimeSec int                                               `mapstructure:"conn_max_lifetime_sec"`
-	ConnMaxIdleTimeSec int                                               `mapstructure:"conn_max_idle_time_sec"`
+	Default              DatabaseConfigDriverName                          `mapstructure:"default"`
+	Drivers              map[DatabaseConfigDriverName]DatabaseConfigDriver `mapstructure:"drivers"`
+	MaxOpenConns         int                                               `mapstructure:"max_open_conns"`
+	MaxIdleConns         int                                               `mapstructure:"max_idle_conns"`
+	ConnMaxLifetimeSec   int                                               `mapstructure:"conn_max_lifetime_sec"`
+	ConnMaxIdleTimeSec   int                                               `mapstructure:"conn_max_idle_time_sec"`
+	PoolStatsIntervalSec int                                               `mapstructure:"pool_stats_interval_sec"` // 0 disables periodic pool stats logging
 }
 
 // GetDriver returns a pointer to the named database driver config, or nil if not found.

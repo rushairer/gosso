@@ -213,14 +213,15 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 }
 
 // validateUsername validates a username string.
-// Username must be non-empty, at most 50 characters, and contain only
+// Username must be non-empty, at most 64 characters, and contain only
 // lowercase letters, digits, hyphens, dots, and underscores.
+// The 64-character limit matches domain.ErrUsernameTooLong.
 func validateUsername(username string) error {
 	if username == "" {
 		return fmt.Errorf("username must not be empty")
 	}
-	if len(username) > 50 {
-		return fmt.Errorf("username must not exceed 50 characters")
+	if len(username) > 64 {
+		return fmt.Errorf("username must not exceed 64 characters")
 	}
 	for _, c := range username {
 		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' && c != '-' && c != '.' {
