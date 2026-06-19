@@ -131,6 +131,8 @@ func TestNewOAuth2Client_Success(t *testing.T) {
 	assert.NotEmpty(t, c.ID)
 	assert.False(t, c.CreatedAt.IsZero())
 	assert.False(t, c.UpdatedAt.IsZero())
+	assert.NotNil(t, c.Metadata)
+	assert.NotNil(t, c.Scopes)
 }
 
 func TestNewOAuth2Client_MissingAccountID(t *testing.T) {

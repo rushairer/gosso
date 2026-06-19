@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 - `db.Queryable` interface abstracting `*sql.DB` and `*sql.Tx` for query/exec operations — eliminates duplication between standalone and transactional repository methods (`internal/db/queryable.go`).
+- `NewTokenBlacklist` constructor with JTI and expiry validation — prevents creation of invalid blacklist entries (`internal/token/domain/blacklist.go`).
+- `NewRefreshToken` constructor with token, account ID, and expiry validation — prevents creation of invalid refresh tokens (`internal/token/domain/token.go`).
 
 ### Changed
 - `accountRepositoryImpl.FindByID`, `FindByIDTx`, and `FindByIDIncludingDeletedTx` now share a single `findAccountByID` helper via the `Queryable` interface — removes ~40 lines of duplicated SQL/error-handling logic (`internal/account/repository/account_repository_impl.go`).
@@ -16,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Removed deprecated `SetTokenRevoker`, `SetMaxSessions`, `SetSessionTTL`, and `SetMaxSessionAge` methods from `SessionService` — all production callers already use `NewSessionServiceWithConfig`; test files migrated accordingly (`internal/session/service/session_service.go` + 6 test files).
 - `getConfigPath` now checks the executable's directory for a `config/` folder before falling back to `./config` — prevents config-not-found errors when running the binary from a different working directory (`cmd/gosso/config_flags.go`).
 - `smtpTLSPolicy` documentation updated to explain the `mandatory` default and how to configure `notls`/`opportunistic` for local development with Mailpit (`internal/notification/service/email_service.go`).
+- `SuspendAccount`/`ActivateAccount` now use `domain.AccountStatusActive`/`domain.AccountStatusSuspended` constants instead of hardcoded string literals (`internal/account/repository/account_repository_impl.go`).
+- `VerifyFirstUnverifiedTOTP` now parameterizes the `'totp'` credential type as a SQL argument instead of a hardcoded string literal (`internal/account/repository/credential_repository_impl.go`).
+- `BlacklistService.RevokeToken` and `RotateRefreshToken` now use domain constructors (`NewTokenBlacklist`, `NewRefreshToken`) for validation (`internal/token/service/blacklist_service.go`, `internal/token/service/token_service_revoke.go`).
+- `Session.Metadata` JSON tag changed from `"metadata,omitempty"` to `"metadata"` — `omitempty` on a non-nil empty map (`make(map[string]any)`) has no effect and was misleading (`internal/session/domain/session.go`).
+- `AccountService.SetOptions` comment now explicitly documents it is NOT goroutine-safe and must be called during initialization (`internal/account/service/account_service.go`).
 
 ### Security
 - `FederatedIdentity.UpdateProfile` now validates profile JSON size against `maxProfileSize` (4096 bytes) — prevents storage of excessively large payloads on update, matching the existing creation-time check (`internal/account/domain/federated_identity.go`).
@@ -29,6 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ChangePassword` now rejects same-password changes to avoid unnecessary session revocation (`internal/account/service/account_service_manage.go`).
 - Username validation now enforces a minimum length of 2 characters (`internal/account/service/account_service_identity.go`).
 - `BigEndianBytes` now returns an error instead of panicking on negative input — callers get graceful error handling instead of runtime panics (`internal/utility/bigendian.go`, `internal/oidc/service/jwks_service.go`).
+- `OAuth2Client.NewOAuth2Client` now initializes `Metadata` and `Scopes` fields — previously nil map/slice could cause panic on write (`internal/oauth2/domain/client.go`).
+- `DeviceCode.MarkUsed` now returns `ErrDeviceCodeAlreadyUsed` for already-used codes instead of the generic `ErrDeviceCodeNotAuthorized` — improves error semantics for debugging (`internal/oauth2/domain/device_code.go`).
+- `ListAccounts` now clamps pagination parameters to valid ranges (page ≥ 1, pageSize in [1, 100]) — prevents invalid queries with negative or excessively large page sizes (`internal/account/service/account_service_manage.go`).
+- `SaveConsent` now validates consent is non-nil and required fields (AccountID, ClientID) are non-empty — prevents nil pointer dereference and invalid consent records (`internal/oauth2/service/consent_service.go`).
+- `AuditRecord.CorrelationID` JSON tag changed from `"tx_id"` to `"correlation_id"` — aligns JSON output with field semantics (DB column name remains `tx_id`) (`internal/audit/domain/audit.go`).
+- `AbortWithServiceError` now includes `request_id` in both matched-sentinel and fallback error responses — previously only fallback responses included it, making client-side debugging inconsistent (`internal/controllerutil/error_handler.go`).
 
 ### Changed
 - `MustMarshalJSON` renamed to `MarshalJSONOrEmpty` — the "Must" prefix in Go conventionally implies panic on failure, which did not match this function's behavior of returning `{}`. A deprecated alias `MustMarshalJSON` is kept for backward compatibility (`internal/utility/jsonutil.go` + all callers).

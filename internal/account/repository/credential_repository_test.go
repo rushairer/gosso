@@ -417,7 +417,7 @@ func TestVerifyFirstUnverifiedTOTP_Found(t *testing.T) {
 	tx, _ := db.Begin()
 
 	mock.ExpectExec("UPDATE account_credentials").
-		WithArgs("account-001").
+		WithArgs("account-001", "totp").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewCredentialRepository(db)
@@ -437,7 +437,7 @@ func TestVerifyFirstUnverifiedTOTP_NotFound(t *testing.T) {
 	tx, _ := db.Begin()
 
 	mock.ExpectExec("UPDATE account_credentials").
-		WithArgs("account-001").
+		WithArgs("account-001", "totp").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	repo := NewCredentialRepository(db)

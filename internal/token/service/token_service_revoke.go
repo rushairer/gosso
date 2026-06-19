@@ -115,17 +115,15 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	}
 
 	// 5. Build new token data with the correct SessionID from the old token
-	newRT := &domain.RefreshToken{
-		Token:     newTokenString,
-		AccountID: oldRT.AccountID,
-		ClientID:  oldRT.ClientID,
-		SessionID: oldRT.SessionID,
-		Scope:     oldRT.Scope,
-		IP:        oldRT.IP,
-		UserAgent: oldRT.UserAgent,
-		ExpiresAt: time.Now().Add(s.refreshExpiry),
-		CreatedAt: time.Now(),
+	newRT, err := domain.NewRefreshToken(newTokenString, oldRT.AccountID, time.Now().Add(s.refreshExpiry))
+	if err != nil {
+		return nil, fmt.Errorf("create new refresh token: %w", err)
 	}
+	newRT.ClientID = oldRT.ClientID
+	newRT.SessionID = oldRT.SessionID
+	newRT.Scope = oldRT.Scope
+	newRT.IP = oldRT.IP
+	newRT.UserAgent = oldRT.UserAgent
 
 	newData, err := json.Marshal(newRT)
 	if err != nil {

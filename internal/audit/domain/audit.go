@@ -8,7 +8,7 @@ import (
 // AuditRecord represents a single audit-log entry stored in the database.
 type AuditRecord struct {
 	ID            string          `json:"id"`
-	CorrelationID string          `json:"tx_id"` // Random UUID for grouping related records; not a DB transaction ID
+	CorrelationID string          `json:"correlation_id"` // Random UUID for grouping related records; not a DB transaction ID
 	AccountID     *string         `json:"account_id,omitempty"`
 	Action        string          `json:"action"`
 	Actor         string          `json:"actor"`

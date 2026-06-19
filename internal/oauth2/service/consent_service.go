@@ -92,6 +92,13 @@ func (s *ConsentService) GetConsent(ctx context.Context, accountID, clientID str
 
 // SaveConsent saves the user's consent record to DB and updates the Redis cache.
 func (s *ConsentService) SaveConsent(ctx context.Context, consent *domain.Consent) error {
+	if consent == nil {
+		return errors.New("consent must not be nil")
+	}
+	if consent.AccountID == "" || consent.ClientID == "" {
+		return &ValidationError{Message: "consent account_id and client_id are required"}
+	}
+
 	consent.GrantedAt = time.Now()
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {

@@ -123,6 +123,9 @@ func (d *DeviceCode) Deny() error {
 
 // MarkUsed transitions the device code from authorized to used.
 func (d *DeviceCode) MarkUsed() error {
+	if d.Status == DeviceCodeStatusUsed {
+		return ErrDeviceCodeAlreadyUsed
+	}
 	if d.Status != DeviceCodeStatusAuthorized {
 		return ErrDeviceCodeNotAuthorized
 	}

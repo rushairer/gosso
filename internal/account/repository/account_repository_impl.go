@@ -249,12 +249,12 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 
 // SuspendAccount atomically sets status to 'suspended' only if currently 'active'.
 func (r *accountRepositoryImpl) SuspendAccount(ctx context.Context, tx *sql.Tx, accountID string) error {
-	return r.transitionAccountStatus(ctx, tx, accountID, "active", "suspended")
+	return r.transitionAccountStatus(ctx, tx, accountID, string(domain.AccountStatusActive), string(domain.AccountStatusSuspended))
 }
 
 // ActivateAccount atomically sets status to 'active' only if currently 'suspended'.
 func (r *accountRepositoryImpl) ActivateAccount(ctx context.Context, tx *sql.Tx, accountID string) error {
-	return r.transitionAccountStatus(ctx, tx, accountID, "suspended", "active")
+	return r.transitionAccountStatus(ctx, tx, accountID, string(domain.AccountStatusSuspended), string(domain.AccountStatusActive))
 }
 
 // transitionAccountStatus is a shared helper for status transitions.

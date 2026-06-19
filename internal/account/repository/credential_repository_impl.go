@@ -290,14 +290,14 @@ func (r *credentialRepositoryImpl) VerifyFirstUnverifiedTOTP(ctx context.Context
 		SET verified = true, verified_at = NOW()
 		WHERE id = (
 			SELECT id FROM account_credentials
-			WHERE account_id = $1 AND credential_type = 'totp' AND verified = false AND deleted_at IS NULL
+			WHERE account_id = $1 AND credential_type = $2 AND verified = false AND deleted_at IS NULL
 			ORDER BY created_at DESC
 			LIMIT 1
 			FOR UPDATE SKIP LOCKED
 		)
 	`
 
-	result, err := tx.ExecContext(ctx, query, accountID)
+	result, err := tx.ExecContext(ctx, query, accountID, string(domain.CredentialTypeTOTP))
 	if err != nil {
 		return false, fmt.Errorf("verify first unverified TOTP: %w", err)
 	}

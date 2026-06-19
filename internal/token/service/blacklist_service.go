@@ -46,11 +46,9 @@ func NewBlacklistService(redis *cache.RedisClient, logger *zap.Logger) (*Blackli
 
 // RevokeToken revokes a token (adds it to the blacklist)
 func (s *BlacklistService) RevokeToken(ctx context.Context, jti string, reason string, expiresAt time.Time) error {
-	blacklist := &domain.TokenBlacklist{
-		JTI:       jti,
-		Reason:    reason,
-		RevokedAt: time.Now(),
-		ExpiresAt: expiresAt,
+	blacklist, err := domain.NewTokenBlacklist(jti, reason, expiresAt)
+	if err != nil {
+		return fmt.Errorf("create token blacklist: %w", err)
 	}
 
 	data, err := json.Marshal(blacklist)

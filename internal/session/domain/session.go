@@ -23,7 +23,7 @@ type Session struct {
 	CreatedAt    time.Time `json:"created_at"`
 	LastActiveAt time.Time `json:"last_active_at"`
 	// Metadata stores additional session information (e.g., device type, browser).
-	Metadata map[string]any `json:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata"`
 }
 
 // NewSession creates a new session with the given parameters.

@@ -158,7 +158,8 @@ func NewAccountService(
 	return svc
 }
 
-// SetOptions configures optional cross-module dependencies atomically.
+// SetOptions configures optional cross-module dependencies.
+// NOT goroutine-safe. Must be called during initialization before any concurrent access.
 func (s *accountServiceImpl) SetOptions(opts *AccountServiceOptions) {
 	if opts != nil {
 		s.sessionRevoker = opts.SessionRevoker

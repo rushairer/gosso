@@ -117,5 +117,11 @@ func TestDeviceCode_MarkUsed_NotAuthorized(t *testing.T) {
 func TestDeviceCode_MarkUsed_AlreadyUsed(t *testing.T) {
 	dc := &DeviceCode{Status: DeviceCodeStatusUsed}
 	err := dc.MarkUsed()
+	assert.ErrorIs(t, err, ErrDeviceCodeAlreadyUsed)
+}
+
+func TestDeviceCode_MarkUsed_Denied(t *testing.T) {
+	dc := &DeviceCode{Status: DeviceCodeStatusDenied}
+	err := dc.MarkUsed()
 	assert.ErrorIs(t, err, ErrDeviceCodeNotAuthorized)
 }

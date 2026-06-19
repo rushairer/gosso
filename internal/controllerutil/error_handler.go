@@ -32,7 +32,14 @@ func AbortWithServiceError(ctx *gin.Context, logger *zap.Logger, err error,
 	for _, rule := range rules {
 		if errors.Is(err, rule.Sentinel) {
 			logger.Warn(rule.Mapping.Message, zap.Error(err))
-			ctx.JSON(rule.Mapping.Status, gouno.NewErrorResponse(rule.Mapping.Status, rule.Mapping.Message))
+			resp := gin.H{
+				"code":    rule.Mapping.Status,
+				"message": rule.Mapping.Message,
+			}
+			if reqID, ok := ctx.Get("request_id"); ok {
+				resp["request_id"] = reqID
+			}
+			ctx.JSON(rule.Mapping.Status, resp)
 			ctx.Abort()
 			return
 		}

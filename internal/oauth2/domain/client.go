@@ -144,6 +144,8 @@ func NewOAuth2Client(accountID, name, clientID string, grantTypes []string) (*OA
 		Name:       name,
 		ClientID:   clientID,
 		GrantTypes: grantTypes,
+		Metadata:   make(map[string]any),
+		Scopes:     []string{},
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}, nil
