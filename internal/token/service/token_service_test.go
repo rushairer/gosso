@@ -530,13 +530,12 @@ func TestRevokeAccountTokens(t *testing.T) {
 	parsed, err := svc.ValidateAccessTokenWithContext(ctx, tokenString)
 	require.NoError(t, err)
 
-	// Revoke all tokens for account
-	// Wait until the next second boundary so the revocation timestamp
-	// (stored as Unix seconds) lands strictly after the token's IssuedAt.
-	nextSecond := time.Now().Truncate(time.Second).Add(time.Second)
-	time.Sleep(time.Until(nextSecond))
-
-	err = svc.RevokeAccountTokens(ctx, parsed.AccountID)
+	// Set the revocation timestamp 1 second after the token's IssuedAt.
+	// This avoids time.Sleep by directly manipulating the blacklist, while
+	// guaranteeing the revocation timestamp is strictly after IssuedAt
+	// (the comparison in ValidateAccessTokenWithContext uses Before, which is strict <).
+	revokeAt := parsed.IssuedAt.Time.Add(time.Second)
+	err = svc.blacklist.SetAccountRevokedAfter(ctx, parsed.AccountID, revokeAt, 10*time.Minute)
 	require.NoError(t, err)
 
 	// The previously valid token should now be rejected

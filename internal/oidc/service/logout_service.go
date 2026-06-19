@@ -39,7 +39,8 @@ func NewLogoutService(
 // ValidateIDTokenHint validates an ID token hint per OIDC RP-Initiated Logout spec.
 // The OP SHOULD accept expired ID tokens, so expiry is not checked.
 // Only signature, issuer, and audience are validated.
-func (s *LogoutService) ValidateIDTokenHint(tokenString string) (*IDTokenClaims, error) {
+// If clientID is non-empty, the token's audience must contain it (OIDC RP-Initiated Logout §2).
+func (s *LogoutService) ValidateIDTokenHint(tokenString string, clientID string) (*IDTokenClaims, error) {
 	if tokenString == "" {
 		return nil, fmt.Errorf("empty id_token_hint")
 	}
@@ -67,12 +68,29 @@ func (s *LogoutService) ValidateIDTokenHint(tokenString string) (*IDTokenClaims,
 		return nil, fmt.Errorf("id_token_hint has no audience")
 	}
 
+	// OIDC RP-Initiated Logout §2: validate that the token was issued to the requesting client.
+	if clientID != "" {
+		found := false
+		for _, aud := range claims.Audience {
+			if aud == clientID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("%w: token audience %v does not contain %q", ErrAudienceMismatch, claims.Audience, clientID)
+		}
+	}
+
 	return claims, nil
 }
 
 var (
 	// ErrSessionServiceNotConfigured is returned when the session service is not available.
 	ErrSessionServiceNotConfigured = errors.New("session service not configured")
+
+	// ErrAudienceMismatch is returned when the id_token_hint audience does not contain the requested client_id.
+	ErrAudienceMismatch = errors.New("id_token_hint audience does not match client_id")
 )
 
 // LogoutByAccountID revokes all sessions and refresh tokens for the given account.

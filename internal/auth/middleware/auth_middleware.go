@@ -3,7 +3,6 @@ package middleware
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -28,7 +27,7 @@ type TokenValidator interface {
 
 // errUnauthorized is the generic error returned for all authentication failures.
 // Detailed reasons are logged server-side only to prevent information leakage.
-var errUnauthorized = fmt.Errorf("unauthorized")
+var errUnauthorized = errors.New("unauthorized")
 
 // ValidateBearerToken extracts and validates the Bearer token from the request.
 // Returns the claims on success, or nil with an error on failure.

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -199,26 +200,16 @@ func (c *OIDCController) validateBearerToken(ctx *gin.Context) *tokenDomain.Acce
 // tryLogoutByIDTokenHint attempts logout using the id_token_hint parameter.
 // Returns the resolved clientID and true on success, or ("", false) to fall through.
 func (c *OIDCController) tryLogoutByIDTokenHint(ctx *gin.Context, req logoutRequest, bearerClaims *tokenDomain.AccessTokenClaims) (string, bool) {
-	claims, err := c.logoutSvc.ValidateIDTokenHint(req.IDTokenHint)
+	claims, err := c.logoutSvc.ValidateIDTokenHint(req.IDTokenHint, req.ClientID)
 	if err != nil {
-		c.logger.Debug("id_token_hint validation failed, skipping", zap.Error(err))
-		return "", false
-	}
-
-	// If client_id is provided, verify it matches the ID token audience
-	if req.ClientID != "" {
-		audMatch := false
-		for _, aud := range claims.Audience {
-			if aud == req.ClientID {
-				audMatch = true
-				break
-			}
-		}
-		if !audMatch {
-			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "client_id does not match id_token_hint audience"))
+		// Audience mismatch is a client error — return 400 instead of falling through.
+		if errors.Is(err, oidcService.ErrAudienceMismatch) {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
 			ctx.Abort()
 			return "", true // handled (with error)
 		}
+		c.logger.Debug("id_token_hint validation failed, skipping", zap.Error(err))
+		return "", false
 	}
 
 	accountID := claims.Subject

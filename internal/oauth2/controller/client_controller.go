@@ -185,6 +185,10 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 
 	client, err := c.clientSvc.UpdateClientByAccountID(ctx, accountID, clientID, svcReq)
 	if err != nil {
+		if isValidationError(err) {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+			return
+		}
 		controllerutil.HandleServiceError(ctx, c.logger, err, updateClientErrorMap,
 			http.StatusBadRequest, "failed to update client")
 		return

@@ -29,6 +29,7 @@ type consentState struct {
 	CodeChallenge       string `json:"code_challenge"`
 	CodeChallengeMethod string `json:"code_challenge_method"`
 	Nonce               string `json:"nonce"`
+	State               string `json:"state"`
 }
 
 // Authorize GET /oauth2/authorize
@@ -113,6 +114,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: codeChallengeMethod,
 		Nonce:               nonce,
+		State:               state,
 	})
 	if err != nil {
 		c.logger.Error("Failed to marshal consent state", zap.Error(err))
@@ -256,8 +258,9 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	}
 	if req.CodeChallenge != stored.CodeChallenge ||
 		req.CodeChallengeMethod != stored.CodeChallengeMethod ||
-		req.Nonce != stored.Nonce {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "PKCE parameters mismatch"})
+		req.Nonce != stored.Nonce ||
+		req.State != stored.State {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "authorization parameters mismatch"})
 		return
 	}
 

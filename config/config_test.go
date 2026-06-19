@@ -137,6 +137,7 @@ func TestValidate_Errors(t *testing.T) {
 		{
 			name: "default dev DSN rejected",
 			mutate: func(c *GoUnoConfig) {
+				c.WebServerConfig.Production = true
 				c.DatabaseConfig.Drivers["postgres"] = DatabaseConfigDriver{
 					Name: "postgres", Driver: "pgx", DSN: defaultPostgresDSN,
 				}
@@ -228,6 +229,7 @@ func TestValidate_Errors(t *testing.T) {
 		{
 			name: "production issuer must use https",
 			mutate: func(c *GoUnoConfig) {
+				c.WebServerConfig.Production = true
 				c.AuthConfig.Issuer = "http://sso.example.com"
 			},
 			wantErr: "auth: issuer must use https in production",
@@ -235,6 +237,7 @@ func TestValidate_Errors(t *testing.T) {
 		{
 			name: "production issuer must not be localhost",
 			mutate: func(c *GoUnoConfig) {
+				c.WebServerConfig.Production = true
 				c.AuthConfig.Issuer = "https://localhost:8080"
 			},
 			wantErr: "auth: issuer must not point to localhost in production",
@@ -265,6 +268,7 @@ func TestValidate_Errors(t *testing.T) {
 		{
 			name: "default totp key rejected",
 			mutate: func(c *GoUnoConfig) {
+				c.WebServerConfig.Production = true
 				c.AuthConfig.TOTPEncryptionKey = defaultTOTPEncryptionKey
 			},
 			wantErr: "totp_encryption_key must be explicitly configured",

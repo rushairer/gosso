@@ -342,7 +342,7 @@ func (s *AuthService) ClearLoginRateLimitsByUsername(ctx context.Context, userna
 		}
 		for _, key := range keys {
 			if delErr := s.redis.Del(ctx, key); delErr != nil {
-				s.logger.Warn("Failed to delete login rate limit key", zap.String("key", key), zap.Error(delErr))
+				s.logger.Warn("Failed to delete login rate limit key", zap.String("key_masked", maskRateLimitKey(key)), zap.Error(delErr))
 				if firstErr == nil {
 					firstErr = fmt.Errorf("delete rate limit key %s: %w", key, delErr)
 				}

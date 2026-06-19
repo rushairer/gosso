@@ -2082,8 +2082,8 @@ func TestToken_AuthCode_GrantNotAllowed(t *testing.T) {
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.Contains(t, w.Body.String(), "invalid_client")
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "unauthorized_client")
 }
 
 func TestToken_AuthCode_InvalidSecret(t *testing.T) {
@@ -2405,8 +2405,8 @@ func TestToken_RefreshToken_GrantNotAllowed(t *testing.T) {
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.Contains(t, w.Body.String(), "invalid_client")
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "unauthorized_client")
 }
 
 func TestToken_RefreshToken_ConfidentialMissingSecret(t *testing.T) {
@@ -2605,6 +2605,7 @@ func TestSubmitConsent_Success(t *testing.T) {
 		"code_challenge":        "",
 		"code_challenge_method": "",
 		"nonce":                 "",
+		"state":                 "abc",
 	})
 	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
 
@@ -2651,6 +2652,7 @@ func TestSubmitConsent_ClientNotFound(t *testing.T) {
 		"code_challenge":        "",
 		"code_challenge_method": "",
 		"nonce":                 "",
+		"state":                 "abc",
 	})
 	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
 
@@ -2696,6 +2698,7 @@ func TestSubmitConsent_InvalidRedirectURI(t *testing.T) {
 		"code_challenge":        "",
 		"code_challenge_method": "",
 		"nonce":                 "",
+		"state":                 "abc",
 	})
 	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
 
@@ -2742,6 +2745,7 @@ func TestSubmitConsent_InvalidScope(t *testing.T) {
 		"code_challenge":        "",
 		"code_challenge_method": "",
 		"nonce":                 "",
+		"state":                 "abc",
 	})
 	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
 
@@ -2789,6 +2793,7 @@ func TestSubmitConsent_SaveConsentError(t *testing.T) {
 		"code_challenge":        "",
 		"code_challenge_method": "",
 		"nonce":                 "",
+		"state":                 "abc",
 	})
 	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
 
@@ -2838,6 +2843,7 @@ func TestSubmitConsent_GenerateCodeError(t *testing.T) {
 		"code_challenge":        "",
 		"code_challenge_method": "",
 		"nonce":                 "",
+		"state":                 "abc",
 	})
 	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
 

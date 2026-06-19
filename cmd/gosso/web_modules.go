@@ -52,7 +52,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	keySvc, err := tokenService.NewKeyService(
 		cfg.AuthConfig.PrivateKeyPath,
 		cfg.AuthConfig.KeyID,
-		!cfg.WebServerConfig.Debug,
+		cfg.WebServerConfig.Production,
 		cfg.AuthConfig.RSAKeyBits,
 		logger,
 	)

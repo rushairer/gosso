@@ -62,8 +62,8 @@ func (c *OAuth2Client) ValidatePostLogoutRedirectURI(uri string) bool {
 	return found == 1
 }
 
-// isValidRedirectScheme checks that the URI uses http or https scheme and has no fragment.
-// RFC 6749 §3.1.2: authorization endpoint MUST NOT redirect to a URI with a fragment component.
+// isValidRedirectScheme checks that the URI uses http or https scheme, has no fragment,
+// and restricts http:// to loopback addresses only (RFC 9700 §2.1).
 func isValidRedirectScheme(uri string) bool {
 	u, err := url.Parse(uri)
 	if err != nil {
@@ -75,7 +75,16 @@ func isValidRedirectScheme(uri string) bool {
 	if u.Fragment != "" {
 		return false
 	}
+	// RFC 9700 §2.1: HTTP is only allowed for loopback addresses (native app development).
+	if u.Scheme == "http" && !isLoopback(u.Hostname()) {
+		return false
+	}
 	return true
+}
+
+// isLoopback checks if a hostname is a loopback address.
+func isLoopback(host string) bool {
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 // HasGrantType checks whether the specified grant type is supported

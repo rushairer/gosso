@@ -58,7 +58,7 @@ func TestValidateIDTokenHint_Valid(t *testing.T) {
 
 	tokenString := signTestIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
-	claims, err := svc.ValidateIDTokenHint(tokenString)
+	claims, err := svc.ValidateIDTokenHint(tokenString, "")
 	require.NoError(t, err)
 	assert.Equal(t, "account-001", claims.Subject)
 	assert.Equal(t, "https://sso.example.com", claims.Issuer)
@@ -70,7 +70,7 @@ func TestValidateIDTokenHint_ExpiredTokenAccepted(t *testing.T) {
 
 	tokenString := signTestIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, true)
 
-	claims, err := svc.ValidateIDTokenHint(tokenString)
+	claims, err := svc.ValidateIDTokenHint(tokenString, "")
 	require.NoError(t, err)
 	assert.Equal(t, "account-001", claims.Subject)
 }
@@ -78,7 +78,7 @@ func TestValidateIDTokenHint_ExpiredTokenAccepted(t *testing.T) {
 func TestValidateIDTokenHint_EmptyString(t *testing.T) {
 	svc, _ := setupTestLogoutService(t)
 
-	_, err := svc.ValidateIDTokenHint("")
+	_, err := svc.ValidateIDTokenHint("", "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
 }
@@ -86,7 +86,7 @@ func TestValidateIDTokenHint_EmptyString(t *testing.T) {
 func TestValidateIDTokenHint_InvalidJWT(t *testing.T) {
 	svc, _ := setupTestLogoutService(t)
 
-	_, err := svc.ValidateIDTokenHint("not-a-jwt")
+	_, err := svc.ValidateIDTokenHint("not-a-jwt", "")
 	assert.Error(t, err)
 }
 
@@ -95,7 +95,7 @@ func TestValidateIDTokenHint_WrongIssuer(t *testing.T) {
 
 	tokenString := signTestIDToken(t, keySvc, "https://other-issuer.com", "account-001", []string{"client-001"}, false)
 
-	_, err := svc.ValidateIDTokenHint(tokenString)
+	_, err := svc.ValidateIDTokenHint(tokenString, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "issuer mismatch")
 }
@@ -105,7 +105,7 @@ func TestValidateIDTokenHint_NoAudience(t *testing.T) {
 
 	tokenString := signTestIDToken(t, keySvc, "https://sso.example.com", "account-001", nil, false)
 
-	_, err := svc.ValidateIDTokenHint(tokenString)
+	_, err := svc.ValidateIDTokenHint(tokenString, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no audience")
 }
@@ -119,7 +119,7 @@ func TestValidateIDTokenHint_BadSignature(t *testing.T) {
 
 	tokenString := signTestIDToken(t, otherKeySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
 
-	_, err = svc.ValidateIDTokenHint(tokenString)
+	_, err = svc.ValidateIDTokenHint(tokenString, "")
 	assert.Error(t, err)
 }
 
@@ -138,7 +138,7 @@ func TestValidateIDTokenHint_WrongAlgorithm(t *testing.T) {
 	tokenString, err := token.SignedString([]byte("hmac-secret"))
 	require.NoError(t, err)
 
-	_, err = svc.ValidateIDTokenHint(tokenString)
+	_, err = svc.ValidateIDTokenHint(tokenString, "")
 	assert.Error(t, err)
 }
 

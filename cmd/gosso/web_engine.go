@@ -33,10 +33,10 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		cors.New(corsConfig),
 		middleware.RequestIDMiddleware(),
 		middleware.ZapLoggerMiddleware(logger),
-		middleware.SecurityHeadersMiddleware(!cfg.WebServerConfig.Debug),
+		middleware.SecurityHeadersMiddleware(cfg.WebServerConfig.Production),
 		middleware.MaxBodySizeMiddleware(cfg.WebServerConfig.MaxBodySize),
 		middleware.TimeoutMiddleware(cfg.WebServerConfig.RequestTimeout),
-		middleware.CSRFMiddleware(!cfg.WebServerConfig.Debug, logger, cfg.AuthConfig.CSRFCookieMaxAge,
+		middleware.CSRFMiddleware(cfg.WebServerConfig.Production, logger, cfg.AuthConfig.CSRFCookieMaxAge,
 			"/api/passkey/login/begin",
 			"/api/passkey/login/complete",
 			"/api/passkey/mfa/begin",
@@ -79,7 +79,7 @@ func buildCORSConfig(cfg config.GoUnoConfig, logger *zap.Logger) (cors.Config, e
 	}
 	if len(cfg.CORSConfig.AllowedOrigins) > 0 {
 		corsConfig.AllowOrigins = cfg.CORSConfig.AllowedOrigins
-	} else if !cfg.WebServerConfig.Debug {
+	} else if cfg.WebServerConfig.Production {
 		return cors.Config{}, fmt.Errorf("cors: allowed_origins is required in production mode")
 	} else {
 		logger.Warn("CORS allowed_origins not configured, falling back to localhost — do not use this in production")

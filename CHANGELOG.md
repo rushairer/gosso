@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Security
 - `account_id` in all structured logs is now masked via `utility.MaskOpaqueID()` — 42 log sites across 16 files previously logged raw UUID values, risking PII exposure in log aggregation systems.
 - `NewAuthCodeService` now validates that `expiry` is positive and `redis` is non-nil — prevents silent misconfiguration where authorization codes would expire immediately (`internal/oauth2/service/auth_code_service.go`).
+- Production safety guards now use a dedicated `Production` flag (`GOUNO_PRODUCTION`) instead of relying on `!Debug` — prevents accidental bypass when `GOUNO_WEB_SERVER_DEBUG=true` leaks to production (`config/config.go`, `cmd/gosso/web_engine.go`, `cmd/gosso/web_modules.go`).
+- Token endpoint now returns `400 unauthorized_client` (not `401 invalid_client`) when a valid client lacks the requested grant type — corrects RFC 6749 §5.2 compliance (`internal/oauth2/controller/oauth2_token.go`).
+- Runtime redirect URI validation now enforces RFC 9700 §2.1 loopback restriction for HTTP URIs — previously only checked at client registration time, not at authorization time (`internal/oauth2/domain/client.go`).
+- OAuth2 `state` parameter is now stored server-side in Redis consent state and verified on POST callback — prevents state tampering between consent page render and submission (`internal/oauth2/controller/oauth2_authorize.go`).
+- OIDC logout `id_token_hint` audience now validated against the requesting `client_id` via `ErrAudienceMismatch` sentinel — prevents cross-client token misuse (`internal/oidc/service/logout_service.go`).
+- Rate limit log keys now masked to hide IP addresses and usernames — three log sites previously leaked PII in rate limit error messages (`middleware/redis_ratelimit.go`, `internal/auth/service/auth_login.go`, `internal/auth/service/auth_login_helpers.go`).
 
 ### Changed
 - Renamed `cmd/gouno/` package to `cmd/gosso/` — aligns the Go package name with the project name and binary output (`cmd/gosso/`, `cmd/main.go`).
@@ -25,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Account.Suspend()` and `Account.Activate()` now capture `time.Now()` once — consistent with `SoftDelete()` and `NewAccount()` patterns (`internal/account/domain/account.go`).
 - OAuth2 consent state `GetDel` now correctly returns 400 (not 503) when consent session is missing (`internal/oauth2/controller/oauth2_authorize.go`).
 - Passkey MFA verification flag `GetDel` now correctly returns `ErrPasskeyNotVerified` when the flag key is missing, instead of wrapping `ErrKeyNotFound` (`internal/auth/service/auth_login_helpers.go`).
+- `UpdateClient` now explicitly handles `ValidationError` for consistent 400 responses with specific error messages (`internal/oauth2/controller/client_controller.go`).
+- `errUnauthorized` sentinel in auth middleware now uses `errors.New` instead of `fmt.Errorf` for consistency with other sentinels (`internal/auth/middleware/auth_middleware.go`).
 
 ### Changed
 - Service-layer `Set*` methods (`MFAService`, `PasskeyService`, `VerificationService`) now carry `Deprecated` annotations — directs callers to use `NewXxxWithConfig` constructors instead, consistent with `PasswordResetService` pattern (`internal/auth/service/mfa_service.go`, `internal/auth/service/passkey_service.go`, `internal/auth/service/verification_service.go`).
@@ -45,6 +53,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Account IDs now masked with `MaskOpaqueID()` in all log statements — fixes inconsistent PII exposure in token validation, device code authorization, and account validator error logs (`internal/token/service/token_service_validate.go`, `internal/oauth2/service/device_code_service.go`, `cmd/gouno/web_modules.go`).
 - Non-production RSA key generation warning promoted from `Warn` to `Error` — makes the critical "all tokens invalidated" message harder to miss in log output (`internal/token/service/key_service.go`).
 - `migrate force` now requires `--force` flag — consistent with `migrate down` and `migrate drop` safety gates (`cmd/gouno/migrate.go`).
+
+### Changed
+- CI integration tests now use PostgreSQL 16 (was 15) — matches production Docker Compose version (`.github/workflows/ci.yml`).
+- Production Docker Compose images pinned to explicit minor versions (`redis:7.2-alpine`, `nginx:1.27-alpine`) — reduces supply chain risk from mutable tags (`docker-compose.yml`).
+- CI pipeline now includes Trivy container vulnerability scanning and conditional GHCR image push on main branch (`.github/workflows/ci.yml`).
+- `TestRevokeAccountTokens` no longer uses `time.Sleep` — directly sets revocation timestamp via `SetAccountRevokedAfter` for deterministic, faster execution (`internal/token/service/token_service_test.go`).
 
 ### Fixed
 - Device Code Flow authorization now works correctly — `DeviceUserSubmit` previously read an empty `DeviceCode` field from Redis (cleared before storage for security), causing `AuthorizeDeviceCode` to always fail with `ErrDeviceCodeNotFound`; new `AuthorizeDeviceCodeByHash`/`DenyDeviceCodeByHash` methods operate directly on the Redis key hash (`internal/oauth2/service/device_code_service.go`, `internal/oauth2/controller/oauth2_device.go`).

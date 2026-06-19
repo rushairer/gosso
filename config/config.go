@@ -27,6 +27,10 @@ type GoUnoConfig struct {
 // WebServerConfig holds Gin HTTP server settings including timeouts,
 // body-size limits, trusted proxies, and per-endpoint rate limits.
 type WebServerConfig struct {
+	// Production enables production safety guards (reject dev defaults, enforce HTTPS, etc.).
+	// Independent of Debug — a misconfigured GOUNO_WEB_SERVER_DEBUG=true will not bypass
+	// production guards when Production is true.
+	Production        bool             `mapstructure:"production"`
 	Debug             bool             `mapstructure:"debug"`
 	Address           string           `mapstructure:"address"`
 	Port              string           `mapstructure:"port"`
@@ -289,7 +293,7 @@ func (c *GoUnoConfig) validateWebServer() error {
 	if c.WebServerConfig.ShutdownTimeout <= 0 {
 		return fmt.Errorf("web_server: shutdown_timeout must be positive")
 	}
-	if !c.WebServerConfig.Debug && len(c.WebServerConfig.TrustedProxies) == 0 {
+	if c.WebServerConfig.Production && len(c.WebServerConfig.TrustedProxies) == 0 {
 		return fmt.Errorf("web_server: trusted_proxies must not be empty in production (set to proxy CIDRs, e.g. [\"172.22.0.0/16\"])")
 	}
 	rl := c.WebServerConfig.RateLimits
@@ -340,7 +344,7 @@ func (c *GoUnoConfig) validateDatabase() error {
 	if c.DatabaseConfig.GetDefaultDriver().DSN == "" {
 		return fmt.Errorf("database: default driver DSN is empty")
 	}
-	if !c.WebServerConfig.Debug && c.DatabaseConfig.GetDefaultDriver().DSN == defaultPostgresDSN {
+	if c.WebServerConfig.Production && c.DatabaseConfig.GetDefaultDriver().DSN == defaultPostgresDSN {
 		return fmt.Errorf("database: default driver DSN must be explicitly configured in production (the development default is not allowed)")
 	}
 	if c.DatabaseConfig.ConnMaxLifetimeSec < 0 {
@@ -386,7 +390,7 @@ func (c *GoUnoConfig) validateAuth() error {
 	if err != nil || (issuerURL.Scheme != "http" && issuerURL.Scheme != "https") {
 		return fmt.Errorf("auth: issuer must be a valid URL with http or https scheme")
 	}
-	if !c.WebServerConfig.Debug {
+	if c.WebServerConfig.Production {
 		if issuerURL.Scheme != "https" {
 			return fmt.Errorf("auth: issuer must use https in production")
 		}
@@ -405,7 +409,7 @@ func (c *GoUnoConfig) validateAuth() error {
 	if len(key) != 32 {
 		return fmt.Errorf("auth: totp_encryption_key must decode to exactly 32 bytes (got %d)", len(key))
 	}
-	if !c.WebServerConfig.Debug && c.AuthConfig.TOTPEncryptionKey == defaultTOTPEncryptionKey {
+	if c.WebServerConfig.Production && c.AuthConfig.TOTPEncryptionKey == defaultTOTPEncryptionKey {
 		return fmt.Errorf("auth: totp_encryption_key must be explicitly configured in production (the development default is not allowed)")
 	}
 	if c.AuthConfig.AccessTokenExpiry <= 0 {
@@ -432,7 +436,7 @@ func (c *GoUnoConfig) validateAuth() error {
 	if c.AuthConfig.PrivateKeyPath != "" {
 		if stat, err := os.Stat(c.AuthConfig.PrivateKeyPath); err != nil {
 			if os.IsNotExist(err) {
-				if !c.WebServerConfig.Debug {
+				if c.WebServerConfig.Production {
 					return fmt.Errorf("auth: private_key_path file does not exist: %s", c.AuthConfig.PrivateKeyPath)
 				}
 			} else {
@@ -536,7 +540,7 @@ func (c *GoUnoConfig) validateSMTP() error {
 		default:
 			return fmt.Errorf("smtp: tls_policy must be one of: opportunistic, mandatory, notls (got %q)", c.SMTPConfig.TLSPolicy)
 		}
-		if !c.WebServerConfig.Debug && c.SMTPConfig.TLSPolicy == "notls" {
+		if c.WebServerConfig.Production && c.SMTPConfig.TLSPolicy == "notls" {
 			return fmt.Errorf("smtp: tls_policy 'notls' is not allowed in production (set GOUNO_SMTP_TLS_POLICY=mandatory)")
 		}
 		if c.AuthConfig.PasswordResetBaseURL == "" {
@@ -546,7 +550,7 @@ func (c *GoUnoConfig) validateSMTP() error {
 		if err != nil || (resetURL.Scheme != "http" && resetURL.Scheme != "https") {
 			return fmt.Errorf("auth: password_reset_base_url must be a valid URL with http or https scheme")
 		}
-		if !c.WebServerConfig.Debug && resetURL.Scheme != "https" {
+		if c.WebServerConfig.Production && resetURL.Scheme != "https" {
 			return fmt.Errorf("auth: password_reset_base_url must use https in production mode")
 		}
 	}
@@ -564,7 +568,7 @@ func (c *GoUnoConfig) validateCORS() error {
 			}
 		}
 	}
-	if !c.WebServerConfig.Debug && len(c.CORSConfig.AllowedOrigins) == 0 {
+	if c.WebServerConfig.Production && len(c.CORSConfig.AllowedOrigins) == 0 {
 		return fmt.Errorf("cors: allowed_origins is required in production mode")
 	}
 	return nil

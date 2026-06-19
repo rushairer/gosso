@@ -90,6 +90,7 @@ func (cm *ConfigManager) Config() GoUnoConfig {
 
 func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	// Web server configuration
+	v.SetDefault("web_server.production", false)
 	v.SetDefault("web_server.debug", false)
 	v.SetDefault("web_server.address", "0.0.0.0")
 	v.SetDefault("web_server.port", "8080")

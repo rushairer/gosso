@@ -6,6 +6,7 @@
 # For example, redis.dsn is overridden by GOUNO_REDIS_DSN.
 # See config/README.md for the full mapping.
 web_server:
+    production: true
     address: 0.0.0.0
     port: 8080
     max_body_size: 10485760  # 10MB (matches development default)
