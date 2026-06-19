@@ -23,7 +23,9 @@ func setupDeviceCodeServiceBase(t *testing.T) *DeviceCodeService {
 	redis, mr := testutil.SetupTestRedis(t)
 	t.Cleanup(mr.Close)
 
-	return NewDeviceCodeService(redis, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	svc, err := NewDeviceCodeService(redis, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	require.NoError(t, err)
+	return svc
 }
 
 // setupDeviceCodeServiceCJSON is like setupDeviceCodeServiceBase but skips
@@ -138,15 +140,17 @@ func TestDeviceCodeService_PollRate(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestNewDeviceCodeService_Defaults(t *testing.T) {
-	svc := NewDeviceCodeService(nil, nil, 0, 0)
-	assert.NotNil(t, svc)
-	assert.NotNil(t, svc.logger)
-	assert.Equal(t, 10*time.Minute, svc.expiry)
-	assert.Equal(t, 5*time.Second, svc.interval)
+	// nil redis must return error
+	_, err := NewDeviceCodeService(nil, nil, 0, 0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "redis must not be nil")
 }
 
 func TestNewDeviceCodeService_ExplicitValues(t *testing.T) {
-	svc := NewDeviceCodeService(nil, zap.NewNop(), 2*time.Minute, 10*time.Second)
+	redis, mr := testutil.SetupTestRedis(t)
+	t.Cleanup(mr.Close)
+	svc, err := NewDeviceCodeService(redis, zap.NewNop(), 2*time.Minute, 10*time.Second)
+	require.NoError(t, err)
 	assert.Equal(t, 2*time.Minute, svc.expiry)
 	assert.Equal(t, 10*time.Second, svc.interval)
 }
@@ -185,7 +189,8 @@ func TestGenerateUserCode_Uniqueness(t *testing.T) {
 func TestGetDeviceCode_CorruptData(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	defer mr.Close()
-	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	svc, err := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	require.NoError(t, err)
 	ctx := context.Background()
 
 	dc, err := svc.CreateDeviceCode(ctx, "client", []string{"openid"})
@@ -222,7 +227,8 @@ func TestGetDeviceCodeByUserCode_NotFound(t *testing.T) {
 func TestGetDeviceCodeByUserCode_CorruptDeviceCode(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	defer mr.Close()
-	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	svc, err := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	require.NoError(t, err)
 	ctx := context.Background()
 
 	dc, err := svc.CreateDeviceCode(ctx, "client", []string{"openid"})
@@ -426,19 +432,21 @@ func TestCheckAndUpdatePollRate_ScriptError(t *testing.T) {
 
 func TestCreateDeviceCode_RedisError(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
-	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	svc, err := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	require.NoError(t, err)
 	ctx := context.Background()
 
 	mr.Close()
 
-	_, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	_, err = svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "store device code")
 }
 
 func TestGetDeviceCode_RedisError(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
-	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	svc, err := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	require.NoError(t, err)
 	ctx := context.Background()
 
 	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
@@ -453,7 +461,8 @@ func TestGetDeviceCode_RedisError(t *testing.T) {
 
 func TestGetDeviceCodeByUserCode_ResolveError(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
-	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	svc, err := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	require.NoError(t, err)
 	ctx := context.Background()
 
 	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
@@ -468,10 +477,11 @@ func TestGetDeviceCodeByUserCode_ResolveError(t *testing.T) {
 
 func TestAuthorizeDeviceCode_RedisDown(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
-	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	svc, err := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	require.NoError(t, err)
 	ctx := context.Background()
 
-	_, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	_, err = svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
 	require.NoError(t, err)
 
 	mr.Close()
@@ -482,10 +492,11 @@ func TestAuthorizeDeviceCode_RedisDown(t *testing.T) {
 
 func TestDenyDeviceCode_RedisDown(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
-	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	svc, err := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	require.NoError(t, err)
 	ctx := context.Background()
 
-	_, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	_, err = svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
 	require.NoError(t, err)
 
 	mr.Close()
@@ -496,10 +507,11 @@ func TestDenyDeviceCode_RedisDown(t *testing.T) {
 
 func TestCheckAndUpdatePollRate_RedisDown(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
-	svc := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	svc, err := NewDeviceCodeService(redisClient, zap.NewNop(), 10*time.Minute, 5*time.Second)
+	require.NoError(t, err)
 	ctx := context.Background()
 
-	_, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
+	_, err = svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
 	require.NoError(t, err)
 
 	mr.Close()

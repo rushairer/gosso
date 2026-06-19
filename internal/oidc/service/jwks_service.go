@@ -1,7 +1,10 @@
 package service
 
 import (
+	"crypto/rsa"
 	"encoding/base64"
+	"fmt"
+	"math/big"
 	"sync"
 
 	tokenService "github.com/rushairer/gosso/internal/token/service"
@@ -31,6 +34,55 @@ func (s *JWKSService) GetJWKS() map[string]any {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.jwks
+}
+
+// GetPublicKeyByKID returns the RSA public key matching the given key ID.
+// Checks the current key first, then the previous key (for rotation overlap).
+// Returns nil and an error if no matching key is found.
+func (s *JWKSService) GetPublicKeyByKID(kid string) (*rsa.PublicKey, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Check current key
+	if s.keySvc.KeyID() == kid {
+		return s.keySvc.PublicKey(), nil
+	}
+
+	// Check previous key (rotation overlap)
+	if s.previousKey != nil && (*s.previousKey)["kid"] == kid {
+		return s.reconstructPublicKey(*s.previousKey)
+	}
+
+	return nil, fmt.Errorf("no key found for kid %q", kid)
+}
+
+// reconstructPublicKey rebuilds an RSA public key from JWK parameters (n, e).
+func (s *JWKSService) reconstructPublicKey(jwk map[string]string) (*rsa.PublicKey, error) {
+	nStr, ok := jwk["n"]
+	if !ok {
+		return nil, fmt.Errorf("missing 'n' in JWK")
+	}
+	eStr, ok := jwk["e"]
+	if !ok {
+		return nil, fmt.Errorf("missing 'e' in JWK")
+	}
+
+	nBytes, err := base64.RawURLEncoding.DecodeString(nStr)
+	if err != nil {
+		return nil, fmt.Errorf("decode 'n': %w", err)
+	}
+	eBytes, err := base64.RawURLEncoding.DecodeString(eStr)
+	if err != nil {
+		return nil, fmt.Errorf("decode 'e': %w", err)
+	}
+
+	n := new(big.Int).SetBytes(nBytes)
+	e := 0
+	for _, b := range eBytes {
+		e = e<<8 + int(b)
+	}
+
+	return &rsa.PublicKey{N: n, E: e}, nil
 }
 
 // Reload re-computes the JWKS document from the current RSA key.

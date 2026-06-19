@@ -76,14 +76,14 @@ func isValidRedirectScheme(uri string) bool {
 		return false
 	}
 	// RFC 9700 §2.1: HTTP is only allowed for loopback addresses (native app development).
-	if u.Scheme == "http" && !isLoopback(u.Hostname()) {
+	if u.Scheme == "http" && !IsLoopback(u.Hostname()) {
 		return false
 	}
 	return true
 }
 
-// isLoopback checks if a hostname is a loopback address.
-func isLoopback(host string) bool {
+// IsLoopback checks if a hostname is a loopback address.
+func IsLoopback(host string) bool {
 	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
@@ -113,11 +113,11 @@ const (
 
 // Error definitions
 var (
-	ErrClientNotFound           = errors.New("oauth2 client not found")
-	ErrClientIDRequired         = errors.New("oauth2 client: client_id is required")
-	ErrClientNameRequired       = errors.New("oauth2 client: name is required")
-	ErrClientGrantTypesRequired = errors.New("oauth2 client: grant_types must not be empty")
-	ErrAccountIDRequired        = errors.New("oauth2 client: account_id is required")
+	ErrClientNotFound               = errors.New("oauth2 client not found")
+	ErrClientIDRequired             = errors.New("oauth2 client: client_id is required")
+	ErrClientNameRequired           = errors.New("oauth2 client: name is required")
+	ErrClientGrantTypesRequired     = errors.New("oauth2 client: grant_types must not be empty")
+	ErrAccountIDRequired            = errors.New("oauth2 client: account_id is required")
 	ErrClientConcurrentModification = errors.New("oauth2 client was modified concurrently")
 )
 

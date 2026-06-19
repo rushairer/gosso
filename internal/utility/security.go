@@ -2,6 +2,7 @@ package utility
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 )
@@ -15,12 +16,13 @@ func init() {
 }
 
 // SetDummyWorkDuration overrides the default DummyWork sleep duration.
-// Must be called before any authentication operations. Panics if d <= 0.
-func SetDummyWorkDuration(d time.Duration) {
+// Must be called before any authentication operations. Returns an error if d <= 0.
+func SetDummyWorkDuration(d time.Duration) error {
 	if d <= 0 {
-		panic("dummy work duration must be positive")
+		return fmt.Errorf("dummy work duration must be positive, got %v", d)
 	}
 	dummyWorkDuration.Store(int64(d))
+	return nil
 }
 
 // DummyWorkWithContext performs sleep-based timing padding to equalise the response

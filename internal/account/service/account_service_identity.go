@@ -76,13 +76,22 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 // Prevents unbinding the last authentication method if the account has no password.
 // The check and deletion are performed atomically within a transaction to prevent TOCTOU races.
 func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accountID, identityID string) error {
-	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
-		return err
-	}
-
 	now := time.Now()
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// Verify account is active inside the transaction to prevent TOCTOU:
+		// the account could be soft-deleted between the check and the write.
+		account, err := s.accountRepo.FindByIDTx(ctx, tx, accountID)
+		if err != nil {
+			if errors.Is(err, repository.ErrAccountNotFound) {
+				return ErrAccountNotActive
+			}
+			return err
+		}
+		if !account.IsActive() {
+			return ErrAccountNotActive
+		}
+
 		// Check that unbinding won't lock the user out: they must have either a password
 		// or at least one other federated identity remaining.
 		hasPassword := false
@@ -131,12 +140,20 @@ func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accoun
 
 // AssignRole assigns a role to the account.
 func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID string) error {
-	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
-		return err
-	}
-
-	// Verify role exists and assign atomically to prevent TOCTOU race conditions.
+	// Verify role exists and assign atomically. Account activity is checked inside
+	// the transaction to prevent TOCTOU: the account could be soft-deleted between
+	// the check and the write.
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		account, err := s.accountRepo.FindByIDTx(ctx, tx, accountID)
+		if err != nil {
+			if errors.Is(err, repository.ErrAccountNotFound) {
+				return ErrAccountNotActive
+			}
+			return err
+		}
+		if !account.IsActive() {
+			return ErrAccountNotActive
+		}
 		role, err := s.roleRepo.FindByIDTx(ctx, tx, roleID)
 		if err != nil {
 			return err
@@ -162,12 +179,20 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 
 // RemoveRole removes a role from the account.
 func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID string) error {
-	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
-		return err
-	}
 	now := time.Now()
 
+	// Account activity is checked inside the transaction to prevent TOCTOU.
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		account, err := s.accountRepo.FindByIDTx(ctx, tx, accountID)
+		if err != nil {
+			if errors.Is(err, repository.ErrAccountNotFound) {
+				return ErrAccountNotActive
+			}
+			return err
+		}
+		if !account.IsActive() {
+			return ErrAccountNotActive
+		}
 		return s.roleRepo.RemoveRoleFromAccount(ctx, tx, accountID, roleID, now)
 	})
 	if err != nil {

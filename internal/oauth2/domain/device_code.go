@@ -10,14 +10,14 @@ var ErrDeviceCodeNotFound = errors.New("device code not found")
 
 // DeviceCode domain sentinel errors.
 var (
-	ErrDeviceCodeRequired         = errors.New("device code: device_code is required")
-	ErrUserCodeRequired           = errors.New("device code: user_code is required")
-	ErrDeviceClientRequired       = errors.New("device code: client_id is required")
-	ErrDeviceExpiresRequired      = errors.New("device code: expires_at is required")
+	ErrDeviceCodeRequired          = errors.New("device code: device_code is required")
+	ErrUserCodeRequired            = errors.New("device code: user_code is required")
+	ErrDeviceClientRequired        = errors.New("device code: client_id is required")
+	ErrDeviceExpiresRequired       = errors.New("device code: expires_at is required")
 	ErrDeviceCodeAlreadyAuthorized = errors.New("device code: already authorized")
-	ErrDeviceCodeAlreadyDenied    = errors.New("device code: already denied")
-	ErrDeviceCodeAlreadyUsed      = errors.New("device code: already used")
-	ErrDeviceCodeNotAuthorized    = errors.New("device code: not authorized")
+	ErrDeviceCodeAlreadyDenied     = errors.New("device code: already denied")
+	ErrDeviceCodeAlreadyUsed       = errors.New("device code: already used")
+	ErrDeviceCodeNotAuthorized     = errors.New("device code: not authorized")
 )
 
 // NewDeviceCode creates a new DeviceCode with the required fields.

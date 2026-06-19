@@ -134,7 +134,9 @@ func (m *mockTokenManager) RotateRefreshToken(_ context.Context, _ string) (*tok
 
 func (m *mockTokenManager) RevokeRefreshToken(_ context.Context, _ string) error { return nil }
 
-func (m *mockTokenManager) RevokeAccessToken(_ context.Context, _ string, _ time.Time) error { return nil }
+func (m *mockTokenManager) RevokeAccessToken(_ context.Context, _ string, _ time.Time) error {
+	return nil
+}
 
 func (m *mockTokenManager) IntrospectToken(_ context.Context, _ string) (map[string]any, error) {
 	return map[string]any{"active": true}, nil

@@ -18,9 +18,10 @@ import (
 )
 
 const (
-	consentKeyPrefix       = "consent:"
-	consentTTL             = 90 * 24 * time.Hour // 90 days
-	consentCacheFallbackTTL = 5 * time.Minute    // short TTL when primary cache write fails
+	consentKeyPrefix        = "consent:"
+	consentTTL              = 90 * 24 * time.Hour        // 90 days
+	consentCacheFallbackTTL = 5 * time.Minute            // short TTL when primary cache write fails
+	consentTombstone        = `{"_tombstone":"revoked"}` // explicit marker for revoked consent cache entries
 )
 
 // ConsentService handles user consent for OAuth2 authorization.
@@ -54,12 +55,17 @@ func (s *ConsentService) GetConsent(ctx context.Context, accountID, clientID str
 	// Try Redis cache first
 	data, err := s.redis.Get(ctx, key)
 	if err == nil {
-		var consent domain.Consent
-		jsonErr := json.Unmarshal([]byte(data), &consent)
-		if jsonErr == nil {
-			return &consent, nil
+		// Check for explicit tombstone marker (consent was revoked but cache delete failed)
+		if data == consentTombstone {
+			// Tombstone hit — consent was revoked. Fall through to DB to confirm.
+		} else {
+			var consent domain.Consent
+			jsonErr := json.Unmarshal([]byte(data), &consent)
+			if jsonErr == nil {
+				return &consent, nil
+			}
+			s.logger.Warn("consent cache corrupt, falling back to DB", zap.Error(jsonErr))
 		}
-		s.logger.Warn("consent cache corrupt, falling back to DB", zap.Error(jsonErr))
 	} else if !errors.Is(err, cache.ErrKeyNotFound) {
 		s.logger.Warn("Redis consent cache read failed, falling back to DB",
 			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
@@ -130,7 +136,7 @@ func (s *ConsentService) DeleteConsent(ctx context.Context, accountID, clientID 
 		// If delete fails, the stale positive consent in cache could survive up to
 		// 90 days. Overwrite with a tombstone that expires quickly, so the next
 		// GetConsent falls through to the database.
-		_ = s.redis.Set(ctx, key, "revoked", consentCacheFallbackTTL)
+		_ = s.redis.Set(ctx, key, consentTombstone, consentCacheFallbackTTL)
 	}
 
 	return nil

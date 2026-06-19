@@ -232,21 +232,8 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 		return fmt.Errorf("generate code: %w", err)
 	}
 
-	// Send before storing — if send fails, no orphaned code or cooldown
-	switch credType {
-	case "email":
-		if err := s.emailSvc.SendVerificationCode(ctx, identifier, code); err != nil {
-			return fmt.Errorf("send email: %w", err)
-		}
-	case "phone":
-		if err := s.smsSvc.SendVerificationCode(ctx, identifier, code); err != nil {
-			return fmt.Errorf("send SMS: %w", err)
-		}
-	default:
-		return fmt.Errorf("%w: %s", ErrUnsupportedType, credType)
-	}
-
-	// Store in Redis (only after successful send).
+	// Store in Redis BEFORE sending. If send fails, the code is rolled back
+	// to avoid leaving an orphaned code that the user cannot verify.
 	// The code is stored as its HMAC hash (using the application pepper as key)
 	// so that a Redis compromise does not expose active verification codes.
 	// Without the pepper, an attacker cannot precompute a rainbow table even
@@ -270,6 +257,24 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 	// Set cooldown (fail-open: if Redis is down, we lose cooldown but can still verify)
 	if err := s.redis.Set(ctx, cooldownKey, []byte("1"), s.cooldownTTL); err != nil {
 		s.logger.Warn("Failed to set cooldown", zap.Error(err))
+	}
+
+	// Send the code. If sending fails, roll back the stored code to avoid
+	// leaving an unverifiable code in Redis.
+	switch credType {
+	case "email":
+		if err := s.emailSvc.SendVerificationCode(ctx, identifier, code); err != nil {
+			_ = s.redis.Del(ctx, codeKey) // rollback stored code
+			return fmt.Errorf("send email: %w", err)
+		}
+	case "phone":
+		if err := s.smsSvc.SendVerificationCode(ctx, identifier, code); err != nil {
+			_ = s.redis.Del(ctx, codeKey) // rollback stored code
+			return fmt.Errorf("send SMS: %w", err)
+		}
+	default:
+		_ = s.redis.Del(ctx, codeKey) // rollback stored code
+		return fmt.Errorf("%w: %s", ErrUnsupportedType, credType)
 	}
 
 	s.logger.Info("Verification code sent",

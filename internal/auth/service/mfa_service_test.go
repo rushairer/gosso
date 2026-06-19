@@ -995,7 +995,7 @@ func TestGenerateBackupCodes_SoftDeleteOldCodesError(t *testing.T) {
 
 	_, err = svc.GenerateBackupCodes(context.Background(), "account-001")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "delete old backup code")
+	assert.Contains(t, err.Error(), "delete backup_code credential")
 }
 
 // ──────────────────────────────────────────────

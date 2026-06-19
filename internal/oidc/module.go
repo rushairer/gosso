@@ -33,7 +33,7 @@ func InitializeOIDCModule(
 	discoverySvc := oidcService.NewDiscoveryService(authConfig.Issuer)
 	jwksSvc := oidcService.NewJWKSService(tokenSvc.KeyService())
 	userInfoSvc := oidcService.NewUserInfoService(accountSvc, credentialRepo, logger)
-	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, authConfig.Issuer, logger)
+	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, jwksSvc, authConfig.Issuer, logger)
 
 	return &OIDCModule{
 		IDTokenService:   idTokenSvc,

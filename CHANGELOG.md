@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `IDTokenService` now gracefully handles missing email/phone credentials instead of returning a hard error — users without email or phone credentials can now get ID tokens (`internal/oidc/service/id_token_service.go`).
+- MFA token blacklist timing in `VerifyMFALogin` — the MFA token is now blacklisted after account lookup and active status verification, preventing user lockout on transient DB failures (`internal/auth/service/auth_login.go`).
+- Verification code store-before-send ordering — the code is now stored in Redis before sending via email/SMS, with automatic rollback if delivery fails, preventing users from receiving unverifiable codes (`internal/auth/service/verification_service.go`).
+- `DiscoveryService.GetDiscoveryDocument()` now returns a copy of the internal map instead of a direct reference, preventing accidental mutation of shared state (`internal/oidc/service/discovery_service.go`).
+- `SetDummyWorkDuration` now returns an error instead of panicking on invalid input (`internal/utility/security.go`).
+
+### Security
+- `AssignRole`, `RemoveRole`, and `UnbindFederatedIdentity` now verify account activity inside the database transaction (TOCTOU fix) — prevents race conditions where an account could be deleted between the activity check and the write operation (`internal/account/service/account_service_identity.go`).
+- `http.DefaultTransport` type assertion in `SocialLoginService` now uses checked assertion with fallback — prevents potential panic if the transport type changes (`internal/auth/service/social_login_service.go`).
+- `NewDeviceCodeService` now validates that `redis` is non-nil at construction time — prevents runtime panic on first use (`internal/oauth2/service/device_code_service.go`).
+- `LogoutService.ValidateIDTokenHint` now falls back to JWKS-published keys (including previous key during rotation overlap) when the current key fails — prevents logout failures after key rotation (`internal/oidc/service/logout_service.go`, `internal/oidc/service/jwks_service.go`).
+- Consent cache tombstone now uses explicit JSON marker `{"_tombstone":"revoked"}` instead of implicit string `"revoked"` — prevents accidental deserialization bugs and makes the tombstone contract explicit (`internal/oauth2/service/consent_service.go`).
+
+### Changed
+- `AuditRecord.TxID` renamed to `CorrelationID` — the field was a random UUID for grouping related records, not a database transaction ID; JSON tag `"tx_id"` is preserved for backward compatibility (`internal/audit/domain/audit.go`).
+- Extracted `softDeleteCredentialsByType` helper in `MFAService` — eliminates code duplication between `DisableTOTP` and `GenerateBackupCodes` (`internal/auth/service/mfa_service.go`).
+- `IsLoopback` exported from `oauth2/domain` package and deduplicated — removed duplicate `isLoopbackHost` from `oauth2/service` package (`internal/oauth2/domain/client.go`, `internal/oauth2/service/client_service.go`).
+- `renderConsentTemplate` now accepts a `consentTemplateData` struct instead of 11 individual string parameters — improves readability and maintainability (`internal/oauth2/controller/oauth2_authorize.go`).
+
 ### Added
 - `NewPasskeyServiceWithConfig` constructor with `PasskeyServiceConfig` — completes the WithConfig migration for all auth services (`internal/auth/service/passkey_service.go`).
 - Migration rollback CI job (`migration-test`) — runs full up/down/up cycle on every push to validate all `.down.sql` files are reversible (`.github/workflows/ci.yml`).

@@ -135,7 +135,7 @@ func (a *Auditor) Wait() {
 func (a *Auditor) buildBatchRequest(record *domain.AuditRecord) *batchflow.Request {
 	request := batchflow.NewRequest(a.recordSchema).
 		Set("id", record.ID).
-		Set("tx_id", record.TxID).
+		Set("tx_id", record.CorrelationID).
 		SetString("action", record.Action).
 		SetString("actor", record.Actor).
 		Set("resource", record.Resource).
@@ -243,7 +243,7 @@ func (a *Auditor) LogSync(ctx context.Context, record *domain.AuditRecord) error
 
 	_, err := a.db.ExecContext(ctx, query,
 		record.ID,
-		record.TxID,
+		record.CorrelationID,
 		accountID,
 		record.Action,
 		record.Actor,

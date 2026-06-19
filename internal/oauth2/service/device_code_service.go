@@ -38,7 +38,10 @@ type DeviceCodeService struct {
 }
 
 // NewDeviceCodeService creates a new device code service instance.
-func NewDeviceCodeService(redis *cache.RedisClient, logger *zap.Logger, expiry, interval time.Duration) *DeviceCodeService {
+func NewDeviceCodeService(redis *cache.RedisClient, logger *zap.Logger, expiry, interval time.Duration) (*DeviceCodeService, error) {
+	if redis == nil {
+		return nil, fmt.Errorf("NewDeviceCodeService: redis must not be nil")
+	}
 	logger = utility.EnsureLogger(logger)
 	if expiry <= 0 {
 		expiry = 10 * time.Minute
@@ -51,7 +54,7 @@ func NewDeviceCodeService(redis *cache.RedisClient, logger *zap.Logger, expiry, 
 		logger:   logger,
 		expiry:   expiry,
 		interval: interval,
-	}
+	}, nil
 }
 
 // CreateDeviceCode generates a device code and user code, stores them in Redis.

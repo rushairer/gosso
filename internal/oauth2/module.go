@@ -7,8 +7,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/config"
-	"github.com/rushairer/gosso/internal/cache"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
+	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/oauth2/repository"
 	"github.com/rushairer/gosso/internal/oauth2/service"
 )
@@ -41,7 +41,10 @@ func InitializeOAuth2Module(
 	if err != nil {
 		return nil, fmt.Errorf("initialize consent service: %w", err)
 	}
-	deviceCodeSvc := service.NewDeviceCodeService(redis, logger, authConfig.DeviceCodeExpiry, authConfig.DeviceCodeInterval)
+	deviceCodeSvc, err := service.NewDeviceCodeService(redis, logger, authConfig.DeviceCodeExpiry, authConfig.DeviceCodeInterval)
+	if err != nil {
+		return nil, fmt.Errorf("initialize device code service: %w", err)
+	}
 
 	return &OAuth2Module{
 		ClientService:     clientSvc,

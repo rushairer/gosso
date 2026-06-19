@@ -18,15 +18,15 @@ import (
 )
 
 var (
-	ErrAccountIDRequired              = errors.New("account ID is required")
-	ErrMustUseNewPasswordCredential   = errors.New("must use NewPasswordCredential for password type")
-	ErrPasswordRequired               = errors.New("password must not be empty")
-	ErrPasswordTooLong                = errors.New("password exceeds maximum length")
-	ErrEmailRequired                  = errors.New("email is required")
-	ErrInvalidEmailFormat             = errors.New("invalid email format")
-	ErrPhoneRequired                  = errors.New("phone is required")
-	ErrInvalidPhoneFormat             = errors.New("invalid phone format")
-	ErrCredentialAlreadyDeleted       = errors.New("credential is already deleted")
+	ErrAccountIDRequired            = errors.New("account ID is required")
+	ErrMustUseNewPasswordCredential = errors.New("must use NewPasswordCredential for password type")
+	ErrPasswordRequired             = errors.New("password must not be empty")
+	ErrPasswordTooLong              = errors.New("password exceeds maximum length")
+	ErrEmailRequired                = errors.New("email is required")
+	ErrInvalidEmailFormat           = errors.New("invalid email format")
+	ErrPhoneRequired                = errors.New("phone is required")
+	ErrInvalidPhoneFormat           = errors.New("invalid phone format")
+	ErrCredentialAlreadyDeleted     = errors.New("credential is already deleted")
 )
 
 // CredentialType represents the type of credential.

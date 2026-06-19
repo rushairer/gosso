@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDummyWorkWithContext_SleepsForDuration(t *testing.T) {
 	// Set a known duration
-	SetDummyWorkDuration(50 * time.Millisecond)
-	defer SetDummyWorkDuration(100 * time.Millisecond) // restore default
+	require.NoError(t, SetDummyWorkDuration(50*time.Millisecond))
+	defer func() { _ = SetDummyWorkDuration(100 * time.Millisecond) }() // restore default
 
 	start := time.Now()
 	DummyWorkWithContext(context.Background())
@@ -21,8 +22,8 @@ func TestDummyWorkWithContext_SleepsForDuration(t *testing.T) {
 }
 
 func TestDummyWorkWithContext_CancelsOnContextDone(t *testing.T) {
-	SetDummyWorkDuration(5 * time.Second) // long duration
-	defer SetDummyWorkDuration(100 * time.Millisecond)
+	require.NoError(t, SetDummyWorkDuration(5*time.Second)) // long duration
+	defer func() { _ = SetDummyWorkDuration(100 * time.Millisecond) }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
@@ -34,14 +35,14 @@ func TestDummyWorkWithContext_CancelsOnContextDone(t *testing.T) {
 	assert.Less(t, elapsed, 500*time.Millisecond, "should return quickly when context is cancelled")
 }
 
-func TestSetDummyWorkDuration_PanicsOnZero(t *testing.T) {
-	assert.Panics(t, func() {
-		SetDummyWorkDuration(0)
-	})
+func TestSetDummyWorkDuration_ReturnsErrorOnZero(t *testing.T) {
+	err := SetDummyWorkDuration(0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "must be positive")
 }
 
-func TestSetDummyWorkDuration_PanicsOnNegative(t *testing.T) {
-	assert.Panics(t, func() {
-		SetDummyWorkDuration(-1 * time.Second)
-	})
+func TestSetDummyWorkDuration_ReturnsErrorOnNegative(t *testing.T) {
+	err := SetDummyWorkDuration(-1 * time.Second)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "must be positive")
 }

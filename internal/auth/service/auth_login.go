@@ -170,21 +170,22 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 		return nil, err
 	}
 
-	// 3. Blacklist MFA token immediately after successful verification to prevent reuse
-	// before session creation. This closes the race window between MFA verification and
-	// the eventual function return that would fire a deferred blacklist.
-	if err := s.blacklistMFAToken(ctx, claims); err != nil {
-		s.logger.Error("Failed to blacklist MFA token after verification",
-			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.String("jti", utility.MaskOpaqueID(claims.ID)), zap.Error(err))
-	}
-
-	// 4. Find account
+	// 3. Find account BEFORE blacklisting the MFA token.
+	// If the account lookup or active check fails transiently, the user can retry
+	// MFA verification without losing their token.
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
 		return nil, ErrInvalidCredentials
 	}
 	if !account.IsActive() {
 		return nil, ErrInvalidCredentials
+	}
+
+	// 4. Blacklist MFA token after successful verification and account validation
+	// to prevent reuse before session creation.
+	if err := s.blacklistMFAToken(ctx, claims); err != nil {
+		s.logger.Error("Failed to blacklist MFA token after verification",
+			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.String("jti", utility.MaskOpaqueID(claims.ID)), zap.Error(err))
 	}
 
 	// 5. Complete login (session, tokens, rate limit clear, audit)

@@ -267,12 +267,13 @@ func TestAssignRole(t *testing.T) {
 		"account-001", "testuser", "Test User", nil, domain.AccountStatusActive,
 		"en", "UTC", []byte("{}"), now, now, nil,
 	)
+	// Role lookup and assignment now both run inside the same transaction
+	mock.ExpectBegin()
+
+	// Account activity check runs inside the transaction (TOCTOU-safe)
 	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
 		WithArgs("account-001").
 		WillReturnRows(accountRows)
-
-	// Role lookup and assignment now both run inside the same transaction
-	mock.ExpectBegin()
 
 	// Mock role FindByIDTx — role exists and is not deleted (inside transaction)
 	roleRows := sqlmock.NewRows([]string{
@@ -316,11 +317,13 @@ func TestRemoveRole(t *testing.T) {
 		"account-001", "testuser", "Test User", nil, domain.AccountStatusActive,
 		"en", "UTC", []byte("{}"), now, now, nil,
 	)
+	mock.ExpectBegin()
+
+	// Account activity check runs inside the transaction (TOCTOU-safe)
 	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
 		WithArgs("account-001").
 		WillReturnRows(accountRows)
 
-	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE account_roles SET deleted_at").
 		WithArgs(sqlmock.AnyArg(), "account-001", "role-001").
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -353,11 +356,13 @@ func TestRemoveRole_NotFound(t *testing.T) {
 		"account-001", "testuser", "Test User", nil, domain.AccountStatusActive,
 		"en", "UTC", []byte("{}"), now, now, nil,
 	)
+	mock.ExpectBegin()
+
+	// Account activity check runs inside the transaction (TOCTOU-safe)
 	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
 		WithArgs("account-001").
 		WillReturnRows(accountRows)
 
-	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE account_roles SET deleted_at").
 		WithArgs(sqlmock.AnyArg(), "account-001", "nonexistent-role").
 		WillReturnResult(sqlmock.NewResult(0, 0))
@@ -1070,7 +1075,6 @@ func TestUnbindFederatedIdentity(t *testing.T) {
 	accountID := "account-001"
 	identityID := "fi-001"
 
-	// Mock FindByID for requireActiveAccount
 	now := time.Now()
 	accountRows := sqlmock.NewRows([]string{
 		"id", "username", "display_name", "avatar_url", "status",
@@ -1079,12 +1083,15 @@ func TestUnbindFederatedIdentity(t *testing.T) {
 		accountID, "testuser", "Test User", nil, domain.AccountStatusActive,
 		"en", "UTC", []byte("{}"), now, now, nil,
 	)
+
+	// The account check and password/identity checks are all INSIDE the transaction (TOCTOU fix)
+	mock.ExpectBegin()
+
+	// Mock FindByIDTx for requireActiveAccount inside transaction
 	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
 
-	// The password and identity checks are now INSIDE the transaction (TOCTOU fix)
-	mock.ExpectBegin()
 	// Mock FindByAccountAndTypeTx for password check inside transaction
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials WHERE account_id").
 		WithArgs(accountID, domain.CredentialTypePassword).
@@ -1122,7 +1129,7 @@ func TestUnbindFederatedIdentity_NotFound(t *testing.T) {
 	accountID := "account-001"
 	identityID := "nonexistent"
 
-	// Mock FindByID for requireActiveAccount
+	// Mock FindByID for requireActiveAccount (now inside transaction)
 	now := time.Now()
 	accountRows := sqlmock.NewRows([]string{
 		"id", "username", "display_name", "avatar_url", "status",
@@ -1131,12 +1138,13 @@ func TestUnbindFederatedIdentity_NotFound(t *testing.T) {
 		accountID, "testuser", "Test User", nil, domain.AccountStatusActive,
 		"en", "UTC", []byte("{}"), now, now, nil,
 	)
+
+	// The account check and password check are now INSIDE the transaction (TOCTOU fix)
+	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
 
-	// The password check is now INSIDE the transaction (TOCTOU fix)
-	mock.ExpectBegin()
 	// Mock FindByAccountAndTypeTx for password check inside transaction
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials WHERE account_id").
 		WithArgs(accountID, domain.CredentialTypePassword).

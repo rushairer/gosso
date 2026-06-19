@@ -61,7 +61,17 @@ func NewDiscoveryService(issuer string) *DiscoveryService {
 	return s
 }
 
-// GetDiscoveryDocument returns the OIDC Discovery document (pre-computed, immutable)
+// GetDiscoveryDocument returns a copy of the OIDC Discovery document.
+// Returns a copy to prevent callers from mutating the shared state.
 func (s *DiscoveryService) GetDiscoveryDocument() map[string]any {
-	return s.doc
+	return copyMap(s.doc)
+}
+
+// copyMap performs a shallow copy of a map[string]any.
+func copyMap(m map[string]any) map[string]any {
+	cp := make(map[string]any, len(m))
+	for k, v := range m {
+		cp[k] = v
+	}
+	return cp
 }

@@ -424,9 +424,9 @@ func TestCSRFTokenFromCookie_NoCookie(t *testing.T) {
 func TestNewOAuth2Controller_Success(t *testing.T) {
 	ctrl, err := NewOAuth2Controller(
 		&mockOAuth2ClientSvcForOAuth2{},
-		nil, nil,
+		&mockAuthCodeMgr{}, &mockConsentMgr{},
 		&mockTokenMgr{},
-		nil, nil,
+		&mockIDTokenMgr{}, &mockDeviceCodeMgr{},
 		nil, &mockAccountValidatorAlwaysActive{},
 		nil, nil,
 		"https://sso.example.com",

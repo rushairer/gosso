@@ -27,7 +27,7 @@ func setupTestLogoutService(t *testing.T) (*LogoutService, *tokenService.KeyServ
 	require.NoError(t, err)
 	tokenSvc, err := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, nil, logger)
 	require.NoError(t, err)
-	logoutSvc := NewLogoutService(tokenSvc, nil, "https://sso.example.com", logger)
+	logoutSvc := NewLogoutService(tokenSvc, nil, nil, "https://sso.example.com", logger)
 
 	return logoutSvc, keySvc
 }
@@ -164,7 +164,7 @@ func setupTestLogoutServiceWithSession(t *testing.T) (*LogoutService, *tokenServ
 	require.NoError(t, err)
 	sessionSvc.SetTokenRevoker(tokenSvc)
 
-	logoutSvc := NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", logger)
+	logoutSvc := NewLogoutService(tokenSvc, sessionSvc, nil, "https://sso.example.com", logger)
 	return logoutSvc, keySvc, sessionSvc
 }
 
@@ -226,7 +226,7 @@ func TestLogoutByAccountID_SessionServiceError(t *testing.T) {
 	// RevokeAllForAccount now gracefully skips token revocation and logs a warning.
 	sessionSvc, err := sessionService.NewSessionService(redisClient, logger)
 	require.NoError(t, err)
-	logoutSvc := NewLogoutService(tokenSvc, sessionSvc, "https://sso.example.com", logger)
+	logoutSvc := NewLogoutService(tokenSvc, sessionSvc, nil, "https://sso.example.com", logger)
 
 	err = logoutSvc.LogoutByAccountID(context.Background(), "account-001")
 	assert.NoError(t, err)

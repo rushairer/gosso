@@ -94,7 +94,11 @@ func NewSocialLoginService(
 		federatedIdentityRepo: federatedIdentityRepo,
 		providers:             providers,
 		httpClient: func() *http.Client {
-			transport := http.DefaultTransport.(*http.Transport).Clone()
+			transport, ok := http.DefaultTransport.(*http.Transport)
+			if !ok {
+				transport = &http.Transport{}
+			}
+			transport = transport.Clone()
 			transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 			return &http.Client{
 				Timeout:   10 * time.Second,

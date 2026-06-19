@@ -15,12 +15,12 @@ import (
 func TestLogNilReceiver(t *testing.T) {
 	var auditor *Auditor
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		CreatedAt:     time.Now(),
 	}
 	err := auditor.Log(context.Background(), record)
 	assert.NoError(t, err)
@@ -41,7 +41,7 @@ func TestNewRecord(t *testing.T) {
 	assert.NotNil(t, record.AccountID)
 	assert.Equal(t, accountID, *record.AccountID)
 	assert.NotEmpty(t, record.ID)
-	assert.NotEmpty(t, record.TxID)
+	assert.NotEmpty(t, record.CorrelationID)
 	assert.False(t, record.CreatedAt.IsZero())
 }
 

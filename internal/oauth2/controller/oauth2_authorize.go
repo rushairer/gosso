@@ -143,7 +143,12 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		allowedScopes := intersectScopes(clientAllowedScopes, existingConsent.Scopes)
 		if len(allowedScopes) == 0 {
 			// No overlap — require re-consent
-			c.renderConsentTemplate(ctx, client.Name, clientID, requestedScopes, scope, state, redirectURI, codeChallenge, codeChallengeMethod, nonce, consentID)
+			c.renderConsentTemplate(ctx, consentTemplateData{
+				ClientName: client.Name, ClientID: clientID, Scopes: requestedScopes, Scope: scope,
+				State: state, RedirectURI: redirectURI, CodeChallenge: codeChallenge,
+				CodeChallengeMethod: codeChallengeMethod, Nonce: nonce, ConsentID: consentID,
+				CSRFToken: csrfTokenFromCookie(ctx), CSPNonce: middleware.GetCSPNonce(ctx),
+			})
 			return
 		}
 		code, err := c.authCodeSvc.GenerateCode(ctx, clientID, accountIDStr, redirectURI, allowedScopes, codeChallenge, codeChallengeMethod, nonce)
@@ -157,7 +162,12 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 	}
 
 	// No existing consent — show consent page
-	c.renderConsentTemplate(ctx, client.Name, clientID, splitScope(scope), scope, state, redirectURI, codeChallenge, codeChallengeMethod, nonce, consentID)
+	c.renderConsentTemplate(ctx, consentTemplateData{
+		ClientName: client.Name, ClientID: clientID, Scopes: splitScope(scope), Scope: scope,
+		State: state, RedirectURI: redirectURI, CodeChallenge: codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod, Nonce: nonce, ConsentID: consentID,
+		CSRFToken: csrfTokenFromCookie(ctx), CSPNonce: middleware.GetCSPNonce(ctx),
+	})
 }
 
 // ConsentRequest is the consent approval request body.
@@ -314,22 +324,38 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	redirectWithCode(ctx, req.RedirectURI, code.Code, req.State, c.issuer)
 }
 
+// consentTemplateData holds the data passed to the consent HTML template.
+type consentTemplateData struct {
+	ClientName          string
+	ClientID            string
+	Scopes              []string
+	Scope               string
+	State               string
+	RedirectURI         string
+	CodeChallenge       string
+	CodeChallengeMethod string
+	Nonce               string
+	CSRFToken           string
+	ConsentID           string
+	CSPNonce            string
+}
+
 // renderConsentTemplate renders the consent page and writes it to the response.
-func (c *OAuth2Controller) renderConsentTemplate(ctx *gin.Context, clientName, clientID string, scopes []string, scope, state, redirectURI, codeChallenge, codeChallengeMethod, nonce, consentID string) {
+func (c *OAuth2Controller) renderConsentTemplate(ctx *gin.Context, data consentTemplateData) {
 	var buf bytes.Buffer
 	if err := c.consentTmpl.Execute(&buf, gin.H{
-		"ClientName":          clientName,
-		"ClientID":            clientID,
-		"Scopes":              scopes,
-		"Scope":               scope,
-		"State":               state,
-		"RedirectURI":         redirectURI,
-		"CodeChallenge":       codeChallenge,
-		"CodeChallengeMethod": codeChallengeMethod,
-		"Nonce":               nonce,
-		"CSRFToken":           csrfTokenFromCookie(ctx),
-		"ConsentID":           consentID,
-		"CSPNonce":            middleware.GetCSPNonce(ctx),
+		"ClientName":          data.ClientName,
+		"ClientID":            data.ClientID,
+		"Scopes":              data.Scopes,
+		"Scope":               data.Scope,
+		"State":               data.State,
+		"RedirectURI":         data.RedirectURI,
+		"CodeChallenge":       data.CodeChallenge,
+		"CodeChallengeMethod": data.CodeChallengeMethod,
+		"Nonce":               data.Nonce,
+		"CSRFToken":           data.CSRFToken,
+		"ConsentID":           data.ConsentID,
+		"CSPNonce":            data.CSPNonce,
 	}); err != nil {
 		c.logger.Error("Failed to render consent template", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})

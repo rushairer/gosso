@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/rushairer/gosso/internal/audit"
 	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
@@ -312,16 +312,11 @@ func validateRedirectURIs(uris []string) error {
 		}
 		// Per RFC 6749 Section 3.1.2 and OAuth 2.0 Security Best Current Practice (RFC 9700),
 		// HTTP is only allowed for loopback addresses (native app development).
-		if u.Scheme == "http" && !isLoopbackHost(u.Hostname()) {
+		if u.Scheme == "http" && !domain.IsLoopback(u.Hostname()) {
 			return &ValidationError{Message: fmt.Sprintf("redirect_uris must use https for non-loopback hosts: %s", uri)}
 		}
 	}
 	return nil
-}
-
-// isLoopbackHost checks if a hostname is a loopback address.
-func isLoopbackHost(host string) bool {
-	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 var ErrClientAccessDenied = errors.New("access denied: client does not belong to this account")

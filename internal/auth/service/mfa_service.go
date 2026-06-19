@@ -329,34 +329,31 @@ func (s *MFAService) ActivateTOTP(ctx context.Context, accountID, code string) e
 	return nil
 }
 
+// softDeleteCredentialsByType finds all credentials of the given type for the account
+// and soft-deletes any that are not already deleted. Must be called within a transaction.
+func (s *MFAService) softDeleteCredentialsByType(ctx context.Context, tx *sql.Tx, accountID string, credType accountDomain.CredentialType) error {
+	creds, err := s.credentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, credType)
+	if err != nil {
+		return fmt.Errorf("find %s credentials: %w", credType, err)
+	}
+	for _, c := range creds {
+		if !c.IsDeleted() {
+			if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
+				return fmt.Errorf("delete %s credential %s: %w", credType, c.ID, err)
+			}
+		}
+	}
+	return nil
+}
+
 // DisableTOTP disables TOTP
 func (s *MFAService) DisableTOTP(ctx context.Context, accountID string) error {
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		creds, err := s.credentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, accountDomain.CredentialTypeTOTP)
-		if err != nil {
-			return fmt.Errorf("find totp credential: %w", err)
+		if err := s.softDeleteCredentialsByType(ctx, tx, accountID, accountDomain.CredentialTypeTOTP); err != nil {
+			return err
 		}
-		for _, c := range creds {
-			if !c.IsDeleted() {
-				if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
-					return fmt.Errorf("delete TOTP credential %s: %w", c.ID, err)
-				}
-			}
-		}
-
-		// Also delete all backup codes
-		backupCreds, err := s.credentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, accountDomain.CredentialTypeBackupCode)
-		if err != nil {
-			return fmt.Errorf("find backup code credentials: %w", err)
-		}
-		for _, c := range backupCreds {
-			if !c.IsDeleted() {
-				if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
-					return fmt.Errorf("delete backup code credential %s: %w", c.ID, err)
-				}
-			}
-		}
-		return nil
+		// Also delete all backup codes when TOTP is disabled
+		return s.softDeleteCredentialsByType(ctx, tx, accountID, accountDomain.CredentialTypeBackupCode)
 	})
 	if err != nil {
 		return fmt.Errorf("disable totp: %w", err)
@@ -394,16 +391,8 @@ func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) 
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		// Delete old backup codes in the same transaction
-		oldCreds, err := s.credentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, accountDomain.CredentialTypeBackupCode)
-		if err != nil {
-			return fmt.Errorf("find old backup codes: %w", err)
-		}
-		for _, c := range oldCreds {
-			if !c.IsDeleted() {
-				if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
-					return fmt.Errorf("delete old backup code: %w", err)
-				}
-			}
+		if err := s.softDeleteCredentialsByType(ctx, tx, accountID, accountDomain.CredentialTypeBackupCode); err != nil {
+			return err
 		}
 		// Create new backup codes
 		return s.credentialRepo.CreateCredentials(ctx, tx, creds)

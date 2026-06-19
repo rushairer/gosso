@@ -46,8 +46,8 @@ func TestNewRecord_GeneratesUniqueIDs(t *testing.T) {
 	r2 := NewRecord(ActionLoginSuccess, "system", nil, resource, nil)
 
 	assert.NotEqual(t, r1.ID, r2.ID)
-	assert.NotEqual(t, r1.TxID, r2.TxID)
-	assert.NotEqual(t, r1.ID, r1.TxID)
+	assert.NotEqual(t, r1.CorrelationID, r2.CorrelationID)
+	assert.NotEqual(t, r1.ID, r1.CorrelationID)
 }
 
 func TestNewRecord_UUIDFormat(t *testing.T) {
@@ -57,7 +57,7 @@ func TestNewRecord_UUIDFormat(t *testing.T) {
 
 	_, err := uuid.Parse(record.ID)
 	assert.NoError(t, err)
-	_, err = uuid.Parse(record.TxID)
+	_, err = uuid.Parse(record.CorrelationID)
 	assert.NoError(t, err)
 }
 

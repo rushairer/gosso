@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"time"
 
@@ -135,6 +136,9 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 func (s *IDTokenService) addEmailClaims(ctx context.Context, accountID string, claims *IDTokenClaims) error {
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeEmail)
 	if err != nil {
+		if errors.Is(err, accountRepo.ErrCredentialNotFound) {
+			return nil // no email credential is not an error
+		}
 		return fmt.Errorf("query email credential for ID token: %w", err)
 	}
 	if len(creds) > 0 && creds[0].Identifier != nil {
@@ -148,6 +152,9 @@ func (s *IDTokenService) addEmailClaims(ctx context.Context, accountID string, c
 func (s *IDTokenService) addPhoneClaims(ctx context.Context, accountID string, claims *IDTokenClaims) error {
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypePhone)
 	if err != nil {
+		if errors.Is(err, accountRepo.ErrCredentialNotFound) {
+			return nil // no phone credential is not an error
+		}
 		return fmt.Errorf("query phone credential for ID token: %w", err)
 	}
 	if len(creds) > 0 && creds[0].Identifier != nil {

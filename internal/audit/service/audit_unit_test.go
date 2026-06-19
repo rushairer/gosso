@@ -81,7 +81,7 @@ func TestAuditor_Log_NilReceiver(t *testing.T) {
 	var auditor *Auditor
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		Action:    "test.action",
 		Actor:     "test",
 		Resource:  json.RawMessage(`{}`),
@@ -95,7 +95,7 @@ func TestAuditor_LogSync_NilReceiver(t *testing.T) {
 	var auditor *Auditor
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		Action:    "test.action",
 		Actor:     "test",
 		Resource:  json.RawMessage(`{}`),
@@ -111,7 +111,7 @@ func TestAuditor_LogSync_NilReceiver(t *testing.T) {
 func TestAuditLog_NilAuditor(t *testing.T) {
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		Action:    "test.action",
 		Actor:     "test",
 		Resource:  json.RawMessage(`{}`),
@@ -126,7 +126,7 @@ func TestAuditLog_NilAuditor(t *testing.T) {
 func TestAuditLogSync_NilAuditor(t *testing.T) {
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		Action:    "test.action",
 		Actor:     "test",
 		Resource:  json.RawMessage(`{}`),
@@ -146,7 +146,7 @@ func TestAuditLog_WithAuditor_SubmitError(t *testing.T) {
 
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		Action:    "test.action",
 		Actor:     "test",
 		Resource:  json.RawMessage(`{}`),
@@ -170,7 +170,7 @@ func TestAuditor_Log_WithRequestID(t *testing.T) {
 
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		Action:    "test.action",
 		Actor:     "test",
 		Resource:  json.RawMessage(`{}`),
@@ -204,7 +204,7 @@ func TestAuditor_LogSync_WithRequestID(t *testing.T) {
 
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		Action:    "test.action",
 		Actor:     "test",
 		Resource:  json.RawMessage(`{}`),
@@ -233,7 +233,7 @@ func TestAuditor_Log_MalformedMeta(t *testing.T) {
 
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		Action:    "test.action",
 		Actor:     "test",
 		Resource:  json.RawMessage(`{}`),
@@ -266,7 +266,7 @@ func TestAuditor_LogSync_MalformedMeta(t *testing.T) {
 
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		Action:    "test.action",
 		Actor:     "test",
 		Resource:  json.RawMessage(`{}`),
@@ -295,7 +295,7 @@ func TestAuditor_Log_WithoutRequestID(t *testing.T) {
 	originalMeta := json.RawMessage(`{"foo": "bar"}`)
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		Action:    "test.action",
 		Actor:     "test",
 		Resource:  json.RawMessage(`{}`),
@@ -344,7 +344,7 @@ func TestDo_WithRecord(t *testing.T) {
 
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		Action:    "test.action",
 		Actor:     "test",
 		Resource:  json.RawMessage(`{}`),
@@ -364,7 +364,7 @@ func TestDo_WithRecordAndAccountID(t *testing.T) {
 	accountID := "acc-123"
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		AccountID: &accountID,
 		Action:    "test.action",
 		Actor:     "test",
@@ -384,7 +384,7 @@ func TestDo_SubmitAfterClose(t *testing.T) {
 
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		Action:    "test.action",
 		Actor:     "test",
 		Resource:  json.RawMessage(`{}`),
@@ -415,7 +415,7 @@ func TestAuditLogSync_WithAuditor_Success(t *testing.T) {
 
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		Action:    "test.action",
 		Actor:     "test",
 		Resource:  json.RawMessage(`{}`),
@@ -441,7 +441,7 @@ func TestAuditLogSync_WithAuditor_DBError(t *testing.T) {
 
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		Action:    "test.action",
 		Actor:     "test",
 		Resource:  json.RawMessage(`{}`),
@@ -465,7 +465,7 @@ func TestAuditor_Log_WithAccountID(t *testing.T) {
 	accountID := "acc-456"
 	record := &domain.AuditRecord{
 		ID:        uuid.New().String(),
-		TxID:      uuid.New().String(),
+		CorrelationID:      uuid.New().String(),
 		AccountID: &accountID,
 		Action:    "test.action",
 		Actor:     "test",

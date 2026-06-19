@@ -17,6 +17,7 @@ import (
 type LogoutService struct {
 	tokenSvc   *tokenService.TokenService
 	sessionSvc *sessionService.SessionService
+	jwksSvc    *JWKSService // for key rotation fallback in id_token_hint validation
 	issuer     string
 	logger     *zap.Logger
 }
@@ -25,12 +26,14 @@ type LogoutService struct {
 func NewLogoutService(
 	tokenSvc *tokenService.TokenService,
 	sessionSvc *sessionService.SessionService,
+	jwksSvc *JWKSService,
 	issuer string,
 	logger *zap.Logger,
 ) *LogoutService {
 	return &LogoutService{
 		tokenSvc:   tokenSvc,
 		sessionSvc: sessionSvc,
+		jwksSvc:    jwksSvc,
 		issuer:     issuer,
 		logger:     logger,
 	}
@@ -47,12 +50,38 @@ func (s *LogoutService) ValidateIDTokenHint(tokenString string, clientID string)
 
 	parser := jwt.NewParser(jwt.WithoutClaimsValidation())
 	claims := &IDTokenClaims{}
-	token, err := parser.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
+
+	// keyFunc resolves the RSA public key for signature verification.
+	// Tries the current key first; on failure, falls back to JWKS-published keys
+	// (including the previous key during rotation overlap).
+	keyFunc := func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return s.tokenSvc.KeyService().PublicKey(), nil
-	})
+		// Try current key first
+		currentKey := s.tokenSvc.KeyService().PublicKey()
+		return currentKey, nil
+	}
+
+	token, err := parser.ParseWithClaims(tokenString, claims, keyFunc)
+	if err != nil && s.jwksSvc != nil {
+		// Current key failed — try JWKS fallback (handles key rotation overlap).
+		// Extract kid from token header and look up in JWKS.
+		var kid string
+		if hdr, _, parseErr := parser.ParseUnverified(tokenString, jwt.MapClaims{}); parseErr == nil {
+			if k, ok := hdr.Header["kid"].(string); ok {
+				kid = k
+			}
+		}
+		if kid != "" && kid != s.tokenSvc.KeyService().KeyID() {
+			if pubKey, jwksErr := s.jwksSvc.GetPublicKeyByKID(kid); jwksErr == nil {
+				claims = &IDTokenClaims{}
+				token, err = parser.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
+					return pubKey, nil
+				})
+			}
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("parse id_token_hint: %w", err)
 	}
