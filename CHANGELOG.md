@@ -8,9 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
-- CSP headers now include `object-src 'none'`, `base-uri 'self'`, and `form-action 'self'` — hardens Content Security Policy against plugin injection and base URI manipulation attacks per OWASP recommendations (`middleware/middleware.go`).
-- `RedisClient.IncrWithExpiry` and `CheckAndIncr` now validate that `expiry` is positive — prevents accidental key deletion from zero/negative expiry values that Redis interprets as "delete immediately" (`internal/cache/redis_client.go`).
-- `ForgotPassword` error logging downgraded from `Error` to `Warn` — "email not found" is an expected caller scenario, not an application error; reduces log noise and prevents alert fatigue (`internal/auth/controller/auth_controller.go`).
+- `account_id` in all structured logs is now masked via `utility.MaskOpaqueID()` — 42 log sites across 16 files previously logged raw UUID values, risking PII exposure in log aggregation systems.
+- `NewAuthCodeService` now validates that `expiry` is positive and `redis` is non-nil — prevents silent misconfiguration where authorization codes would expire immediately (`internal/oauth2/service/auth_code_service.go`).
+
+### Changed
+- Renamed `cmd/gouno/` package to `cmd/gosso/` — aligns the Go package name with the project name and binary output (`cmd/gosso/`, `cmd/main.go`).
+- `InitializeOAuth2Module` now returns `(*OAuth2Module, error)` — propagates `AuthCodeService` construction errors instead of silently accepting invalid configuration (`internal/oauth2/module.go`).
+- Dual-layer login rate limiting now has explicit documentation comments explaining the router-level (per-IP) and service-level (per-IP+username) defense intent (`router/web.go`, `internal/auth/service/auth_login.go`).
+- Refresh token IP binding gap documented with known-limitation comments in `RefreshTokens` and `GenerateRefreshToken` — clarifies the degradation path when IP metadata is missing (`internal/auth/service/auth_session.go`, `internal/token/service/token_service.go`).
 
 ### Fixed
 - `ConfigManager` is now safe for concurrent reads — removed two-phase construction (`hasConfig` field and `setConfig` method); config is fully initialized in the constructor before the pointer is returned (`config/config_manager.go`).

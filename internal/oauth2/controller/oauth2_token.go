@@ -207,7 +207,7 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		c.logger.Warn("Refresh token IP changed",
 			zap.String("original_ip", utility.NormalizeIP(oldRefreshToken.IP)),
 			zap.String("current_ip", utility.NormalizeIP(ctx.ClientIP())),
-			zap.String("account_id", oldRefreshToken.AccountID))
+			zap.String("account_id", utility.MaskOpaqueID(oldRefreshToken.AccountID)))
 	}
 
 	// Verify client binding (RFC 6749 §6: client_id MUST match)

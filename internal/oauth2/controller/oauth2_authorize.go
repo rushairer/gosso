@@ -16,6 +16,7 @@ import (
 
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/utility"
 	"github.com/rushairer/gosso/middleware"
 )
 
@@ -131,7 +132,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 
 	existingConsent, consentErr := c.consentSvc.GetConsent(ctx, accountIDStr, clientID)
 	if consentErr != nil && !errors.Is(consentErr, oauth2Domain.ErrConsentNotFound) {
-		c.logger.Warn("Failed to get consent, showing consent page", zap.Error(consentErr), zap.String("account_id", accountIDStr), zap.String("client_id", clientID))
+		c.logger.Warn("Failed to get consent, showing consent page", zap.Error(consentErr), zap.String("account_id", utility.MaskOpaqueID(accountIDStr)), zap.String("client_id", clientID))
 	}
 	if existingConsent != nil {
 		// Only grant scopes the user previously consented to AND the client is currently allowed

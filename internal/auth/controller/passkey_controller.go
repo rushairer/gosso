@@ -13,6 +13,7 @@ import (
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/controllerutil"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	"github.com/rushairer/gosso/internal/utility"
 	"github.com/rushairer/gosso/middleware"
 )
 
@@ -213,7 +214,7 @@ func (c *PasskeyController) LoginComplete(ctx *gin.Context) {
 	// Complete full login flow with accountID (create session, generate tokens)
 	loginResult, err := c.authSvc.LoginByPasskey(ctx, accountID, ctx.ClientIP(), ctx.Request.UserAgent())
 	if err != nil {
-		c.logger.Error("Passkey login failed", zap.String("account_id", accountID), zap.Error(err))
+		c.logger.Error("Passkey login failed", zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "login failed"))
 		return
 	}
@@ -297,7 +298,7 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 	if err := c.authSvc.MarkPasskeyMFAVerified(ctx, claims.ID); err != nil {
 		c.logger.Error("Failed to mark passkey MFA verified",
 			zap.Error(err),
-			zap.String("account_id", claims.AccountID))
+			zap.String("account_id", utility.MaskOpaqueID(claims.AccountID)))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
 		return
 	}
@@ -305,7 +306,7 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 	// Complete login directly — no separate /mfa/verify call needed
 	result, err := c.authSvc.CompletePasskeyMFALogin(ctx, req.MFAToken, ctx.ClientIP(), ctx.Request.UserAgent())
 	if err != nil {
-		c.logger.Error("Passkey MFA login failed", zap.String("account_id", claims.AccountID), zap.Error(err))
+		c.logger.Error("Passkey MFA login failed", zap.String("account_id", utility.MaskOpaqueID(claims.AccountID)), zap.Error(err))
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "MFA verification failed"))
 		return
 	}

@@ -63,6 +63,12 @@ func RegisterWebRouter(deps RouterDeps) {
 
 	// Per-endpoint rate limiting middleware
 	// Security-sensitive endpoints fail-closed (reject if Redis is unavailable)
+	//
+	// DUAL-LAYER RATE LIMITING for login: this middleware layer enforces a per-IP sliding
+	// window limit (loginLimit) to protect against distributed brute-force attacks. The
+	// auth service layer adds a second per-IP+username limit (login_attempts:{ip}:{username})
+	// to prevent targeted account enumeration from a single IP. Both layers are intentional —
+	// removing either would create a gap in protection.
 	loginLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "login", middleware.IPKeyFunc, deps.RateLimits.Login, time.Minute, false, deps.Logger)
 	mfaLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "mfa", middleware.IPKeyFunc, deps.RateLimits.Token, time.Minute, false, deps.Logger)
 	passkeyLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "passkey", middleware.IPKeyFunc, deps.RateLimits.Passkey, time.Minute, false, deps.Logger)

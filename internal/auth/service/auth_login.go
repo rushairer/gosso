@@ -33,6 +33,9 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	const maxPasswordLen = utility.MaxPasswordLength
 
 	// 1. Check rate limit for login failures (keyed on IP + normalized username).
+	// This is the SECOND layer of dual-layer rate limiting — the first layer is the
+	// per-IP loginLimit middleware in the router. This service-level check adds
+	// per-IP+username granularity to prevent targeted account enumeration.
 	// Fail-closed: if Redis is unavailable, deny login to prevent brute-force attacks.
 	// Rate limit is checked BEFORE input validation so that empty/invalid credentials
 	// are still counted — otherwise an attacker can probe with unlimited empty requests.
@@ -162,7 +165,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 		// Blacklist MFA token on failure to prevent brute-force replay.
 		if bErr := s.blacklistMFAToken(ctx, claims); bErr != nil {
 			s.logger.Error("Failed to blacklist MFA token after failed verification",
-				zap.String("account_id", accountID), zap.String("jti", utility.MaskOpaqueID(claims.ID)), zap.Error(bErr))
+				zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.String("jti", utility.MaskOpaqueID(claims.ID)), zap.Error(bErr))
 		}
 		return nil, err
 	}
@@ -172,7 +175,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	// the eventual function return that would fire a deferred blacklist.
 	if err := s.blacklistMFAToken(ctx, claims); err != nil {
 		s.logger.Error("Failed to blacklist MFA token after verification",
-			zap.String("account_id", accountID), zap.String("jti", utility.MaskOpaqueID(claims.ID)), zap.Error(err))
+			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.String("jti", utility.MaskOpaqueID(claims.ID)), zap.Error(err))
 	}
 
 	// 4. Find account

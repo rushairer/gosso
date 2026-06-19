@@ -1,4 +1,4 @@
-package gouno
+package gosso
 
 import (
 	"context"
@@ -101,7 +101,10 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		return nil, fmt.Errorf("failed to initialize auth module: %w", err)
 	}
 
-	oauth2Mod := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig, auditor)
+	oauth2Mod, err := oauth2.InitializeOAuth2Module(db, redis, logger, cfg.AuthConfig, auditor)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize oauth2 module: %w", err)
+	}
 	oidcMod := oidc.InitializeOIDCModule(tokenSvc, accountMod.Service, cfg.AuthConfig, authMod.SessionService, accountMod.CredentialRepo, logger)
 
 	// Wire cross-module dependencies into account service via a single atomic call.

@@ -64,7 +64,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	txDuration := time.Since(txStart)
 	if txDuration > 2*time.Second {
 		s.logger.Warn("Slow account soft-delete transaction",
-			zap.String("account_id", accountID),
+			zap.String("account_id", utility.MaskOpaqueID(accountID)),
 			zap.Duration("duration", txDuration))
 	}
 	if err != nil {
@@ -77,7 +77,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	// blacklisting of access token JTIs is not required here.
 	var revokeErr error
 	if revokeErr = s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
-		s.logger.Error("Failed to revoke sessions after account deletion", zap.String("account_id", accountID), zap.Error(revokeErr))
+		s.logger.Error("Failed to revoke sessions after account deletion", zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(revokeErr))
 	}
 
 	// 5. Clear consent cache entries for this account.
@@ -86,7 +86,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	if s.consentCacheInvalidator != nil {
 		if err := s.consentCacheInvalidator.DeleteConsentsByAccount(ctx, accountID); err != nil {
 			s.logger.Warn("Failed to clear consent cache after account deletion",
-				zap.String("account_id", accountID), zap.Error(err))
+				zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
 		}
 	}
 
@@ -212,7 +212,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	// 4. Revoke all existing sessions so that any attacker with a stolen session is kicked out
 	if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
 		s.logger.Error("Failed to revoke sessions after password change",
-			zap.String("account_id", accountID), zap.Error(revokeErr))
+			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(revokeErr))
 		// Password was already changed successfully, but caller should know session revocation failed
 		// so they can take additional action (e.g., notify the user).
 		return fmt.Errorf("password changed but session revocation failed: %w", revokeErr)
@@ -247,7 +247,7 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 	// Revoke all active sessions so the suspended user loses access immediately
 	if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
 		s.logger.Error("Failed to revoke sessions after account suspension",
-			zap.String("account_id", accountID), zap.Error(revokeErr))
+			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(revokeErr))
 		return fmt.Errorf("suspend succeeded but session revocation failed: %w", revokeErr)
 	}
 

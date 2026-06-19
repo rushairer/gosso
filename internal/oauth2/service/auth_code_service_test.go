@@ -22,7 +22,9 @@ func setupTestAuthCodeService(t *testing.T) (*AuthCodeService, func()) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	cleanup := mr.Close
 
-	return NewAuthCodeService(redisClient, logger, 5*time.Minute), cleanup
+	svc, err := NewAuthCodeService(redisClient, logger, 5*time.Minute)
+	require.NoError(t, err)
+	return svc, cleanup
 }
 
 func TestGenerateCode(t *testing.T) {
@@ -147,7 +149,8 @@ func TestValidateCode_PKCE_Fail(t *testing.T) {
 func TestValidateCode_Expired(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	defer mr.Close()
-	svc := NewAuthCodeService(redisClient, zap.NewNop(), 5*time.Minute)
+	svc, err := NewAuthCodeService(redisClient, zap.NewNop(), 5*time.Minute)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	code, err := svc.GenerateCode(ctx, "client", "account", "http://localhost/callback",
@@ -183,7 +186,8 @@ func TestValidateCode_PKCE_NilVerifier(t *testing.T) {
 func TestValidateCode_CorruptData(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	defer mr.Close()
-	svc := NewAuthCodeService(redisClient, zap.NewNop(), 5*time.Minute)
+	svc, err := NewAuthCodeService(redisClient, zap.NewNop(), 5*time.Minute)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	code, err := svc.GenerateCode(ctx, "client", "account", "http://localhost/callback",
@@ -201,12 +205,13 @@ func TestValidateCode_CorruptData(t *testing.T) {
 
 func TestGenerateCode_RedisError(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
-	svc := NewAuthCodeService(redisClient, zap.NewNop(), 5*time.Minute)
+	svc, err := NewAuthCodeService(redisClient, zap.NewNop(), 5*time.Minute)
+	require.NoError(t, err)
 	ctx := context.Background()
 
 	mr.Close()
 
-	_, err := svc.GenerateCode(ctx, "client", "account", "http://localhost/callback",
+	_, err = svc.GenerateCode(ctx, "client", "account", "http://localhost/callback",
 		[]string{"openid"}, "", "", "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "store authorization code")

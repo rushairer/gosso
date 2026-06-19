@@ -30,14 +30,21 @@ type AuthCodeService struct {
 	expiry time.Duration
 }
 
-// NewAuthCodeService creates a new authorization code service instance
-func NewAuthCodeService(redis *cache.RedisClient, logger *zap.Logger, expiry time.Duration) *AuthCodeService {
+// NewAuthCodeService creates a new authorization code service instance.
+// Returns an error if redis is nil or expiry is not positive.
+func NewAuthCodeService(redis *cache.RedisClient, logger *zap.Logger, expiry time.Duration) (*AuthCodeService, error) {
 	logger = utility.EnsureLogger(logger)
+	if redis == nil {
+		return nil, errors.New("auth code service: redis client is required")
+	}
+	if expiry <= 0 {
+		return nil, fmt.Errorf("auth code service: expiry must be positive (got %s)", expiry)
+	}
 	return &AuthCodeService{
 		redis:  redis,
 		logger: logger,
 		expiry: expiry,
-	}
+	}, nil
 }
 
 // GenerateCode generates an authorization code and stores it in Redis
@@ -79,7 +86,7 @@ func (s *AuthCodeService) GenerateCode(
 
 	s.logger.Debug("Authorization code generated",
 		zap.String("client_id", clientID),
-		zap.String("account_id", accountID))
+		zap.String("account_id", utility.MaskOpaqueID(accountID)))
 
 	return ac, nil
 }

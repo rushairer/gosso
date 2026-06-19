@@ -7,6 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // sensitiveQueryParams are query parameter names whose values should be redacted in logs.
@@ -94,7 +96,7 @@ func ZapLoggerMiddleware(logger *zap.Logger) gin.HandlerFunc {
 
 		if accountID, exists := ctx.Get(ContextKeyAccountID); exists {
 			if aid, ok := accountID.(string); ok && aid != "" {
-				fields = append(fields, zap.String("account_id", aid))
+				fields = append(fields, zap.String("account_id", utility.MaskOpaqueID(aid)))
 			}
 		}
 

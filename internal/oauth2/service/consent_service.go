@@ -62,7 +62,7 @@ func (s *ConsentService) GetConsent(ctx context.Context, accountID, clientID str
 		s.logger.Warn("consent cache corrupt, falling back to DB", zap.Error(jsonErr))
 	} else if !errors.Is(err, cache.ErrKeyNotFound) {
 		s.logger.Warn("Redis consent cache read failed, falling back to DB",
-			zap.String("account_id", accountID), zap.Error(err))
+			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
 	}
 
 	// Cache miss or error — read from DB
@@ -109,7 +109,7 @@ func (s *ConsentService) SaveConsent(ctx context.Context, consent *domain.Consen
 	}
 
 	s.logger.Info("Consent saved",
-		zap.String("account_id", consent.AccountID),
+		zap.String("account_id", utility.MaskOpaqueID(consent.AccountID)),
 		zap.String("client_id", consent.ClientID))
 
 	return nil
@@ -167,7 +167,7 @@ func (s *ConsentService) DeleteConsentsByAccount(ctx context.Context, accountID 
 
 	if totalDeleted > 0 {
 		s.logger.Info("Cleared consent cache for account",
-			zap.String("account_id", accountID),
+			zap.String("account_id", utility.MaskOpaqueID(accountID)),
 			zap.Int("keys_deleted", totalDeleted))
 	}
 	return nil

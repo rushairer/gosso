@@ -180,6 +180,11 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 	rt.ExpiresAt = now.Add(s.refreshExpiry)
 	rt.CreatedAt = now
 
+	// KNOWN LIMITATION: When IP is empty (e.g. missing audit metadata middleware),
+	// the token is still created. The IP binding check in RefreshTokens will skip
+	// validation for IP-less tokens, effectively disabling theft detection for them.
+	// A production-hardened fix would add an enforceIPBinding config flag to reject
+	// token creation when IP is empty, but that requires config plumbing beyond this scope.
 	if rt.IP == "" {
 		s.logger.Warn("Generating refresh token without IP binding; IP-based theft detection will be unavailable",
 			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.String("session_id", utility.MaskOpaqueID(sessionID)))

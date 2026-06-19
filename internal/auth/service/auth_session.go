@@ -21,18 +21,22 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		return nil, ErrInvalidRefreshToken
 	}
 
-	// 2. Verify IP binding — reject refresh from a different IP to prevent token theft
+	// 2. Verify IP binding — reject refresh from a different IP to prevent token theft.
+	// NOTE: If the token was generated without an IP (oldRT.IP == ""), the check is skipped.
+	// This is a known degradation path: if an upstream middleware failure causes IP loss at
+	// token creation time, the resulting token will never be IP-protected. A stricter fix
+	// (e.g. enforceIPBinding flag in TokenService) is left for a future architecture change.
 	if oldRT.IP != "" {
 		currentIP := audit.IPFromContext(ctx)
 		if currentIP == "" {
 			s.logger.Warn("Refresh token has IP binding but current request has no IP; rejecting",
-				zap.String("account_id", oldRT.AccountID))
+				zap.String("account_id", utility.MaskOpaqueID(oldRT.AccountID)))
 			return nil, ErrInvalidRefreshToken
 		} else if utility.NormalizeIP(oldRT.IP) != utility.NormalizeIP(currentIP) {
 			s.logger.Warn("Refresh token IP mismatch",
 				zap.String("original_ip", utility.MaskOpaqueID(oldRT.IP)),
 				zap.String("current_ip", utility.MaskOpaqueID(currentIP)),
-				zap.String("account_id", oldRT.AccountID))
+				zap.String("account_id", utility.MaskOpaqueID(oldRT.AccountID)))
 			return nil, ErrInvalidRefreshToken
 		}
 	}

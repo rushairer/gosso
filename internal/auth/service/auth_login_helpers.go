@@ -73,7 +73,7 @@ func buildMFAResult(account *accountDomain.Account, mfaToken string, mfaTypes []
 func (s *AuthService) handleMFARequirement(ctx context.Context, account *accountDomain.Account) (*LoginResult, error) {
 	mfaEnabled, err := s.mfaSvc.IsMFAEnabled(ctx, account.ID)
 	if err != nil {
-		s.logger.Error("Failed to check MFA status, denying login", zap.String("account_id", account.ID), zap.Error(err))
+		s.logger.Error("Failed to check MFA status, denying login", zap.String("account_id", utility.MaskOpaqueID(account.ID)), zap.Error(err))
 		return nil, ErrServiceUnavailable
 	}
 	if !mfaEnabled {
@@ -125,7 +125,7 @@ func (s *AuthService) verifyPasskeyMFAFlag(ctx context.Context, mfaTokenJTI, acc
 			return ErrPasskeyNotVerified
 		}
 		s.logger.Error("Redis GetDel failed for passkey MFA verification",
-			zap.Error(verr), zap.String("account_id", accountID))
+			zap.Error(verr), zap.String("account_id", utility.MaskOpaqueID(accountID)))
 		return fmt.Errorf("verify passkey mfa: %w", verr)
 	}
 	if verified != "1" {
@@ -220,7 +220,7 @@ func (s *AuthService) completeLogin(ctx context.Context, account *accountDomain.
 	}
 
 	s.logger.Info("Login successful",
-		zap.String("account_id", account.ID),
+		zap.String("account_id", utility.MaskOpaqueID(account.ID)),
 		zap.String("session_id", utility.MaskOpaqueID(session.ID)))
 
 	s.clearLoginRateLimits(ctx, ip, account.Username)

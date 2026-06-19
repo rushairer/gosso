@@ -91,12 +91,12 @@ func (s *LogoutService) LogoutByAccountID(ctx context.Context, accountID string)
 	// rejected by ValidateAccessTokenWithContext.
 	if err := s.tokenSvc.RevokeAccountTokens(ctx, accountID); err != nil {
 		s.logger.Warn("Failed to revoke access tokens for account during logout",
-			zap.String("account_id", accountID), zap.Error(err))
+			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
 		// Non-fatal: sessions and refresh tokens are already revoked above.
 		// The JWT middleware's session check provides a secondary defense.
 	}
 
-	s.logger.Info("Account logout successful", zap.String("account_id", accountID))
+	s.logger.Info("Account logout successful", zap.String("account_id", utility.MaskOpaqueID(accountID)))
 	return nil
 }
 

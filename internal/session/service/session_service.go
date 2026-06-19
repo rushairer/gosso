@@ -254,7 +254,7 @@ func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Sess
 	// Refresh the account sessions index TTL to prevent it from expiring before the session
 	indexKey := s.buildAccountSessionsKey(session.AccountID)
 	if err := s.redis.Expire(ctx, indexKey, s.sessionTTL); err != nil {
-		s.logger.Warn("Failed to refresh account sessions index TTL", zap.String("account_id", session.AccountID), zap.Error(err))
+		s.logger.Warn("Failed to refresh account sessions index TTL", zap.String("account_id", utility.MaskOpaqueID(session.AccountID)), zap.Error(err))
 	}
 
 	s.logger.Debug("Session updated", zap.String("session_id", maskSessionID(session.ID)))

@@ -232,7 +232,7 @@ func (c *OIDCController) tryLogoutByIDTokenHint(ctx *gin.Context, req logoutRequ
 	}
 
 	if err := c.logoutSvc.LogoutByAccountID(ctx, accountID); err != nil {
-		c.logger.Error("Logout by account ID failed", zap.String("account_id", accountID), zap.Error(err))
+		c.logger.Error("Logout by account ID failed", zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout failed"))
 		ctx.Abort()
 		return "", true

@@ -1,4 +1,4 @@
-package gouno
+package gosso
 
 import (
 	"database/sql"

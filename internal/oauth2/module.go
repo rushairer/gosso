@@ -2,6 +2,7 @@ package oauth2
 
 import (
 	"database/sql"
+	"fmt"
 
 	"go.uber.org/zap"
 
@@ -28,11 +29,14 @@ func InitializeOAuth2Module(
 	logger *zap.Logger,
 	authConfig config.AuthConfig,
 	auditor *auditService.Auditor,
-) *OAuth2Module {
+) (*OAuth2Module, error) {
 	clientRepo := repository.NewOAuth2ClientRepository(db)
 	consentRepo := repository.NewConsentRepository(db)
 	clientSvc := service.NewOAuth2ClientService(db, clientRepo, auditor, logger)
-	authCodeSvc := service.NewAuthCodeService(redis, logger, authConfig.AuthorizationCodeExpiry)
+	authCodeSvc, err := service.NewAuthCodeService(redis, logger, authConfig.AuthorizationCodeExpiry)
+	if err != nil {
+		return nil, fmt.Errorf("initialize auth code service: %w", err)
+	}
 	consentSvc := service.NewConsentService(db, consentRepo, redis, logger)
 	deviceCodeSvc := service.NewDeviceCodeService(redis, logger, authConfig.DeviceCodeExpiry, authConfig.DeviceCodeInterval)
 
@@ -42,5 +46,5 @@ func InitializeOAuth2Module(
 		ConsentService:    consentSvc,
 		DeviceCodeService: deviceCodeSvc,
 		ClientRepo:        clientRepo,
-	}
+	}, nil
 }

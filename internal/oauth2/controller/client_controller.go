@@ -10,6 +10,7 @@ import (
 	"github.com/rushairer/gosso/internal/controllerutil"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
+	"github.com/rushairer/gosso/internal/utility"
 	"github.com/rushairer/gosso/middleware"
 )
 
@@ -95,7 +96,7 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
 			return
 		}
-		c.logger.Error("Failed to register client", zap.Error(err), zap.String("account_id", accountID))
+		c.logger.Error("Failed to register client", zap.Error(err), zap.String("account_id", utility.MaskOpaqueID(accountID)))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to register client"))
 		return
 	}
@@ -116,7 +117,7 @@ func (c *ClientController) ListClients(ctx *gin.Context) {
 
 	clients, err := c.clientSvc.FindByAccountID(ctx, accountID)
 	if err != nil {
-		c.logger.Error("Failed to list clients", zap.Error(err), zap.String("account_id", accountID))
+		c.logger.Error("Failed to list clients", zap.Error(err), zap.String("account_id", utility.MaskOpaqueID(accountID)))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to list clients"))
 		return
 	}

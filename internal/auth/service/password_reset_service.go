@@ -414,7 +414,7 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		defer revokeCancel()
 		if err := s.tokenRevoker.RevokeAccountTokens(revokeCtx, data.AccountID); err != nil {
 			s.logger.Error("Failed to revoke access tokens after password reset",
-				zap.String("account_id", data.AccountID), zap.Error(err))
+				zap.String("account_id", utility.MaskOpaqueID(data.AccountID)), zap.Error(err))
 		}
 	}
 
@@ -435,24 +435,24 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 			defer cancel()
 			if err := s.sessionSvc.RevokeAllForAccount(bgCtx, data.AccountID); err != nil {
 				s.logger.Error("Failed to revoke sessions after password reset",
-					zap.String("account_id", data.AccountID), zap.Error(err))
+					zap.String("account_id", utility.MaskOpaqueID(data.AccountID)), zap.Error(err))
 			}
 		}()
 	default:
 		s.wg.Done()
 		s.logger.Warn("Revoke goroutine limit reached, falling back to synchronous revocation",
-			zap.String("account_id", data.AccountID),
+			zap.String("account_id", utility.MaskOpaqueID(data.AccountID)),
 			zap.Bool("synchronous_fallback", true),
 			zap.Int("semaphore_cap", cap(s.revokeSem)))
 		syncCtx, syncCancel := context.WithTimeout(context.Background(), passwordResetSyncRevokeTimeout)
 		defer syncCancel()
 		if err := s.sessionSvc.RevokeAllForAccount(syncCtx, data.AccountID); err != nil {
 			s.logger.Error("Failed to revoke sessions synchronously after password reset",
-				zap.String("account_id", data.AccountID), zap.Error(err))
+				zap.String("account_id", utility.MaskOpaqueID(data.AccountID)), zap.Error(err))
 		}
 	}
 
-	s.logger.Info("Password reset successfully", zap.String("account_id", data.AccountID))
+	s.logger.Info("Password reset successfully", zap.String("account_id", utility.MaskOpaqueID(data.AccountID)))
 	return nil
 }
 

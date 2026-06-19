@@ -1,7 +1,7 @@
 package main
 
-import "github.com/rushairer/gosso/cmd/gouno"
+import "github.com/rushairer/gosso/cmd/gosso"
 
 func main() {
-	gouno.Execute()
+	gosso.Execute()
 }

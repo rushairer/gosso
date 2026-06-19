@@ -98,7 +98,7 @@ func (s *PasskeyService) BeginRegistration(ctx context.Context, accountID, usern
 	// Find existing credentials for exclusion
 	existingCreds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil {
-		s.logger.Error("Failed to find existing credentials during registration", zap.Error(err), zap.String("account_id", accountID))
+		s.logger.Error("Failed to find existing credentials during registration", zap.Error(err), zap.String("account_id", utility.MaskOpaqueID(accountID)))
 		return nil, "", fmt.Errorf("find existing credentials: %w", err)
 	}
 
@@ -177,7 +177,7 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, ac
 	}
 
 	s.logger.Info("Passkey registered",
-		zap.String("account_id", accountID),
+		zap.String("account_id", utility.MaskOpaqueID(accountID)),
 		zap.String("credential_id", cred.ID))
 
 	return cred, nil
@@ -197,7 +197,7 @@ func (s *PasskeyService) BeginMFALogin(ctx context.Context, accountID string) (*
 func (s *PasskeyService) beginLoginInternal(ctx context.Context, accountID, keyPrefix, logAction string) (*protocol.CredentialAssertion, string, error) {
 	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil {
-		s.logger.Warn("Failed to find passkey credentials for "+logAction, zap.String("account_id", accountID), zap.Error(err))
+		s.logger.Warn("Failed to find passkey credentials for "+logAction, zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
 		return nil, "", ErrPasskeyNotFound
 	}
 	if len(creds) == 0 {
@@ -326,7 +326,7 @@ func (s *PasskeyService) completeLoginInternal(ctx context.Context, requestID, e
 		// A database failure should not block a legitimate login.
 		s.logger.Error("Failed to update credential sign count — clone detection may be compromised (login allowed to proceed)",
 			zap.Error(err),
-			zap.String("account_id", cred.AccountID),
+			zap.String("account_id", utility.MaskOpaqueID(cred.AccountID)),
 			zap.String("credential_id", cred.ID))
 	}
 
@@ -382,7 +382,7 @@ func (s *PasskeyService) DeleteCredential(ctx context.Context, accountID, creden
 	}
 
 	s.logger.Info("Passkey deleted",
-		zap.String("account_id", accountID),
+		zap.String("account_id", utility.MaskOpaqueID(accountID)),
 		zap.String("credential_id", cred.ID))
 
 	return nil
