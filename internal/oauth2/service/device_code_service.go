@@ -21,9 +21,9 @@ import (
 )
 
 const (
-	DeviceCodeKeyPrefix = "device_code:"
-	UserCodeKeyPrefix   = "user_code:"
-	DeviceCodeLength    = 32 // bytes → 64 hex chars
+	deviceCodeKeyPrefix = "device_code:"
+	userCodeKeyPrefix   = "user_code:"
+	deviceCodeLength    = 32 // bytes → 64 hex chars
 )
 
 // userCodeCharset excludes ambiguous characters (0/O, 1/I/L).
@@ -57,7 +57,7 @@ func NewDeviceCodeService(redis *cache.RedisClient, logger *zap.Logger, expiry, 
 // CreateDeviceCode generates a device code and user code, stores them in Redis.
 func (s *DeviceCodeService) CreateDeviceCode(ctx context.Context, clientID string, scopes []string) (*domain.DeviceCode, error) {
 	// Generate device code (32 random bytes → 64 hex chars)
-	dcBytes := make([]byte, DeviceCodeLength)
+	dcBytes := make([]byte, deviceCodeLength)
 	if _, err := rand.Read(dcBytes); err != nil {
 		return nil, fmt.Errorf("generate device code: %w", err)
 	}
@@ -90,8 +90,8 @@ func (s *DeviceCodeService) CreateDeviceCode(ctx context.Context, clientID strin
 
 	// Store device code and user code mapping atomically
 	dcHash := tokenDomain.HashToken(deviceCodeStr)
-	dcKey := DeviceCodeKeyPrefix + dcHash
-	ucKey := UserCodeKeyPrefix + strings.ToUpper(formattedUserCode)
+	dcKey := deviceCodeKeyPrefix + dcHash
+	ucKey := userCodeKeyPrefix + strings.ToUpper(formattedUserCode)
 	ttlSeconds := int(s.expiry.Seconds())
 	if err := s.redis.RunScript(ctx, createDeviceCodeScript,
 		[]string{dcKey, ucKey},
@@ -109,7 +109,7 @@ func (s *DeviceCodeService) CreateDeviceCode(ctx context.Context, clientID strin
 
 // GetDeviceCode retrieves a device code by its device_code value.
 func (s *DeviceCodeService) GetDeviceCode(ctx context.Context, deviceCode string) (*domain.DeviceCode, error) {
-	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
+	key := deviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
 	data, err := s.redis.Get(ctx, key)
 	if errors.Is(err, cache.ErrKeyNotFound) {
 		return nil, domain.ErrDeviceCodeNotFound
@@ -135,7 +135,7 @@ func (s *DeviceCodeService) GetDeviceCodeByUserCode(ctx context.Context, userCod
 	}
 	formatted := normalized[:4] + "-" + normalized[4:]
 
-	ucKey := UserCodeKeyPrefix + formatted
+	ucKey := userCodeKeyPrefix + formatted
 	dcHash, err := s.redis.Get(ctx, ucKey)
 	if errors.Is(err, cache.ErrKeyNotFound) {
 		return nil, domain.ErrDeviceCodeNotFound
@@ -144,7 +144,7 @@ func (s *DeviceCodeService) GetDeviceCodeByUserCode(ctx context.Context, userCod
 		return nil, fmt.Errorf("resolve user code: %w", err)
 	}
 
-	dcKey := DeviceCodeKeyPrefix + dcHash
+	dcKey := deviceCodeKeyPrefix + dcHash
 	data, err := s.redis.Get(ctx, dcKey)
 	if errors.Is(err, cache.ErrKeyNotFound) {
 		return nil, domain.ErrDeviceCodeNotFound
@@ -165,7 +165,7 @@ func (s *DeviceCodeService) GetDeviceCodeByUserCode(ctx context.Context, userCod
 
 // AuthorizeDeviceCode atomically marks a device code as authorized with the given account ID.
 func (s *DeviceCodeService) AuthorizeDeviceCode(ctx context.Context, deviceCode, accountID string) error {
-	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
+	key := deviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
 
 	authorizedAt := time.Now().Format(time.RFC3339)
 	result, err := s.redis.RunScript(ctx, authorizeDeviceCodeScript, []string{key},
@@ -185,7 +185,7 @@ func (s *DeviceCodeService) AuthorizeDeviceCode(ctx context.Context, deviceCode,
 
 // DenyDeviceCode atomically marks a device code as denied.
 func (s *DeviceCodeService) DenyDeviceCode(ctx context.Context, deviceCode string) error {
-	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
+	key := deviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
 
 	result, err := s.redis.RunScript(ctx, denyDeviceCodeScript, []string{key}).Result()
 	if errors.Is(err, redis.Nil) || result == nil {
@@ -212,7 +212,7 @@ func (s *DeviceCodeService) DenyDeviceCode(ctx context.Context, deviceCode strin
 // AuthorizeDeviceCodeByHash atomically marks a device code as authorized using its Redis key hash.
 // This is the preferred method when the raw device code is not available (e.g., user code consent flow).
 func (s *DeviceCodeService) AuthorizeDeviceCodeByHash(ctx context.Context, dcHash, accountID string) error {
-	key := DeviceCodeKeyPrefix + dcHash
+	key := deviceCodeKeyPrefix + dcHash
 
 	authorizedAt := time.Now().Format(time.RFC3339)
 	result, err := s.redis.RunScript(ctx, authorizeDeviceCodeScript, []string{key},
@@ -233,7 +233,7 @@ func (s *DeviceCodeService) AuthorizeDeviceCodeByHash(ctx context.Context, dcHas
 // DenyDeviceCodeByHash atomically marks a device code as denied using its Redis key hash.
 // This is the preferred method when the raw device code is not available (e.g., user code consent flow).
 func (s *DeviceCodeService) DenyDeviceCodeByHash(ctx context.Context, dcHash string) error {
-	key := DeviceCodeKeyPrefix + dcHash
+	key := deviceCodeKeyPrefix + dcHash
 
 	result, err := s.redis.RunScript(ctx, denyDeviceCodeScript, []string{key}).Result()
 	if errors.Is(err, redis.Nil) || result == nil {
@@ -294,8 +294,8 @@ return 1
 // CheckAndUpdatePollRate enforces the minimum polling interval.
 // Returns ErrSlowDown if the client polls too fast.
 func (s *DeviceCodeService) CheckAndUpdatePollRate(ctx context.Context, deviceCode string) error {
-	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
-	pollKey := DeviceCodeKeyPrefix + "poll:" + tokenDomain.HashToken(deviceCode)
+	key := deviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
+	pollKey := deviceCodeKeyPrefix + "poll:" + tokenDomain.HashToken(deviceCode)
 
 	now := time.Now().Unix()
 	result, err := s.redis.RunScript(ctx, checkAndUpdatePollRateScript, []string{key, pollKey},
@@ -416,7 +416,7 @@ func (s *DeviceCodeService) ClaimAuthorizedDeviceCode(ctx context.Context, devic
 		return nil, fmt.Errorf("client_id is required for claiming device code")
 	}
 
-	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
+	key := deviceCodeKeyPrefix + tokenDomain.HashToken(deviceCode)
 
 	result, err := s.redis.RunScript(ctx, claimAuthorizedScript, []string{key}, clientID).Result()
 	if errors.Is(err, redis.Nil) || result == nil {

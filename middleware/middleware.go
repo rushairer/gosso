@@ -3,6 +3,7 @@ package middleware
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"runtime/debug"
 	"time"
@@ -106,7 +107,8 @@ func MaxBodySizeMiddleware(maxBytes int64) gin.HandlerFunc {
 		// After handlers have run, check if any error is a MaxBytesError
 		// and rewrite the response to 413.
 		for _, ginErr := range ctx.Errors {
-			if ginErr.Err != nil && ginErr.Err.Error() == "http: request body too large" {
+			var maxBytesErr *http.MaxBytesError
+			if ginErr.Err != nil && errors.As(ginErr.Err, &maxBytesErr) {
 				ctx.JSON(http.StatusRequestEntityTooLarge, gouno.NewErrorResponse(http.StatusRequestEntityTooLarge, "request body too large"))
 				return
 			}

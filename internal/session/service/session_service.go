@@ -199,7 +199,7 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 	s.logger.Info("Session created",
 		zap.String("session_id", maskSessionID(session.ID)),
 		zap.String("account_id", utility.MaskOpaqueID(session.AccountID)),
-		zap.String("ip", session.IP),
+		zap.String("ip", utility.MaskOpaqueID(session.IP)),
 		zap.Duration("ttl", s.sessionTTL))
 
 	return nil

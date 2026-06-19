@@ -91,7 +91,7 @@ func (s *TokenService) ValidateRefreshToken(ctx context.Context, token string) (
 
 	// Defense-in-depth: explicit expiry check in addition to Redis TTL.
 	if !rt.ExpiresAt.IsZero() && time.Now().After(rt.ExpiresAt) {
-		return nil, fmt.Errorf("refresh token expired")
+		return nil, ErrRefreshTokenExpired
 	}
 
 	// Account-level revocation check — rejects refresh tokens issued before the

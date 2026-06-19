@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	ConsentKeyPrefix       = "consent:"
-	ConsentTTL             = 90 * 24 * time.Hour // 90 days
-	ConsentCacheFallbackTTL = 5 * time.Minute    // short TTL when primary cache write fails
+	consentKeyPrefix       = "consent:"
+	consentTTL             = 90 * 24 * time.Hour // 90 days
+	consentCacheFallbackTTL = 5 * time.Minute    // short TTL when primary cache write fails
 )
 
 // ConsentService handles user consent for OAuth2 authorization.
@@ -76,7 +76,7 @@ func (s *ConsentService) GetConsent(ctx context.Context, accountID, clientID str
 
 	// Write back to cache
 	if cacheData, marshalErr := json.Marshal(consent); marshalErr == nil {
-		if setErr := s.redis.Set(ctx, key, cacheData, ConsentTTL); setErr != nil {
+		if setErr := s.redis.Set(ctx, key, cacheData, consentTTL); setErr != nil {
 			s.logger.Warn("Failed to write consent cache", zap.Error(setErr))
 		}
 	}
@@ -101,10 +101,10 @@ func (s *ConsentService) SaveConsent(ctx context.Context, consent *domain.Consen
 		s.logger.Warn("Failed to marshal consent for cache", zap.Error(err))
 	} else {
 		key := s.buildConsentKey(consent.AccountID, consent.ClientID)
-		if setErr := s.redis.Set(ctx, key, data, ConsentTTL); setErr != nil {
+		if setErr := s.redis.Set(ctx, key, data, consentTTL); setErr != nil {
 			s.logger.Warn("Failed to update consent cache, setting fallback TTL", zap.Error(setErr))
 			// Use a short fallback TTL so stale data expires quickly instead of 90 days.
-			_ = s.redis.Set(ctx, key, data, ConsentCacheFallbackTTL)
+			_ = s.redis.Set(ctx, key, data, consentCacheFallbackTTL)
 		}
 	}
 
@@ -130,21 +130,21 @@ func (s *ConsentService) DeleteConsent(ctx context.Context, accountID, clientID 
 		// If delete fails, the stale positive consent in cache could survive up to
 		// 90 days. Overwrite with a tombstone that expires quickly, so the next
 		// GetConsent falls through to the database.
-		_ = s.redis.Set(ctx, key, "revoked", ConsentCacheFallbackTTL)
+		_ = s.redis.Set(ctx, key, "revoked", consentCacheFallbackTTL)
 	}
 
 	return nil
 }
 
 func (s *ConsentService) buildConsentKey(accountID, clientID string) string {
-	return fmt.Sprintf("%s%s|%s", ConsentKeyPrefix, accountID, clientID)
+	return fmt.Sprintf("%s%s|%s", consentKeyPrefix, accountID, clientID)
 }
 
 // DeleteConsentsByAccount removes all consent cache entries for the given account.
 // Uses SCAN to iterate matching keys and deletes them in batches.
 // This is called when an account is deleted to prevent stale consent cache entries.
 func (s *ConsentService) DeleteConsentsByAccount(ctx context.Context, accountID string) error {
-	pattern := fmt.Sprintf("%s%s|*", ConsentKeyPrefix, accountID)
+	pattern := fmt.Sprintf("%s%s|*", consentKeyPrefix, accountID)
 	var cursor uint64
 	var totalDeleted int
 

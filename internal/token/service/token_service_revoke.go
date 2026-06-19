@@ -81,7 +81,7 @@ return #members
 // the wrong session, which is cleaned up by the session expiry mechanism.
 func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) (*domain.RefreshToken, error) {
 	// 1. Generate new token
-	newBytes := make([]byte, RefreshTokenLength)
+	newBytes := make([]byte, refreshTokenLength)
 	if _, err := rand.Read(newBytes); err != nil {
 		return nil, fmt.Errorf("generate new token: %w", err)
 	}
@@ -210,7 +210,7 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 
 	result, err := s.redis.RunScript(ctx, revokeAllSessionScript,
 		[]string{sessionKey},
-		RefreshTokenKeyPrefix,
+		refreshTokenKeyPrefix,
 	).Int64()
 	if err != nil {
 		return fmt.Errorf("revoke session tokens: %w", err)

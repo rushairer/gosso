@@ -152,7 +152,7 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 	}
 
 	var sessions []*domain.Session
-	staleIDs := make([]string, 0)
+	staleIDs := make([]string, 0, len(entries))
 	for i, cmd := range cmds {
 		data, err := cmd.Result()
 		if err != nil {

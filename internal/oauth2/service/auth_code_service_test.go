@@ -158,7 +158,7 @@ func TestValidateCode_Expired(t *testing.T) {
 	code.ExpiresAt = time.Now().Add(-1 * time.Hour)
 	data, err := json.Marshal(code)
 	require.NoError(t, err)
-	key := AuthCodeKeyPrefix + tokenDomain.HashToken(code.Code)
+	key := authCodeKeyPrefix + tokenDomain.HashToken(code.Code)
 	mr.Set(key, string(data))
 
 	_, err = svc.ValidateCode(ctx, code.Code, "client", "http://localhost/callback", nil)
@@ -191,7 +191,7 @@ func TestValidateCode_CorruptData(t *testing.T) {
 	require.NoError(t, err)
 
 	// Overwrite stored data with invalid JSON
-	key := AuthCodeKeyPrefix + tokenDomain.HashToken(code.Code)
+	key := authCodeKeyPrefix + tokenDomain.HashToken(code.Code)
 	mr.Set(key, "not-valid-json")
 
 	_, err = svc.ValidateCode(ctx, code.Code, "client", "http://localhost/callback", nil)

@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// dummyWorkDuration stores the sleep duration for DummyWork.
+// dummyWorkDuration stores the sleep duration for DummyWorkWithContext.
 // Defaults to 100ms to match typical Argon2id computation time.
 var dummyWorkDuration atomic.Int64
 
@@ -39,11 +39,4 @@ func DummyWorkWithContext(ctx context.Context) {
 	case <-timer.C:
 	case <-ctx.Done():
 	}
-}
-
-// DummyWork is a convenience wrapper around DummyWorkWithContext that uses
-// context.Background(). Prefer DummyWorkWithContext when a context is available
-// (e.g. request handlers) to support cancellation during shutdown.
-func DummyWork() {
-	DummyWorkWithContext(context.Background())
 }

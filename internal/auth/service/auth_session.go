@@ -30,8 +30,8 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 			return nil, ErrInvalidRefreshToken
 		} else if utility.NormalizeIP(oldRT.IP) != utility.NormalizeIP(currentIP) {
 			s.logger.Warn("Refresh token IP mismatch",
-				zap.String("original_ip", oldRT.IP),
-				zap.String("current_ip", currentIP),
+				zap.String("original_ip", utility.MaskOpaqueID(oldRT.IP)),
+				zap.String("current_ip", utility.MaskOpaqueID(currentIP)),
 				zap.String("account_id", oldRT.AccountID))
 			return nil, ErrInvalidRefreshToken
 		}

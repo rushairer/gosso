@@ -23,9 +23,9 @@ import (
 )
 
 const (
-	RefreshTokenKeyPrefix   = "refresh_token:"
-	SessionTokensKeyPrefix  = "session_tokens:"
-	RefreshTokenLength      = 32 // 32 bytes = 64 hex chars
+	refreshTokenKeyPrefix   = "refresh_token:"
+	sessionTokensKeyPrefix  = "session_tokens:"
+	refreshTokenLength      = 32 // 32 bytes = 64 hex chars
 	MinAccountRevocationTTL = 5 * time.Minute
 
 	// MaxShortLivedExpiry is the maximum allowed expiry for short-lived tokens.
@@ -160,7 +160,7 @@ func (s *TokenService) AccessExpiry() time.Duration {
 
 // GenerateRefreshToken generates a random refresh token and stores it in Redis
 func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clientID, sessionID, scope string) (*domain.RefreshToken, error) {
-	bytes := make([]byte, RefreshTokenLength)
+	bytes := make([]byte, refreshTokenLength)
 	if _, err := rand.Read(bytes); err != nil {
 		s.logger.Error("Failed to generate random bytes", zap.Error(err))
 		return nil, fmt.Errorf("generate refresh token: %w", err)
@@ -214,11 +214,11 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 }
 
 func (s *TokenService) buildRefreshTokenKey(token string) string {
-	return fmt.Sprintf("%s%s", RefreshTokenKeyPrefix, domain.HashToken(token))
+	return fmt.Sprintf("%s%s", refreshTokenKeyPrefix, domain.HashToken(token))
 }
 
 func (s *TokenService) buildSessionTokensKey(sessionID string) string {
-	return fmt.Sprintf("%s%s", SessionTokensKeyPrefix, sessionID)
+	return fmt.Sprintf("%s%s", sessionTokensKeyPrefix, sessionID)
 }
 
 // KeyService returns the underlying key service.

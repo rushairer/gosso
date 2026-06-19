@@ -192,7 +192,7 @@ func TestGetDeviceCode_CorruptData(t *testing.T) {
 	require.NoError(t, err)
 
 	// Corrupt the stored device code data
-	key := DeviceCodeKeyPrefix + tokenDomain.HashToken(dc.DeviceCode)
+	key := deviceCodeKeyPrefix + tokenDomain.HashToken(dc.DeviceCode)
 	mr.Set(key, "not-valid-json")
 
 	_, err = svc.GetDeviceCode(ctx, dc.DeviceCode)
@@ -229,7 +229,7 @@ func TestGetDeviceCodeByUserCode_CorruptDeviceCode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Corrupt the device code data (user code mapping still points to it)
-	dcKey := DeviceCodeKeyPrefix + tokenDomain.HashToken(dc.DeviceCode)
+	dcKey := deviceCodeKeyPrefix + tokenDomain.HashToken(dc.DeviceCode)
 	mr.Set(dcKey, "not-valid-json")
 
 	_, err = svc.GetDeviceCodeByUserCode(ctx, dc.UserCode)

@@ -111,7 +111,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginReq
 	}
 
 	s.logger.Info("Login successful",
-		zap.String("account_id", account.ID),
+		zap.String("account_id", utility.MaskOpaqueID(account.ID)),
 		zap.String("session_id", utility.MaskOpaqueID(session.ID)))
 
 	// Clear login failures count

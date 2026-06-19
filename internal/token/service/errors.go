@@ -7,4 +7,5 @@ var (
 	ErrInvalidToken           = errors.New("invalid token claims")
 	ErrBlacklistUnavailable   = errors.New("token blacklist unavailable")
 	ErrBlacklistNotConfigured = errors.New("token blacklist service not configured")
+	ErrRefreshTokenExpired    = errors.New("refresh token expired")
 )
