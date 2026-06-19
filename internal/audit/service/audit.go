@@ -163,7 +163,9 @@ func (a *Auditor) Do(
 	}
 
 	if auditRecord != nil {
-		if err := a.batchflow.Submit(ctx, a.buildBatchRequest(auditRecord)); err != nil {
+		// Use a background context for the audit submission so the record is not
+		// dropped when the request context is cancelled (e.g. client disconnect).
+		if err := a.batchflow.Submit(context.Background(), a.buildBatchRequest(auditRecord)); err != nil {
 			return err
 		}
 	}
@@ -212,8 +214,11 @@ func (a *Auditor) Log(ctx context.Context, record *domain.AuditRecord) error {
 }
 
 // submit builds a batchflow request from an audit record and submits it.
+// Uses context.Background() to ensure the audit record is not dropped when the
+// request context is cancelled (e.g. client disconnect or request timeout).
 func (a *Auditor) submit(ctx context.Context, record *domain.AuditRecord) error {
-	return a.batchflow.Submit(ctx, a.buildBatchRequest(record))
+	_ = ctx // context unused for submission; request-scoped enrichMeta already ran
+	return a.batchflow.Submit(context.Background(), a.buildBatchRequest(record))
 }
 
 // LogSync writes an audit record directly to the database, bypassing the batch pipeline.

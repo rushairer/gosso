@@ -101,8 +101,13 @@ func (c *AdminController) ListAccounts(ctx *gin.Context) {
 
 // isSelfAccount checks if the current admin is operating on their own account.
 // Uses UUID parsing to handle format differences (e.g., with/without braces).
+// Returns true (fail-safe deny) if the admin ID cannot be determined, to prevent
+// self-account operations when the middleware is misconfigured.
 func isSelfAccount(ctx *gin.Context, accountID string) bool {
 	currentAdminID := ctx.GetString(middleware.ContextKeyAccountID)
+	if currentAdminID == "" {
+		return true // fail-safe: deny if admin ID is missing (middleware misconfiguration)
+	}
 	a, err1 := uuid.Parse(currentAdminID)
 	b, err2 := uuid.Parse(accountID)
 	if err1 != nil || err2 != nil {

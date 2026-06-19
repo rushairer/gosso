@@ -108,26 +108,19 @@ type IntrospectRequest struct {
 func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 	var req IntrospectRequest
 
-	// RFC 7662: accept both JSON and application/x-www-form-urlencoded
+	// RFC 7662 references RFC 6749 token endpoint: enforce application/x-www-form-urlencoded.
+	// Reject application/json to match the token endpoint's strictness.
 	if contentType := ctx.GetHeader("Content-Type"); contentType != "" {
 		mediaType, _, _ := mime.ParseMediaType(contentType)
 		if mediaType == "application/json" {
-			if err := ctx.ShouldBindJSON(&req); err != nil {
-				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
-				return
-			}
-		} else {
-			if err := ctx.ShouldBind(&req); err != nil {
-				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
-				return
-			}
-		}
-	} else {
-		// Default to form binding when Content-Type is not specified
-		if err := ctx.ShouldBind(&req); err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+			ctx.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "invalid_request", "error_description": "Content-Type must be application/x-www-form-urlencoded"})
 			return
 		}
+	}
+
+	if err := ctx.ShouldBind(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
 	}
 
 	// Client authentication (Basic Auth or client_id/client_secret) - RFC 7662 requires authentication

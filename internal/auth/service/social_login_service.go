@@ -141,7 +141,13 @@ func (s *SocialLoginService) GetAuthURL(ctx context.Context, provider, state str
 	params.Set("scope", strings.Join(p.Scopes, " "))
 	params.Set("state", state)
 
-	return p.AuthURL + "?" + params.Encode(), nil
+	// Use url.Parse to safely append params even if AuthURL already has a query string.
+	parsedURL, err := url.Parse(p.AuthURL)
+	if err != nil {
+		return "", fmt.Errorf("parse auth URL for provider %s: %w", provider, err)
+	}
+	parsedURL.RawQuery = params.Encode()
+	return parsedURL.String(), nil
 }
 
 // HandleCallback handles the OAuth2 third-party callback after code exchange.

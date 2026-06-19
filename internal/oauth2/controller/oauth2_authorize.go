@@ -55,6 +55,12 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
+	// OIDC Core Section 3.1.2.1: reject unsupported response_mode values.
+	if responseMode := ctx.Query("response_mode"); responseMode != "" && responseMode != "query" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "unsupported response_mode, only 'query' is supported"})
+		return
+	}
+
 	client, err := c.clientSvc.FindByClientID(ctx, clientID)
 	if err != nil {
 		if c.clientAuth != nil {

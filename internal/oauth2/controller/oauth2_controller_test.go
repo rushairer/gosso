@@ -847,9 +847,9 @@ func TestIntrospect_BasicAuth_Success(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{"token":"some-token"}`
-	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	body := "token=some-token"
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth("cid-test", "test-secret")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -864,9 +864,9 @@ func TestIntrospect_BasicAuth_Success(t *testing.T) {
 func TestIntrospect_NoAuth(t *testing.T) {
 	engine := setupOAuth2Router(&mockOAuth2ClientSvcForOAuth2{}, &mockTokenMgr{}, &mockDeviceCodeMgr{})
 
-	body := `{"token":"some-token"}`
-	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	body := "token=some-token"
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -883,9 +883,9 @@ func TestIntrospect_ClientNotFound(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{"token":"some-token"}`
-	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	body := "token=some-token"
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth("bad-client", "secret")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -903,9 +903,9 @@ func TestIntrospect_WrongSecret(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{"token":"some-token"}`
-	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	body := "token=some-token"
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth("cid-test", "wrong-secret")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -925,9 +925,9 @@ func TestIntrospect_TokenInactive(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{"token":"expired-token"}`
-	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	body := "token=expired-token"
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth("cid-test", "test-secret")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -951,9 +951,9 @@ func TestIntrospect_InfrastructureError(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{"token":"some-token"}`
-	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	body := "token=some-token"
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth("cid-test", "test-secret")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -972,14 +972,35 @@ func TestIntrospect_MissingToken_Body(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := `{}`
+	body := ""
+	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("cid-test", "test-secret")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestIntrospect_RejectsJSON(t *testing.T) {
+	client := newConfidentialTestClient()
+	engine := setupOAuth2Router(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		&mockTokenMgr{},
+		&mockDeviceCodeMgr{},
+	)
+
+	body := `{"token":"some-token"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/introspect", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.SetBasicAuth("cid-test", "test-secret")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnsupportedMediaType, w.Code)
+	assert.Contains(t, w.Body.String(), "application/x-www-form-urlencoded")
 }
 
 // ──────────────────────────────────────────────

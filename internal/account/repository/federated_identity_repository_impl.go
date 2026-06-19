@@ -130,7 +130,7 @@ func (r *federatedIdentityRepositoryImpl) FindByAccountIDTx(ctx context.Context,
 func (r *federatedIdentityRepositoryImpl) SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `
 		UPDATE federated_identities
-		SET deleted_at = $1, updated_at = $1
+		SET deleted_at = $1, updated_at = $1, profile = '{}'
 		WHERE account_id = $2 AND deleted_at IS NULL
 	`
 

@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"net/http"
 	"net/mail"
 	"time"
@@ -754,7 +755,13 @@ func (c *AuthController) ForgotPassword(ctx *gin.Context) {
 	}
 
 	if err := c.passwordResetSvc.RequestReset(ctx, req.Email); err != nil {
-		c.logger.Warn("Password reset request failed", zap.String("email", utility.MaskEmail(req.Email)), zap.Error(err))
+		// Distinguish expected business errors from infrastructure failures.
+		// Log infrastructure errors at Error level for alerting.
+		if errors.Is(err, authService.ErrServiceUnavailable) || errors.Is(err, authService.ErrPasswordCooldown) {
+			c.logger.Warn("Password reset request denied", zap.String("email", utility.MaskEmail(req.Email)), zap.Error(err))
+		} else {
+			c.logger.Error("Password reset request failed unexpectedly", zap.String("email", utility.MaskEmail(req.Email)), zap.Error(err))
+		}
 	}
 
 	// Always return 200 to prevent email enumeration

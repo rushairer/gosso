@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"unicode"
 )
 
 // MinPasswordLength is the minimum required password length.
@@ -35,11 +34,11 @@ func ValidatePasswordStrength(password string) error {
 	var hasUpper, hasLower, hasDigit, hasSpecial bool
 	for _, c := range password {
 		switch {
-		case unicode.IsUpper(c):
+		case c >= 'A' && c <= 'Z':
 			hasUpper = true
-		case unicode.IsLower(c):
+		case c >= 'a' && c <= 'z':
 			hasLower = true
-		case unicode.IsDigit(c):
+		case c >= '0' && c <= '9':
 			hasDigit = true
 		case strings.ContainsRune(allowedSpecialChars, c):
 			hasSpecial = true

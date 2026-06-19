@@ -5,6 +5,9 @@ import "errors"
 // Business rule violations returned by AccountService methods.
 var (
 	ErrUsernameAlreadyTaken          = errors.New("username already taken")
+	ErrUsernameEmpty                 = errors.New("username must not be empty")
+	ErrUsernameTooLong               = errors.New("username must not exceed 64 characters")
+	ErrUsernameInvalidChars          = errors.New("username may only contain lowercase letters, digits, hyphens, dots, and underscores")
 	ErrIncorrectOldPassword          = errors.New("incorrect old password")
 	ErrFederatedIdentityAlreadyBound = errors.New("federated identity already bound")
 	ErrEmailAlreadyRegistered        = errors.New("email already registered")

@@ -123,12 +123,6 @@ func (s *TokenService) IntrospectToken(ctx context.Context, tokenString string) 
 		return map[string]any{"active": false}, nil
 	}
 
-	// Reject tokens with a not-before claim in the future.
-	// Allow 30 seconds of clock skew to handle minor time differences between servers.
-	if claims.NotBefore != nil && claims.NotBefore.After(time.Now().Add(30*time.Second)) {
-		return map[string]any{"active": false}, nil
-	}
-
 	result := map[string]any{
 		"active":     true,
 		"sub":        claims.AccountID,

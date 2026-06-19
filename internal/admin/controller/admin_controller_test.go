@@ -109,6 +109,10 @@ func (m *mockAccountService) SetOptions(_ *accountService.AccountServiceOptions)
 
 const validUUID = "550e8400-e29b-41d4-a716-446655440000"
 
+// adminUUID is a different UUID used as the current admin's ID in tests.
+// This ensures isSelfAccount returns false so the operation proceeds.
+const adminUUID = "550e8400-e29b-41d4-a716-446655440099"
+
 func setupAdminController(accountSvc *mockAccountService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -234,7 +238,7 @@ func TestAddRole_Error(t *testing.T) {
 	accountSvc := &mockAccountService{
 		assignRoleFn: func() error { return fmt.Errorf("role assignment failed") },
 	}
-	engine := setupAdminController(accountSvc)
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
 
 	roleUUID := "660e8400-e29b-41d4-a716-446655440001"
 	body := fmt.Sprintf(`{"role_id":%q}`, roleUUID)
@@ -314,7 +318,7 @@ func TestDeleteAccount_Success(t *testing.T) {
 	accountSvc := &mockAccountService{
 		deleteFn: func() error { return nil },
 	}
-	engine := setupAdminController(accountSvc)
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/admin/accounts/"+validUUID, nil)
 	w := httptest.NewRecorder()
@@ -328,7 +332,7 @@ func TestDeleteAccount_Error(t *testing.T) {
 	accountSvc := &mockAccountService{
 		deleteFn: func() error { return fmt.Errorf("cannot delete") },
 	}
-	engine := setupAdminController(accountSvc)
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/admin/accounts/"+validUUID, nil)
 	w := httptest.NewRecorder()
@@ -346,7 +350,7 @@ func TestDisableAccount_Success(t *testing.T) {
 	accountSvc := &mockAccountService{
 		suspendFn: func() error { return nil },
 	}
-	engine := setupAdminController(accountSvc)
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/disable", nil)
 	w := httptest.NewRecorder()
@@ -360,7 +364,7 @@ func TestEnableAccount_Success(t *testing.T) {
 	accountSvc := &mockAccountService{
 		activateFn: func() error { return nil },
 	}
-	engine := setupAdminController(accountSvc)
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/enable", nil)
 	w := httptest.NewRecorder()
@@ -374,7 +378,7 @@ func TestDisableAccount_Error(t *testing.T) {
 	accountSvc := &mockAccountService{
 		suspendFn: func() error { return fmt.Errorf("already suspended") },
 	}
-	engine := setupAdminController(accountSvc)
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/disable", nil)
 	w := httptest.NewRecorder()
@@ -408,7 +412,7 @@ func TestAddRole_Success(t *testing.T) {
 	accountSvc := &mockAccountService{
 		assignRoleFn: func() error { return nil },
 	}
-	engine := setupAdminController(accountSvc)
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
 
 	body := fmt.Sprintf(`{"role_id":%q}`, validUUID)
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/roles", bytes.NewBufferString(body))
@@ -421,7 +425,7 @@ func TestAddRole_Success(t *testing.T) {
 }
 
 func TestAddRole_InvalidBody(t *testing.T) {
-	engine := setupAdminController(&mockAccountService{})
+	engine := setupAdminControllerWithAdminID(&mockAccountService{}, adminUUID)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/roles", bytes.NewBufferString(`{}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -433,7 +437,7 @@ func TestAddRole_InvalidBody(t *testing.T) {
 }
 
 func TestAddRole_InvalidRoleUUID(t *testing.T) {
-	engine := setupAdminController(&mockAccountService{})
+	engine := setupAdminControllerWithAdminID(&mockAccountService{}, adminUUID)
 
 	body := `{"role_id":"not-a-uuid"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/roles", bytes.NewBufferString(body))
@@ -449,7 +453,7 @@ func TestRemoveRole_Success(t *testing.T) {
 	accountSvc := &mockAccountService{
 		removeRoleFn: func() error { return nil },
 	}
-	engine := setupAdminController(accountSvc)
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
 
 	roleUUID := "660e8400-e29b-41d4-a716-446655440001"
 	req := httptest.NewRequest(http.MethodDelete, "/api/admin/accounts/"+validUUID+"/roles/"+roleUUID, nil)
@@ -461,7 +465,7 @@ func TestRemoveRole_Success(t *testing.T) {
 }
 
 func TestRemoveRole_InvalidRoleUUID(t *testing.T) {
-	engine := setupAdminController(&mockAccountService{})
+	engine := setupAdminControllerWithAdminID(&mockAccountService{}, adminUUID)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/admin/accounts/"+validUUID+"/roles/not-a-uuid", nil)
 	w := httptest.NewRecorder()
@@ -550,7 +554,7 @@ func TestDisableAccount_NotFound(t *testing.T) {
 	accountSvc := &mockAccountService{
 		suspendFn: func() error { return accountRepository.ErrAccountNotFound },
 	}
-	engine := setupAdminController(accountSvc)
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/disable", nil)
 	w := httptest.NewRecorder()
@@ -564,7 +568,7 @@ func TestDisableAccount_InvalidTransition(t *testing.T) {
 	accountSvc := &mockAccountService{
 		suspendFn: func() error { return accountRepository.ErrInvalidStatusTransition },
 	}
-	engine := setupAdminController(accountSvc)
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/disable", nil)
 	w := httptest.NewRecorder()
@@ -600,7 +604,7 @@ func TestEnableAccount_NotFound(t *testing.T) {
 	accountSvc := &mockAccountService{
 		activateFn: func() error { return accountRepository.ErrAccountNotFound },
 	}
-	engine := setupAdminController(accountSvc)
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/enable", nil)
 	w := httptest.NewRecorder()
@@ -614,7 +618,7 @@ func TestEnableAccount_InvalidTransition(t *testing.T) {
 	accountSvc := &mockAccountService{
 		activateFn: func() error { return accountRepository.ErrInvalidStatusTransition },
 	}
-	engine := setupAdminController(accountSvc)
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/enable", nil)
 	w := httptest.NewRecorder()
@@ -628,7 +632,7 @@ func TestEnableAccount_GenericError(t *testing.T) {
 	accountSvc := &mockAccountService{
 		activateFn: func() error { return fmt.Errorf("redis connection lost") },
 	}
-	engine := setupAdminController(accountSvc)
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/enable", nil)
 	w := httptest.NewRecorder()
@@ -669,7 +673,7 @@ func TestRemoveRole_Error(t *testing.T) {
 	accountSvc := &mockAccountService{
 		removeRoleFn: func() error { return fmt.Errorf("db delete failed") },
 	}
-	engine := setupAdminController(accountSvc)
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
 
 	roleUUID := "660e8400-e29b-41d4-a716-446655440001"
 	req := httptest.NewRequest(http.MethodDelete, "/api/admin/accounts/"+validUUID+"/roles/"+roleUUID, nil)

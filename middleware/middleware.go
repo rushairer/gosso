@@ -102,5 +102,14 @@ func MaxBodySizeMiddleware(maxBytes int64) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxBytes)
 		ctx.Next()
+
+		// After handlers have run, check if any error is a MaxBytesError
+		// and rewrite the response to 413.
+		for _, ginErr := range ctx.Errors {
+			if ginErr.Err != nil && ginErr.Err.Error() == "http: request body too large" {
+				ctx.JSON(http.StatusRequestEntityTooLarge, gouno.NewErrorResponse(http.StatusRequestEntityTooLarge, "request body too large"))
+				return
+			}
+		}
 	}
 }

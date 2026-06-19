@@ -155,9 +155,12 @@ func (s *accountServiceImpl) VerifyContactCredential(ctx context.Context, accoun
 }
 
 // ChangePassword changes the account password.
+//
+// The entire read-verify-update cycle runs inside a single transaction with
+// FOR UPDATE row-level locking to prevent TOCTOU race conditions.
 func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error {
-	// 0. Ensure account is active
-	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
+	// 0. Validate new password strength before doing expensive work
+	if err := utility.ValidatePasswordStrength(newPassword); err != nil {
 		return err
 	}
 
@@ -166,39 +169,47 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 		return fmt.Errorf("%w: cannot revoke sessions on password change", ErrSessionRevokerNotBound)
 	}
 
-	// 2. Find password credential
-	passwordCred, err := s.credentialRepo.FindPasswordCredential(ctx, accountID)
-	if err != nil {
-		return fmt.Errorf("find password credential: %w", err)
-	}
-
-	// 3. Verify old password
-	if !passwordCred.VerifyPassword(oldPassword) {
-		return ErrIncorrectOldPassword
-	}
-
-	// 4. Validate new password strength
-	if err := utility.ValidatePasswordStrength(newPassword); err != nil {
-		return err
-	}
-
-	// 5. Hash new password
+	// 2. Hash new password (CPU-intensive, done outside the transaction)
 	newPasswordHash, err := domain.HashPassword(newPassword)
 	if err != nil {
 		return fmt.Errorf("hash new password: %w", err)
 	}
 
-	// 6. Update password
-	passwordCred.Value = newPasswordHash
-
+	// 3. Find + verify + update inside a single transaction with row-level locking
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// Verify account is active inside the transaction
+		account, err := s.accountRepo.FindByIDTx(ctx, tx, accountID)
+		if err != nil {
+			return err
+		}
+		if !account.IsActive() {
+			return ErrAccountNotActive
+		}
+
+		// Find password credential with row-level locking
+		creds, err := s.credentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, domain.CredentialTypePassword)
+		if err != nil {
+			return fmt.Errorf("find password credential: %w", err)
+		}
+		if len(creds) == 0 {
+			return repository.ErrCredentialNotFound
+		}
+		passwordCred := creds[0]
+
+		// Verify old password
+		if !passwordCred.VerifyPassword(oldPassword) {
+			return ErrIncorrectOldPassword
+		}
+
+		// Update password
+		passwordCred.Value = newPasswordHash
 		return s.credentialRepo.UpdateCredential(ctx, tx, passwordCred)
 	})
 	if err != nil {
 		return err
 	}
 
-	// 7. Revoke all existing sessions so that any attacker with a stolen session is kicked out
+	// 4. Revoke all existing sessions so that any attacker with a stolen session is kicked out
 	if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
 		s.logger.Error("Failed to revoke sessions after password change",
 			zap.String("account_id", accountID), zap.Error(revokeErr))
@@ -207,7 +218,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 		return fmt.Errorf("password changed but session revocation failed: %w", revokeErr)
 	}
 
-	// 8. Audit log (sync — critical security event)
+	// 5. Audit log (sync — critical security event)
 	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionPasswordChange,
 		audit.IPFromContext(ctx),

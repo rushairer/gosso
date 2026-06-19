@@ -526,7 +526,10 @@ func TestChangePassword(t *testing.T) {
 	oldHash, err := domain.HashPassword(oldPassword)
 	require.NoError(t, err)
 
-	// Mock FindByID for requireActiveAccount
+	// All DB operations now happen inside a single transaction
+	mock.ExpectBegin()
+
+	// Mock FindByIDTx for account active check inside transaction
 	now := time.Now()
 	accountRows := sqlmock.NewRows([]string{
 		"id", "username", "display_name", "avatar_url", "status",
@@ -539,6 +542,7 @@ func TestChangePassword(t *testing.T) {
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
 
+	// Mock FindByAccountAndTypeForUpdate for password credential lookup
 	rows := sqlmock.NewRows([]string{
 		"id", "account_id", "credential_type", "identifier", "credential_value",
 		"verified", "primary_credential", "metadata", "created_at", "updated_at",
@@ -552,7 +556,6 @@ func TestChangePassword(t *testing.T) {
 		WithArgs(accountID, domain.CredentialTypePassword).
 		WillReturnRows(rows)
 
-	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE account_credentials").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -964,7 +967,10 @@ func TestBindFederatedIdentity(t *testing.T) {
 
 	accountID := "account-001"
 
-	// Mock FindByID for requireActiveAccount
+	// All DB operations now happen inside a single transaction
+	mock.ExpectBegin()
+
+	// Mock FindByIDTx for account active check inside transaction
 	now := time.Now()
 	accountRows := sqlmock.NewRows([]string{
 		"id", "username", "display_name", "avatar_url", "status",
@@ -976,8 +982,6 @@ func TestBindFederatedIdentity(t *testing.T) {
 	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
-
-	mock.ExpectBegin()
 
 	// FindByProvider — not found (no existing binding)
 	mock.ExpectQuery("SELECT (.+) FROM federated_identities WHERE provider").
@@ -1013,7 +1017,10 @@ func TestBindFederatedIdentity_AlreadyBound(t *testing.T) {
 	accountID := "account-001"
 	now := time.Now()
 
-	// Mock FindByID for requireActiveAccount
+	// All DB operations now happen inside a single transaction
+	mock.ExpectBegin()
+
+	// Mock FindByIDTx for account active check inside transaction
 	accountRows := sqlmock.NewRows([]string{
 		"id", "username", "display_name", "avatar_url", "status",
 		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
@@ -1024,8 +1031,6 @@ func TestBindFederatedIdentity_AlreadyBound(t *testing.T) {
 	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
-
-	mock.ExpectBegin()
 
 	// FindByProvider — found existing binding
 	existingRows := sqlmock.NewRows([]string{

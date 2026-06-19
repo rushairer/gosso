@@ -20,15 +20,22 @@ import (
 
 // BindFederatedIdentity binds a third-party identity.
 func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountID string, provider domain.Provider, providerUserID string, profile map[string]any) error {
-	if _, err := s.requireActiveAccount(ctx, accountID); err != nil {
-		return err
-	}
 	identity, err := domain.NewFederatedIdentity(accountID, provider, providerUserID, profile)
 	if err != nil {
 		return fmt.Errorf("create federated identity: %w", err)
 	}
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// Verify account is active inside the transaction to prevent TOCTOU:
+		// the account could be soft-deleted or suspended between the check and the insert.
+		account, err := s.accountRepo.FindByIDTx(ctx, tx, accountID)
+		if err != nil {
+			return err
+		}
+		if !account.IsActive() {
+			return ErrAccountNotActive
+		}
+
 		// Check inside the transaction to avoid TOCTOU: a concurrent request
 		// could bind the same identity between our check and the insert.
 		existing, err := s.federatedIdentityRepo.FindByProviderTx(ctx, tx, provider, providerUserID)
@@ -80,12 +87,13 @@ func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accoun
 		// or at least one other federated identity remaining.
 		hasPassword := false
 		pwCreds, err := s.credentialRepo.FindByAccountAndTypeTx(ctx, tx, accountID, domain.CredentialTypePassword)
-		if err == nil {
-			for _, c := range pwCreds {
-				if !c.IsDeleted() {
-					hasPassword = true
-					break
-				}
+		if err != nil {
+			return fmt.Errorf("check password credential: %w", err)
+		}
+		for _, c := range pwCreds {
+			if !c.IsDeleted() {
+				hasPassword = true
+				break
 			}
 		}
 		if !hasPassword {
@@ -218,14 +226,14 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 // The 64-character limit matches domain.ErrUsernameTooLong.
 func validateUsername(username string) error {
 	if username == "" {
-		return fmt.Errorf("username must not be empty")
+		return ErrUsernameEmpty
 	}
 	if len(username) > 64 {
-		return fmt.Errorf("username must not exceed 64 characters")
+		return ErrUsernameTooLong
 	}
 	for _, c := range username {
 		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' && c != '-' && c != '.' {
-			return fmt.Errorf("username may only contain lowercase letters, digits, hyphens, dots, and underscores")
+			return ErrUsernameInvalidChars
 		}
 	}
 	return nil
