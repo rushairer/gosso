@@ -22,6 +22,13 @@ func TestNewKeyService_Generate(t *testing.T) {
 	assert.Equal(t, 3072, svc.PrivateKey().N.BitLen())
 }
 
+func TestNewKeyService_InvalidKeyBits(t *testing.T) {
+	svc, err := NewKeyService("", "", false, 1024, zap.NewNop())
+	require.Error(t, err)
+	assert.Nil(t, svc)
+	assert.Contains(t, err.Error(), "rsa_key_bits must be at least 2048")
+}
+
 func TestNewKeyService_CreateFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "keys", "private.pem")

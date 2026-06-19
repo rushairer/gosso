@@ -202,6 +202,10 @@ type AuthConfig struct {
 
 	// RSA key size in bits for new key generation (0 = 3072 default)
 	RSAKeyBits int `mapstructure:"rsa_key_bits"`
+
+	// AccountValidatorCacheTTL is the TTL for the account validation cache
+	// used by the OAuth2 token endpoint. 0 = 5s default.
+	AccountValidatorCacheTTL time.Duration `mapstructure:"account_validator_cache_ttl"`
 }
 
 // CORSConfig configures Cross-Origin Resource Sharing (CORS) headers.

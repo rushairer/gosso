@@ -61,7 +61,12 @@ func setupTestConsentService(t *testing.T) (*ConsentService, sqlmock.Sqlmock, fu
 	require.NoError(t, err)
 
 	repo := newMockConsentRepository()
-	svc := NewConsentService(db, repo, redisClient, logger)
+	svc, err := NewConsentService(db, repo, redisClient, logger)
+	if err != nil {
+		mr.Close()
+		db.Close()
+		t.Fatalf("NewConsentService: %v", err)
+	}
 
 	cleanup := func() {
 		mr.Close()
@@ -142,7 +147,7 @@ func TestDeleteConsent(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-func TestNewConsentService_NilRepo_Panics(t *testing.T) {
+func TestNewConsentService_NilRepo_ReturnsError(t *testing.T) {
 	logger := zap.NewNop()
 	redisClient, mr := testutil.SetupTestRedis(t)
 	defer mr.Close()
@@ -151,9 +156,10 @@ func TestNewConsentService_NilRepo_Panics(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	assert.Panics(t, func() {
-		NewConsentService(db, nil, redisClient, logger)
-	})
+	svc, err := NewConsentService(db, nil, redisClient, logger)
+	require.Error(t, err)
+	assert.Nil(t, svc)
+	assert.Contains(t, err.Error(), "consent repository is required")
 }
 
 func TestSaveConsent_UpdatesCache(t *testing.T) {
@@ -214,7 +220,8 @@ func TestGetConsent_CorruptCache(t *testing.T) {
 	defer db.Close()
 
 	repo := newMockConsentRepository()
-	svc := NewConsentService(db, repo, redisClient, zap.NewNop())
+	svc, err := NewConsentService(db, repo, redisClient, zap.NewNop())
+	require.NoError(t, err)
 
 	ctx := context.Background()
 
@@ -243,7 +250,8 @@ func TestGetConsent_CacheReadError(t *testing.T) {
 	defer db.Close()
 
 	repo := newMockConsentRepository()
-	svc := NewConsentService(db, repo, redisClient, zap.NewNop())
+	svc, err := NewConsentService(db, repo, redisClient, zap.NewNop())
+	require.NoError(t, err)
 
 	ctx := context.Background()
 

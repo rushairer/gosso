@@ -63,3 +63,15 @@ func MaskOpaqueID(id string) string {
 	}
 	return string(runes[:4]) + "***" + string(runes[len(runes)-4:])
 }
+
+// MaskRateLimitKey masks PII (IP addresses, usernames) from rate limit keys for safe logging.
+// Keeps only the first colon-separated segment (the key type/prefix).
+// Example: "login_attempts:192.168.1.1:user@example.com" -> "login_attempts:***"
+func MaskRateLimitKey(key string) string {
+	for i, c := range key {
+		if c == ':' {
+			return key[:i] + ":***"
+		}
+	}
+	return "***"
+}

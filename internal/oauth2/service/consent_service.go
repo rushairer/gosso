@@ -33,17 +33,17 @@ type ConsentService struct {
 }
 
 // NewConsentService creates a new consent service instance.
-func NewConsentService(db *sql.DB, consentRepo repository.ConsentRepository, redis *cache.RedisClient, logger *zap.Logger) *ConsentService {
+func NewConsentService(db *sql.DB, consentRepo repository.ConsentRepository, redis *cache.RedisClient, logger *zap.Logger) (*ConsentService, error) {
 	logger = utility.EnsureLogger(logger)
 	if consentRepo == nil {
-		panic("consent repository is required")
+		return nil, fmt.Errorf("consent repository is required")
 	}
 	return &ConsentService{
 		db:          db,
 		consentRepo: consentRepo,
 		redis:       redis,
 		logger:      logger,
-	}
+	}, nil
 }
 
 // GetConsent retrieves the user's consent record for a specific client.

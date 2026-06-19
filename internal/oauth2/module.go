@@ -37,7 +37,10 @@ func InitializeOAuth2Module(
 	if err != nil {
 		return nil, fmt.Errorf("initialize auth code service: %w", err)
 	}
-	consentSvc := service.NewConsentService(db, consentRepo, redis, logger)
+	consentSvc, err := service.NewConsentService(db, consentRepo, redis, logger)
+	if err != nil {
+		return nil, fmt.Errorf("initialize consent service: %w", err)
+	}
 	deviceCodeSvc := service.NewDeviceCodeService(redis, logger, authConfig.DeviceCodeExpiry, authConfig.DeviceCodeInterval)
 
 	return &OAuth2Module{

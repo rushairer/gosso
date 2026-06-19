@@ -109,11 +109,12 @@ type PasswordResetService struct {
 // PasswordResetServiceConfig holds optional configuration for PasswordResetService.
 // Zero-valued fields use package defaults.
 type PasswordResetServiceConfig struct {
-	WaitTimeout       time.Duration // default: 60s
-	TokenTTL          time.Duration // default: passwordResetTokenTTL
-	CooldownTTL       time.Duration // default: passwordResetCooldownTTL
-	MaxAttempts       int           // default: passwordResetMaxAttempts
-	RevokeConcurrency int           // default: 10
+	WaitTimeout          time.Duration        // default: 60s
+	TokenTTL             time.Duration        // default: passwordResetTokenTTL
+	CooldownTTL          time.Duration        // default: passwordResetCooldownTTL
+	MaxAttempts          int                  // default: passwordResetMaxAttempts
+	RevokeConcurrency    int                  // default: 10
+	LoginRateLimitClearer LoginRateLimitClearer // optional; clears login rate-limit counters after reset
 }
 
 // NewPasswordResetService creates a new password reset service instance
@@ -180,6 +181,9 @@ func NewPasswordResetServiceWithConfig(
 	}
 	if cfg.MaxAttempts > 0 {
 		svc.maxAttempts = cfg.MaxAttempts
+	}
+	if cfg.LoginRateLimitClearer != nil {
+		svc.loginRateLimitClearer = cfg.LoginRateLimitClearer
 	}
 	return svc
 }

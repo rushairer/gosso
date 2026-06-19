@@ -74,6 +74,7 @@ auth:
         - email
     private_key_path: "/app/keys/private.pem"
     password_reset_base_url: ""
+    account_validator_cache_ttl: 5s
     # WebAuthn / Passkey configuration (REQUIRED for passkey support)
     webauthn_rp_id: ""
     webauthn_rp_name: ""

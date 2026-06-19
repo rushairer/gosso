@@ -91,7 +91,10 @@ func sessionExample(ctx context.Context, redisClient *cache.RedisClient, logger 
 	logger.Info("========== Session Management ==========")
 
 	// 创建会话服务
-	sessionSvc := sessionService.NewSessionService(redisClient, logger)
+	sessionSvc, err := sessionService.NewSessionService(redisClient, logger)
+	if err != nil {
+		logger.Fatal("Failed to create session service", zap.Error(err))
+	}
 	sessionSvc.SetSessionTTL(24 * time.Hour)
 
 	// 创建用户会话
@@ -107,7 +110,7 @@ func sessionExample(ctx context.Context, redisClient *cache.RedisClient, logger 
 		},
 	}
 
-	err := sessionSvc.CreateSession(ctx, session)
+	err = sessionSvc.CreateSession(ctx, session)
 	if err != nil {
 		logger.Error("Failed to create session", zap.Error(err))
 		return

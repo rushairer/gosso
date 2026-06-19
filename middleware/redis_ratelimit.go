@@ -100,7 +100,7 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, endpoint string, keyFunc f
 			if logger != nil {
 				// Log at Warn level to avoid log storms when Redis is down under high traffic.
 				// The actual error is operational (Redis unavailable), not an application bug.
-				logger.Warn("Rate limiter Redis error", zap.String("key_masked", maskRateLimitKey(key)), zap.Error(err))
+				logger.Warn("Rate limiter Redis error", zap.String("key_masked", utility.MaskRateLimitKey(key)), zap.Error(err))
 			}
 			if failOpen {
 				ctx.Next()
@@ -145,16 +145,4 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, endpoint string, keyFunc f
 // Normalizes IPv4-mapped IPv6 addresses to prevent rate limit bypass.
 func IPKeyFunc(ctx *gin.Context) string {
 	return utility.NormalizeIP(ctx.ClientIP())
-}
-
-// maskRateLimitKey masks PII (IP addresses, usernames) from rate limit keys for safe logging.
-// Example: "login_attempts:192.168.1.1:user@example.com" -> "login_attempts:***"
-func maskRateLimitKey(key string) string {
-	// Keep only the first colon-separated segment (the key type/prefix).
-	for i, c := range key {
-		if c == ':' {
-			return key[:i] + ":***"
-		}
-	}
-	return "***"
 }

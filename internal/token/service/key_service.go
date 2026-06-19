@@ -37,13 +37,13 @@ type KeyService struct {
 //  3. privateKeyPath empty → generate in-memory (dev mode, keys lost on restart)
 //
 // keyBits specifies the RSA key size for new key generation. If 0, defaults to 3072.
-// Panics if keyBits is non-zero and less than 2048.
+// Returns an error if keyBits is non-zero and less than 2048.
 func NewKeyService(privateKeyPath string, keyID string, isProduction bool, keyBits int, logger *zap.Logger) (*KeyService, error) {
 	if keyBits == 0 {
 		keyBits = defaultRSAKeyBits
 	}
 	if keyBits < 2048 {
-		panic("rsa_key_bits must be at least 2048")
+		return nil, fmt.Errorf("rsa_key_bits must be at least 2048 (got %d)", keyBits)
 	}
 
 	logger = utility.EnsureLogger(logger)

@@ -53,12 +53,15 @@ type AuthModuleConfig struct {
 // InitializeAuthModule initializes the authentication module.
 // Returns an error if the TOTP encryption key cannot be set.
 func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
-	sessionSvc := sessionService.NewSessionServiceWithConfig(cfg.Redis, cfg.Logger, sessionService.SessionConfig{
+	sessionSvc, err := sessionService.NewSessionServiceWithConfig(cfg.Redis, cfg.Logger, sessionService.SessionConfig{
 		SessionTTL:    cfg.AuthConfig.SessionTTL,
 		MaxSessions:   cfg.AuthConfig.MaxSessions,
 		MaxSessionAge: cfg.AuthConfig.MaxSessionAge,
 		TokenRevoker:  cfg.TokenSvc,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("initialize session service: %w", err)
+	}
 
 	// PasskeyService (if WebAuthn is configured)
 	var passkeySvc *service.PasskeyService
@@ -132,13 +135,13 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 	})
 
 	passwordResetSvc := service.NewPasswordResetServiceWithConfig(cfg.Redis, cfg.CredentialRepo, emailSvc, sessionSvc, cfg.TokenSvc, cfg.AccountSvc, cfg.DB, cfg.BaseURL, cfg.Logger, service.PasswordResetServiceConfig{
-		WaitTimeout:       cfg.AuthConfig.PasswordResetWaitTimeout,
-		TokenTTL:          cfg.AuthConfig.PasswordResetTokenTTL,
-		CooldownTTL:       cfg.AuthConfig.PasswordResetCooldownTTL,
-		MaxAttempts:       cfg.AuthConfig.PasswordResetMaxAttempts,
-		RevokeConcurrency: cfg.AuthConfig.PasswordResetRevokeConcurrency,
+		WaitTimeout:          cfg.AuthConfig.PasswordResetWaitTimeout,
+		TokenTTL:             cfg.AuthConfig.PasswordResetTokenTTL,
+		CooldownTTL:          cfg.AuthConfig.PasswordResetCooldownTTL,
+		MaxAttempts:          cfg.AuthConfig.PasswordResetMaxAttempts,
+		RevokeConcurrency:    cfg.AuthConfig.PasswordResetRevokeConcurrency,
+		LoginRateLimitClearer: authSvc,
 	})
-	passwordResetSvc.SetLoginRateLimitClearer(authSvc)
 
 	return &AuthModule{
 		AuthService:          authSvc,

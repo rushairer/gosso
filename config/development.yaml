@@ -67,6 +67,7 @@ auth:
         - email
     private_key_path: "./keys/private.pem"
     password_reset_base_url: "http://localhost:3000/reset-password"
+    account_validator_cache_ttl: 5s
     # WebAuthn / Passkey configuration
     webauthn_rp_id: "localhost"
     webauthn_rp_name: "gouno-dev"

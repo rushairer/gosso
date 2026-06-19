@@ -76,15 +76,16 @@ type SessionService struct {
 
 // NewSessionService creates a new session service instance with default configuration.
 // Use Set* methods to customize before first use (legacy pattern).
-func NewSessionService(redis *cache.RedisClient, logger *zap.Logger) *SessionService {
+func NewSessionService(redis *cache.RedisClient, logger *zap.Logger) (*SessionService, error) {
 	return NewSessionServiceWithConfig(redis, logger, SessionConfig{})
 }
 
 // NewSessionServiceWithConfig creates a new session service instance with the given config.
 // Zero-valued fields use package defaults.
-func NewSessionServiceWithConfig(redis *cache.RedisClient, logger *zap.Logger, cfg SessionConfig) *SessionService {
+// Returns an error if redis is nil.
+func NewSessionServiceWithConfig(redis *cache.RedisClient, logger *zap.Logger, cfg SessionConfig) (*SessionService, error) {
 	if redis == nil {
-		panic("NewSessionService: redis must not be nil")
+		return nil, fmt.Errorf("NewSessionService: redis must not be nil")
 	}
 	logger = utility.EnsureLogger(logger)
 
@@ -108,7 +109,7 @@ func NewSessionServiceWithConfig(redis *cache.RedisClient, logger *zap.Logger, c
 	if cfg.TokenRevoker != nil {
 		svc.tokenRevoker = cfg.TokenRevoker
 	}
-	return svc
+	return svc, nil
 }
 
 // SetTokenRevoker sets the token revoker for cascading token revocation.

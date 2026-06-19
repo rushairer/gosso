@@ -90,3 +90,24 @@ func TestMaskOpaqueID(t *testing.T) {
 		})
 	}
 }
+
+func TestMaskRateLimitKey(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"login_attempts:192.168.1.1:user@example.com", "login_attempts:***"},
+		{"rate_limit:10.0.0.1", "rate_limit:***"},
+		{"nocolon", "***"},
+		{"", "***"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := MaskRateLimitKey(tt.input)
+			if got != tt.want {
+				t.Errorf("MaskRateLimitKey(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}

@@ -206,7 +206,7 @@ func (s *AuthService) clearLoginRateLimits(ctx context.Context, ip string, usern
 		normalizedIP := utility.NormalizeIP(ip)
 		key := fmt.Sprintf("login_attempts:%s:%s", normalizedIP, strings.ToLower(*username))
 		if err := s.redis.Del(ctx, key); err != nil {
-			s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key_masked", maskRateLimitKey(key)), zap.Error(err))
+			s.logger.Warn("Failed to clear rate limit counter after successful login", zap.String("key_masked", utility.MaskRateLimitKey(key)), zap.Error(err))
 		}
 	}
 }
@@ -235,15 +235,4 @@ func (s *AuthService) completeLogin(ctx context.Context, account *accountDomain.
 	)
 
 	return buildLoginResult(account, session, accessToken, refreshToken), nil
-}
-
-// maskRateLimitKey masks PII (IP addresses, usernames) from rate limit keys for safe logging.
-// Example: "login_attempts:192.168.1.1:user@example.com" -> "login_attempts:***"
-func maskRateLimitKey(key string) string {
-	for i, c := range key {
-		if c == ':' {
-			return key[:i] + ":***"
-		}
-	}
-	return "***"
 }

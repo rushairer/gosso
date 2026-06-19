@@ -116,7 +116,11 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	})
 
 	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, !cfg.WebServerConfig.Debug, logger)
-	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &oauth2Service.ClientAuthenticator{}, &accountValidatorAdapter{accountSvc: accountMod.Service, logger: logger, cacheTTL: 5 * time.Second}, authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)
+	accountValidatorCacheTTL := cfg.AuthConfig.AccountValidatorCacheTTL
+	if accountValidatorCacheTTL <= 0 {
+		accountValidatorCacheTTL = 5 * time.Second
+	}
+	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &oauth2Service.ClientAuthenticator{}, &accountValidatorAdapter{accountSvc: accountMod.Service, logger: logger, cacheTTL: accountValidatorCacheTTL}, authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
 	}

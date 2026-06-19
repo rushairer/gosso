@@ -23,7 +23,8 @@ func setupTestSessionService(t *testing.T) (*SessionService, func()) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	cleanup := mr.Close
 
-	service := NewSessionService(redisClient, logger)
+	service, err := NewSessionService(redisClient, logger)
+	require.NoError(t, err)
 	service.SetSessionTTL(10 * time.Second) // short TTL for tests
 	service.SetTokenRevoker(&stubTokenRevoker{})
 
@@ -50,7 +51,8 @@ func TestNewSessionService_NilLogger(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	defer mr.Close()
 
-	svc := NewSessionService(redisClient, nil)
+	svc, err := NewSessionService(redisClient, nil)
+	require.NoError(t, err)
 	assert.NotNil(t, svc)
 	assert.NotNil(t, svc.logger)
 	assert.Equal(t, DefaultSessionTTL, svc.sessionTTL)
@@ -58,16 +60,18 @@ func TestNewSessionService_NilLogger(t *testing.T) {
 }
 
 func TestNewSessionService_NilRedis(t *testing.T) {
-	assert.Panics(t, func() {
-		NewSessionService(nil, zap.NewNop())
-	})
+	svc, err := NewSessionService(nil, zap.NewNop())
+	require.Error(t, err)
+	assert.Nil(t, svc)
+	assert.Contains(t, err.Error(), "redis must not be nil")
 }
 
 func TestNewSessionService_WithLogger(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	defer mr.Close()
 	logger := zap.NewNop()
-	svc := NewSessionService(redisClient, logger)
+	svc, err := NewSessionService(redisClient, logger)
+	require.NoError(t, err)
 	assert.NotNil(t, svc)
 }
 
@@ -375,7 +379,8 @@ func TestSessionService_RevokeSession_NoTokenRevoker(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	defer mr.Close()
 
-	svc := NewSessionService(redisClient, logger)
+	svc, err := NewSessionService(redisClient, logger)
+	require.NoError(t, err)
 	svc.SetSessionTTL(10 * time.Second)
 
 	ctx := context.Background()
@@ -386,7 +391,7 @@ func TestSessionService_RevokeSession_NoTokenRevoker(t *testing.T) {
 		IP:        "127.0.0.1",
 		UserAgent: "test-agent",
 	}
-	err := svc.CreateSession(ctx, session)
+	err = svc.CreateSession(ctx, session)
 	require.NoError(t, err)
 	defer func() { _ = svc.DeleteSession(ctx, session.ID) }()
 
@@ -452,7 +457,8 @@ func TestSessionService_RevokeAllForAccount_NoTokenRevoker(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	defer mr.Close()
 
-	svc := NewSessionService(redisClient, logger)
+	svc, err := NewSessionService(redisClient, logger)
+	require.NoError(t, err)
 	svc.SetSessionTTL(10 * time.Second)
 
 	ctx := context.Background()
@@ -464,7 +470,7 @@ func TestSessionService_RevokeAllForAccount_NoTokenRevoker(t *testing.T) {
 
 	// Without a token revoker, RevokeAllForAccount should still succeed
 	// and clean up session keys (token revocation is skipped with a warning).
-	err := svc.RevokeAllForAccount(ctx, accountID)
+	err = svc.RevokeAllForAccount(ctx, accountID)
 	assert.NoError(t, err)
 
 	// Verify sessions were cleaned up
@@ -482,7 +488,8 @@ func TestSessionService_ValidateSession_ExpiredByMaxAge(t *testing.T) {
 	defer mr.Close()
 
 	logger := zap.NewNop()
-	svc := NewSessionService(redisClient, logger)
+	svc, err := NewSessionService(redisClient, logger)
+	require.NoError(t, err)
 	svc.SetSessionTTL(10 * time.Second)
 	svc.SetMaxSessionAge(1 * time.Millisecond)
 	svc.SetTokenRevoker(&stubTokenRevoker{})
@@ -493,7 +500,7 @@ func TestSessionService_ValidateSession_ExpiredByMaxAge(t *testing.T) {
 
 	time.Sleep(5 * time.Millisecond)
 
-	_, err := svc.ValidateSession(ctx, session.ID)
+	_, err = svc.ValidateSession(ctx, session.ID)
 	assert.ErrorIs(t, err, ErrSessionExpired)
 }
 
@@ -506,7 +513,8 @@ func TestSessionService_RefreshSession_ExpiredByMaxAge(t *testing.T) {
 	defer mr.Close()
 
 	logger := zap.NewNop()
-	svc := NewSessionService(redisClient, logger)
+	svc, err := NewSessionService(redisClient, logger)
+	require.NoError(t, err)
 	svc.SetSessionTTL(10 * time.Second)
 	svc.SetMaxSessionAge(1 * time.Millisecond)
 	svc.SetTokenRevoker(&stubTokenRevoker{})
@@ -517,7 +525,7 @@ func TestSessionService_RefreshSession_ExpiredByMaxAge(t *testing.T) {
 
 	time.Sleep(5 * time.Millisecond)
 
-	err := svc.RefreshSession(ctx, session.ID)
+	err = svc.RefreshSession(ctx, session.ID)
 	assert.ErrorIs(t, err, ErrSessionExpired)
 }
 
@@ -545,7 +553,8 @@ func TestSessionService_EnforceSessionLimit(t *testing.T) {
 	testutil.SkipIfNoCJSON(t, redisClient)
 
 	logger := zap.NewNop()
-	svc := NewSessionService(redisClient, logger)
+	svc, err := NewSessionService(redisClient, logger)
+	require.NoError(t, err)
 	svc.SetSessionTTL(10 * time.Second)
 	svc.SetMaxSessions(2)
 	svc.SetTokenRevoker(&stubTokenRevoker{})
@@ -567,18 +576,20 @@ func TestSessionService_EnforceSessionLimit(t *testing.T) {
 func TestSessionService_EnforceSessionLimit_Disabled(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	defer mr.Close()
-	svc := NewSessionService(redisClient, zap.NewNop())
+	svc, err := NewSessionService(redisClient, zap.NewNop())
+	require.NoError(t, err)
 	svc.SetMaxSessions(0)
-	err := svc.EnforceSessionLimit(context.Background(), "any-account")
+	err = svc.EnforceSessionLimit(context.Background(), "any-account")
 	assert.NoError(t, err)
 }
 
 func TestSessionService_EnforceSessionLimit_NoRevoker(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	defer mr.Close()
-	svc := NewSessionService(redisClient, zap.NewNop())
+	svc, err := NewSessionService(redisClient, zap.NewNop())
+	require.NoError(t, err)
 	svc.SetMaxSessions(5)
-	err := svc.EnforceSessionLimit(context.Background(), "any-account")
+	err = svc.EnforceSessionLimit(context.Background(), "any-account")
 	assert.ErrorIs(t, err, ErrTokenRevokerNotConfigured)
 }
 
@@ -713,7 +724,8 @@ func TestSessionService_RevokeSession_RevokerError(t *testing.T) {
 	defer mr.Close()
 
 	logger := zap.NewNop()
-	svc := NewSessionService(redisClient, logger)
+	svc, err := NewSessionService(redisClient, logger)
+	require.NoError(t, err)
 	svc.SetSessionTTL(10 * time.Second)
 	svc.SetTokenRevoker(&stubTokenRevoker{})
 
@@ -724,7 +736,7 @@ func TestSessionService_RevokeSession_RevokerError(t *testing.T) {
 	// Swap to error revoker after session creation
 	svc.SetTokenRevoker(&errorTokenRevoker{})
 
-	err := svc.RevokeSession(ctx, "a1", session.ID)
+	err = svc.RevokeSession(ctx, "a1", session.ID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "revoke tokens for session")
 }
@@ -734,7 +746,8 @@ func TestSessionService_ValidateSession_ExpiredByMaxAge_RevokerError(t *testing.
 	defer mr.Close()
 
 	logger := zap.NewNop()
-	svc := NewSessionService(redisClient, logger)
+	svc, err := NewSessionService(redisClient, logger)
+	require.NoError(t, err)
 	svc.SetSessionTTL(10 * time.Second)
 	svc.SetMaxSessionAge(1 * time.Millisecond)
 	svc.SetTokenRevoker(&errorTokenRevoker{})
@@ -747,7 +760,7 @@ func TestSessionService_ValidateSession_ExpiredByMaxAge_RevokerError(t *testing.
 
 	// Should return ErrSessionExpired even though token revocation fails
 	// (revoker error is only logged as a warning)
-	_, err := svc.ValidateSession(ctx, session.ID)
+	_, err = svc.ValidateSession(ctx, session.ID)
 	assert.ErrorIs(t, err, ErrSessionExpired)
 }
 

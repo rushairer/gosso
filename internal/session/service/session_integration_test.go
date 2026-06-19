@@ -43,7 +43,10 @@ func setupSessionTest(t *testing.T) (context.Context, *service.SessionService) {
 		_ = rdb.FlushDB(ctx).Err()
 	}
 
-	svc := service.NewSessionService(env.Redis, zap.NewNop())
+	svc, err := service.NewSessionService(env.Redis, zap.NewNop())
+	if err != nil {
+		t.Fatalf("NewSessionService: %v", err)
+	}
 	return ctx, svc
 }
 

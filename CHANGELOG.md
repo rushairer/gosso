@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Constructor functions `NewSessionService`, `NewSessionServiceWithConfig`, `NewConsentService`, and `RequireTOTPEncryption` now return errors instead of panicking on invalid input — callers get graceful error handling during startup instead of runtime panics (`internal/session/service/session_service.go`, `internal/oauth2/service/consent_service.go`, `internal/auth/service/mfa_service.go`, `internal/token/service/key_service.go`).
+- Extracted duplicated `maskRateLimitKey` into shared `utility.MaskRateLimitKey` — single source of truth for rate limit key masking across middleware and auth service (`internal/utility/mask.go`).
+- `accountValidatorAdapter` cache TTL is now configurable via `auth.account_validator_cache_ttl` config key (default: 5s) — previously hardcoded in `cmd/gosso/web_modules.go` (`config/config.go`, `cmd/gosso/web_modules.go`).
+- `PasswordResetServiceConfig` now accepts `LoginRateLimitClearer` — eliminates the last production use of deprecated `SetLoginRateLimitClearer` setter (`internal/auth/service/password_reset_service.go`, `internal/auth/module.go`).
+- `ScanKeys` error log now masks the pattern to prevent PII leakage (`internal/cache/redis_client.go`).
+
 ### Security
 - `account_id` in all structured logs is now masked via `utility.MaskOpaqueID()` — 42 log sites across 16 files previously logged raw UUID values, risking PII exposure in log aggregation systems.
 - `NewAuthCodeService` now validates that `expiry` is positive and `redis` is non-nil — prevents silent misconfiguration where authorization codes would expire immediately (`internal/oauth2/service/auth_code_service.go`).
