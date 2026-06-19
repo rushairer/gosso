@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/rushairer/gosso/internal/db"
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 )
 
@@ -48,30 +49,22 @@ func (r *consentRepositoryImpl) Upsert(ctx context.Context, tx *sql.Tx, consent 
 // FindByAccountAndClient finds a consent record by account and client ID.
 // Only returns non-deleted records.
 func (r *consentRepositoryImpl) FindByAccountAndClient(ctx context.Context, accountID, clientID string) (*domain.Consent, error) {
-	query := `
-		SELECT id, account_id, client_id, scopes, granted_at, created_at, updated_at, deleted_at
-		FROM oauth2_consents
-		WHERE account_id = $1 AND client_id = $2 AND deleted_at IS NULL`
-
-	consent, err := scanConsent(r.db.QueryRowContext(ctx, query, accountID, clientID))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: account=%s client=%s", domain.ErrConsentNotFound, accountID, clientID)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("find consent: %w", err)
-	}
-
-	return consent, nil
+	return findConsentByAccountAndClient(ctx, r.db, accountID, clientID)
 }
 
 // FindByAccountAndClientTx finds a consent record within a transaction.
 func (r *consentRepositoryImpl) FindByAccountAndClientTx(ctx context.Context, tx *sql.Tx, accountID, clientID string) (*domain.Consent, error) {
+	return findConsentByAccountAndClient(ctx, tx, accountID, clientID)
+}
+
+// findConsentByAccountAndClient is the shared implementation for FindByAccountAndClient and FindByAccountAndClientTx.
+func findConsentByAccountAndClient(ctx context.Context, q db.Queryable, accountID, clientID string) (*domain.Consent, error) {
 	query := `
 		SELECT id, account_id, client_id, scopes, granted_at, created_at, updated_at, deleted_at
 		FROM oauth2_consents
 		WHERE account_id = $1 AND client_id = $2 AND deleted_at IS NULL`
 
-	consent, err := scanConsent(tx.QueryRowContext(ctx, query, accountID, clientID))
+	consent, err := scanConsent(q.QueryRowContext(ctx, query, accountID, clientID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: account=%s client=%s", domain.ErrConsentNotFound, accountID, clientID)
 	}

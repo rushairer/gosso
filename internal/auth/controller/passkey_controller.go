@@ -221,7 +221,7 @@ func (c *PasskeyController) LoginComplete(ctx *gin.Context) {
 
 	if loginResult.RequiresMFA {
 		controllerutil.SetNoCacheHeaders(ctx)
-		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(mfaRequiredResponse(loginResult.AccessToken, loginResult.MFATypes)))
+		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(mfaRequiredResponse(loginResult.MFAToken, loginResult.MFATypes)))
 		return
 	}
 

@@ -153,57 +153,6 @@ func NewVerificationServiceWithConfig(
 	return svc
 }
 
-// SetCodeTTL overrides the default verification code TTL.
-//
-// Deprecated: Use NewVerificationServiceWithConfig to set all options at construction time.
-// Will be removed in v2.0.0.
-func (s *VerificationService) SetCodeTTL(d time.Duration) {
-	if d > 0 {
-		s.codeTTL = d
-	}
-}
-
-// SetCooldownTTL overrides the default verification cooldown TTL.
-//
-// Deprecated: Use NewVerificationServiceWithConfig to set all options at construction time.
-// Will be removed in v2.0.0.
-func (s *VerificationService) SetCooldownTTL(d time.Duration) {
-	if d > 0 {
-		s.cooldownTTL = d
-	}
-}
-
-// SetMaxAttempts overrides the default verification max attempts.
-//
-// Deprecated: Use NewVerificationServiceWithConfig to set all options at construction time.
-// Will be removed in v2.0.0.
-func (s *VerificationService) SetMaxAttempts(n int) {
-	if n > 0 {
-		s.maxAttempts = n
-	}
-}
-
-// SetCodeLength overrides the default verification code length.
-//
-// Deprecated: Use NewVerificationServiceWithConfig to set all options at construction time.
-// Will be removed in v2.0.0.
-func (s *VerificationService) SetCodeLength(n int) {
-	if n > 0 {
-		s.codeLength = n
-	}
-}
-
-// SetHashPepper sets a secret pepper that is prepended to verification codes
-// before hashing. This prevents rainbow table attacks if Redis is compromised,
-// because the attacker would also need the pepper to compute matching hashes.
-// Use the same value as the TOTP encryption key (already required in production).
-//
-// Deprecated: Use NewVerificationServiceWithConfig to set all options at construction time.
-// Will be removed in v2.0.0.
-func (s *VerificationService) SetHashPepper(pepper string) {
-	s.hashPepper = pepper
-}
-
 type verifyCodeData struct {
 	CodeHash  string `json:"code"`
 	Attempts  int    `json:"attempts"`

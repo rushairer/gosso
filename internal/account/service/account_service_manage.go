@@ -286,16 +286,8 @@ func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID stri
 }
 
 // ListAccounts returns a paginated list of accounts.
+// Pagination parameters are validated and clamped by the repository layer.
 func (s *accountServiceImpl) ListAccounts(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error) {
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 20
-	}
-	if pageSize > 100 {
-		pageSize = 100
-	}
 	return s.accountRepo.FindAll(ctx, page, pageSize, status)
 }
 

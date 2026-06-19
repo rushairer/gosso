@@ -62,7 +62,7 @@ func buildMFAResult(account *accountDomain.Account, mfaToken string, mfaTypes []
 	return &LoginResult{
 		Account:     account,
 		RequiresMFA: true,
-		AccessToken: mfaToken,
+		MFAToken:    mfaToken,
 		MFATypes:    mfaTypes,
 	}
 }
@@ -213,10 +213,20 @@ func (s *AuthService) clearLoginRateLimits(ctx context.Context, ip string, usern
 
 // completeLogin performs the common post-authentication steps: create session and tokens,
 // clear rate limits, and write a success audit log. Returns the login result.
-func (s *AuthService) completeLogin(ctx context.Context, account *accountDomain.Account, ip, userAgent, action string, extraDetail map[string]any) (*LoginResult, error) {
+// When mfaVerified is true, the session is marked as MFA-verified.
+func (s *AuthService) completeLogin(ctx context.Context, account *accountDomain.Account, ip, userAgent, action string, extraDetail map[string]any, mfaVerified bool) (*LoginResult, error) {
 	session, accessToken, refreshToken, err := s.createSessionAndTokens(ctx, account, ip, userAgent)
 	if err != nil {
 		return nil, err
+	}
+
+	// Mark session as MFA-verified when login completes after MFA.
+	if mfaVerified {
+		session.MFAVerified = true
+		if updateErr := s.sessionSvc.UpdateSession(ctx, session); updateErr != nil {
+			s.logger.Warn("Failed to mark session as MFA-verified",
+				zap.String("session_id", utility.MaskOpaqueID(session.ID)), zap.Error(updateErr))
+		}
 	}
 
 	s.logger.Info("Login successful",

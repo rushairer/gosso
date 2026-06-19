@@ -58,6 +58,7 @@ type SocialLoginService struct {
 
 // NewSocialLoginService creates a social login service.
 // mfaChecker may be nil if MFA is not configured; auditor may be nil to skip audit logging.
+// httpClientTimeout overrides the default 10s HTTP client timeout; pass 0 for the default.
 func NewSocialLoginService(
 	db *sql.DB,
 	accountSvc accountService.AccountService,
@@ -69,6 +70,7 @@ func NewSocialLoginService(
 	logger *zap.Logger,
 	mfaChecker MFAChecker,
 	auditor *auditService.Auditor,
+	httpClientTimeout time.Duration,
 ) (*SocialLoginService, error) {
 	// Validate provider URLs use HTTPS (allow localhost for development).
 	for name, p := range providers {
@@ -100,22 +102,18 @@ func NewSocialLoginService(
 			}
 			transport = transport.Clone()
 			transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+			timeout := 10 * time.Second
+			if httpClientTimeout > 0 {
+				timeout = httpClientTimeout
+			}
 			return &http.Client{
-				Timeout:   10 * time.Second,
+				Timeout:   timeout,
 				Transport: transport,
 			}
 		}(),
 		auditor: auditor,
 		logger:  logger,
 	}, nil
-}
-
-// SetHTTPClientTimeout overrides the default HTTP client timeout for social login provider requests.
-// Must be called during initialization; not safe for concurrent use.
-func (s *SocialLoginService) SetHTTPClientTimeout(d time.Duration) {
-	if d > 0 {
-		s.httpClient.Timeout = d
-	}
 }
 
 // GenerateAuthState generates a cryptographic state parameter for OAuth CSRF protection.

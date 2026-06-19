@@ -6,23 +6,16 @@ import (
 )
 
 // MaskEmail masks an email address for safe display.
-// Example: "user@example.com" -> "u***@e***.com"
+// Example: "user@example.com" -> "u***@e***"
+// The TLD is masked to avoid leaking organization type information.
 func MaskEmail(email string) string {
 	atIdx := strings.Index(email, "@")
 	if atIdx > 0 && atIdx < len(email)-1 {
 		local := []rune(email[:atIdx])
 		domain := email[atIdx+1:]
 		maskedLocal := string(local[0]) + "***"
-		dotIdx := strings.Index(domain, ".")
-		var maskedDomain string
-		if dotIdx > 0 {
-			domainRunes := []rune(domain)
-			prefixLen := len([]rune(domain[:dotIdx]))
-			maskedDomain = string(domainRunes[0]) + "***" + string(domainRunes[prefixLen:])
-		} else {
-			r, _ := utf8.DecodeRuneInString(domain)
-			maskedDomain = string(r) + "***"
-		}
+		r, _ := utf8.DecodeRuneInString(domain)
+		maskedDomain := string(r) + "***"
 		return maskedLocal + "@" + maskedDomain
 	}
 	runes := []rune(email)

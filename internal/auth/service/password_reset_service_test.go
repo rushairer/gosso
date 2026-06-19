@@ -566,54 +566,11 @@ func TestNewPasswordResetService_NilLogger(t *testing.T) {
 	assert.NotNil(t, svc.logger)
 }
 
-func TestPasswordResetService_SetWaitTimeout(t *testing.T) {
-	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, nil, "", nil)
-	defaultTimeout := svc.waitTimeout
-	assert.Greater(t, defaultTimeout, time.Duration(0))
-
-	svc.SetWaitTimeout(5 * time.Second)
-	assert.Equal(t, 5*time.Second, svc.waitTimeout)
-
-	// Zero/negative should be no-op.
-	svc.SetWaitTimeout(0)
-	assert.Equal(t, 5*time.Second, svc.waitTimeout)
-	svc.SetWaitTimeout(-1)
-	assert.Equal(t, 5*time.Second, svc.waitTimeout)
-}
-
-func TestPasswordResetService_SetTokenTTL(t *testing.T) {
-	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, nil, "", nil)
-
-	svc.SetTokenTTL(15 * time.Minute)
-	assert.Equal(t, 15*time.Minute, svc.tokenTTL)
-
-	svc.SetTokenTTL(0)
-	assert.Equal(t, 15*time.Minute, svc.tokenTTL)
-}
-
-func TestPasswordResetService_SetCooldownTTL(t *testing.T) {
-	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, nil, "", nil)
-
-	svc.SetCooldownTTL(30 * time.Second)
-	assert.Equal(t, 30*time.Second, svc.cooldownTTL)
-
-	svc.SetCooldownTTL(0)
-	assert.Equal(t, 30*time.Second, svc.cooldownTTL)
-}
-
-func TestPasswordResetService_SetMaxAttempts(t *testing.T) {
-	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, nil, "", nil)
-
-	svc.SetMaxAttempts(10)
-	assert.Equal(t, 10, svc.maxAttempts)
-
-	svc.SetMaxAttempts(0)
-	assert.Equal(t, 10, svc.maxAttempts)
-}
 
 func TestPasswordResetService_Wait(t *testing.T) {
-	svc := NewPasswordResetService(nil, nil, nil, nil, nil, nil, nil, "", nil)
-	svc.SetWaitTimeout(100 * time.Millisecond)
+	svc := NewPasswordResetServiceWithConfig(nil, nil, nil, nil, nil, nil, nil, "", nil, PasswordResetServiceConfig{
+		WaitTimeout: 100 * time.Millisecond,
+	})
 
 	// No background goroutines — Wait() should return immediately.
 	done := make(chan struct{})

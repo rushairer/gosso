@@ -109,7 +109,9 @@ func MaxBodySizeMiddleware(maxBytes int64) gin.HandlerFunc {
 		for _, ginErr := range ctx.Errors {
 			var maxBytesErr *http.MaxBytesError
 			if ginErr.Err != nil && errors.As(ginErr.Err, &maxBytesErr) {
-				ctx.JSON(http.StatusRequestEntityTooLarge, gouno.NewErrorResponse(http.StatusRequestEntityTooLarge, "request body too large"))
+				if !ctx.Writer.Written() {
+					ctx.JSON(http.StatusRequestEntityTooLarge, gouno.NewErrorResponse(http.StatusRequestEntityTooLarge, "request body too large"))
+				}
 				return
 			}
 		}

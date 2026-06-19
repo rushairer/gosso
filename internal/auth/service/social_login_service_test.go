@@ -225,13 +225,13 @@ func TestGetAuthURL_ScopesJoined(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestNewSocialLoginService_NilLogger(t *testing.T) {
-	svc, err := NewSocialLoginService(nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil, nil, nil)
+	svc, err := NewSocialLoginService(nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil, nil, nil, 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc.logger)
 }
 
 func TestNewSocialLoginService_DefaultHTTPClient(t *testing.T) {
-	svc, err := NewSocialLoginService(nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil, nil, nil)
+	svc, err := NewSocialLoginService(nil, nil, nil, nil, nil, nil, map[string]*OAuthProviderConfig{}, nil, nil, nil, 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc.httpClient)
 	assert.Equal(t, 10*time.Second, svc.httpClient.Timeout)
@@ -245,7 +245,7 @@ func TestNewSocialLoginService_RejectsHTTProvider(t *testing.T) {
 			TokenURL: "https://oauth2.googleapis.com/token",
 		},
 	}
-	_, err := NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, nil, nil, nil)
+	_, err := NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, nil, nil, nil, 0)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrProviderURLNotSecure)
 }
@@ -258,7 +258,7 @@ func TestNewSocialLoginService_AllowsLocalhost(t *testing.T) {
 			TokenURL: "http://127.0.0.1:8080/token",
 		},
 	}
-	svc, err := NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, nil, nil, nil)
+	svc, err := NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, nil, nil, nil, 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 }
@@ -271,7 +271,7 @@ func TestNewSocialLoginService_AllowsHTTPS(t *testing.T) {
 			TokenURL: "https://oauth2.googleapis.com/token",
 		},
 	}
-	svc, err := NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, nil, nil, nil)
+	svc, err := NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, nil, nil, nil, 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 }

@@ -7,9 +7,9 @@ func TestMaskEmail(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"user@example.com", "u***@e***.com"},
-		{"ab@cd.org", "a***@c***.org"},
-		{"x@y.io", "x***@y***.io"},
+		{"user@example.com", "u***@e***"},
+		{"ab@cd.org", "a***@c***"},
+		{"x@y.io", "x***@y***"},
 		{"noatsign", "n***"},
 		{"a", "***"},
 		{"", "***"},
@@ -54,7 +54,7 @@ func TestMaskIdentifier(t *testing.T) {
 		identifier string
 		want       string
 	}{
-		{"email", "user@example.com", "u***@e***.com"},
+		{"email", "user@example.com", "u***@e***"},
 		{"phone", "13800138000", "138***00"},
 		{"unknown", "something", "***"},
 		{"", "", "***"},

@@ -189,7 +189,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	}
 
 	// 5. Complete login (session, tokens, rate limit clear, audit)
-	return s.completeLogin(ctx, account, ip, userAgent, auditDomain.ActionMFALoginSuccess, nil)
+	return s.completeLogin(ctx, account, ip, userAgent, auditDomain.ActionMFALoginSuccess, nil, true)
 }
 
 // CompletePasskeyMFALogin completes MFA login directly after passkey verification,
@@ -216,17 +216,22 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	accountID := claims.AccountID
 	mfaAccountID = &accountID
 
-	// 2. Verify passkey MFA flag (set by CompleteMFALogin in the passkey controller)
+	// 2. Per-account rate limiting (prevents brute-force on passkey MFA)
+	if err := s.checkMFAAccountRateLimit(ctx, accountID); err != nil {
+		return nil, err
+	}
+
+	// 3. Verify passkey MFA flag (set by CompleteMFALogin in the passkey controller)
 	if err := s.verifyPasskeyMFAFlag(ctx, claims.ID, accountID); err != nil {
 		return nil, err
 	}
 
-	// 3. Blacklist MFA token to prevent reuse
+	// 4. Blacklist MFA token to prevent reuse
 	if err := s.blacklistMFAToken(ctx, claims); err != nil {
 		return nil, err
 	}
 
-	// 4. Find account
+	// 5. Find account
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
 		return nil, ErrInvalidCredentials
@@ -235,8 +240,8 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 		return nil, ErrInvalidCredentials
 	}
 
-	// 5. Complete login (session, tokens, rate limit clear, audit)
-	return s.completeLogin(ctx, account, ip, userAgent, auditDomain.ActionMFALoginSuccess, nil)
+	// 6. Complete login (session, tokens, rate limit clear, audit)
+	return s.completeLogin(ctx, account, ip, userAgent, auditDomain.ActionMFALoginSuccess, nil, true)
 }
 
 // LoginByPasskey login directly after passkey verification (skipping password check)
@@ -276,7 +281,7 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 
 	// 4. Complete login (session, tokens, rate limit clear, audit)
 	return s.completeLogin(ctx, account, ip, userAgent, auditDomain.ActionLoginSuccess,
-		map[string]any{"method": "passkey"})
+		map[string]any{"method": "passkey"}, false)
 }
 
 // Logout deletes session and revokes tokens

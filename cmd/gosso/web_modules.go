@@ -3,6 +3,7 @@ package gosso
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/rushairer/gosso/config"
 	"github.com/rushairer/gosso/internal/account"
+	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	adminController "github.com/rushairer/gosso/internal/admin/controller"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
@@ -254,11 +256,15 @@ func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID
 			a.logger.Warn("IsAccountActive: failed to look up account, treating as inactive",
 				zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
 		}
-		// Cache negative results briefly to avoid hammering DB on repeated failures
-		a.cache.Store(accountID, &accountValidatorCacheEntry{
-			active:    false,
-			expiresAt: time.Now().Add(a.cacheTTL),
-		})
+		// Only cache negative results for genuinely missing accounts.
+		// Transient DB errors (timeout, connection refused) should NOT be cached
+		// to avoid rejecting valid accounts until the cache expires.
+		if errors.Is(err, accountRepo.ErrAccountNotFound) {
+			a.cache.Store(accountID, &accountValidatorCacheEntry{
+				active:    false,
+				expiresAt: time.Now().Add(a.cacheTTL),
+			})
+		}
 		return false
 	}
 

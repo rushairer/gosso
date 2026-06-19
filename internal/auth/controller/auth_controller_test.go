@@ -232,9 +232,10 @@ func newTestMFAService(t *testing.T, credRepo accountRepo.CredentialRepository) 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	svc, err := service.NewMFAService(credRepo, db, "test-issuer", zap.NewNop(), nil)
+	svc, err := service.NewMFAServiceWithConfig(credRepo, db, "test-issuer", zap.NewNop(), service.MFAServiceConfig{
+		TOTPEncryptionKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	}, nil)
 	require.NoError(t, err)
-	require.NoError(t, svc.SetTOTPEncryptionKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
 	return svc, mock
 }
 
@@ -407,7 +408,7 @@ func TestLogin_MFARequired(t *testing.T) {
 	authSvc := &mockAuthOrchestrator{
 		loginFn: func() (*service.LoginResult, error) {
 			return &service.LoginResult{
-				AccessToken: "mfa-token-123",
+				MFAToken:    "mfa-token-123",
 				RequiresMFA: true,
 				MFATypes:    []string{"totp"},
 			}, nil
@@ -1617,7 +1618,7 @@ func TestSocialAuthURL_Success(t *testing.T) {
 			AuthURL:     "https://accounts.google.com/o/oauth2/v2/auth",
 		},
 	}
-	socialSvc, _ := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop(), nil, nil)
+	socialSvc, _ := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop(), nil, nil, 0)
 	engine := setupAuthControllerWithSocial(socialSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google", nil)
@@ -1653,7 +1654,7 @@ func TestSocialAuthURL_UnsupportedProvider(t *testing.T) {
 			AuthURL:     "https://accounts.google.com/o/oauth2/v2/auth",
 		},
 	}
-	socialSvc, _ := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop(), nil, nil)
+	socialSvc, _ := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop(), nil, nil, 0)
 	engine := setupAuthControllerWithSocial(socialSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/facebook", nil)
@@ -1667,7 +1668,7 @@ func TestSocialCallback_MissingState(t *testing.T) {
 	providers := map[string]*service.OAuthProviderConfig{
 		"google": {AuthURL: "https://accounts.google.com/o/oauth2/v2/auth"},
 	}
-	socialSvc, _ := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop(), nil, nil)
+	socialSvc, _ := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop(), nil, nil, 0)
 	engine := setupAuthControllerWithSocial(socialSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google/callback", nil)
@@ -1681,7 +1682,7 @@ func TestSocialCallback_MismatchedState(t *testing.T) {
 	providers := map[string]*service.OAuthProviderConfig{
 		"google": {AuthURL: "https://accounts.google.com/o/oauth2/v2/auth"},
 	}
-	socialSvc, _ := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop(), nil, nil)
+	socialSvc, _ := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop(), nil, nil, 0)
 	engine := setupAuthControllerWithSocial(socialSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google/callback?state=state-a&code=test-code", nil)
@@ -1696,7 +1697,7 @@ func TestSocialCallback_MissingCode(t *testing.T) {
 	providers := map[string]*service.OAuthProviderConfig{
 		"google": {AuthURL: "https://accounts.google.com/o/oauth2/v2/auth"},
 	}
-	socialSvc, _ := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop(), nil, nil)
+	socialSvc, _ := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop(), nil, nil, 0)
 	engine := setupAuthControllerWithSocial(socialSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google/callback?state=test-state", nil)
@@ -1720,7 +1721,7 @@ func TestSocialCallback_ExchangeFails(t *testing.T) {
 			UserInfoURL:  srv.URL + "/userinfo",
 		},
 	}
-	socialSvc, _ := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop(), nil, nil)
+	socialSvc, _ := service.NewSocialLoginService(nil, nil, nil, nil, nil, nil, providers, zap.NewNop(), nil, nil, 0)
 	engine := setupAuthControllerWithSocial(socialSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google/callback?state=test-state&code=bad-code", nil)
@@ -1776,7 +1777,7 @@ func TestSocialCallback_Success(t *testing.T) {
 			UserInfoURL:  srv.URL + "/userinfo",
 		},
 	}
-	socialSvc, _ := service.NewSocialLoginService(nil, accountSvc, sessionCreator, nil, nil, fedIdentityRepo, providers, zap.NewNop(), nil, nil)
+	socialSvc, _ := service.NewSocialLoginService(nil, accountSvc, sessionCreator, nil, nil, fedIdentityRepo, providers, zap.NewNop(), nil, nil, 0)
 	engine := setupAuthControllerWithSocial(socialSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google/callback?state=test-state&code=good-code", nil)

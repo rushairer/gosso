@@ -85,9 +85,14 @@ func NewMFAServiceWithConfig(
 		backupCodeLength: defaultBackupCodeLength,
 	}
 	if cfg.TOTPEncryptionKey != "" {
-		if err := svc.SetTOTPEncryptionKey(cfg.TOTPEncryptionKey); err != nil {
-			return nil, fmt.Errorf("failed to set TOTP encryption key: %w", err)
+		key, err := hex.DecodeString(cfg.TOTPEncryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("invalid TOTP encryption key: %w", err)
 		}
+		if len(key) != 32 {
+			return nil, fmt.Errorf("%w: TOTP encryption key must be 32 bytes (got %d)", ErrInvalidConfig, len(key))
+		}
+		svc.totpEncryptionKey = key
 	}
 	if cfg.BackupCodeCount > 0 && cfg.BackupCodeCount <= 20 {
 		svc.backupCodeCount = cfg.BackupCodeCount
@@ -96,45 +101,6 @@ func NewMFAServiceWithConfig(
 		svc.backupCodeLength = cfg.BackupCodeLength
 	}
 	return svc, nil
-}
-
-// SetBackupCodeCount overrides the backup code count.
-//
-// Deprecated: Use NewMFAServiceWithConfig to set all options at construction time.
-// Will be removed in v2.0.0.
-func (s *MFAService) SetBackupCodeCount(n int) {
-	if n > 0 && n <= 20 {
-		s.backupCodeCount = n
-	}
-}
-
-// SetBackupCodeLength overrides the backup code length.
-//
-// Deprecated: Use NewMFAServiceWithConfig to set all options at construction time.
-// Will be removed in v2.0.0.
-func (s *MFAService) SetBackupCodeLength(n int) {
-	if n > 0 && n <= 12 {
-		s.backupCodeLength = n
-	}
-}
-
-// SetTOTPEncryptionKey sets the AES-256 key used to encrypt TOTP secrets at rest.
-//
-// Deprecated: Use NewMFAServiceWithConfig to set all options at construction time.
-// Will be removed in v2.0.0.
-func (s *MFAService) SetTOTPEncryptionKey(hexKey string) error {
-	if hexKey == "" {
-		return nil
-	}
-	key, err := hex.DecodeString(hexKey)
-	if err != nil {
-		return fmt.Errorf("invalid TOTP encryption key: %w", err)
-	}
-	if len(key) != 32 {
-		return fmt.Errorf("%w: TOTP encryption key must be 32 bytes (got %d)", ErrInvalidConfig, len(key))
-	}
-	s.totpEncryptionKey = key
-	return nil
 }
 
 // RequireTOTPEncryption returns an error if no TOTP encryption key is configured.

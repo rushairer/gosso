@@ -104,16 +104,6 @@ func NewPasskeyServiceWithConfig(
 	}
 }
 
-// SetChallengeTTL overrides the WebAuthn challenge TTL.
-//
-// Deprecated: Use NewPasskeyServiceWithConfig to set all options at construction time.
-// Will be removed in v2.0.0.
-func (s *PasskeyService) SetChallengeTTL(d time.Duration) {
-	if d > 0 {
-		s.challengeTTL = d
-	}
-}
-
 // BeginRegistration starts Passkey registration, returning CredentialCreation options
 // and a requestID that must be passed to CompleteRegistration.
 // The requestID is used as the Redis challenge key (instead of accountID) to prevent

@@ -246,22 +246,6 @@ func TestTransportsToStrings_Data(t *testing.T) {
 	assert.Equal(t, "internal", result[1])
 }
 
-// ──────────────────────────────────────────────
-// SetChallengeTTL
-// ──────────────────────────────────────────────
-
-func TestPasskeyService_SetChallengeTTL(t *testing.T) {
-	svc := &PasskeyService{challengeTTL: defaultChallengeTTL, logger: zap.NewNop()}
-	assert.Equal(t, defaultChallengeTTL, svc.challengeTTL)
-	svc.SetChallengeTTL(10 * time.Minute)
-	assert.Equal(t, 10*time.Minute, svc.challengeTTL)
-}
-
-func TestPasskeyService_SetChallengeTTL_ZeroIgnored(t *testing.T) {
-	svc := &PasskeyService{challengeTTL: defaultChallengeTTL, logger: zap.NewNop()}
-	svc.SetChallengeTTL(0)
-	assert.Equal(t, defaultChallengeTTL, svc.challengeTTL)
-}
 
 // ──────────────────────────────────────────────
 // ResolveAccountForRegistration

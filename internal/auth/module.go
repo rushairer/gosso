@@ -77,10 +77,9 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 			cfg.Logger.Warn("Passkey/WebAuthn functionality will be unavailable; server will continue without it")
 		} else {
 			webauthnRepo := repository.NewWebAuthnCredentialRepository(cfg.DB)
-			passkeySvc = service.NewPasskeyService(web, webauthnRepo, cfg.Redis, cfg.DB, cfg.AccountSvc, cfg.Logger)
-			if cfg.AuthConfig.ChallengeTTL > 0 {
-				passkeySvc.SetChallengeTTL(cfg.AuthConfig.ChallengeTTL)
-			}
+			passkeySvc = service.NewPasskeyServiceWithConfig(web, webauthnRepo, cfg.Redis, cfg.DB, cfg.AccountSvc, cfg.Logger, service.PasskeyServiceConfig{
+				ChallengeTTL: cfg.AuthConfig.ChallengeTTL,
+			})
 		}
 	}
 
@@ -104,12 +103,9 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 	var socialErr error
 	if len(cfg.Providers) > 0 {
 		// authSvc implements both SessionTokenCreator (3rd arg) and MFAChecker (9th arg).
-		socialSvc, socialErr = service.NewSocialLoginService(cfg.DB, cfg.AccountSvc, authSvc, cfg.AccountRepo, cfg.CredentialRepo, cfg.FederatedIdentityRepo, cfg.Providers, cfg.Logger, authSvc, cfg.Auditor)
+		socialSvc, socialErr = service.NewSocialLoginService(cfg.DB, cfg.AccountSvc, authSvc, cfg.AccountRepo, cfg.CredentialRepo, cfg.FederatedIdentityRepo, cfg.Providers, cfg.Logger, authSvc, cfg.Auditor, cfg.AuthConfig.SocialLoginHTTPTimeout)
 		if socialErr != nil {
 			return nil, fmt.Errorf("initialize social login service: %w", socialErr)
-		}
-		if cfg.AuthConfig.SocialLoginHTTPTimeout > 0 {
-			socialSvc.SetHTTPClientTimeout(cfg.AuthConfig.SocialLoginHTTPTimeout)
 		}
 	}
 

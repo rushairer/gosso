@@ -59,7 +59,7 @@ func NewOAuth2ClientService(db *sql.DB, clientRepo repository.OAuth2ClientReposi
 		db:         db,
 		clientRepo: clientRepo,
 		auditor:    auditor,
-		logger:     logger,
+		logger:     utility.EnsureLogger(logger),
 	}
 }
 
@@ -110,6 +110,9 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 	scopes := req.Scopes
 	if len(scopes) == 0 {
 		scopes = []string{"openid"}
+	}
+	if err := validateScopes(scopes); err != nil {
+		return nil, "", err
 	}
 
 	client, err := domain.NewOAuth2Client(req.AccountID, req.Name, clientID, grantTypes)
@@ -233,6 +236,9 @@ func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, a
 			c.GrantTypes = req.GrantTypes
 		}
 		if req.Scopes != nil {
+			if err := validateScopes(req.Scopes); err != nil {
+				return err
+			}
 			c.Scopes = req.Scopes
 		}
 
@@ -267,11 +273,19 @@ var validGrantTypes = []string{
 }
 
 // validateClientName validates a client name. If required is true, empty names are rejected.
+// Whitespace-only names are always rejected.
 func validateClientName(name string, required bool) error {
-	if required && strings.TrimSpace(name) == "" {
-		return &ValidationError{Message: "client name is required"}
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		if required {
+			return &ValidationError{Message: "client name is required"}
+		}
+		if name != "" {
+			return &ValidationError{Message: "client name must not be only whitespace"}
+		}
+		return nil
 	}
-	if len(name) > 256 {
+	if len(trimmed) > 256 {
 		return &ValidationError{Message: "client name must not exceed 256 characters"}
 	}
 	return nil
@@ -296,6 +310,27 @@ func validateGrantTypes(types []string) error {
 		}
 		if !found {
 			return &ValidationError{Message: fmt.Sprintf("invalid grant_type: %q", gt)}
+		}
+	}
+	return nil
+}
+
+const (
+	maxScopes       = 30
+	maxScopeLength  = 256
+)
+
+// validateScopes validates that scope values are well-formed.
+func validateScopes(scopes []string) error {
+	if len(scopes) > maxScopes {
+		return &ValidationError{Message: fmt.Sprintf("too many scopes (max %d)", maxScopes)}
+	}
+	for _, s := range scopes {
+		if strings.TrimSpace(s) == "" {
+			return &ValidationError{Message: "scope must not be empty"}
+		}
+		if len(s) > maxScopeLength {
+			return &ValidationError{Message: fmt.Sprintf("scope %q exceeds maximum length of %d characters", s, maxScopeLength)}
 		}
 	}
 	return nil

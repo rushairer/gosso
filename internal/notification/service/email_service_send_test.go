@@ -21,8 +21,8 @@ func TestMaskEmail(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"standard email", "user@example.com", "u***@e***.com"},
-		{"short local", "a@b.com", "a***@b***.com"},
+		{"standard email", "user@example.com", "u***@e***"},
+		{"short local", "a@b.com", "a***@b***"},
 		{"empty", "", "***"},
 	}
 	for _, tt := range tests {

@@ -51,6 +51,7 @@ type LoginResult struct {
 	Session      *sessionDomain.Session
 	AccessToken  string
 	RefreshToken string
+	MFAToken     string   `json:"-"` // Only set when RequiresMFA is true
 	RequiresMFA  bool
 	MFATypes     []string `json:"mfa_types,omitempty"`
 }

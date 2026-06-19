@@ -3,6 +3,7 @@ package middleware
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -126,12 +127,12 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, endpoint string, keyFunc f
 		resetAt := result[2]
 		retryAfter := result[3]
 
-		ctx.Header("X-RateLimit-Limit", fmt.Sprintf("%d", limit))
-		ctx.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
-		ctx.Header("X-RateLimit-Reset", fmt.Sprintf("%d", resetAt))
+		ctx.Header("X-RateLimit-Limit", strconv.Itoa(limit))
+		ctx.Header("X-RateLimit-Remaining", strconv.FormatInt(remaining, 10))
+		ctx.Header("X-RateLimit-Reset", strconv.FormatInt(resetAt, 10))
 
 		if !allowed {
-			ctx.Header("Retry-After", fmt.Sprintf("%d", retryAfter))
+			ctx.Header("Retry-After", strconv.FormatInt(retryAfter, 10))
 			ctx.JSON(http.StatusTooManyRequests, gouno.NewErrorResponse(http.StatusTooManyRequests, "rate limit exceeded"))
 			ctx.Abort()
 			return

@@ -260,7 +260,7 @@ func TestLoginByUsernamePassword_MFARequired(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, result.RequiresMFA)
-	assert.NotEmpty(t, result.AccessToken)
+	assert.NotEmpty(t, result.MFAToken)
 	assert.Contains(t, result.MFATypes, "totp")
 }
 
@@ -584,7 +584,7 @@ func TestLoginByPasskey_MFARequired(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, result.RequiresMFA)
-	assert.NotEmpty(t, result.AccessToken)
+	assert.NotEmpty(t, result.MFAToken)
 	assert.Contains(t, result.MFATypes, "totp")
 }
 

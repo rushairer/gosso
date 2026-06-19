@@ -173,39 +173,6 @@ func TestVerifyCode_CodeReuse(t *testing.T) {
 	assert.Contains(t, err.Error(), "expired or not found")
 }
 
-// ──────────────────────────────────────────────
-// Setter tests
-// ──────────────────────────────────────────────
-
-func TestVerificationService_SetCodeTTL(t *testing.T) {
-	svc := NewVerificationService(nil, nil, nil, nil, nil)
-	svc.SetCodeTTL(5 * time.Minute)
-	assert.Equal(t, 5*time.Minute, svc.codeTTL)
-
-	// zero/negative should be no-op
-	svc.SetCodeTTL(0)
-	assert.Equal(t, 5*time.Minute, svc.codeTTL)
-	svc.SetCodeTTL(-1)
-	assert.Equal(t, 5*time.Minute, svc.codeTTL)
-}
-
-func TestVerificationService_SetCooldownTTL(t *testing.T) {
-	svc := NewVerificationService(nil, nil, nil, nil, nil)
-	svc.SetCooldownTTL(30 * time.Second)
-	assert.Equal(t, 30*time.Second, svc.cooldownTTL)
-
-	svc.SetCooldownTTL(0)
-	assert.Equal(t, 30*time.Second, svc.cooldownTTL)
-}
-
-func TestVerificationService_SetMaxAttempts(t *testing.T) {
-	svc := NewVerificationService(nil, nil, nil, nil, nil)
-	svc.SetMaxAttempts(3)
-	assert.Equal(t, 3, svc.maxAttempts)
-
-	svc.SetMaxAttempts(0)
-	assert.Equal(t, 3, svc.maxAttempts)
-}
 
 // ──────────────────────────────────────────────
 // Unsupported type test

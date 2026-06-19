@@ -274,7 +274,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 
 	if result.RequiresMFA {
 		controllerutil.SetNoCacheHeaders(ctx)
-		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(mfaRequiredResponse(result.AccessToken, result.MFATypes)))
+		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(mfaRequiredResponse(result.MFAToken, result.MFATypes)))
 		return
 	}
 
@@ -288,7 +288,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 
 // RefreshTokenRequest refresh token request body
 type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required,max=2048"`
+	RefreshToken string `json:"refresh_token" binding:"required,max=128"`
 }
 
 // Refresh POST /api/auth/refresh
@@ -411,12 +411,17 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 		return
 	}
 
-	if req.Type != "passkey" && req.Code == "" {
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "code is required"))
+	// Default empty type to "totp"
+	if req.Type == "" {
+		req.Type = "totp"
+	}
+
+	if req.Type != "totp" && req.Type != "passkey" {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "unsupported mfa type"))
 		return
 	}
-	if req.Type != "" && req.Type != "totp" && req.Type != "passkey" {
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "unsupported mfa type"))
+	if req.Type != "passkey" && req.Code == "" {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "code is required"))
 		return
 	}
 
@@ -631,7 +636,7 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 	controllerutil.SetNoCacheHeaders(ctx)
 
 	if result.RequiresMFA {
-		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(mfaRequiredResponse(result.AccessToken, result.MFATypes)))
+		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(mfaRequiredResponse(result.MFAToken, result.MFATypes)))
 		return
 	}
 

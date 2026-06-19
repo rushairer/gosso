@@ -253,9 +253,10 @@ func (m *dbMockCredentialRepo) CreateCredentials(_ context.Context, _ *sql.Tx, c
 
 func newTestMFAServiceWithDB(t *testing.T, credRepo *dbMockCredentialRepo, sqlDB *sql.DB) *MFAService {
 	t.Helper()
-	svc, err := NewMFAService(credRepo, sqlDB, "http://localhost:8080", nil, nil)
+	svc, err := NewMFAServiceWithConfig(credRepo, sqlDB, "http://localhost:8080", nil, MFAServiceConfig{
+		TOTPEncryptionKey: testEncryptionKeyHex,
+	}, nil)
 	require.NoError(t, err)
-	require.NoError(t, svc.SetTOTPEncryptionKey(testEncryptionKeyHex))
 	return svc
 }
 
@@ -810,9 +811,6 @@ func TestEnrollTOTP_WithEncryptionKey(t *testing.T) {
 	}
 	svc := newTestMFAServiceWithDB(t, credRepo, sqlDB)
 
-	err = svc.SetTOTPEncryptionKey(testEncryptionKeyHex)
-	require.NoError(t, err)
-
 	// Single transaction wrapping both delete + create
 	sqlMock.ExpectBegin()
 	sqlMock.ExpectCommit()
@@ -894,8 +892,10 @@ func TestVerifyTOTP_WithEncryptionKey(t *testing.T) {
 			},
 		},
 	}
-	svc := newTestMFAService(credRepo)
-	require.NoError(t, svc.SetTOTPEncryptionKey(testEncryptionKeyHex))
+	svc, err := NewMFAServiceWithConfig(credRepo, nil, "http://localhost:8080", nil, MFAServiceConfig{
+		TOTPEncryptionKey: testEncryptionKeyHex,
+	}, nil)
+	require.NoError(t, err)
 
 	code, err := totp.GenerateCode(secret, time.Now())
 	require.NoError(t, err)
@@ -914,8 +914,10 @@ func TestVerifyTOTP_DecryptionFailure(t *testing.T) {
 			},
 		},
 	}
-	svc := newTestMFAService(credRepo)
-	require.NoError(t, svc.SetTOTPEncryptionKey(testEncryptionKeyHex))
+	svc, err := NewMFAServiceWithConfig(credRepo, nil, "http://localhost:8080", nil, MFAServiceConfig{
+		TOTPEncryptionKey: testEncryptionKeyHex,
+	}, nil)
+	require.NoError(t, err)
 
 	valid, err := svc.VerifyTOTP(context.Background(), "account-001", "123456")
 	require.Error(t, err)
