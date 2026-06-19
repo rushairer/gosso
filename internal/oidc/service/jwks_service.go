@@ -114,7 +114,12 @@ func (s *JWKSService) ClearPreviousKey() {
 func (s *JWKSService) buildCurrentKeyEntry() map[string]string {
 	pubKey := s.keySvc.PublicKey()
 	n := base64.RawURLEncoding.EncodeToString(pubKey.N.Bytes())
-	e := base64.RawURLEncoding.EncodeToString(utility.BigEndianBytes(pubKey.E))
+	eBytes, err := utility.BigEndianBytes(pubKey.E)
+	if err != nil {
+		// RSA exponents are always positive; this should never happen.
+		panic("jwks: unexpected BigEndianBytes error: " + err.Error())
+	}
+	e := base64.RawURLEncoding.EncodeToString(eBytes)
 	return map[string]string{
 		"kty": "RSA",
 		"kid": s.keySvc.KeyID(),

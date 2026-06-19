@@ -113,7 +113,8 @@ func TestBigEndianBytes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := utility.BigEndianBytes(tt.input)
+			got, err := utility.BigEndianBytes(tt.input)
+			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 		})
 	}

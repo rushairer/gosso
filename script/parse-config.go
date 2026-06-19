@@ -100,53 +100,15 @@ func parseRedisDSN(dsn string) (host string, port int, password string, database
 		}
 	}
 
-	// Handle redis:// protocol
-	if strings.HasPrefix(dsn, "redis://") {
-		dsn = strings.TrimPrefix(dsn, "redis://")
-
-		// Check if there is a password
-		if strings.Contains(dsn, "@") {
-			parts := strings.SplitN(dsn, "@", 2)
-			if len(parts) == 2 {
-				// Extract the password part
-				authPart := parts[0]
-				if strings.HasPrefix(authPart, ":") {
-					password = strings.TrimPrefix(authPart, ":")
-				}
-				dsn = parts[1]
-			}
+	// Simple host:port format (e.g. localhost:6379)
+	if strings.Contains(dsn, ":") {
+		parts := strings.SplitN(dsn, ":", 2)
+		if len(parts) == 2 {
+			host = parts[0]
+			port, _ = strconv.Atoi(parts[1])
 		}
-
-		// Check if there is a database number
-		if strings.Contains(dsn, "/") {
-			parts := strings.SplitN(dsn, "/", 2)
-			if len(parts) == 2 {
-				database, _ = strconv.Atoi(parts[1])
-				dsn = parts[0]
-			}
-		}
-
-		// Parse host:port
-		if strings.Contains(dsn, ":") {
-			parts := strings.SplitN(dsn, ":", 2)
-			if len(parts) == 2 {
-				host = parts[0]
-				port, _ = strconv.Atoi(parts[1])
-			}
-		} else if dsn != "" {
-			host = dsn
-		}
-	} else {
-		// Simple host:port format
-		if strings.Contains(dsn, ":") {
-			parts := strings.SplitN(dsn, ":", 2)
-			if len(parts) == 2 {
-				host = parts[0]
-				port, _ = strconv.Atoi(parts[1])
-			}
-		} else if dsn != "" {
-			host = dsn
-		}
+	} else if dsn != "" {
+		host = dsn
 	}
 
 	return

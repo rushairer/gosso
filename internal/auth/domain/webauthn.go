@@ -15,7 +15,10 @@ var (
 	ErrWebAuthnCredentialIDRequired = errors.New("webauthn: credential_id is required")
 	ErrWebAuthnPublicKeyRequired    = errors.New("webauthn: public_key is required")
 	ErrWebAuthnAlreadyDeleted       = errors.New("webauthn: credential already deleted")
+	ErrWebAuthnNameTooLong          = errors.New("webauthn: name exceeds maximum length")
 )
+
+const maxWebAuthnNameLength = 255 // Maximum credential name length
 
 // WebAuthnCredential represents a stored WebAuthn passkey credential.
 type WebAuthnCredential struct {
@@ -45,6 +48,9 @@ func NewWebAuthnCredential(accountID string, credentialID, publicKey []byte, att
 	}
 	if len(publicKey) == 0 {
 		return nil, ErrWebAuthnPublicKeyRequired
+	}
+	if len(name) > maxWebAuthnNameLength {
+		return nil, ErrWebAuthnNameTooLong
 	}
 	now := time.Now()
 	return &WebAuthnCredential{

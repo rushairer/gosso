@@ -14,7 +14,11 @@ var ErrConsentNotFound = errors.New("consent not found")
 var (
 	ErrConsentAccountIDRequired = errors.New("consent: account_id is required")
 	ErrConsentClientIDRequired  = errors.New("consent: client_id is required")
+	ErrConsentEmptyScope        = errors.New("consent: scope must not be empty")
+	ErrConsentTooManyScopes     = errors.New("consent: too many scopes")
 )
+
+const maxConsentScopes = 64 // Maximum number of scopes per consent
 
 // NewConsent creates a new Consent with the required fields.
 // Validates that accountID and clientID are non-empty.
@@ -27,6 +31,14 @@ func NewConsent(accountID, clientID string, scopes []string) (*Consent, error) {
 	}
 	if scopes == nil {
 		scopes = []string{}
+	}
+	if len(scopes) > maxConsentScopes {
+		return nil, ErrConsentTooManyScopes
+	}
+	for _, s := range scopes {
+		if s == "" {
+			return nil, ErrConsentEmptyScope
+		}
 	}
 	return &Consent{
 		ID:        uuid.New().String(),

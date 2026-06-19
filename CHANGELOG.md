@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- `SoftDeleteByID` and `SoftDeleteByAccountID` for federated identities now clear `profile` and `provider_user_id` PII data on soft delete — previously these fields were retained after deletion, risking PII exposure in the database (`internal/account/repository/federated_identity_repository_impl.go`).
+
+### Fixed
+- `BigEndianBytes` now returns an error instead of panicking on negative input — callers get graceful error handling instead of runtime panics (`internal/utility/bigendian.go`, `internal/oidc/service/jwks_service.go`).
+
+### Changed
+- `NewFederatedIdentity` now validates that the `profile` map does not exceed 4KB when serialized to JSON — prevents storage of excessively large payloads (`internal/account/domain/federated_identity.go`).
+- `NewWebAuthnCredential` now validates that `name` does not exceed 255 characters (`internal/auth/domain/webauthn.go`).
+- `NewConsent` now validates that scopes are non-empty strings and the total count does not exceed 64 (`internal/oauth2/domain/consent.go`).
+- `accountValidatorAdapter` cache cleanup strategy changed from call-counter based (every 1000 calls) to time-based (every 30 seconds with double-checked locking) — eliminates latency spikes under high traffic (`cmd/gosso/web_modules.go`).
+- Removed unreachable dead code in `parseRedisDSN` — a second `redis://` protocol handler that could never execute after the `url.Parse` path (`script/parse-config.go`).
+
 ### Fixed
 - `IDTokenService` now gracefully handles missing email/phone credentials instead of returning a hard error — users without email or phone credentials can now get ID tokens (`internal/oidc/service/id_token_service.go`).
 - MFA token blacklist timing in `VerifyMFALogin` — the MFA token is now blacklisted after account lookup and active status verification, preventing user lockout on transient DB failures (`internal/auth/service/auth_login.go`).

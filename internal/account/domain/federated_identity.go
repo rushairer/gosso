@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -35,7 +36,10 @@ var (
 	ErrProviderRequired                = errors.New("provider is required")
 	ErrUnsupportedProvider             = errors.New("unsupported provider")
 	ErrProviderUserIDRequired          = errors.New("provider user ID is required")
+	ErrProfileTooLarge                 = errors.New("profile data exceeds maximum size")
 )
+
+const maxProfileSize = 4096 // Maximum profile JSON size in bytes
 
 // IsValidProvider reports whether p is a recognized identity provider.
 func IsValidProvider(p Provider) bool {
@@ -63,6 +67,15 @@ func NewFederatedIdentity(accountID string, provider Provider, providerUserID st
 	}
 	if profile == nil {
 		profile = make(map[string]any)
+	}
+
+	// Validate profile size to prevent storage of excessively large payloads
+	profileJSON, err := json.Marshal(profile)
+	if err != nil {
+		return nil, fmt.Errorf("marshal profile: %w", err)
+	}
+	if len(profileJSON) > maxProfileSize {
+		return nil, ErrProfileTooLarge
 	}
 
 	now := time.Now()

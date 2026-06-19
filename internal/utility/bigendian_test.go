@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBigEndianBytes(t *testing.T) {
@@ -24,7 +25,14 @@ func TestBigEndianBytes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, BigEndianBytes(tt.input))
+			got, err := BigEndianBytes(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, got)
 		})
 	}
+}
+
+func TestBigEndianBytes_Negative(t *testing.T) {
+	_, err := BigEndianBytes(-1)
+	assert.ErrorIs(t, err, ErrNegativeInput)
 }

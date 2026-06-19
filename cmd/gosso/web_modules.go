@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -120,7 +119,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	if accountValidatorCacheTTL <= 0 {
 		accountValidatorCacheTTL = 5 * time.Second
 	}
-	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &oauth2Service.ClientAuthenticator{}, &accountValidatorAdapter{accountSvc: accountMod.Service, logger: logger, cacheTTL: accountValidatorCacheTTL}, authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)
+	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &oauth2Service.ClientAuthenticator{}, &accountValidatorAdapter{accountSvc: accountMod.Service, logger: logger, cacheTTL: accountValidatorCacheTTL, lastCleanup: time.Now()}, authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
 	}
@@ -195,28 +194,35 @@ type accountValidatorCacheEntry struct {
 
 // accountValidatorAdapter implements oauth2Controller.AccountValidator using the account service.
 // Results are cached for a short TTL to avoid a DB round-trip on every token exchange.
-// Expired entries are lazily evicted every 1000 calls to prevent unbounded memory growth.
+// Expired entries are cleaned up periodically based on elapsed time to prevent unbounded memory growth.
 type accountValidatorAdapter struct {
-	accountSvc  accountService.AccountService
-	logger      *zap.Logger
-	cache       sync.Map // map[string]*accountValidatorCacheEntry
-	cacheTTL    time.Duration
-	callCounter atomic.Int64
+	accountSvc   accountService.AccountService
+	logger       *zap.Logger
+	cache        sync.Map // map[string]*accountValidatorCacheEntry
+	cacheTTL     time.Duration
+	lastCleanup  time.Time
+	cleanupMutex sync.Mutex
 }
 
-// cacheCleanupInterval is how many IsAccountActive calls between lazy cache cleanups.
-const cacheCleanupInterval = 1000
+// cacheCleanupInterval is how often (in seconds) the cache is scanned for expired entries.
+const cacheCleanupInterval = 30 * time.Second
 
 func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID string) bool {
-	// Lazy cleanup of expired entries to prevent unbounded memory growth.
-	if a.callCounter.Add(1)%cacheCleanupInterval == 0 {
-		now := time.Now()
-		a.cache.Range(func(key, value any) bool {
-			if entry, ok := value.(*accountValidatorCacheEntry); ok && now.After(entry.expiresAt) {
-				a.cache.Delete(key)
-			}
-			return true
-		})
+	// Time-based cleanup of expired entries to prevent unbounded memory growth.
+	// Uses a mutex to ensure only one goroutine performs cleanup at a time.
+	if time.Since(a.lastCleanup) > cacheCleanupInterval {
+		a.cleanupMutex.Lock()
+		if time.Since(a.lastCleanup) > cacheCleanupInterval {
+			now := time.Now()
+			a.cache.Range(func(key, value any) bool {
+				if entry, ok := value.(*accountValidatorCacheEntry); ok && now.After(entry.expiresAt) {
+					a.cache.Delete(key)
+				}
+				return true
+			})
+			a.lastCleanup = time.Now()
+		}
+		a.cleanupMutex.Unlock()
 	}
 
 	// Check cache first
