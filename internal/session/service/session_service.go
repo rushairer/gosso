@@ -75,7 +75,7 @@ type SessionService struct {
 }
 
 // NewSessionService creates a new session service instance with default configuration.
-// Use Set* methods to customize before first use (legacy pattern).
+// Deprecated: Use NewSessionServiceWithConfig directly.
 func NewSessionService(redis *cache.RedisClient, logger *zap.Logger) (*SessionService, error) {
 	return NewSessionServiceWithConfig(redis, logger, SessionConfig{})
 }
@@ -110,51 +110,6 @@ func NewSessionServiceWithConfig(redis *cache.RedisClient, logger *zap.Logger, c
 		svc.tokenRevoker = cfg.TokenRevoker
 	}
 	return svc, nil
-}
-
-// SetTokenRevoker sets the token revoker for cascading token revocation.
-//
-// Deprecated: Use NewSessionServiceWithConfig with SessionConfig.TokenRevoker instead.
-// Must be called during initialization; not safe for concurrent use.
-// Will be removed in v2.0.0.
-func (s *SessionService) SetTokenRevoker(revoker TokenRevoker) {
-	s.tokenRevoker = revoker
-}
-
-// SetMaxSessions sets the maximum concurrent sessions per account.
-//
-// Deprecated: Use NewSessionServiceWithConfig with SessionConfig.MaxSessions instead.
-// Must be called during initialization; not safe for concurrent use.
-// Will be removed in v2.0.0.
-func (s *SessionService) SetMaxSessions(n int) {
-	if n < 0 {
-		return
-	}
-	s.maxSessions = n
-}
-
-// SetSessionTTL sets the session expiry duration.
-//
-// Deprecated: Use NewSessionServiceWithConfig with SessionConfig.SessionTTL instead.
-// Must be called during initialization; not safe for concurrent use.
-// Will be removed in v2.0.0.
-func (s *SessionService) SetSessionTTL(ttl time.Duration) {
-	if ttl <= 0 {
-		return
-	}
-	s.sessionTTL = ttl
-}
-
-// SetMaxSessionAge sets the absolute maximum session lifetime regardless of activity.
-//
-// Deprecated: Use NewSessionServiceWithConfig with SessionConfig.MaxSessionAge instead.
-// Must be called during initialization; not safe for concurrent use.
-// Will be removed in v2.0.0.
-func (s *SessionService) SetMaxSessionAge(age time.Duration) {
-	if age <= 0 {
-		return
-	}
-	s.maxSessionAge = age
 }
 
 // CreateSession creates a new session.

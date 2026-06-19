@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -119,7 +120,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	if accountValidatorCacheTTL <= 0 {
 		accountValidatorCacheTTL = 5 * time.Second
 	}
-	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &oauth2Service.ClientAuthenticator{}, &accountValidatorAdapter{accountSvc: accountMod.Service, logger: logger, cacheTTL: accountValidatorCacheTTL, lastCleanup: time.Now()}, authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)
+	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &oauth2Service.ClientAuthenticator{}, newAccountValidatorAdapter(accountMod.Service, logger, accountValidatorCacheTTL), authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
 	}
@@ -200,19 +201,30 @@ type accountValidatorAdapter struct {
 	logger       *zap.Logger
 	cache        sync.Map // map[string]*accountValidatorCacheEntry
 	cacheTTL     time.Duration
-	lastCleanup  time.Time
+	lastCleanup  atomic.Int64 // UnixNano timestamp; read/written atomically for lock-free fast-path check
 	cleanupMutex sync.Mutex
 }
 
 // cacheCleanupInterval is how often (in seconds) the cache is scanned for expired entries.
 const cacheCleanupInterval = 30 * time.Second
 
+// newAccountValidatorAdapter creates an accountValidatorAdapter with the lastCleanup timer initialized.
+func newAccountValidatorAdapter(svc accountService.AccountService, logger *zap.Logger, ttl time.Duration) *accountValidatorAdapter {
+	a := &accountValidatorAdapter{
+		accountSvc: svc,
+		logger:     logger,
+		cacheTTL:   ttl,
+	}
+	a.lastCleanup.Store(time.Now().UnixNano())
+	return a
+}
+
 func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID string) bool {
 	// Time-based cleanup of expired entries to prevent unbounded memory growth.
-	// Uses a mutex to ensure only one goroutine performs cleanup at a time.
-	if time.Since(a.lastCleanup) > cacheCleanupInterval {
+	// lastCleanup is read atomically for the fast-path check; the mutex serializes actual cleanup.
+	if time.Since(time.Unix(0, a.lastCleanup.Load())) > cacheCleanupInterval {
 		a.cleanupMutex.Lock()
-		if time.Since(a.lastCleanup) > cacheCleanupInterval {
+		if time.Since(time.Unix(0, a.lastCleanup.Load())) > cacheCleanupInterval {
 			now := time.Now()
 			a.cache.Range(func(key, value any) bool {
 				if entry, ok := value.(*accountValidatorCacheEntry); ok && now.After(entry.expiresAt) {
@@ -220,7 +232,7 @@ func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID
 				}
 				return true
 			})
-			a.lastCleanup = time.Now()
+			a.lastCleanup.Store(time.Now().UnixNano())
 		}
 		a.cleanupMutex.Unlock()
 	}

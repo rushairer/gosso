@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `db.Queryable` interface abstracting `*sql.DB` and `*sql.Tx` for query/exec operations — eliminates duplication between standalone and transactional repository methods (`internal/db/queryable.go`).
+
+### Changed
+- `accountRepositoryImpl.FindByID`, `FindByIDTx`, and `FindByIDIncludingDeletedTx` now share a single `findAccountByID` helper via the `Queryable` interface — removes ~40 lines of duplicated SQL/error-handling logic (`internal/account/repository/account_repository_impl.go`).
+- `accountValidatorAdapter.lastCleanup` changed from `time.Time` to `atomic.Int64` — fixes non-atomic read on ARM architectures where the lock-free fast-path check could observe stale values (`cmd/gosso/web_modules.go`).
+- Removed deprecated `SetTokenRevoker`, `SetMaxSessions`, `SetSessionTTL`, and `SetMaxSessionAge` methods from `SessionService` — all production callers already use `NewSessionServiceWithConfig`; test files migrated accordingly (`internal/session/service/session_service.go` + 6 test files).
+- `getConfigPath` now checks the executable's directory for a `config/` folder before falling back to `./config` — prevents config-not-found errors when running the binary from a different working directory (`cmd/gosso/config_flags.go`).
+- `smtpTLSPolicy` documentation updated to explain the `mandatory` default and how to configure `notls`/`opportunistic` for local development with Mailpit (`internal/notification/service/email_service.go`).
+
 ### Security
 - `FederatedIdentity.UpdateProfile` now validates profile JSON size against `maxProfileSize` (4096 bytes) — prevents storage of excessively large payloads on update, matching the existing creation-time check (`internal/account/domain/federated_identity.go`).
 - `ClearLoginRateLimitsByUsername` error messages now mask the Redis key with `MaskRateLimitKey` — prevents PII (username) leakage in error logs (`internal/auth/service/auth_login.go`).

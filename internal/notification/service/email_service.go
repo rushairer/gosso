@@ -209,6 +209,10 @@ func maskEmail(email string) string {
 	return utility.MaskEmail(email)
 }
 
+// smtpTLSPolicy returns the TLS policy for SMTP connections.
+// Defaults to TLSMandatory for production security.
+// For local development with Mailpit or similar tools that don't support TLS,
+// set smtp.tls_policy to "notls" or "opportunistic" in your config.
 func smtpTLSPolicy(policy string) mail.TLSPolicy {
 	switch policy {
 	case "mandatory":

@@ -94,11 +94,12 @@ func sessionExample(ctx context.Context, redisClient *cache.RedisClient, logger 
 	logger.Info("========== Session Management ==========")
 
 	// 创建会话服务
-	sessionSvc, err := sessionService.NewSessionService(redisClient, logger)
+	sessionSvc, err := sessionService.NewSessionServiceWithConfig(redisClient, logger, sessionService.SessionConfig{
+		SessionTTL: 24 * time.Hour,
+	})
 	if err != nil {
 		logger.Fatal("Failed to create session service", zap.Error(err))
 	}
-	sessionSvc.SetSessionTTL(24 * time.Hour)
 
 	// 创建用户会话
 	accountID := uuid.New().String()

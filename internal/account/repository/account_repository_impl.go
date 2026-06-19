@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rushairer/gosso/internal/account/domain"
+	dbPkg "github.com/rushairer/gosso/internal/db"
 )
 
 // accountRepositoryImpl implements AccountRepository
@@ -62,64 +63,40 @@ func (r *accountRepositoryImpl) CreateAccount(ctx context.Context, tx *sql.Tx, a
 	return nil
 }
 
-// FindByID finds an account by ID
-func (r *accountRepositoryImpl) FindByID(ctx context.Context, accountID string) (*domain.Account, error) {
+// findAccountByID is a shared helper that queries a single account by ID.
+// The includeDeleted flag controls whether soft-deleted rows are included.
+func (r *accountRepositoryImpl) findAccountByID(ctx context.Context, q dbPkg.Queryable, accountID string, includeDeleted bool) (*domain.Account, error) {
 	query := `
 		SELECT id, username, display_name, avatar_url, status, locale, timezone, metadata, created_at, updated_at, deleted_at
 		FROM accounts
-		WHERE id = $1 AND deleted_at IS NULL
-	`
+		WHERE id = $1`
+	if !includeDeleted {
+		query += " AND deleted_at IS NULL"
+	}
 
-	account, err := scanAccount(r.db.QueryRowContext(ctx, query, accountID))
-
+	account, err := scanAccount(q.QueryRowContext(ctx, query, accountID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, accountID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query account: %w", err)
 	}
-
 	return account, nil
+}
+
+// FindByID finds an account by ID (non-deleted only).
+func (r *accountRepositoryImpl) FindByID(ctx context.Context, accountID string) (*domain.Account, error) {
+	return r.findAccountByID(ctx, r.db, accountID, false)
 }
 
 // FindByIDTx finds an account by ID within a transaction (non-deleted only).
 func (r *accountRepositoryImpl) FindByIDTx(ctx context.Context, tx *sql.Tx, accountID string) (*domain.Account, error) {
-	query := `
-		SELECT id, username, display_name, avatar_url, status, locale, timezone, metadata, created_at, updated_at, deleted_at
-		FROM accounts
-		WHERE id = $1 AND deleted_at IS NULL
-	`
-
-	account, err := scanAccount(tx.QueryRowContext(ctx, query, accountID))
-
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, accountID)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("query account: %w", err)
-	}
-
-	return account, nil
+	return r.findAccountByID(ctx, tx, accountID, false)
 }
 
 // FindByIDIncludingDeletedTx finds an account by ID within a transaction, including soft-deleted rows.
 func (r *accountRepositoryImpl) FindByIDIncludingDeletedTx(ctx context.Context, tx *sql.Tx, accountID string) (*domain.Account, error) {
-	query := `
-		SELECT id, username, display_name, avatar_url, status, locale, timezone, metadata, created_at, updated_at, deleted_at
-		FROM accounts
-		WHERE id = $1 -- intentionally includes soft-deleted rows
-	`
-
-	account, err := scanAccount(tx.QueryRowContext(ctx, query, accountID))
-
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: %s", ErrAccountNotFound, accountID)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("query account: %w", err)
-	}
-
-	return account, nil
+	return r.findAccountByID(ctx, tx, accountID, true)
 }
 
 // FindByUsername finds an account by username

@@ -160,9 +160,10 @@ func setupTestLogoutServiceWithSession(t *testing.T) (*LogoutService, *tokenServ
 	require.NoError(t, err)
 	tokenSvc, err := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, nil, logger)
 	require.NoError(t, err)
-	sessionSvc, err := sessionService.NewSessionService(redisClient, logger)
+	sessionSvc, err := sessionService.NewSessionServiceWithConfig(redisClient, logger, sessionService.SessionConfig{
+		TokenRevoker: tokenSvc,
+	})
 	require.NoError(t, err)
-	sessionSvc.SetTokenRevoker(tokenSvc)
 
 	logoutSvc := NewLogoutService(tokenSvc, sessionSvc, nil, "https://sso.example.com", logger)
 	return logoutSvc, keySvc, sessionSvc

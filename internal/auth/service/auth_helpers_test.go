@@ -238,14 +238,6 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 		sqlDB.Close()
 	})
 
-	// Real SessionService backed by miniredis
-	sessSvc, err := sessionService.NewSessionService(redisClient, logger)
-	if err != nil {
-		mr.Close()
-		sqlDB.Close()
-		t.Fatalf("failed to create session service: %v", err)
-	}
-
 	// Real TokenService backed by miniredis + in-memory RSA key
 	keySvc, err := tokenService.NewKeyService("", "test-key", false, 0, logger)
 	if err != nil {
@@ -275,7 +267,15 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 		t.Fatalf("failed to create token service: %v", err)
 	}
 
-	sessSvc.SetTokenRevoker(tokSvc)
+	// Real SessionService backed by miniredis
+	sessSvc, err := sessionService.NewSessionServiceWithConfig(redisClient, logger, sessionService.SessionConfig{
+		TokenRevoker: tokSvc,
+	})
+	if err != nil {
+		mr.Close()
+		sqlDB.Close()
+		t.Fatalf("failed to create session service: %v", err)
+	}
 
 	// Mock services
 	accountSvc := &testAccountService{

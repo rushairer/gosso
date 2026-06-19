@@ -10,6 +10,7 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/audit"
+	sessionService "github.com/rushairer/gosso/internal/session/service"
 )
 
 // mockTokenRevoker implements sessionService.TokenRevoker for testing.
@@ -28,11 +29,13 @@ func (m *mockTokenRevoker) RevokeAllForSession(_ context.Context, sessionID stri
 
 func TestRevokeSession_Success(t *testing.T) {
 	fixture := setupTestAuthService(t)
-	defer fixture.mr.Close()
-	defer fixture.sqlDB.Close()
 
 	revoker := &mockTokenRevoker{}
-	fixture.sessionSvc.SetTokenRevoker(revoker)
+	newSvc, _ := sessionService.NewSessionServiceWithConfig(
+		fixture.redis, fixture.logger, sessionService.SessionConfig{TokenRevoker: revoker},
+	)
+	fixture.sessionSvc = newSvc
+	fixture.svc.sessionSvc = newSvc
 
 	fixture.seedTestAccount("account-001", "testuser", "password123")
 	fixture.sqlMock.ExpectBegin()
@@ -56,11 +59,13 @@ func TestRevokeSession_Success(t *testing.T) {
 
 func TestRevokeSession_SessionNotFound(t *testing.T) {
 	fixture := setupTestAuthService(t)
-	defer fixture.mr.Close()
-	defer fixture.sqlDB.Close()
 
 	revoker := &mockTokenRevoker{}
-	fixture.sessionSvc.SetTokenRevoker(revoker)
+	newSvc, _ := sessionService.NewSessionServiceWithConfig(
+		fixture.redis, fixture.logger, sessionService.SessionConfig{TokenRevoker: revoker},
+	)
+	fixture.sessionSvc = newSvc
+	fixture.svc.sessionSvc = newSvc
 
 	err := fixture.svc.RevokeSession(context.Background(), "account-001", "nonexistent-session")
 	assert.Error(t, err)

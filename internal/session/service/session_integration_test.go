@@ -190,8 +190,20 @@ func TestRevokeAllForAccount(t *testing.T) {
 }
 
 func TestEnforceSessionLimit(t *testing.T) {
-	ctx, svc := setupSessionTest(t)
-	svc.SetMaxSessions(3)
+	ctx := context.Background()
+
+	// Flush Redis
+	rdb := env.Redis.GetClient()
+	if rdb != nil {
+		_ = rdb.FlushDB(ctx).Err()
+	}
+
+	svc, err := service.NewSessionServiceWithConfig(env.Redis, zap.NewNop(), service.SessionConfig{
+		MaxSessions: 3,
+	})
+	if err != nil {
+		t.Fatalf("NewSessionServiceWithConfig: %v", err)
+	}
 
 	accountID := uuid.New().String()
 
