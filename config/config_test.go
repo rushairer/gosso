@@ -68,6 +68,9 @@ func validConfig() GoUnoConfig {
 			DeviceCodeInterval:      5 * time.Second,
 			TOTPEncryptionKey:       "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899", // 32 bytes, fake, differs from dev default
 		},
+		CORSConfig: CORSConfig{
+			AllowedOrigins: []string{"https://app.example.com"},
+		},
 	}
 }
 

@@ -546,6 +546,9 @@ func (c *GoUnoConfig) validateSMTP() error {
 		if err != nil || (resetURL.Scheme != "http" && resetURL.Scheme != "https") {
 			return fmt.Errorf("auth: password_reset_base_url must be a valid URL with http or https scheme")
 		}
+		if !c.WebServerConfig.Debug && resetURL.Scheme != "https" {
+			return fmt.Errorf("auth: password_reset_base_url must use https in production mode")
+		}
 	}
 	return nil
 }
@@ -560,6 +563,9 @@ func (c *GoUnoConfig) validateCORS() error {
 				return fmt.Errorf("cors: allow_credentials cannot be used with wildcard origin '*'")
 			}
 		}
+	}
+	if !c.WebServerConfig.Debug && len(c.CORSConfig.AllowedOrigins) == 0 {
+		return fmt.Errorf("cors: allowed_origins is required in production mode")
 	}
 	return nil
 }
