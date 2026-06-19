@@ -84,7 +84,7 @@ func TestLoginByUsernamePassword_Success(t *testing.T) {
 
 	authSvc := initAuthService(t, e)
 
-	result, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginRequest{
+	result, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginCommand{
 		Username:  "testuser",
 		Password:  "password123",
 		IP:        "127.0.0.1",
@@ -107,7 +107,7 @@ func TestLoginByUsernamePassword_WrongPassword(t *testing.T) {
 
 	authSvc := initAuthService(t, e)
 
-	result, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginRequest{
+	result, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginCommand{
 		Username:  "testuser",
 		Password:  "wrongpassword",
 		IP:        "127.0.0.1",
@@ -123,7 +123,7 @@ func TestLoginByUsernamePassword_AccountNotFound(t *testing.T) {
 
 	authSvc := initAuthService(t, e)
 
-	result, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginRequest{
+	result, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginCommand{
 		Username:  "nonexistent",
 		Password:  "password123",
 		IP:        "127.0.0.1",
@@ -142,7 +142,7 @@ func TestLoginAndRefresh(t *testing.T) {
 
 	authSvc := initAuthService(t, e)
 
-	loginResult, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginRequest{
+	loginResult, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginCommand{
 		Username:  "testuser",
 		Password:  "password123",
 		IP:        "127.0.0.1",
@@ -168,7 +168,7 @@ func TestLoginAndLogout(t *testing.T) {
 
 	authSvc := initAuthService(t, e)
 
-	loginResult, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginRequest{
+	loginResult, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginCommand{
 		Username:  "testuser",
 		Password:  "password123",
 		IP:        "127.0.0.1",
@@ -196,7 +196,7 @@ func TestLoginRateLimiting(t *testing.T) {
 	authSvc := initAuthService(t, e)
 
 	for i := 0; i < 5; i++ {
-		_, _ = authSvc.LoginByUsernamePassword(ctx, &service.LoginRequest{
+		_, _ = authSvc.LoginByUsernamePassword(ctx, &service.LoginCommand{
 			Username:  "testuser",
 			Password:  "wrongpassword",
 			IP:        "127.0.0.1",
@@ -204,7 +204,7 @@ func TestLoginRateLimiting(t *testing.T) {
 		})
 	}
 
-	result, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginRequest{
+	result, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginCommand{
 		Username:  "testuser",
 		Password:  "password123",
 		IP:        "127.0.0.1",
@@ -223,13 +223,13 @@ func TestSessionListAndRevoke(t *testing.T) {
 
 	authSvc := initAuthService(t, e)
 
-	login1, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginRequest{
+	login1, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginCommand{
 		Username: "testuser", Password: "password123",
 		IP: "127.0.0.1", UserAgent: "agent-1",
 	})
 	require.NoError(t, err)
 
-	login2, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginRequest{
+	login2, err := authSvc.LoginByUsernamePassword(ctx, &service.LoginCommand{
 		Username: "testuser", Password: "password123",
 		IP: "127.0.0.2", UserAgent: "agent-2",
 	})

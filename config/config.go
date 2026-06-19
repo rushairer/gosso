@@ -33,7 +33,7 @@ type WebServerConfig struct {
 	Production        bool             `mapstructure:"production"`
 	Debug             bool             `mapstructure:"debug"`
 	Address           string           `mapstructure:"address"`
-	Port              string           `mapstructure:"port"`
+	Port              int              `mapstructure:"port"`
 	IdleTimeout       time.Duration    `mapstructure:"idle_timeout"`
 	ReadTimeout       time.Duration    `mapstructure:"read_timeout"`
 	ReadHeaderTimeout time.Duration    `mapstructure:"read_header_timeout"`
@@ -265,12 +265,8 @@ func (c *GoUnoConfig) Validate() error {
 }
 
 func (c *GoUnoConfig) validateWebServer() error {
-	if c.WebServerConfig.Port == "" {
-		return fmt.Errorf("web_server: port is required")
-	}
-	var port int
-	if _, err := fmt.Sscanf(c.WebServerConfig.Port, "%d", &port); err != nil || port < 1 || port > 65535 {
-		return fmt.Errorf("web_server: port must be a valid port number (1-65535), got %q", c.WebServerConfig.Port)
+	if c.WebServerConfig.Port < 1 || c.WebServerConfig.Port > 65535 {
+		return fmt.Errorf("web_server: port must be a valid port number (1-65535), got %d", c.WebServerConfig.Port)
 	}
 	if c.WebServerConfig.MaxBodySize <= 0 {
 		return fmt.Errorf("web_server: max_body_size must be positive (got %d)", c.WebServerConfig.MaxBodySize)

@@ -37,8 +37,8 @@ const (
 	mfaAccountRateLimitWindow = 5 * time.Minute
 )
 
-// LoginRequest login request
-type LoginRequest struct {
+// LoginCommand represents a username+password login request from the controller layer.
+type LoginCommand struct {
 	Username  string
 	Password  string
 	IP        string

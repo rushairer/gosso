@@ -189,7 +189,7 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
 			return
 		}
-		controllerutil.HandleServiceError(ctx, c.logger, err, updateClientErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, updateClientErrorMap,
 			http.StatusBadRequest, "failed to update client")
 		return
 	}
@@ -220,7 +220,7 @@ func (c *ClientController) DeleteClient(ctx *gin.Context) {
 	}
 
 	if err := c.clientSvc.DeleteClient(ctx, accountID, clientID); err != nil {
-		controllerutil.HandleServiceError(ctx, c.logger, err, clientDeleteErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, clientDeleteErrorMap,
 			http.StatusInternalServerError, "Failed to delete client")
 		return
 	}

@@ -125,7 +125,7 @@ func (c *AdminController) GetAccount(ctx *gin.Context) {
 
 	account, err := c.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
-		controllerutil.HandleServiceError(ctx, c.logger, err, adminAccountErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, adminAccountErrorMap,
 			http.StatusInternalServerError, "Failed to get account")
 		return
 	}
@@ -146,7 +146,7 @@ func (c *AdminController) DeleteAccount(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.SoftDeleteAccount(ctx, accountID); err != nil {
-		controllerutil.HandleServiceError(ctx, c.logger, err, adminDeleteAccountErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, adminDeleteAccountErrorMap,
 			http.StatusInternalServerError, "Failed to delete account")
 		return
 	}
@@ -167,7 +167,7 @@ func (c *AdminController) DisableAccount(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.SuspendAccount(ctx, accountID); err != nil {
-		controllerutil.HandleServiceError(ctx, c.logger, err, adminAccountErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, adminAccountErrorMap,
 			http.StatusInternalServerError, "Failed to disable account")
 		return
 	}
@@ -188,7 +188,7 @@ func (c *AdminController) EnableAccount(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.ActivateAccount(ctx, accountID); err != nil {
-		controllerutil.HandleServiceError(ctx, c.logger, err, adminAccountErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, adminAccountErrorMap,
 			http.StatusInternalServerError, "Failed to enable account")
 		return
 	}
@@ -205,7 +205,7 @@ func (c *AdminController) GetAccountRoles(ctx *gin.Context) {
 
 	roles, err := c.accountSvc.GetAccountRoles(ctx, accountID)
 	if err != nil {
-		controllerutil.HandleServiceError(ctx, c.logger, err, adminAccountErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, adminAccountErrorMap,
 			http.StatusInternalServerError, "Failed to get account roles")
 		return
 	}
@@ -240,7 +240,7 @@ func (c *AdminController) AddRole(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.AssignRole(ctx, accountID, req.RoleID); err != nil {
-		controllerutil.HandleServiceError(ctx, c.logger, err, adminRoleErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, adminRoleErrorMap,
 			http.StatusInternalServerError, "Failed to assign role")
 		return
 	}
@@ -266,7 +266,7 @@ func (c *AdminController) RemoveRole(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.RemoveRole(ctx, accountID, roleID); err != nil {
-		controllerutil.HandleServiceError(ctx, c.logger, err, adminRoleErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, adminRoleErrorMap,
 			http.StatusInternalServerError, "Failed to remove role")
 		return
 	}

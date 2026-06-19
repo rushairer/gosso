@@ -61,7 +61,7 @@ var mfaVerifyErrorMap = []controllerutil.ErrorRule{
 
 // authServiceDeps defines the auth service methods used by AuthController.
 type authServiceDeps interface {
-	LoginByUsernamePassword(ctx context.Context, req *authService.LoginRequest) (*authService.LoginResult, error)
+	LoginByUsernamePassword(ctx context.Context, req *authService.LoginCommand) (*authService.LoginResult, error)
 	VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfaType, ip, userAgent string) (*authService.LoginResult, error)
 	Logout(ctx context.Context, accountID, sessionID string, accessTokenJTI string, tokenExpiresAt time.Time) error
 	RefreshTokens(ctx context.Context, refreshToken string) (*authService.RefreshResult, error)
@@ -260,14 +260,14 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		return
 	}
 
-	result, err := c.authSvc.LoginByUsernamePassword(ctx, &authService.LoginRequest{
+	result, err := c.authSvc.LoginByUsernamePassword(ctx, &authService.LoginCommand{
 		Username:  req.Username,
 		Password:  req.Password,
 		IP:        ctx.ClientIP(),
 		UserAgent: ctx.Request.UserAgent(),
 	})
 	if err != nil {
-		controllerutil.HandleServiceError(ctx, c.logger, err, loginErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, loginErrorMap,
 			http.StatusUnauthorized, "Login failed")
 		return
 	}
@@ -301,7 +301,7 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 
 	result, err := c.authSvc.RefreshTokens(ctx, req.RefreshToken)
 	if err != nil {
-		controllerutil.HandleServiceError(ctx, c.logger, err, refreshErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, refreshErrorMap,
 			http.StatusUnauthorized, "Token refresh failed")
 		return
 	}
@@ -388,7 +388,7 @@ func (c *AuthController) RevokeSession(ctx *gin.Context) {
 	}
 
 	if err := c.authSvc.RevokeSession(ctx, tc.AccountID, sessionID); err != nil {
-		controllerutil.HandleServiceError(ctx, c.logger, err, revokeSessionErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, revokeSessionErrorMap,
 			http.StatusInternalServerError, "Failed to revoke session")
 		return
 	}
@@ -422,7 +422,7 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 
 	result, err := c.authSvc.VerifyMFALogin(ctx, req.MFAToken, req.Code, req.Type, ctx.ClientIP(), ctx.Request.UserAgent())
 	if err != nil {
-		controllerutil.HandleServiceError(ctx, c.logger, err, mfaVerifyErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, mfaVerifyErrorMap,
 			http.StatusUnauthorized, "MFA verification failed")
 		return
 	}
@@ -691,7 +691,7 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 	}
 
 	if err := c.verificationSvc.SendCode(ctx, req.Type, req.Identifier, tc.AccountID); err != nil {
-		controllerutil.HandleServiceError(ctx, c.logger, err, sendVerificationErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, sendVerificationErrorMap,
 			http.StatusInternalServerError, "failed to send verification code")
 		return
 	}

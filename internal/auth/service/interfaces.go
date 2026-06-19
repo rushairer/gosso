@@ -11,7 +11,7 @@ import (
 
 // AuthOrchestrator defines the interface used by controllers for authentication operations.
 type AuthOrchestrator interface {
-	LoginByUsernamePassword(ctx context.Context, req *LoginRequest) (*LoginResult, error)
+	LoginByUsernamePassword(ctx context.Context, req *LoginCommand) (*LoginResult, error)
 	LoginByPasskey(ctx context.Context, accountID, ip, userAgent string) (*LoginResult, error)
 	VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfaType, ip, userAgent string) (*LoginResult, error)
 	Logout(ctx context.Context, accountID, sessionID string, accessTokenJTI string, tokenExpiresAt time.Time) error

@@ -93,7 +93,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("web_server.production", false)
 	v.SetDefault("web_server.debug", false)
 	v.SetDefault("web_server.address", "0.0.0.0")
-	v.SetDefault("web_server.port", "8080")
+	v.SetDefault("web_server.port", 8080)
 	v.SetDefault("web_server.idle_timeout", "60s")
 	v.SetDefault("web_server.read_timeout", "5s")
 	v.SetDefault("web_server.read_header_timeout", "2s")

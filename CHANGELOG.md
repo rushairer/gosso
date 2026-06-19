@@ -22,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `InitializeOAuth2Module` now returns `(*OAuth2Module, error)` — propagates `AuthCodeService` construction errors instead of silently accepting invalid configuration (`internal/oauth2/module.go`).
 - Dual-layer login rate limiting now has explicit documentation comments explaining the router-level (per-IP) and service-level (per-IP+username) defense intent (`router/web.go`, `internal/auth/service/auth_login.go`).
 - Refresh token IP binding gap documented with known-limitation comments in `RefreshTokens` and `GenerateRefreshToken` — clarifies the degradation path when IP metadata is missing (`internal/auth/service/auth_session.go`, `internal/token/service/token_service.go`).
+- Renamed service-layer `LoginRequest` to `LoginCommand` — avoids naming collision with controller-layer `LoginRequest` DTO and clarifies that the service-layer type is a command, not an HTTP binding (`internal/auth/service/auth_service.go`).
+- Renamed `HandleServiceError` to `AbortWithServiceError` — function name now conveys that it calls `ctx.Abort()` to stop the handler chain; 17 call sites updated across 5 controllers (`internal/controllerutil/error_handler.go`).
+- Changed `WebServerConfig.Port` type from `string` to `int` — eliminates runtime `Sscanf` parsing in validation and aligns with `SMTPConfig.Port` which is already `int` (`config/config.go`).
+
+### Added
+- Unit tests for `parseSteps` and `parseVersion` migration helpers (`cmd/gosso/migrate_test.go`).
+- Unit tests for `RequireAccountID` middleware — covers valid ID, missing ID, empty string, and wrong type (`middleware/account_test.go`).
+- Unit tests for `RequestIDMiddleware` and `isValidRequestID` — covers UUID generation, header preservation, length validation, character validation, and context propagation (`middleware/requestid_test.go`).
+- Unit tests for `sanitizeQuery`, `truncateString`, `LoggerFromContext`, and `ZapLoggerMiddleware` — covers sensitive param redaction, string truncation, logger retrieval from context, and HTTP log level classification (`middleware/zaplogger_test.go`).
 
 ### Fixed
 - `ConfigManager` is now safe for concurrent reads — removed two-phase construction (`hasConfig` field and `setConfig` method); config is fully initialized in the constructor before the pointer is returned (`config/config_manager.go`).

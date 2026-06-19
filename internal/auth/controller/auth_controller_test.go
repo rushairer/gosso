@@ -49,7 +49,7 @@ type mockAuthOrchestrator struct {
 	mfaSvc            *service.MFAService
 }
 
-func (m *mockAuthOrchestrator) LoginByUsernamePassword(_ context.Context, _ *service.LoginRequest) (*service.LoginResult, error) {
+func (m *mockAuthOrchestrator) LoginByUsernamePassword(_ context.Context, _ *service.LoginCommand) (*service.LoginResult, error) {
 	if m.loginFn != nil {
 		return m.loginFn()
 	}

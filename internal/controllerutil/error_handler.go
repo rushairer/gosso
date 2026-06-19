@@ -22,12 +22,12 @@ type ErrorRule struct {
 	Mapping  ErrorMapping
 }
 
-// HandleServiceError maps a service error to an HTTP response using gouno.NewErrorResponse.
+// AbortWithServiceError maps a service error to an HTTP response using gouno.NewErrorResponse.
 // It iterates rules in order and returns the first matching entry via errors.Is.
 // If no match, it returns fallbackStatus with fallbackMsg.
 // Matched errors are logged at Warn level; unmatched errors are logged at Error level.
 // Always calls ctx.Abort() after writing the response to prevent handler chain continuation.
-func HandleServiceError(ctx *gin.Context, logger *zap.Logger, err error,
+func AbortWithServiceError(ctx *gin.Context, logger *zap.Logger, err error,
 	rules []ErrorRule, fallbackStatus int, fallbackMsg string) {
 	for _, rule := range rules {
 		if errors.Is(err, rule.Sentinel) {

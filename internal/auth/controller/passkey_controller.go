@@ -173,7 +173,7 @@ func (c *PasskeyController) LoginBegin(ctx *gin.Context) {
 		}
 		options, requestID, err := c.passkeySvc.BeginLogin(ctx, req.AccountID)
 		if err != nil {
-			controllerutil.HandleServiceError(ctx, c.logger, err, passkeyLoginErrorMap,
+			controllerutil.AbortWithServiceError(ctx, c.logger, err, passkeyLoginErrorMap,
 				http.StatusInternalServerError, "Failed to begin passkey login")
 			return
 		}
@@ -353,7 +353,7 @@ func (c *PasskeyController) DeleteCredential(ctx *gin.Context) {
 	}
 
 	if err := c.passkeySvc.DeleteCredential(ctx, accountID, credentialID); err != nil {
-		controllerutil.HandleServiceError(ctx, c.logger, err, passkeyDeleteErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, passkeyDeleteErrorMap,
 			http.StatusInternalServerError, "Failed to delete passkey")
 		return
 	}

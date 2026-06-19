@@ -25,9 +25,9 @@ func nopLogger() *zap.Logger {
 	return zap.NewNop()
 }
 
-// --- HandleServiceError tests ---
+// --- AbortWithServiceError tests ---
 
-func TestHandleServiceError_SentinelMatch(t *testing.T) {
+func TestAbortWithServiceError_SentinelMatch(t *testing.T) {
 	ctx, recorder := setupTestContext()
 	logger := nopLogger()
 
@@ -36,7 +36,7 @@ func TestHandleServiceError_SentinelMatch(t *testing.T) {
 		{Sentinel: sentinel, Mapping: ErrorMapping{Status: http.StatusNotFound, Message: "resource not found"}},
 	}
 
-	HandleServiceError(ctx, logger, sentinel, rules, http.StatusInternalServerError, "internal error")
+	AbortWithServiceError(ctx, logger, sentinel, rules, http.StatusInternalServerError, "internal error")
 
 	assert.Equal(t, http.StatusNotFound, recorder.Code)
 
@@ -46,7 +46,7 @@ func TestHandleServiceError_SentinelMatch(t *testing.T) {
 	assert.Equal(t, "resource not found", body["message"])
 }
 
-func TestHandleServiceError_NoMatch(t *testing.T) {
+func TestAbortWithServiceError_NoMatch(t *testing.T) {
 	ctx, recorder := setupTestContext()
 	logger := nopLogger()
 
@@ -56,7 +56,7 @@ func TestHandleServiceError_NoMatch(t *testing.T) {
 	}
 
 	unknownErr := errors.New("something unexpected")
-	HandleServiceError(ctx, logger, unknownErr, rules, http.StatusInternalServerError, "internal error")
+	AbortWithServiceError(ctx, logger, unknownErr, rules, http.StatusInternalServerError, "internal error")
 
 	assert.Equal(t, http.StatusInternalServerError, recorder.Code)
 
@@ -66,14 +66,14 @@ func TestHandleServiceError_NoMatch(t *testing.T) {
 	assert.Equal(t, "internal error", body["message"])
 }
 
-func TestHandleServiceError_EmptyErrorMap(t *testing.T) {
+func TestAbortWithServiceError_EmptyErrorMap(t *testing.T) {
 	ctx, recorder := setupTestContext()
 	logger := nopLogger()
 
 	rules := []ErrorRule{}
 
 	err := errors.New("any error")
-	HandleServiceError(ctx, logger, err, rules, http.StatusConflict, "conflict fallback")
+	AbortWithServiceError(ctx, logger, err, rules, http.StatusConflict, "conflict fallback")
 
 	assert.Equal(t, http.StatusConflict, recorder.Code)
 
@@ -83,7 +83,7 @@ func TestHandleServiceError_EmptyErrorMap(t *testing.T) {
 	assert.Equal(t, "conflict fallback", body["message"])
 }
 
-func TestHandleServiceError_NilError(t *testing.T) {
+func TestAbortWithServiceError_NilError(t *testing.T) {
 	ctx, recorder := setupTestContext()
 	logger := nopLogger()
 
@@ -93,7 +93,7 @@ func TestHandleServiceError_NilError(t *testing.T) {
 	}
 
 	assert.NotPanics(t, func() {
-		HandleServiceError(ctx, logger, nil, rules, http.StatusInternalServerError, "internal error")
+		AbortWithServiceError(ctx, logger, nil, rules, http.StatusInternalServerError, "internal error")
 	})
 
 	// nil should not match any sentinel, so fallback is used
@@ -105,7 +105,7 @@ func TestHandleServiceError_NilError(t *testing.T) {
 	assert.Equal(t, "internal error", body["message"])
 }
 
-func TestHandleServiceError_WrappedErrorMatches(t *testing.T) {
+func TestAbortWithServiceError_WrappedErrorMatches(t *testing.T) {
 	ctx, recorder := setupTestContext()
 	logger := nopLogger()
 
@@ -115,7 +115,7 @@ func TestHandleServiceError_WrappedErrorMatches(t *testing.T) {
 	}
 
 	wrappedErr := fmt.Errorf("operation failed: %w", sentinel)
-	HandleServiceError(ctx, logger, wrappedErr, rules, http.StatusInternalServerError, "internal error")
+	AbortWithServiceError(ctx, logger, wrappedErr, rules, http.StatusInternalServerError, "internal error")
 
 	assert.Equal(t, http.StatusForbidden, recorder.Code)
 
@@ -125,7 +125,7 @@ func TestHandleServiceError_WrappedErrorMatches(t *testing.T) {
 	assert.Equal(t, "access denied", body["message"])
 }
 
-func TestHandleServiceError_WrappedErrorNoMatch(t *testing.T) {
+func TestAbortWithServiceError_WrappedErrorNoMatch(t *testing.T) {
 	ctx, recorder := setupTestContext()
 	logger := nopLogger()
 
@@ -135,7 +135,7 @@ func TestHandleServiceError_WrappedErrorNoMatch(t *testing.T) {
 	}
 
 	wrappedErr := fmt.Errorf("wrap: %w", errors.New("something else"))
-	HandleServiceError(ctx, logger, wrappedErr, rules, http.StatusInternalServerError, "internal error")
+	AbortWithServiceError(ctx, logger, wrappedErr, rules, http.StatusInternalServerError, "internal error")
 
 	assert.Equal(t, http.StatusInternalServerError, recorder.Code)
 }

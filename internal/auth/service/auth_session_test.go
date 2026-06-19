@@ -38,7 +38,7 @@ func TestRevokeSession_Success(t *testing.T) {
 	fixture.sqlMock.ExpectBegin()
 	fixture.sqlMock.ExpectCommit()
 
-	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username: "testuser", Password: "password123",
 		IP: "127.0.0.1", UserAgent: "test-agent",
 	})
@@ -105,7 +105,7 @@ func TestRefreshTokens_IPMismatch(t *testing.T) {
 
 	// Login with IP "10.0.0.1" in context (captured by GenerateRefreshToken).
 	loginCtx := audit.SetMetadata(context.Background(), "10.0.0.1", "test-agent", "")
-	loginResult, err := fixture.svc.LoginByUsernamePassword(loginCtx, &LoginRequest{
+	loginResult, err := fixture.svc.LoginByUsernamePassword(loginCtx, &LoginCommand{
 		Username: "testuser", Password: "password123",
 		IP: "10.0.0.1", UserAgent: "test-agent",
 	})
@@ -127,7 +127,7 @@ func TestRefreshTokens_SessionInvalid(t *testing.T) {
 	fixture.sqlMock.ExpectBegin()
 	fixture.sqlMock.ExpectCommit()
 
-	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username: "testuser", Password: "password123",
 		IP: "127.0.0.1", UserAgent: "test-agent",
 	})
@@ -151,7 +151,7 @@ func TestRefreshTokens_AccountInactive(t *testing.T) {
 	fixture.sqlMock.ExpectBegin()
 	fixture.sqlMock.ExpectCommit()
 
-	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username: "testuser", Password: "password123",
 		IP: "127.0.0.1", UserAgent: "test-agent",
 	})

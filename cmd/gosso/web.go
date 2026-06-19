@@ -59,7 +59,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	logger.Info("starting web server",
 		zap.String("env", env),
 		zap.Bool("debug", globalConfig.WebServerConfig.Debug),
-		zap.String("addr", globalConfig.WebServerConfig.Address+":"+globalConfig.WebServerConfig.Port),
+		zap.String("addr", fmt.Sprintf("%s:%d", globalConfig.WebServerConfig.Address, globalConfig.WebServerConfig.Port)),
 	)
 
 	db, err := initDatabase(ctx, globalConfig, logger)
@@ -98,7 +98,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	}
 
 	httpServer := &http.Server{
-		Addr:              fmt.Sprintf("%s:%s", globalConfig.WebServerConfig.Address, globalConfig.WebServerConfig.Port),
+		Addr:              fmt.Sprintf("%s:%d", globalConfig.WebServerConfig.Address, globalConfig.WebServerConfig.Port),
 		IdleTimeout:       globalConfig.WebServerConfig.IdleTimeout,
 		WriteTimeout:      globalConfig.WebServerConfig.WriteTimeout,
 		ReadTimeout:       globalConfig.WebServerConfig.ReadTimeout,

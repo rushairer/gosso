@@ -104,7 +104,7 @@ func (c *OIDCController) UserInfo(ctx *gin.Context) {
 
 	info, err := c.userInfoSvc.GetUserInfo(ctx, claims.AccountID, scopes)
 	if err != nil {
-		controllerutil.HandleServiceError(ctx, c.logger, err, userInfoErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, userInfoErrorMap,
 			http.StatusInternalServerError, "Failed to get user info")
 		return
 	}

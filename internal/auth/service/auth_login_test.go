@@ -110,7 +110,7 @@ func TestLoginByUsernamePassword_Success(t *testing.T) {
 	fixture.sqlMock.ExpectBegin()
 	fixture.sqlMock.ExpectCommit()
 
-	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username:  "testuser",
 		Password:  "password123",
 		IP:        "127.0.0.1",
@@ -132,7 +132,7 @@ func TestLoginByUsernamePassword_AccountNotFound(t *testing.T) {
 	defer fixture.mr.Close()
 	defer fixture.sqlDB.Close()
 
-	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username:  "unknown",
 		Password:  "password123",
 		IP:        "127.0.0.1",
@@ -150,7 +150,7 @@ func TestLoginByUsernamePassword_WrongPassword(t *testing.T) {
 
 	fixture.seedTestAccount("account-001", "testuser", "password123")
 
-	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username:  "testuser",
 		Password:  "wrongpassword",
 		IP:        "127.0.0.1",
@@ -169,7 +169,7 @@ func TestLoginByUsernamePassword_InactiveAccount(t *testing.T) {
 	fixture.seedTestAccount("account-001", "testuser", "password123")
 	fixture.accountSvc.byID["account-001"].Status = accountDomain.AccountStatusSuspended
 
-	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username:  "testuser",
 		Password:  "password123",
 		IP:        "127.0.0.1",
@@ -204,7 +204,7 @@ func TestLoginByUsernamePassword_RateLimited(t *testing.T) {
 	)
 
 	// First attempt: wrong password, counter=1, not locked
-	_, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+	_, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username:  "testuser",
 		Password:  "wrong",
 		IP:        "127.0.0.1",
@@ -213,7 +213,7 @@ func TestLoginByUsernamePassword_RateLimited(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalidCredentials)
 
 	// Second attempt: counter=2 >= maxAttempts=2 -> locked
-	_, err = fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+	_, err = fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username:  "testuser",
 		Password:  "password123",
 		IP:        "127.0.0.1",
@@ -231,7 +231,7 @@ func TestLoginByUsernamePassword_RedisDown_Denied(t *testing.T) {
 	// Simulate Redis being unavailable by closing miniredis
 	fixture.mr.Close()
 
-	_, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+	_, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username:  "testuser",
 		Password:  "password123",
 		IP:        "127.0.0.1",
@@ -250,7 +250,7 @@ func TestLoginByUsernamePassword_MFARequired(t *testing.T) {
 		{ID: "totp-1", Type: accountDomain.CredentialTypeTOTP, Verified: true},
 	}
 
-	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username:  "testuser",
 		Password:  "password123",
 		IP:        "127.0.0.1",
@@ -279,7 +279,7 @@ func TestRefreshTokens_Success(t *testing.T) {
 	fixture.sqlMock.ExpectBegin()
 	fixture.sqlMock.ExpectCommit()
 
-	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username:  "testuser",
 		Password:  "password123",
 		IP:        "127.0.0.1",
@@ -319,7 +319,7 @@ func TestLogout_Success(t *testing.T) {
 	fixture.sqlMock.ExpectBegin()
 	fixture.sqlMock.ExpectCommit()
 
-	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username:  "testuser",
 		Password:  "password123",
 		IP:        "127.0.0.1",
@@ -342,7 +342,7 @@ func TestLogout_WithAccessToken(t *testing.T) {
 	fixture.sqlMock.ExpectBegin()
 	fixture.sqlMock.ExpectCommit()
 
-	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginRequest{
+	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username:  "testuser",
 		Password:  "password123",
 		IP:        "127.0.0.1",

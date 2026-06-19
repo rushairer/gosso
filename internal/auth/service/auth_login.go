@@ -17,7 +17,7 @@ import (
 )
 
 // LoginByUsernamePassword login by username and password
-func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginRequest) (result *LoginResult, err error) {
+func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginCommand) (result *LoginResult, err error) {
 	defer func() {
 		if err != nil {
 			s.loginAuditLogsSync(ctx, auditDomain.ActionLoginFailure, req.IP, nil,

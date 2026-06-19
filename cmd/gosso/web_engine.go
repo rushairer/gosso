@@ -83,7 +83,7 @@ func buildCORSConfig(cfg config.GoUnoConfig, logger *zap.Logger) (cors.Config, e
 		return cors.Config{}, fmt.Errorf("cors: allowed_origins is required in production mode")
 	} else {
 		logger.Warn("CORS allowed_origins not configured, falling back to localhost — do not use this in production")
-		corsConfig.AllowOrigins = []string{fmt.Sprintf("http://localhost:%s", cfg.WebServerConfig.Port)}
+		corsConfig.AllowOrigins = []string{fmt.Sprintf("http://localhost:%d", cfg.WebServerConfig.Port)}
 	}
 	if len(cfg.CORSConfig.AllowedMethods) > 0 {
 		corsConfig.AllowMethods = cfg.CORSConfig.AllowedMethods

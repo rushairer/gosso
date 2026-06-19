@@ -16,7 +16,7 @@ import (
 func validConfig() GoUnoConfig {
 	return GoUnoConfig{
 		WebServerConfig: WebServerConfig{
-			Port:              "8080",
+			Port:              8080,
 			MaxBodySize:       10 * 1024 * 1024,
 			ReadTimeout:       10 * time.Second,
 			WriteTimeout:      10 * time.Second,
@@ -577,7 +577,7 @@ func TestSetConfigDefaults(t *testing.T) {
 	v := viper.New()
 	cm.setConfigDefaults(v)
 
-	assert.Equal(t, "8080", v.GetString("web_server.port"))
+	assert.Equal(t, 8080, v.GetInt("web_server.port"))
 	assert.Equal(t, "0.0.0.0", v.GetString("web_server.address"))
 	assert.Equal(t, int64(10*1024*1024), v.GetInt64("web_server.max_body_size"))
 	assert.Equal(t, "postgres", v.GetString("database.default"))
