@@ -179,7 +179,11 @@ func (c *Credential) IsVerified() bool {
 }
 
 // Verify marks the credential as verified.
+// Idempotent: if already verified, does not overwrite VerifiedAt.
 func (c *Credential) Verify() {
+	if c.Verified {
+		return
+	}
 	now := time.Now()
 	c.Verified = true
 	c.VerifiedAt = &now

@@ -7,7 +7,13 @@ import (
 	"github.com/spf13/viper"
 )
 
-var EnvironmentConfig EnvironmentSettings
+var environmentConfig EnvironmentSettings
+
+// GetEnvironmentSettings returns the loaded environment configuration.
+// Must call LoadEnvironmentConfig or InitDeployConfig first.
+func GetEnvironmentSettings() EnvironmentSettings {
+	return environmentConfig
+}
 
 // EnvironmentSettings represents the environment configuration structure
 type EnvironmentSettings struct {
@@ -99,7 +105,7 @@ func LoadEnvironmentConfig(configPath string) error {
 		return err
 	}
 
-	if err := envViper.Unmarshal(&EnvironmentConfig); err != nil {
+	if err := envViper.Unmarshal(&environmentConfig); err != nil {
 		return err
 	}
 
@@ -108,7 +114,7 @@ func LoadEnvironmentConfig(configPath string) error {
 
 // GetEnvironment retrieves the configuration for a specified environment
 func GetEnvironment(env string) (*Environment, bool) {
-	if envConfig, exists := EnvironmentConfig.Environments[env]; exists {
+	if envConfig, exists := environmentConfig.Environments[env]; exists {
 		return &envConfig, true
 	}
 	return nil, false

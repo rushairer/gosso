@@ -95,7 +95,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		auditDomain.ActionAccountDelete,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
+		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID}),
 		auditMetaFromContext(ctx),
 	))
 
@@ -147,7 +147,7 @@ func (s *accountServiceImpl) VerifyContactCredential(ctx context.Context, accoun
 		auditDomain.ActionCredentialVerify,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "credential_type": credential.Type}),
+		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID, "credential_type": credential.Type}),
 		auditMetaFromContext(ctx),
 	))
 
@@ -162,6 +162,11 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	// 0. Validate new password strength before doing expensive work
 	if err := utility.ValidatePasswordStrength(newPassword); err != nil {
 		return err
+	}
+
+	// 0b. Reject no-op password change to avoid unnecessary session revocation
+	if oldPassword == newPassword {
+		return ErrSamePassword
 	}
 
 	// 1. Fail-fast: ensure session revoker is configured before modifying data
@@ -223,7 +228,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 		auditDomain.ActionPasswordChange,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
+		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID}),
 		auditMetaFromContext(ctx),
 	))
 
@@ -255,7 +260,7 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 		auditDomain.ActionAccountSuspend,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
+		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID}),
 		auditMetaFromContext(ctx),
 	))
 	return nil
@@ -274,7 +279,7 @@ func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID stri
 		auditDomain.ActionAccountActivate,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID}),
+		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID}),
 		auditMetaFromContext(ctx),
 	))
 	return nil

@@ -24,7 +24,7 @@ type RedisClient struct {
 // DSN format: redis://[user:password@]host:port/db
 // Example: redis://:password@localhost:6379/0
 // The ctx parameter controls the ping timeout; pass context.Background() for startup.
-func NewRedisClient(ctx context.Context, dsn string, maxActiveConns int, poolTimeout time.Duration, logger *zap.Logger) (*RedisClient, error) {
+func NewRedisClient(ctx context.Context, dsn string, maxActiveConns int, poolTimeout, dialTimeout, readTimeout, writeTimeout time.Duration, logger *zap.Logger) (*RedisClient, error) {
 	opts, err := redis.ParseURL(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("parse redis DSN: %w", err)
@@ -36,9 +36,9 @@ func NewRedisClient(ctx context.Context, dsn string, maxActiveConns int, poolTim
 	opts.MaxRetries = 3
 	opts.MinRetryBackoff = 100 * time.Millisecond
 	opts.MaxRetryBackoff = 500 * time.Millisecond
-	opts.DialTimeout = 5 * time.Second
-	opts.ReadTimeout = 3 * time.Second
-	opts.WriteTimeout = 3 * time.Second
+	opts.DialTimeout = dialTimeout
+	opts.ReadTimeout = readTimeout
+	opts.WriteTimeout = writeTimeout
 
 	client := redis.NewClient(opts)
 

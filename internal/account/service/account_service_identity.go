@@ -65,7 +65,7 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 		auditDomain.ActionFederatedIdentityBind,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "provider": string(provider), "provider_user_id": providerUserID}),
+		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID, "provider": string(provider), "provider_user_id": providerUserID}),
 		auditMetaFromContext(ctx),
 	))
 
@@ -131,7 +131,7 @@ func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accoun
 		auditDomain.ActionFederatedIdentityUnbind,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "identity_id": identityID}),
+		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID, "identity_id": identityID}),
 		auditMetaFromContext(ctx),
 	))
 
@@ -171,7 +171,7 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 		auditDomain.ActionRoleAssign,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
+		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID, "role_id": roleID}),
 		auditMetaFromContext(ctx),
 	))
 	return nil
@@ -203,7 +203,7 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 		auditDomain.ActionRoleRemove,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{"account_id": accountID, "role_id": roleID}),
+		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID, "role_id": roleID}),
 		auditMetaFromContext(ctx),
 	))
 	return nil
@@ -246,12 +246,15 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 }
 
 // validateUsername validates a username string.
-// Username must be non-empty, at most 64 characters, and contain only
-// lowercase letters, digits, hyphens, dots, and underscores.
+// Username must be non-empty, at least 2 characters, at most 64 characters,
+// and contain only lowercase letters, digits, hyphens, dots, and underscores.
 // The 64-character limit matches domain.ErrUsernameTooLong.
 func validateUsername(username string) error {
 	if username == "" {
 		return ErrUsernameEmpty
+	}
+	if len(username) < 2 {
+		return ErrUsernameTooShort
 	}
 	if len(username) > 64 {
 		return ErrUsernameTooLong
@@ -289,7 +292,7 @@ func (s *accountServiceImpl) checkCredentialExistsTx(ctx context.Context, tx *sq
 
 // auditMetaFromContext extracts IP and user-agent from context for audit logging.
 func auditMetaFromContext(ctx context.Context) json.RawMessage {
-	return utility.MustMarshalJSON(map[string]any{
+	return utility.MarshalJSONOrEmpty(map[string]any{
 		"ip":         audit.IPFromContext(ctx),
 		"user_agent": audit.UserAgentFromContext(ctx),
 	})

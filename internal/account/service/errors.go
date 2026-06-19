@@ -6,9 +6,11 @@ import "errors"
 var (
 	ErrUsernameAlreadyTaken          = errors.New("username already taken")
 	ErrUsernameEmpty                 = errors.New("username must not be empty")
+	ErrUsernameTooShort              = errors.New("username must be at least 2 characters")
 	ErrUsernameTooLong               = errors.New("username must not exceed 64 characters")
 	ErrUsernameInvalidChars          = errors.New("username may only contain lowercase letters, digits, hyphens, dots, and underscores")
 	ErrIncorrectOldPassword          = errors.New("incorrect old password")
+	ErrSamePassword                  = errors.New("new password must differ from old password")
 	ErrFederatedIdentityAlreadyBound = errors.New("federated identity already bound")
 	ErrEmailAlreadyRegistered        = errors.New("email already registered")
 	ErrPhoneAlreadyRegistered        = errors.New("phone already registered")

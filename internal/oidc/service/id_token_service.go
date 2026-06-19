@@ -93,7 +93,7 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 		},
 		AZP:      clientID, // Authorized Party per OIDC Core §2 — single aud value
 		Nonce:    nonce,
-		AuthTime: ptrInt64(authTime.Unix()),
+		AuthTime: utility.Int64Ptr(authTime.Unix()),
 		AMR:      authMethods,
 	}
 
@@ -102,8 +102,8 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 		switch scope {
 		case "profile":
 			claims.Name = account.DisplayName
-			claims.PreferredUsername = safeString(account.Username)
-			claims.Picture = safeString(account.AvatarURL)
+			claims.PreferredUsername = utility.DerefString(account.Username)
+			claims.Picture = utility.DerefString(account.AvatarURL)
 			claims.Locale = account.Locale
 		case "email":
 			if err := s.addEmailClaims(ctx, accountID, claims); err != nil {
@@ -163,15 +163,4 @@ func (s *IDTokenService) addPhoneClaims(ctx context.Context, accountID string, c
 		claims.PhoneVerified = &verified
 	}
 	return nil
-}
-
-func ptrInt64(v int64) *int64 {
-	return &v
-}
-
-func safeString(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }

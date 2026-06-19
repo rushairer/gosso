@@ -149,12 +149,12 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 		auditDomain.ActionTokenRotate,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(newRT.AccountID),
-		utility.MustMarshalJSON(map[string]any{
+		utility.MarshalJSONOrEmpty(map[string]any{
 			"session_id": newRT.SessionID,
 			"old_token":  oldHash,
 			"new_token":  newHash,
 		}),
-		utility.MustMarshalJSON(map[string]any{
+		utility.MarshalJSONOrEmpty(map[string]any{
 			"ip":         audit.IPFromContext(ctx),
 			"user_agent": audit.UserAgentFromContext(ctx),
 		}),
@@ -187,11 +187,11 @@ func (s *TokenService) RevokeRefreshToken(ctx context.Context, token string) err
 			auditDomain.ActionTokenRevoke,
 			audit.IPFromContext(ctx),
 			nil,
-			utility.MustMarshalJSON(map[string]any{
+			utility.MarshalJSONOrEmpty(map[string]any{
 				"token_hash": domain.HashToken(token),
 				"session_id": rt.SessionID,
 			}),
-			utility.MustMarshalJSON(map[string]any{
+			utility.MarshalJSONOrEmpty(map[string]any{
 				"ip":         audit.IPFromContext(ctx),
 				"user_agent": audit.UserAgentFromContext(ctx),
 			}),
@@ -225,11 +225,11 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 		auditDomain.ActionTokenRevoke,
 		audit.IPFromContext(ctx),
 		nil,
-		utility.MustMarshalJSON(map[string]any{
+		utility.MarshalJSONOrEmpty(map[string]any{
 			"session_id": sessionID,
 			"reason":     "revoke_all_for_session",
 		}),
-		utility.MustMarshalJSON(map[string]any{
+		utility.MarshalJSONOrEmpty(map[string]any{
 			"ip":         audit.IPFromContext(ctx),
 			"user_agent": audit.UserAgentFromContext(ctx),
 		}),
@@ -271,10 +271,10 @@ func (s *TokenService) RevokeAccountTokens(ctx context.Context, accountID string
 		auditDomain.ActionTokenRevoke,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(accountID),
-		utility.MustMarshalJSON(map[string]any{
+		utility.MarshalJSONOrEmpty(map[string]any{
 			"reason": "revoke_all_for_account",
 		}),
-		utility.MustMarshalJSON(map[string]any{
+		utility.MarshalJSONOrEmpty(map[string]any{
 			"ip":         audit.IPFromContext(ctx),
 			"user_agent": audit.UserAgentFromContext(ctx),
 		}),

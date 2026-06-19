@@ -19,7 +19,7 @@ func setupTestRedisClient(t *testing.T) (*RedisClient, *miniredis.Miniredis) {
 	logger := zap.NewNop()
 
 	mr := miniredis.RunT(t)
-	client, err := NewRedisClient(context.Background(), "redis://"+mr.Addr(), 10, 5*time.Second, logger)
+	client, err := NewRedisClient(context.Background(), "redis://"+mr.Addr(), 10, 5*time.Second, 5*time.Second, 3*time.Second, 3*time.Second, logger)
 	if err != nil {
 		mr.Close()
 		t.Fatalf("failed to create test redis client: %v", err)
@@ -464,7 +464,7 @@ func TestRedisClient_GetDel(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestNewRedisClient_InvalidDSN(t *testing.T) {
-	_, err := NewRedisClient(context.Background(), "not-a-valid-dsn", 10, 5*time.Second, nil)
+	_, err := NewRedisClient(context.Background(), "not-a-valid-dsn", 10, 5*time.Second, 5*time.Second, 3*time.Second, 3*time.Second, nil)
 	assert.Error(t, err)
 }
 
@@ -580,7 +580,7 @@ func TestNewRedisClient_NilLogger(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
-	client, err := NewRedisClient(context.Background(), "redis://"+mr.Addr(), 10, 5*time.Second, nil)
+	client, err := NewRedisClient(context.Background(), "redis://"+mr.Addr(), 10, 5*time.Second, 5*time.Second, 3*time.Second, 3*time.Second, nil)
 	require.NoError(t, err)
 	require.NotNil(t, client)
 	assert.NoError(t, client.Close())
@@ -593,7 +593,7 @@ func TestNewRedisClient_PingFailure(t *testing.T) {
 	// Close server before client connects → immediate "connection refused"
 	mr.Close()
 
-	_, err := NewRedisClient(context.Background(), "redis://"+addr, 10, 5*time.Second, zap.NewNop())
+	_, err := NewRedisClient(context.Background(), "redis://"+addr, 10, 5*time.Second, 5*time.Second, 3*time.Second, 3*time.Second, zap.NewNop())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "ping redis")
 }

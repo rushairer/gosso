@@ -75,6 +75,9 @@ func initRedis(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger) 
 		cfg.RedisConfig.DSN,
 		cfg.RedisConfig.MaxActiveConns,
 		time.Duration(cfg.RedisConfig.PoolTimeoutSeconds)*time.Second,
+		time.Duration(cfg.RedisConfig.DialTimeoutSeconds)*time.Second,
+		time.Duration(cfg.RedisConfig.ReadTimeoutSeconds)*time.Second,
+		time.Duration(cfg.RedisConfig.WriteTimeoutSeconds)*time.Second,
 		logger,
 	)
 	if err != nil {

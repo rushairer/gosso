@@ -138,6 +138,12 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	// Redis configuration
 	v.SetDefault("redis.max_active_conns", 10)
 	v.SetDefault("redis.pool_timeout_seconds", 5)
+	v.SetDefault("redis.dial_timeout_seconds", 5)
+	v.SetDefault("redis.read_timeout_seconds", 3)
+	v.SetDefault("redis.write_timeout_seconds", 3)
+
+	// SMTP configuration
+	v.SetDefault("smtp.timeout_seconds", 30)
 
 	// Log configuration
 	v.SetDefault("log.level", 0)

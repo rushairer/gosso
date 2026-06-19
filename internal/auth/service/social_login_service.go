@@ -298,10 +298,10 @@ func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, i
 		if err != nil {
 			if auditErr := auditService.AuditLogSync(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 				auditDomain.ActionLoginFailure,
-				audit.IPFromContext(ctx),
+				ip,
 				&accountID,
-				utility.MustMarshalJSON(map[string]any{"method": "social", "account_id": accountID}),
-				utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx), "reason": safeAuditReason(err)}),
+				utility.MarshalJSONOrEmpty(map[string]any{"method": "social", "account_id": accountID}),
+				utility.MarshalJSONOrEmpty(map[string]any{"ip": ip, "user_agent": userAgent, "reason": safeAuditReason(err)}),
 			)); auditErr != nil {
 				s.logger.Error("Failed to write sync audit log for social login failure", zap.Error(auditErr))
 			}
@@ -366,8 +366,8 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 		auditDomain.ActionAccountRegister,
 		audit.IPFromContext(ctx),
 		&account.ID,
-		utility.MustMarshalJSON(map[string]any{"account_id": account.ID, "provider": provider}),
-		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		utility.MarshalJSONOrEmpty(map[string]any{"account_id": account.ID, "provider": provider}),
+		utility.MarshalJSONOrEmpty(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
 
 	return s.issueSessionAndTokens(ctx, account, ip, userAgent)

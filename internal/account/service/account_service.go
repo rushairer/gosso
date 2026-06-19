@@ -272,7 +272,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		auditDomain.ActionAccountRegister,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(account.ID),
-		utility.MustMarshalJSON(map[string]any{"account_id": account.ID}),
+		utility.MarshalJSONOrEmpty(map[string]any{"account_id": account.ID}),
 		auditMetaFromContext(ctx),
 	))
 
@@ -316,7 +316,7 @@ func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.
 		auditDomain.ActionAccountUpdate,
 		audit.IPFromContext(ctx),
 		utility.StringPtr(account.ID),
-		utility.MustMarshalJSON(map[string]any{"account_id": account.ID}),
+		utility.MarshalJSONOrEmpty(map[string]any{"account_id": account.ID}),
 		auditMetaFromContext(ctx),
 	))
 

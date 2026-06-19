@@ -135,7 +135,7 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 		auditDomain.ActionOAuth2ClientRegister,
 		audit.IPFromContext(ctx),
 		&req.AccountID,
-		utility.MustMarshalJSON(map[string]any{"client_id": client.ClientID, "name": client.Name}),
+		utility.MarshalJSONOrEmpty(map[string]any{"client_id": client.ClientID, "name": client.Name}),
 		nil,
 	))
 
@@ -252,7 +252,7 @@ func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, a
 		auditDomain.ActionOAuth2ClientUpdate,
 		audit.IPFromContext(ctx),
 		&accountID,
-		utility.MustMarshalJSON(map[string]any{"client_id": client.ClientID, "name": client.Name}),
+		utility.MarshalJSONOrEmpty(map[string]any{"client_id": client.ClientID, "name": client.Name}),
 		nil,
 	))
 
@@ -340,7 +340,7 @@ func (s *oauth2ClientServiceImpl) DeleteClient(ctx context.Context, accountID, c
 		auditDomain.ActionOAuth2ClientDelete,
 		audit.IPFromContext(ctx),
 		&accountID,
-		utility.MustMarshalJSON(map[string]any{"client_id": clientID}),
+		utility.MarshalJSONOrEmpty(map[string]any{"client_id": clientID}),
 		nil,
 	))
 

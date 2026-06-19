@@ -33,7 +33,7 @@ func setupTestRedis(t *testing.T) *cache.RedisClient {
 	t.Helper()
 	testutil.RequireLocalTCPListen(t, "tcp4", "127.0.0.1:0")
 	mr := miniredis.RunT(t)
-	client, err := cache.NewRedisClient(context.Background(), "redis://"+mr.Addr(), 10, 5*time.Second, zap.NewNop())
+	client, err := cache.NewRedisClient(context.Background(), "redis://"+mr.Addr(), 10, 5*time.Second, 5*time.Second, 3*time.Second, 3*time.Second, zap.NewNop())
 	require.NoError(t, err)
 	return client
 }

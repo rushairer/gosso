@@ -52,9 +52,12 @@ func validConfig() GoUnoConfig {
 			ConnMaxIdleTimeSec: 180,
 		},
 		RedisConfig: RedisConfig{
-			DSN:                "redis://redis.example.com:6379/0",
-			MaxActiveConns:     10,
-			PoolTimeoutSeconds: 5,
+			DSN:                 "redis://redis.example.com:6379/0",
+			MaxActiveConns:      10,
+			PoolTimeoutSeconds:  5,
+			DialTimeoutSeconds:  5,
+			ReadTimeoutSeconds:  3,
+			WriteTimeoutSeconds: 3,
 		},
 		AuthConfig: AuthConfig{
 			Issuer:                  "https://sso.example.com",

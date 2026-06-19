@@ -313,8 +313,8 @@ func (s *AuthService) Logout(ctx context.Context, accountID, sessionID string, a
 		auditDomain.ActionLogout,
 		audit.IPFromContext(ctx),
 		acctID,
-		utility.MustMarshalJSON(map[string]any{"session_id": sessionID}),
-		utility.MustMarshalJSON(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+		utility.MarshalJSONOrEmpty(map[string]any{"session_id": sessionID}),
+		utility.MarshalJSONOrEmpty(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
 	))
 
 	if len(errs) > 0 {
@@ -345,7 +345,7 @@ func (s *AuthService) ClearLoginRateLimitsByUsername(ctx context.Context, userna
 			if delErr := s.redis.Del(ctx, key); delErr != nil {
 				s.logger.Warn("Failed to delete login rate limit key", zap.String("key_masked", utility.MaskRateLimitKey(key)), zap.Error(delErr))
 				if firstErr == nil {
-					firstErr = fmt.Errorf("delete rate limit key %s: %w", key, delErr)
+					firstErr = fmt.Errorf("delete rate limit key %s: %w", utility.MaskRateLimitKey(key), delErr)
 				}
 			}
 		}

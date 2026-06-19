@@ -48,7 +48,18 @@ func TestFederatedIdentity_UpdateProfile(t *testing.T) {
 	fi, _ := NewFederatedIdentity("acc-4", ProviderGoogle, "g-101", nil)
 	oldUpdatedAt := fi.UpdatedAt
 	newProfile := map[string]interface{}{"name": "Updated"}
-	fi.UpdateProfile(newProfile)
+	err := fi.UpdateProfile(newProfile)
+	assert.NoError(t, err)
 	assert.Equal(t, "Updated", fi.Profile["name"])
 	assert.True(t, fi.UpdatedAt.After(oldUpdatedAt) || fi.UpdatedAt.Equal(oldUpdatedAt))
+}
+
+func TestFederatedIdentity_UpdateProfile_TooLarge(t *testing.T) {
+	fi, _ := NewFederatedIdentity("acc-5", ProviderGoogle, "g-102", nil)
+	// Create a profile that exceeds maxProfileSize (4096 bytes)
+	bigProfile := map[string]interface{}{
+		"data": string(make([]byte, maxProfileSize)),
+	}
+	err := fi.UpdateProfile(bigProfile)
+	assert.ErrorIs(t, err, ErrProfileTooLarge)
 }

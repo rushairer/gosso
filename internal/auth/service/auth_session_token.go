@@ -74,8 +74,8 @@ func (s *AuthService) loginAuditLogs(ctx context.Context, action string, actor s
 		action,
 		actor,
 		accountID,
-		utility.MustMarshalJSON(detail),
-		utility.MustMarshalJSON(meta),
+		utility.MarshalJSONOrEmpty(detail),
+		utility.MarshalJSONOrEmpty(meta),
 	))
 }
 
@@ -85,8 +85,8 @@ func (s *AuthService) loginAuditLogsSync(ctx context.Context, action string, act
 		action,
 		actor,
 		accountID,
-		utility.MustMarshalJSON(detail),
-		utility.MustMarshalJSON(meta),
+		utility.MarshalJSONOrEmpty(detail),
+		utility.MarshalJSONOrEmpty(meta),
 	)); err != nil {
 		s.logger.Error("Failed to write sync audit log", zap.String("action", action), zap.Error(err))
 	}

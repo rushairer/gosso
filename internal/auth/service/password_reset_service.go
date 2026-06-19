@@ -104,6 +104,7 @@ type PasswordResetService struct {
 	maxAttempts           int
 	stopCtx               context.Context
 	stopCancel            context.CancelFunc
+	waitOnce              sync.Once
 }
 
 // PasswordResetServiceConfig holds optional configuration for PasswordResetService.
@@ -491,14 +492,16 @@ func (s *PasswordResetService) buildCooldownKey(email string) string {
 // where goroutines may check for cancellation.
 func (s *PasswordResetService) Wait() {
 	s.stopCancel() // signal background goroutines to wind down (currently reserved for future use)
-	done := make(chan struct{})
-	go func() { s.wg.Wait(); close(done) }()
-	timer := time.NewTimer(s.waitTimeout)
-	defer timer.Stop()
-	select {
-	case <-done:
-	case <-timer.C:
-		s.logger.Warn("Timeout waiting for background password reset goroutines",
-			zap.Duration("timeout", s.waitTimeout))
-	}
+	s.waitOnce.Do(func() {
+		done := make(chan struct{})
+		go func() { s.wg.Wait(); close(done) }()
+		timer := time.NewTimer(s.waitTimeout)
+		defer timer.Stop()
+		select {
+		case <-done:
+		case <-timer.C:
+			s.logger.Warn("Timeout waiting for background password reset goroutines",
+				zap.Duration("timeout", s.waitTimeout))
+		}
+	})
 }

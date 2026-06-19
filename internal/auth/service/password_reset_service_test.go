@@ -52,7 +52,7 @@ func setupTestMiniredis(t *testing.T) (*cache.RedisClient, *miniredis.Miniredis)
 	logger := zap.NewNop()
 
 	mr := miniredis.RunT(t)
-	redisClient, err := cache.NewRedisClient(context.Background(), "redis://"+mr.Addr(), 10, 5*time.Second, logger)
+	redisClient, err := cache.NewRedisClient(context.Background(), "redis://"+mr.Addr(), 10, 5*time.Second, 5*time.Second, 3*time.Second, 3*time.Second, logger)
 	if err != nil {
 		mr.Close()
 		t.Fatalf("failed to create test redis client: %v", err)

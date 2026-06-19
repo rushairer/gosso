@@ -106,6 +106,9 @@ type RedisConfig struct {
 	DSN                string `mapstructure:"dsn"`
 	MaxActiveConns     int    `mapstructure:"max_active_conns"`
 	PoolTimeoutSeconds int    `mapstructure:"pool_timeout_seconds"`
+	DialTimeoutSeconds int    `mapstructure:"dial_timeout_seconds"`
+	ReadTimeoutSeconds int    `mapstructure:"read_timeout_seconds"`
+	WriteTimeoutSeconds int   `mapstructure:"write_timeout_seconds"`
 }
 
 // TaskPipelineConfig configures the async batch-processing pipeline used by
@@ -129,13 +132,14 @@ type TaskPipelineConfig struct {
 // SMTPConfig holds outbound email (SMTP) settings used for password-reset
 // and verification emails. When Host is empty the email subsystem is disabled.
 type SMTPConfig struct {
-	Host          string        `mapstructure:"host"`
-	Port          int           `mapstructure:"port"`
-	Username      string        `mapstructure:"username"`
-	Password      string        `mapstructure:"password" json:"-"`
-	From          string        `mapstructure:"from"`
-	TLSPolicy     string        `mapstructure:"tls_policy"`
-	SendRateLimit time.Duration `mapstructure:"send_rate_limit"` // minimum interval between sends (0 = 100ms default)
+	Host           string        `mapstructure:"host"`
+	Port           int           `mapstructure:"port"`
+	Username       string        `mapstructure:"username"`
+	Password       string        `mapstructure:"password" json:"-"`
+	From           string        `mapstructure:"from"`
+	TLSPolicy      string        `mapstructure:"tls_policy"`
+	SendRateLimit  time.Duration `mapstructure:"send_rate_limit"` // minimum interval between sends (0 = 100ms default)
+	TimeoutSeconds int           `mapstructure:"timeout_seconds"` // SMTP connection/send timeout (default: 30s)
 }
 
 // LogConfig holds logging configuration.
@@ -378,6 +382,15 @@ func (c *GoUnoConfig) validateRedis() error {
 	}
 	if c.RedisConfig.PoolTimeoutSeconds <= 0 {
 		return fmt.Errorf("redis: pool_timeout_seconds must be positive (got %d)", c.RedisConfig.PoolTimeoutSeconds)
+	}
+	if c.RedisConfig.DialTimeoutSeconds <= 0 {
+		return fmt.Errorf("redis: dial_timeout_seconds must be positive (got %d)", c.RedisConfig.DialTimeoutSeconds)
+	}
+	if c.RedisConfig.ReadTimeoutSeconds <= 0 {
+		return fmt.Errorf("redis: read_timeout_seconds must be positive (got %d)", c.RedisConfig.ReadTimeoutSeconds)
+	}
+	if c.RedisConfig.WriteTimeoutSeconds <= 0 {
+		return fmt.Errorf("redis: write_timeout_seconds must be positive (got %d)", c.RedisConfig.WriteTimeoutSeconds)
 	}
 	return nil
 }

@@ -8,10 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- `FederatedIdentity.UpdateProfile` now validates profile JSON size against `maxProfileSize` (4096 bytes) — prevents storage of excessively large payloads on update, matching the existing creation-time check (`internal/account/domain/federated_identity.go`).
+- `ClearLoginRateLimitsByUsername` error messages now mask the Redis key with `MaskRateLimitKey` — prevents PII (username) leakage in error logs (`internal/auth/service/auth_login.go`).
+- Social login audit log in `loginExistingUser` now uses the explicit `ip`/`userAgent` parameters instead of re-extracting from context — ensures consistent IP source when context values differ (`internal/auth/service/social_login_service.go`).
 - `SoftDeleteByID` and `SoftDeleteByAccountID` for federated identities now clear `profile` and `provider_user_id` PII data on soft delete — previously these fields were retained after deletion, risking PII exposure in the database (`internal/account/repository/federated_identity_repository_impl.go`).
 
 ### Fixed
+- `PasswordResetService.Wait()` now uses `sync.Once` to prevent goroutine leak on repeated calls — previously each call spawned a new goroutine that blocked indefinitely (`internal/auth/service/password_reset_service.go`).
+- `Credential.Verify()` is now idempotent — won't overwrite `VerifiedAt` on already-verified credentials (`internal/account/domain/credential.go`).
+- `ChangePassword` now rejects same-password changes to avoid unnecessary session revocation (`internal/account/service/account_service_manage.go`).
+- Username validation now enforces a minimum length of 2 characters (`internal/account/service/account_service_identity.go`).
 - `BigEndianBytes` now returns an error instead of panicking on negative input — callers get graceful error handling instead of runtime panics (`internal/utility/bigendian.go`, `internal/oidc/service/jwks_service.go`).
+
+### Changed
+- `MustMarshalJSON` renamed to `MarshalJSONOrEmpty` — the "Must" prefix in Go conventionally implies panic on failure, which did not match this function's behavior of returning `{}`. A deprecated alias `MustMarshalJSON` is kept for backward compatibility (`internal/utility/jsonutil.go` + all callers).
+- `deploy.EnvironmentConfig` made unexported; new `GetEnvironmentSettings()` getter added for controlled access (`deploy/config.go`).
+- Consolidated duplicate `safeString`/`ptrInt64` helpers from `id_token_service.go` into shared `utility.DerefString` and `utility.Int64Ptr` (`internal/utility/ptr.go`, `internal/oidc/service/id_token_service.go`).
+- Redis client timeouts (`DialTimeout`, `ReadTimeout`, `WriteTimeout`) are now configurable via `RedisConfig` fields with validation — previously hardcoded at 5s/3s/3s (`config/config.go`, `internal/cache/redis_client.go`).
+- SMTP timeout is now configurable via `SMTPConfig.TimeoutSeconds` — previously hardcoded at 30s (`config/config.go`, `internal/notification/service/email_service.go`).
 
 ### Changed
 - `NewFederatedIdentity` now validates that the `profile` map does not exceed 4KB when serialized to JSON — prevents storage of excessively large payloads (`internal/account/domain/federated_identity.go`).

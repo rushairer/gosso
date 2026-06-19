@@ -60,10 +60,14 @@ type EmailService struct {
 func NewEmailService(cfg config.SMTPConfig, logger *zap.Logger) (*EmailService, error) {
 	logger = utility.EnsureLogger(logger)
 
+	smtpTimeout := 30 * time.Second
+	if cfg.TimeoutSeconds > 0 {
+		smtpTimeout = time.Duration(cfg.TimeoutSeconds) * time.Second
+	}
 	opts := []mail.Option{
 		mail.WithPort(cfg.Port),
 		mail.WithTLSPolicy(smtpTLSPolicy(cfg.TLSPolicy)),
-		mail.WithTimeout(30 * time.Second),
+		mail.WithTimeout(smtpTimeout),
 	}
 	if cfg.Username != "" {
 		opts = append(opts,

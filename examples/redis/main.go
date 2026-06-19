@@ -27,6 +27,9 @@ func main() {
 		"redis://localhost:6379/0",
 		100,
 		10*time.Second,
+		5*time.Second,
+		3*time.Second,
+		3*time.Second,
 		logger,
 	)
 	if err != nil {

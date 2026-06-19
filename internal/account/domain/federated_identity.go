@@ -107,10 +107,22 @@ func (fi *FederatedIdentity) SoftDelete() error {
 }
 
 // UpdateProfile updates the profile data.
-func (fi *FederatedIdentity) UpdateProfile(profile map[string]any) {
+// Returns ErrProfileTooLarge if the profile JSON exceeds maxProfileSize.
+func (fi *FederatedIdentity) UpdateProfile(profile map[string]any) error {
 	if profile == nil {
 		profile = make(map[string]any)
 	}
+
+	// Validate profile size to prevent storage of excessively large payloads
+	profileJSON, err := json.Marshal(profile)
+	if err != nil {
+		return fmt.Errorf("marshal profile: %w", err)
+	}
+	if len(profileJSON) > maxProfileSize {
+		return ErrProfileTooLarge
+	}
+
 	fi.Profile = profile
 	fi.UpdatedAt = time.Now()
+	return nil
 }
