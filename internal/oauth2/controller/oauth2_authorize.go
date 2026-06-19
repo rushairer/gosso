@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
+	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/middleware"
 )
 
@@ -229,6 +230,10 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	stateKey := consentStateKeyPrefix + req.ConsentID
 	stateData, err := c.redis.GetDel(ctx, stateKey)
 	if err != nil {
+		if errors.Is(err, cache.ErrKeyNotFound) {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid or expired consent session"})
+			return
+		}
 		ctx.JSON(http.StatusServiceUnavailable, gin.H{"error": "server_error", "error_description": "consent state storage error"})
 		return
 	}

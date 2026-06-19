@@ -82,7 +82,8 @@ func NewPasskeyService(
 }
 
 // SetChallengeTTL overrides the WebAuthn challenge TTL.
-// Must be called during initialization; not safe for concurrent use.
+//
+// Deprecated: Use NewPasskeyServiceWithConfig to set all options at construction time.
 func (s *PasskeyService) SetChallengeTTL(d time.Duration) {
 	if d > 0 {
 		s.challengeTTL = d

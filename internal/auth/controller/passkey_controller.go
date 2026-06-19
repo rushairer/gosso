@@ -27,6 +27,14 @@ var passkeyDeleteErrorMap = []controllerutil.ErrorRule{
 	{Sentinel: accountRepository.ErrCredentialNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "credential not found"}},
 }
 
+// passkeyOptionsResponse constructs the passkey options response body.
+func passkeyOptionsResponse(options any, requestID string) gin.H {
+	return gin.H{
+		"options":    options,
+		"request_id": requestID,
+	}
+}
+
 // passkeyAuthService defines the auth service methods used by PasskeyController.
 type passkeyAuthService interface {
 	LoginByPasskey(ctx context.Context, accountID, ip, userAgent string) (*authService.LoginResult, error)
@@ -101,10 +109,7 @@ func (c *PasskeyController) RegisterBegin(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-		"options":    options,
-		"request_id": requestID,
-	}))
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(passkeyOptionsResponse(options, requestID)))
 }
 
 // RegisterComplete POST /api/auth/passkey/register/complete
@@ -171,10 +176,7 @@ func (c *PasskeyController) LoginBegin(ctx *gin.Context) {
 				http.StatusInternalServerError, "Failed to begin passkey login")
 			return
 		}
-		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-			"options":    options,
-			"request_id": requestID,
-		}))
+		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(passkeyOptionsResponse(options, requestID)))
 		return
 	}
 
@@ -185,10 +187,7 @@ func (c *PasskeyController) LoginBegin(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-		"options":    options,
-		"request_id": requestID,
-	}))
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(passkeyOptionsResponse(options, requestID)))
 }
 
 // LoginCompleteRequest is the passkey login complete request body.
@@ -221,12 +220,7 @@ func (c *PasskeyController) LoginComplete(ctx *gin.Context) {
 
 	if loginResult.RequiresMFA {
 		controllerutil.SetNoCacheHeaders(ctx)
-		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-			"requires_mfa":   true,
-			"mfa_token":      loginResult.AccessToken,
-			"mfa_token_type": "Bearer",
-			"mfa_types":      loginResult.MFATypes,
-		}))
+		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(mfaRequiredResponse(loginResult.AccessToken, loginResult.MFATypes)))
 		return
 	}
 
@@ -269,10 +263,7 @@ func (c *PasskeyController) MFABegin(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-		"options":    options,
-		"request_id": requestID,
-	}))
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(passkeyOptionsResponse(options, requestID)))
 }
 
 // MFACompleteRequest is the passkey MFA complete request body.

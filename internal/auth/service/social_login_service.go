@@ -107,6 +107,7 @@ func NewSocialLoginService(
 }
 
 // SetHTTPClientTimeout overrides the default HTTP client timeout for social login provider requests.
+// Must be called during initialization; not safe for concurrent use.
 func (s *SocialLoginService) SetHTTPClientTimeout(d time.Duration) {
 	if d > 0 {
 		s.httpClient.Timeout = d

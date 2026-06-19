@@ -18,14 +18,15 @@ import (
 )
 
 var (
-	ErrAccountIDRequired        = errors.New("account ID is required")
-	ErrPasswordRequired         = errors.New("password must not be empty")
-	ErrPasswordTooLong          = errors.New("password exceeds maximum length")
-	ErrEmailRequired            = errors.New("email is required")
-	ErrInvalidEmailFormat       = errors.New("invalid email format")
-	ErrPhoneRequired            = errors.New("phone is required")
-	ErrInvalidPhoneFormat       = errors.New("invalid phone format")
-	ErrCredentialAlreadyDeleted = errors.New("credential is already deleted")
+	ErrAccountIDRequired              = errors.New("account ID is required")
+	ErrMustUseNewPasswordCredential   = errors.New("must use NewPasswordCredential for password type")
+	ErrPasswordRequired               = errors.New("password must not be empty")
+	ErrPasswordTooLong                = errors.New("password exceeds maximum length")
+	ErrEmailRequired                  = errors.New("email is required")
+	ErrInvalidEmailFormat             = errors.New("invalid email format")
+	ErrPhoneRequired                  = errors.New("phone is required")
+	ErrInvalidPhoneFormat             = errors.New("invalid phone format")
+	ErrCredentialAlreadyDeleted       = errors.New("credential is already deleted")
 )
 
 // CredentialType represents the type of credential.
@@ -74,6 +75,21 @@ type Credential struct {
 	DeletedAt         *time.Time     `json:"deleted_at,omitempty"`
 }
 
+// newBaseCredential creates a Credential with common fields initialized.
+// Used internally by all credential constructors.
+func newBaseCredential(accountID string, credType CredentialType) *Credential {
+	now := time.Now()
+	return &Credential{
+		ID:        uuid.New().String(),
+		AccountID: accountID,
+		Type:      credType,
+		Verified:  false,
+		Metadata:  make(map[string]any),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+}
+
 // NewCredential creates a new credential.
 // For password credentials, use NewPasswordCredential instead — this function
 // returns an error if called with CredentialTypePassword to prevent accidental plaintext storage.
@@ -82,19 +98,12 @@ func NewCredential(accountID string, credType CredentialType, identifier *string
 		return nil, ErrAccountIDRequired
 	}
 	if credType == CredentialTypePassword {
-		return nil, fmt.Errorf("NewCredential must not be used with CredentialTypePassword; use NewPasswordCredential instead")
+		return nil, ErrMustUseNewPasswordCredential
 	}
-	return &Credential{
-		ID:         uuid.New().String(),
-		AccountID:  accountID,
-		Type:       credType,
-		Identifier: identifier,
-		Value:      value,
-		Verified:   false,
-		Metadata:   make(map[string]any),
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
-	}, nil
+	c := newBaseCredential(accountID, credType)
+	c.Identifier = identifier
+	c.Value = value
+	return c, nil
 }
 
 // NewPasswordCredential creates a password credential (auto-hashed).
@@ -117,16 +126,10 @@ func NewPasswordCredential(accountID string, plainPassword string) (*Credential,
 		return nil, err
 	}
 
-	return &Credential{
-		ID:        uuid.New().String(),
-		AccountID: accountID,
-		Type:      CredentialTypePassword,
-		Value:     hashedPassword,
-		Verified:  true, // password credentials are verified at creation
-		Metadata:  make(map[string]any),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}, nil
+	c := newBaseCredential(accountID, CredentialTypePassword)
+	c.Value = hashedPassword
+	c.Verified = true // password credentials are verified at creation
+	return c, nil
 }
 
 // NewEmailCredential creates an email credential.
@@ -142,16 +145,9 @@ func NewEmailCredential(accountID string, email string) (*Credential, error) {
 	if _, err := mail.ParseAddress(email); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidEmailFormat, err)
 	}
-	return &Credential{
-		ID:         uuid.New().String(),
-		AccountID:  accountID,
-		Type:       CredentialTypeEmail,
-		Identifier: &email,
-		Verified:   false,
-		Metadata:   make(map[string]any),
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
-	}, nil
+	c := newBaseCredential(accountID, CredentialTypeEmail)
+	c.Identifier = &email
+	return c, nil
 }
 
 // NewPhoneCredential creates a phone credential.
@@ -167,16 +163,9 @@ func NewPhoneCredential(accountID string, phone string) (*Credential, error) {
 	if !utility.ValidatePhoneFormat(phone) {
 		return nil, ErrInvalidPhoneFormat
 	}
-	return &Credential{
-		ID:         uuid.New().String(),
-		AccountID:  accountID,
-		Type:       CredentialTypePhone,
-		Identifier: &phone,
-		Verified:   false,
-		Metadata:   make(map[string]any),
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
-	}, nil
+	c := newBaseCredential(accountID, CredentialTypePhone)
+	c.Identifier = &phone
+	return c, nil
 }
 
 // IsDeleted reports whether the credential has been soft-deleted.

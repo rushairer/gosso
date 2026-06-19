@@ -70,14 +70,11 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 	}
 
 	// Validate client metadata before persisting
-	if strings.TrimSpace(req.Name) == "" {
-		return nil, "", &ValidationError{Message: "client name is required"}
+	if err := validateClientName(req.Name, true); err != nil {
+		return nil, "", err
 	}
-	if len(req.Name) > 256 {
-		return nil, "", &ValidationError{Message: "client name must not exceed 256 characters"}
-	}
-	if len(req.Description) > 1024 {
-		return nil, "", &ValidationError{Message: "client description must not exceed 1024 characters"}
+	if err := validateClientDescription(req.Description); err != nil {
+		return nil, "", err
 	}
 	if err := validateRedirectURIs(req.RedirectURIs); err != nil {
 		return nil, "", err
@@ -178,25 +175,16 @@ type UpdateClientRequest struct {
 // UpdateClientByAccountID loads a client by ID, verifies ownership, applies partial updates with
 // validation, and persists the result in a single transaction with optimistic locking.
 func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, accountID, clientID string, req *UpdateClientRequest) (*domain.OAuth2Client, error) {
-	client, err := s.clientRepo.FindByClientID(ctx, clientID)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s", domain.ErrClientNotFound, clientID)
-	}
-	if client.AccountID != accountID {
-		return nil, ErrClientAccessDenied
-	}
-
+	// Validate request fields before starting the transaction
 	if req.Name != nil {
-		if len(*req.Name) > 256 {
-			return nil, &ValidationError{Message: "name must not exceed 256 characters"}
+		if err := validateClientName(*req.Name, false); err != nil {
+			return nil, err
 		}
-		client.Name = *req.Name
 	}
 	if req.Description != nil {
-		if len(*req.Description) > 1024 {
-			return nil, &ValidationError{Message: "description must not exceed 1024 characters"}
+		if err := validateClientDescription(*req.Description); err != nil {
+			return nil, err
 		}
-		client.Description = *req.Description
 	}
 	if req.RedirectURIs != nil {
 		if len(req.RedirectURIs) == 0 {
@@ -205,33 +193,56 @@ func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, a
 		if err := validateRedirectURIs(req.RedirectURIs); err != nil {
 			return nil, err
 		}
-		client.RedirectURIs = req.RedirectURIs
 	}
 	if req.PostLogoutRedirectURIs != nil {
 		if err := validateRedirectURIs(req.PostLogoutRedirectURIs); err != nil {
 			return nil, fmt.Errorf("post_logout_redirect_uris: %w", err)
 		}
-		client.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
 	}
 	if req.GrantTypes != nil {
 		if err := validateGrantTypes(req.GrantTypes); err != nil {
 			return nil, err
 		}
-		client.GrantTypes = req.GrantTypes
-	}
-	if req.Scopes != nil {
-		client.Scopes = req.Scopes
 	}
 
-	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		// Re-read inside the transaction to get a consistent snapshot for optimistic locking
-		current, err := s.clientRepo.FindByClientIDTx(ctx, tx, clientID)
+	var client *domain.OAuth2Client
+	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// Read inside the transaction for a consistent snapshot
+		c, err := s.clientRepo.FindByClientIDTx(ctx, tx, clientID)
 		if err != nil {
 			return fmt.Errorf("%w: %s", domain.ErrClientNotFound, clientID)
 		}
-		expectedUpdatedAt := current.UpdatedAt
-		client.UpdatedAt = time.Now()
-		return s.clientRepo.Update(ctx, tx, client, expectedUpdatedAt)
+		if c.AccountID != accountID {
+			return ErrClientAccessDenied
+		}
+
+		// Apply partial updates
+		if req.Name != nil {
+			c.Name = *req.Name
+		}
+		if req.Description != nil {
+			c.Description = *req.Description
+		}
+		if req.RedirectURIs != nil {
+			c.RedirectURIs = req.RedirectURIs
+		}
+		if req.PostLogoutRedirectURIs != nil {
+			c.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
+		}
+		if req.GrantTypes != nil {
+			c.GrantTypes = req.GrantTypes
+		}
+		if req.Scopes != nil {
+			c.Scopes = req.Scopes
+		}
+
+		expectedUpdatedAt := c.UpdatedAt
+		c.UpdatedAt = time.Now()
+		if err := s.clientRepo.Update(ctx, tx, c, expectedUpdatedAt); err != nil {
+			return err
+		}
+		client = c
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -253,6 +264,25 @@ var validGrantTypes = []string{
 	domain.GrantTypeRefreshToken,
 	domain.GrantTypeClientCredentials,
 	domain.GrantTypeDeviceCode,
+}
+
+// validateClientName validates a client name. If required is true, empty names are rejected.
+func validateClientName(name string, required bool) error {
+	if required && strings.TrimSpace(name) == "" {
+		return &ValidationError{Message: "client name is required"}
+	}
+	if len(name) > 256 {
+		return &ValidationError{Message: "client name must not exceed 256 characters"}
+	}
+	return nil
+}
+
+// validateClientDescription validates a client description length.
+func validateClientDescription(desc string) error {
+	if len(desc) > 1024 {
+		return &ValidationError{Message: "client description must not exceed 1024 characters"}
+	}
+	return nil
 }
 
 func validateGrantTypes(types []string) error {

@@ -161,8 +161,9 @@ func (a *Account) Suspend() error {
 	if a.Status != AccountStatusActive {
 		return fmt.Errorf("%w: current status %q", ErrInvalidAccountStatus, a.Status)
 	}
+	now := time.Now()
 	a.Status = AccountStatusSuspended
-	a.UpdatedAt = time.Now()
+	a.UpdatedAt = now
 	return nil
 }
 
@@ -174,7 +175,8 @@ func (a *Account) Activate() error {
 	if a.Status != AccountStatusSuspended {
 		return fmt.Errorf("%w: current status %q", ErrInvalidAccountStatus, a.Status)
 	}
+	now := time.Now()
 	a.Status = AccountStatusActive
-	a.UpdatedAt = time.Now()
+	a.UpdatedAt = now
 	return nil
 }

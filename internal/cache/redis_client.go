@@ -325,6 +325,9 @@ func (r *RedisClient) RunScript(ctx context.Context, script *redis.Script, keys 
 // IncrWithExpiry atomically increments a counter and sets an expiration time (only on first creation)
 // Avoids race conditions between Incr and Expire
 func (r *RedisClient) IncrWithExpiry(ctx context.Context, key string, expiry time.Duration) (int64, error) {
+	if expiry <= 0 {
+		return 0, fmt.Errorf("incrWithExpiry: expiry must be positive, got %v", expiry)
+	}
 	result, err := incrWithExpiryLuaScript.Run(ctx, r.client, []string{key}, int(math.Ceil(expiry.Seconds()))).Int64()
 	if err != nil {
 		r.logger.Error("Redis IncrWithExpiry failed", zap.String("key", maskKey(key)), zap.Error(err))
@@ -337,6 +340,9 @@ func (r *RedisClient) IncrWithExpiry(ctx context.Context, key string, expiry tim
 // Returns the current count. If the count is already >= limit, the counter is NOT incremented.
 // This prevents the counter from growing unboundedly past the limit.
 func (r *RedisClient) CheckAndIncr(ctx context.Context, key string, limit int, expiry time.Duration) (int64, error) {
+	if expiry <= 0 {
+		return 0, fmt.Errorf("checkAndIncr: expiry must be positive, got %v", expiry)
+	}
 	result, err := checkAndIncrLuaScript.Run(ctx, r.client, []string{key}, limit, int(math.Ceil(expiry.Seconds()))).Int64()
 	if err != nil {
 		r.logger.Error("Redis CheckAndIncr failed", zap.String("key", maskKey(key)), zap.Error(err))
@@ -361,11 +367,11 @@ func (r *RedisClient) SetIfExists(ctx context.Context, key string, value any, ex
 }
 
 // GetDel atomically retrieves and deletes a key in a single operation (Redis GETDEL).
-// Returns empty string and no error if the key does not exist.
+// Returns ErrKeyNotFound if the key does not exist, consistent with Get behavior.
 func (r *RedisClient) GetDel(ctx context.Context, key string) (string, error) {
 	result, err := r.client.GetDel(ctx, key).Result()
 	if errors.Is(err, redis.Nil) {
-		return "", nil
+		return "", ErrKeyNotFound
 	}
 	if err != nil {
 		r.logger.Error("Redis GETDEL failed", zap.String("key", maskKey(key)), zap.Error(err))

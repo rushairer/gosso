@@ -19,9 +19,9 @@ const defaultPostgresDSN = "postgres://postgres:postgres@localhost:5432/gosso?ss
 const defaultTOTPEncryptionKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 // ConfigManager loads, validates, and exposes the application configuration.
+// Immutable after construction — safe for concurrent reads.
 type ConfigManager struct {
-	config    GoUnoConfig // immutable after construction; returned by value (Go struct copy)
-	hasConfig bool        // true once setConfig has been called
+	config GoUnoConfig // immutable after construction; returned by value (Go struct copy)
 }
 
 // NewConfigManager creates a configuration manager.
@@ -77,22 +77,14 @@ func NewConfigManager(
 	if err := newConfig.Validate(); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
-	configManager.setConfig(&newConfig)
+	configManager.config = newConfig
 	return &configManager, nil
-}
-
-func (cm *ConfigManager) setConfig(config *GoUnoConfig) {
-	cm.config = *config
-	cm.hasConfig = true
 }
 
 // Config returns a copy of the configuration.
 // Since the config is immutable after construction, a simple struct copy
 // (Go value assignment) is safe and much cheaper than JSON round-tripping.
 func (cm *ConfigManager) Config() GoUnoConfig {
-	if !cm.hasConfig {
-		return GoUnoConfig{}
-	}
 	return cm.config
 }
 

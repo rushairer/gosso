@@ -109,6 +109,16 @@ func tokenResponse(accessToken, refreshToken, sessionID string, expiresIn int) g
 	}
 }
 
+// mfaRequiredResponse constructs the MFA-required response body.
+func mfaRequiredResponse(token string, mfaTypes []string) gin.H {
+	return gin.H{
+		"requires_mfa":   true,
+		"mfa_token":      token,
+		"mfa_token_type": "Bearer",
+		"mfa_types":      mfaTypes,
+	}
+}
+
 // NewAuthController creates a new instance of AuthController
 func NewAuthController(
 	authSvc authServiceDeps,
@@ -263,12 +273,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 
 	if result.RequiresMFA {
 		controllerutil.SetNoCacheHeaders(ctx)
-		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-			"requires_mfa":   true,
-			"mfa_token":      result.AccessToken,
-			"mfa_token_type": "Bearer",
-			"mfa_types":      result.MFATypes,
-		}))
+		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(mfaRequiredResponse(result.AccessToken, result.MFATypes)))
 		return
 	}
 
@@ -625,12 +630,7 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 	controllerutil.SetNoCacheHeaders(ctx)
 
 	if result.RequiresMFA {
-		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-			"requires_mfa":   true,
-			"mfa_token":      result.AccessToken,
-			"mfa_token_type": "Bearer",
-			"mfa_types":      result.MFATypes,
-		}))
+		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(mfaRequiredResponse(result.AccessToken, result.MFATypes)))
 		return
 	}
 
@@ -754,7 +754,7 @@ func (c *AuthController) ForgotPassword(ctx *gin.Context) {
 	}
 
 	if err := c.passwordResetSvc.RequestReset(ctx, req.Email); err != nil {
-		c.logger.Error("Password reset request failed", zap.String("email", utility.MaskEmail(req.Email)), zap.Error(err))
+		c.logger.Warn("Password reset request failed", zap.String("email", utility.MaskEmail(req.Email)), zap.Error(err))
 	}
 
 	// Always return 200 to prevent email enumeration

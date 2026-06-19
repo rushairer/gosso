@@ -154,6 +154,8 @@ func NewVerificationServiceWithConfig(
 }
 
 // SetCodeTTL overrides the default verification code TTL.
+//
+// Deprecated: Use NewVerificationServiceWithConfig to set all options at construction time.
 func (s *VerificationService) SetCodeTTL(d time.Duration) {
 	if d > 0 {
 		s.codeTTL = d
@@ -161,6 +163,8 @@ func (s *VerificationService) SetCodeTTL(d time.Duration) {
 }
 
 // SetCooldownTTL overrides the default verification cooldown TTL.
+//
+// Deprecated: Use NewVerificationServiceWithConfig to set all options at construction time.
 func (s *VerificationService) SetCooldownTTL(d time.Duration) {
 	if d > 0 {
 		s.cooldownTTL = d
@@ -168,6 +172,8 @@ func (s *VerificationService) SetCooldownTTL(d time.Duration) {
 }
 
 // SetMaxAttempts overrides the default verification max attempts.
+//
+// Deprecated: Use NewVerificationServiceWithConfig to set all options at construction time.
 func (s *VerificationService) SetMaxAttempts(n int) {
 	if n > 0 {
 		s.maxAttempts = n
@@ -175,7 +181,8 @@ func (s *VerificationService) SetMaxAttempts(n int) {
 }
 
 // SetCodeLength overrides the default verification code length.
-// Must be called during initialization; not safe for concurrent use.
+//
+// Deprecated: Use NewVerificationServiceWithConfig to set all options at construction time.
 func (s *VerificationService) SetCodeLength(n int) {
 	if n > 0 {
 		s.codeLength = n
@@ -186,6 +193,8 @@ func (s *VerificationService) SetCodeLength(n int) {
 // before hashing. This prevents rainbow table attacks if Redis is compromised,
 // because the attacker would also need the pepper to compute matching hashes.
 // Use the same value as the TOTP encryption key (already required in production).
+//
+// Deprecated: Use NewVerificationServiceWithConfig to set all options at construction time.
 func (s *VerificationService) SetHashPepper(pepper string) {
 	s.hashPepper = pepper
 }

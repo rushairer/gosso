@@ -13,6 +13,7 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
+	"github.com/rushairer/gosso/internal/cache"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
@@ -120,6 +121,9 @@ func (s *AuthService) verifyPasskeyMFAFlag(ctx context.Context, mfaTokenJTI, acc
 	passkeyKey := fmt.Sprintf("webauthn:mfa_verified:%s", mfaTokenJTI)
 	verified, verr := s.redis.GetDel(ctx, passkeyKey)
 	if verr != nil {
+		if errors.Is(verr, cache.ErrKeyNotFound) {
+			return ErrPasskeyNotVerified
+		}
 		s.logger.Error("Redis GetDel failed for passkey MFA verification",
 			zap.Error(verr), zap.String("account_id", accountID))
 		return fmt.Errorf("verify passkey mfa: %w", verr)

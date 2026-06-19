@@ -435,7 +435,7 @@ func TestCompleteRegistration_MissingChallenge(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{}"))
 	_, err := svc.CompleteRegistration(context.Background(), "test-request-id", "acct-1", "alice", "Alice", req)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unmarshal session data")
+	assert.Contains(t, err.Error(), "challenge not found")
 }
 
 func TestCompleteLogin_MissingChallenge(t *testing.T) {
@@ -450,7 +450,7 @@ func TestCompleteLogin_MissingChallenge(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{}"))
 	_, _, err := svc.CompleteLogin(context.Background(), "nonexistent-request-id", req)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unmarshal session data")
+	assert.Contains(t, err.Error(), "challenge not found")
 }
 
 func TestCompleteMFALogin_MissingChallenge(t *testing.T) {
@@ -465,7 +465,7 @@ func TestCompleteMFALogin_MissingChallenge(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{}"))
 	err := svc.CompleteMFALogin(context.Background(), "nonexistent-request-id", "acct-1", req)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unmarshal session data")
+	assert.Contains(t, err.Error(), "challenge not found")
 }
 
 // ──────────────────────────────────────────────

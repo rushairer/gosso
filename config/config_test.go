@@ -549,7 +549,7 @@ func TestConfigManager_SetConfig_GetConfig(t *testing.T) {
 	assert.Equal(t, GoUnoConfig{}, cm.Config())
 
 	cfg := validConfig()
-	cm.setConfig(&cfg)
+	cm.config = cfg
 
 	got := cm.Config()
 	assert.Equal(t, cfg.AuthConfig.Issuer, got.AuthConfig.Issuer)

@@ -443,9 +443,9 @@ func TestRedisClient_GetDel(t *testing.T) {
 	defer mr.Close()
 	ctx := context.Background()
 
-	// Non-existent key returns empty string, no error
+	// Non-existent key returns ErrKeyNotFound
 	v, err := client.GetDel(ctx, "gd-key")
-	require.NoError(t, err)
+	require.ErrorIs(t, err, ErrKeyNotFound)
 	assert.Equal(t, "", v)
 
 	// Set and GetDel

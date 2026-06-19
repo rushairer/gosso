@@ -175,9 +175,10 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 		Scope:     scope,
 		IP:        audit.IPFromContext(ctx),
 		UserAgent: audit.UserAgentFromContext(ctx),
-		ExpiresAt: time.Now().Add(s.refreshExpiry),
-		CreatedAt: time.Now(),
 	}
+	now := time.Now()
+	rt.ExpiresAt = now.Add(s.refreshExpiry)
+	rt.CreatedAt = now
 
 	if rt.IP == "" {
 		s.logger.Warn("Generating refresh token without IP binding; IP-based theft detection will be unavailable",
@@ -220,7 +221,9 @@ func (s *TokenService) buildSessionTokensKey(sessionID string) string {
 	return fmt.Sprintf("%s%s", SessionTokensKeyPrefix, sessionID)
 }
 
-// KeyService returns the key service (used for ID token signing, etc.)
+// KeyService returns the underlying key service.
+// Exposed for OIDC JWKS endpoint (public key distribution) and ID token signing.
+// Callers should not use this to sign arbitrary tokens — use TokenService methods instead.
 func (s *TokenService) KeyService() *KeyService {
 	return s.keySvc
 }

@@ -8,6 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- CSP headers now include `object-src 'none'`, `base-uri 'self'`, and `form-action 'self'` — hardens Content Security Policy against plugin injection and base URI manipulation attacks per OWASP recommendations (`middleware/middleware.go`).
+- `RedisClient.IncrWithExpiry` and `CheckAndIncr` now validate that `expiry` is positive — prevents accidental key deletion from zero/negative expiry values that Redis interprets as "delete immediately" (`internal/cache/redis_client.go`).
+- `ForgotPassword` error logging downgraded from `Error` to `Warn` — "email not found" is an expected caller scenario, not an application error; reduces log noise and prevents alert fatigue (`internal/auth/controller/auth_controller.go`).
+
+### Fixed
+- `ConfigManager` is now safe for concurrent reads — removed two-phase construction (`hasConfig` field and `setConfig` method); config is fully initialized in the constructor before the pointer is returned (`config/config_manager.go`).
+- `RedisClient.GetDel` now returns `ErrKeyNotFound` when the key does not exist — consistent with `Get` behavior; callers no longer silently receive empty strings for missing keys (`internal/cache/redis_client.go`).
+- `GenerateRefreshToken` now captures `time.Now()` once for both `ExpiresAt` and `CreatedAt` — eliminates nanosecond-level timestamp drift under load (`internal/token/service/token_service.go`).
+- `ClientService.UpdateClientByAccountID` now performs ownership check inside the transaction — eliminates TOCTOU window where a client could be reassigned between the ownership check and the update (`internal/oauth2/service/client_service.go`).
+- `Account.Suspend()` and `Account.Activate()` now capture `time.Now()` once — consistent with `SoftDelete()` and `NewAccount()` patterns (`internal/account/domain/account.go`).
+- OAuth2 consent state `GetDel` now correctly returns 400 (not 503) when consent session is missing (`internal/oauth2/controller/oauth2_authorize.go`).
+- Passkey MFA verification flag `GetDel` now correctly returns `ErrPasskeyNotVerified` when the flag key is missing, instead of wrapping `ErrKeyNotFound` (`internal/auth/service/auth_login_helpers.go`).
+
+### Changed
+- Service-layer `Set*` methods (`MFAService`, `PasskeyService`, `VerificationService`) now carry `Deprecated` annotations — directs callers to use `NewXxxWithConfig` constructors instead, consistent with `PasswordResetService` pattern (`internal/auth/service/mfa_service.go`, `internal/auth/service/passkey_service.go`, `internal/auth/service/verification_service.go`).
+- Controller MFA and Passkey response construction extracted into `mfaRequiredResponse()` and `passkeyOptionsResponse()` helpers — eliminates 7 duplicate `gin.H{}` constructions across `AuthController` and `PasskeyController` (`internal/auth/controller/auth_controller.go`, `internal/auth/controller/passkey_controller.go`).
+- `Credential` constructors refactored with `newBaseCredential()` helper — reduces boilerplate across `NewCredential`, `NewPasswordCredential`, `NewEmailCredential`, `NewPhoneCredential` (`internal/account/domain/credential.go`).
+- `NewCredential` now returns `ErrMustUseNewPasswordCredential` sentinel error — callers can use `errors.Is()` to programmatically check for this specific error (`internal/account/domain/credential.go`).
+- `ClientService` validation logic deduplicated via `validateClientName()` and `validateClientDescription()` helpers — shared between `RegisterClient` and `UpdateClientByAccountID` (`internal/oauth2/service/client_service.go`).
+- `TokenService.KeyService()` accessor now documents its intended usage (OIDC JWKS) and warns against signing arbitrary tokens (`internal/token/service/token_service.go`).
+- `SocialLoginService.SetHTTPClientTimeout` now documents thread-safety constraint — must be called during initialization only (`internal/auth/service/social_login_service.go`).
+
+### Security
 - `ResetPasswordRequest.NewPassword` binding tag minimum length changed from `min=8` to `min=12` — aligns controller-level validation with `utility.MinPasswordLength` (12 bytes), preventing inconsistent error messages when passwords between 8-11 bytes pass binding but fail service validation (`internal/auth/controller/auth_controller.go`).
 - `IsPlausibleJWT` now verifies the decoded JWT header contains an `"alg"` field — previously any 3-segment base64url string could bypass CSRF protection; the additional JSON structure check significantly reduces the bypass surface (`middleware/csrf.go`).
 - `DummyWork` now supports context cancellation via `DummyWorkWithContext(ctx)` — prevents goroutine accumulation during server shutdown when authentication early-return paths are blocked on sleep; all service-layer callers updated to pass request context (`internal/utility/security.go`, `internal/auth/service/auth_login.go`, `internal/auth/service/password_reset_service.go`, `internal/auth/service/verification_service.go`).
