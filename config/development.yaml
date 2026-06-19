@@ -25,6 +25,8 @@ web_server:
         password: 5
         verify: 5
 database:
+    # Dev uses Go defaults for pool sizing (unlimited open conns).
+    # Production should set max_open_conns explicitly — see production.yaml for sizing notes.
     default: postgres
     drivers:
         postgres:

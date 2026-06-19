@@ -56,6 +56,21 @@ test-integration:
 	@echo "📋 Ensure docker-compose.test.yml is running (make docker-test-up)"
 	$(GO_TEST_ENV) go test -p 1 -tags=integration -v -count=1 -timeout=120s ./internal/auth/service/ ./internal/session/service/ ./internal/token/service/ ./internal/account/ ./middleware/
 
+test-migrations:
+	@echo "🔄 Testing migration up/down cycle..."
+	@if [ -z "$${DATABASE_URL}" ]; then \
+		echo "❌ DATABASE_URL is required. Example: postgres://gosso:gosso@localhost:5434/gosso_test?sslmode=disable"; \
+		exit 1; \
+	fi
+	@if ! command -v migrate >/dev/null 2>&1; then \
+		echo "Installing golang-migrate..."; \
+		go install github.com/golang-migrate/migrate/v4/cmd/migrate@latest; \
+	fi
+	migrate -path db/migrations -database "$${DATABASE_URL}" up
+	migrate -path db/migrations -database "$${DATABASE_URL}" down -all
+	migrate -path db/migrations -database "$${DATABASE_URL}" up
+	@echo "✅ Migration up/down/up cycle passed."
+
 architecture-check:
 	bash script/check-architecture.sh
 
@@ -157,6 +172,7 @@ help:
 	@echo "  test                 - Run unit tests"
 	@echo "  test-ui              - Run tests with goconvey (GUI)"
 	@echo "  test-integration     - Run integration tests (requires docker-test-up)"
+	@echo "  test-migrations      - Test migration up/down cycle (requires DATABASE_URL)"
 	@echo "  check                - Run lint + test + build (pre-submit)"
 	@echo "  coverage             - Generate test coverage report"
 	@echo ""
@@ -186,7 +202,7 @@ help:
 	@echo "🆘 Help Commands:"
 	@echo "  help                 - Show this help message"
 
-.PHONY: default build build-debug run dev lint lint-fix test test-ui test-integration architecture-check coverage-check critical-coverage-check check coverage docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs docker-prod-up docker-prod-down docker-prod-logs env-dev env-test env-prod env-all help
+.PHONY: default build build-debug run dev lint lint-fix test test-ui test-integration test-migrations architecture-check coverage-check critical-coverage-check check coverage docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs docker-prod-up docker-prod-down docker-prod-logs env-dev env-test env-prod env-all help
 # Examples - 示例程序
 .PHONY: examples example-account example-redis
 

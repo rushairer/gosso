@@ -101,6 +101,7 @@ func NewMFAServiceWithConfig(
 // SetBackupCodeCount overrides the backup code count.
 //
 // Deprecated: Use NewMFAServiceWithConfig to set all options at construction time.
+// Will be removed in v2.0.0.
 func (s *MFAService) SetBackupCodeCount(n int) {
 	if n > 0 && n <= 20 {
 		s.backupCodeCount = n
@@ -110,6 +111,7 @@ func (s *MFAService) SetBackupCodeCount(n int) {
 // SetBackupCodeLength overrides the backup code length.
 //
 // Deprecated: Use NewMFAServiceWithConfig to set all options at construction time.
+// Will be removed in v2.0.0.
 func (s *MFAService) SetBackupCodeLength(n int) {
 	if n > 0 && n <= 12 {
 		s.backupCodeLength = n
@@ -119,6 +121,7 @@ func (s *MFAService) SetBackupCodeLength(n int) {
 // SetTOTPEncryptionKey sets the AES-256 key used to encrypt TOTP secrets at rest.
 //
 // Deprecated: Use NewMFAServiceWithConfig to set all options at construction time.
+// Will be removed in v2.0.0.
 func (s *MFAService) SetTOTPEncryptionKey(hexKey string) error {
 	if hexKey == "" {
 		return nil

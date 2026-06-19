@@ -174,6 +174,45 @@ jobs:
           GOUNO_DATABASE_DRIVERS_POSTGRES_DSN: "host=127.0.0.1 user=gosso password=${{ secrets.TEST_POSTGRES_PASSWORD }} dbname=gosso_test port=5434 sslmode=disable"
           GOUNO_REDIS_DSN: "redis://127.0.0.1:6381/0"
 
+  migration-test:
+    name: Migration Rollback Test
+    runs-on: ubuntu-latest
+    needs: [test]
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: gosso_test
+          POSTGRES_USER: gosso
+          POSTGRES_PASSWORD: ${{ secrets.TEST_POSTGRES_PASSWORD }}
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U gosso"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install golang-migrate
+        run: |
+          curl -L https://github.com/golang-migrate/migrate/releases/latest/download/migrate.linux-amd64.tar.gz | tar xz
+          sudo mv migrate /usr/local/bin/migrate
+
+      - name: Test migration up/down/up cycle
+        run: |
+          DATABASE_URL="postgres://gosso:${{ secrets.TEST_POSTGRES_PASSWORD }}@127.0.0.1:5434/gosso_test?sslmode=disable"
+          echo "▶ Migrate up (all)..."
+          migrate -path db/migrations -database "$DATABASE_URL" up
+          echo "▶ Migrate down (all)..."
+          migrate -path db/migrations -database "$DATABASE_URL" down -all
+          echo "▶ Migrate up (all) again..."
+          migrate -path db/migrations -database "$DATABASE_URL" up
+          echo "✅ Migration up/down/up cycle passed."
+
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -200,7 +239,7 @@ jobs:
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [architecture-check, integration-test, build]
+    needs: [architecture-check, integration-test, migration-test, build]
 
     permissions:
       contents: read

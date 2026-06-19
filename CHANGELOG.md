@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `NewPasskeyServiceWithConfig` constructor with `PasskeyServiceConfig` — completes the WithConfig migration for all auth services (`internal/auth/service/passkey_service.go`).
+- Migration rollback CI job (`migration-test`) — runs full up/down/up cycle on every push to validate all `.down.sql` files are reversible (`.github/workflows/ci.yml`).
+- `make test-migrations` target — local migration rollback testing against `docker-compose.test.yml` PostgreSQL (`Makefile`).
+
+### Security
+- Social login callback rate limiter changed from fail-open to fail-closed — prevents OAuth code exchange flooding when Redis is unavailable (`router/web.go`).
+
+### Changed
+- `FindAll` status filter validation now returns `ErrInvalidStatusFilter` sentinel error instead of raw `fmt.Errorf` — consistent with project error handling patterns (`internal/account/repository/`).
+- All deprecated setter methods now include `Will be removed in v2.0.0.` in their doc comments — covers `mfa_service.go`, `passkey_service.go`, `password_reset_service.go`, `verification_service.go`, `session_service.go`, `key_service.go`.
+- Nginx config now documents the two-layer rate limiting strategy (Nginx proxy-level + gosso application-level) (`config/nginx.conf`).
+- Production and development database configs now include connection pool sizing guidance (`config/production.yaml`, `config/development.yaml`).
+
 ### Changed
 - Constructor functions `NewSessionService`, `NewSessionServiceWithConfig`, `NewConsentService`, and `RequireTOTPEncryption` now return errors instead of panicking on invalid input — callers get graceful error handling during startup instead of runtime panics (`internal/session/service/session_service.go`, `internal/oauth2/service/consent_service.go`, `internal/auth/service/mfa_service.go`, `internal/token/service/key_service.go`).
 - Extracted duplicated `maskRateLimitKey` into shared `utility.MaskRateLimitKey` — single source of truth for rate limit key masking across middleware and auth service (`internal/utility/mask.go`).

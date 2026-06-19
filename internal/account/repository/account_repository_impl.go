@@ -223,7 +223,7 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 	offset := (page - 1) * pageSize
 
 	if status != "" && !validStatuses[status] {
-		return nil, 0, fmt.Errorf("invalid status filter: %q", status)
+		return nil, 0, fmt.Errorf("%w: %q", ErrInvalidStatusFilter, status)
 	}
 
 	// Build WHERE clause with consistent parameter numbering

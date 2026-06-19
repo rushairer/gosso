@@ -116,6 +116,7 @@ func NewSessionServiceWithConfig(redis *cache.RedisClient, logger *zap.Logger, c
 //
 // Deprecated: Use NewSessionServiceWithConfig with SessionConfig.TokenRevoker instead.
 // Must be called during initialization; not safe for concurrent use.
+// Will be removed in v2.0.0.
 func (s *SessionService) SetTokenRevoker(revoker TokenRevoker) {
 	s.tokenRevoker = revoker
 }
@@ -124,6 +125,7 @@ func (s *SessionService) SetTokenRevoker(revoker TokenRevoker) {
 //
 // Deprecated: Use NewSessionServiceWithConfig with SessionConfig.MaxSessions instead.
 // Must be called during initialization; not safe for concurrent use.
+// Will be removed in v2.0.0.
 func (s *SessionService) SetMaxSessions(n int) {
 	if n < 0 {
 		return
@@ -135,6 +137,7 @@ func (s *SessionService) SetMaxSessions(n int) {
 //
 // Deprecated: Use NewSessionServiceWithConfig with SessionConfig.SessionTTL instead.
 // Must be called during initialization; not safe for concurrent use.
+// Will be removed in v2.0.0.
 func (s *SessionService) SetSessionTTL(ttl time.Duration) {
 	if ttl <= 0 {
 		return
@@ -146,6 +149,7 @@ func (s *SessionService) SetSessionTTL(ttl time.Duration) {
 //
 // Deprecated: Use NewSessionServiceWithConfig with SessionConfig.MaxSessionAge instead.
 // Must be called during initialization; not safe for concurrent use.
+// Will be removed in v2.0.0.
 func (s *SessionService) SetMaxSessionAge(age time.Duration) {
 	if age <= 0 {
 		return

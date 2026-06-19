@@ -191,6 +191,7 @@ func NewPasswordResetServiceWithConfig(
 // SetWaitTimeout overrides the default timeout for Wait() during graceful shutdown.
 //
 // Deprecated: Use NewPasswordResetServiceWithConfig to set all options at construction time.
+// Will be removed in v2.0.0.
 func (s *PasswordResetService) SetWaitTimeout(d time.Duration) {
 	if d > 0 {
 		s.waitTimeout = d
@@ -200,6 +201,7 @@ func (s *PasswordResetService) SetWaitTimeout(d time.Duration) {
 // SetTokenTTL overrides the default password reset token TTL.
 //
 // Deprecated: Use NewPasswordResetServiceWithConfig to set all options at construction time.
+// Will be removed in v2.0.0.
 func (s *PasswordResetService) SetTokenTTL(d time.Duration) {
 	if d > 0 {
 		s.tokenTTL = d
@@ -209,6 +211,7 @@ func (s *PasswordResetService) SetTokenTTL(d time.Duration) {
 // SetCooldownTTL overrides the default password reset cooldown TTL.
 //
 // Deprecated: Use NewPasswordResetServiceWithConfig to set all options at construction time.
+// Will be removed in v2.0.0.
 func (s *PasswordResetService) SetCooldownTTL(d time.Duration) {
 	if d > 0 {
 		s.cooldownTTL = d
@@ -218,6 +221,7 @@ func (s *PasswordResetService) SetCooldownTTL(d time.Duration) {
 // SetMaxAttempts overrides the default password reset max attempts.
 //
 // Deprecated: Use NewPasswordResetServiceWithConfig to set all options at construction time.
+// Will be removed in v2.0.0.
 func (s *PasswordResetService) SetMaxAttempts(n int) {
 	if n > 0 {
 		s.maxAttempts = n
@@ -228,6 +232,7 @@ func (s *PasswordResetService) SetMaxAttempts(n int) {
 // goroutines spawned during password reset. The default is 10.
 //
 // Deprecated: Use NewPasswordResetServiceWithConfig to set all options at construction time.
+// Will be removed in v2.0.0.
 func (s *PasswordResetService) SetRevokeConcurrency(n int) {
 	if n > 0 {
 		s.revokeSem = make(chan struct{}, n)
@@ -238,6 +243,7 @@ func (s *PasswordResetService) SetRevokeConcurrency(n int) {
 // Called after successful password reset to unblock accounts locked by brute-force attacks.
 //
 // Deprecated: Use NewPasswordResetServiceWithConfig to set all options at construction time.
+// Will be removed in v2.0.0.
 func (s *PasswordResetService) SetLoginRateLimitClearer(c LoginRateLimitClearer) {
 	s.loginRateLimitClearer = c
 }

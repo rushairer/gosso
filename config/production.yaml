@@ -30,6 +30,10 @@ web_server:
         verify: 3
 database:
     default: postgres
+    # Connection pool sizing: max_open_conns × app instances must stay below
+    # PostgreSQL max_connections (default: 100 in postgresql.conf).
+    # With 25 per instance, up to 3 instances fit comfortably. For more instances,
+    # either raise max_connections or add a connection pooler (e.g. PgBouncer).
     max_open_conns: 25
     max_idle_conns: 15
     conn_max_lifetime_sec: 300

@@ -19,7 +19,9 @@ import (
 const defaultRSAKeyBits = 3072
 
 // SetRSAKeyBits is a no-op kept for backward compatibility.
+//
 // Deprecated: pass keyBits directly to NewKeyService instead.
+// Will be removed in v2.0.0.
 func SetRSAKeyBits(_ int) {}
 
 // KeyService manages RSA key pairs for RS256 JWT signing.

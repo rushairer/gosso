@@ -11,9 +11,10 @@ import (
 
 // Sentinel errors for repository operations
 var (
-	ErrAccountNotFound          = errors.New("account not found")
-	ErrInvalidStatusTransition  = errors.New("invalid account status transition")
-	ErrConcurrentModification   = errors.New("account was modified concurrently")
+	ErrAccountNotFound         = errors.New("account not found")
+	ErrInvalidStatusTransition = errors.New("invalid account status transition")
+	ErrConcurrentModification  = errors.New("account was modified concurrently")
+	ErrInvalidStatusFilter     = errors.New("invalid status filter")
 )
 
 // AccountRepository defines the interface for account repository

@@ -60,7 +60,7 @@ type PasskeyService struct {
 	challengeTTL  time.Duration
 }
 
-// NewPasskeyService creates a new PasskeyService instance
+// NewPasskeyService creates a new PasskeyService instance with default configuration.
 func NewPasskeyService(
 	web *wa.WebAuthn,
 	credRepo repository.WebAuthnCredentialRepository,
@@ -69,7 +69,30 @@ func NewPasskeyService(
 	accountLookup AccountLookup,
 	logger *zap.Logger,
 ) *PasskeyService {
+	return NewPasskeyServiceWithConfig(web, credRepo, redis, db, accountLookup, logger, PasskeyServiceConfig{})
+}
+
+// PasskeyServiceConfig holds optional configuration for PasskeyService.
+// Zero-valued fields fall back to package-level defaults.
+type PasskeyServiceConfig struct {
+	ChallengeTTL time.Duration // default: defaultChallengeTTL (5 min)
+}
+
+// NewPasskeyServiceWithConfig creates a new PasskeyService with explicit configuration.
+func NewPasskeyServiceWithConfig(
+	web *wa.WebAuthn,
+	credRepo repository.WebAuthnCredentialRepository,
+	redis *cache.RedisClient,
+	db *sql.DB,
+	accountLookup AccountLookup,
+	logger *zap.Logger,
+	cfg PasskeyServiceConfig,
+) *PasskeyService {
 	logger = utility.EnsureLogger(logger)
+	challengeTTL := cfg.ChallengeTTL
+	if challengeTTL <= 0 {
+		challengeTTL = defaultChallengeTTL
+	}
 	return &PasskeyService{
 		web:           web,
 		credRepo:      credRepo,
@@ -77,13 +100,14 @@ func NewPasskeyService(
 		db:            db,
 		accountLookup: accountLookup,
 		logger:        logger,
-		challengeTTL:  defaultChallengeTTL,
+		challengeTTL:  challengeTTL,
 	}
 }
 
 // SetChallengeTTL overrides the WebAuthn challenge TTL.
 //
 // Deprecated: Use NewPasskeyServiceWithConfig to set all options at construction time.
+// Will be removed in v2.0.0.
 func (s *PasskeyService) SetChallengeTTL(d time.Duration) {
 	if d > 0 {
 		s.challengeTTL = d
