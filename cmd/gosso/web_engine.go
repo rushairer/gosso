@@ -95,5 +95,10 @@ func buildCORSConfig(cfg config.GoUnoConfig, logger *zap.Logger) (cors.Config, e
 	} else {
 		corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token"}
 	}
+	if len(cfg.CORSConfig.ExposedHeaders) > 0 {
+		corsConfig.ExposeHeaders = cfg.CORSConfig.ExposedHeaders
+	} else {
+		corsConfig.ExposeHeaders = []string{"X-Request-ID"}
+	}
 	return corsConfig, nil
 }

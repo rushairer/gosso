@@ -237,6 +237,48 @@ func (s *SocialLoginService) exchangeCode(ctx context.Context, p *OAuthProviderC
 	return tokenResp.AccessToken, nil
 }
 
+// Typed response structs for social login providers.
+// Using typed structs instead of map[string]any prevents silent failures
+// from field name typos and type assertion mismatches.
+type googleUserInfo struct {
+	ID            any    `json:"id"` // Google may return numeric or string IDs
+	Email         string `json:"email"`
+	Name          string `json:"name"`
+	EmailVerified bool   `json:"email_verified"`
+}
+
+type githubUserInfo struct {
+	ID    any    `json:"id"` // GitHub may return numeric or string IDs
+	Email string `json:"email"`
+	Name  string `json:"name"`
+}
+
+type wechatUserInfo struct {
+	OpenID   string `json:"openid"`
+	Nickname string `json:"nickname"`
+}
+
+// normalizeProviderID converts a provider ID (which may be a JSON number or string)
+// to a consistent string representation.
+func normalizeProviderID(id any, provider string) (string, error) {
+	if id == nil {
+		return "", fmt.Errorf("%s: missing id field", provider)
+	}
+	switch v := id.(type) {
+	case string:
+		if v == "" {
+			return "", fmt.Errorf("%s: empty id field", provider)
+		}
+		return v, nil
+	case float64:
+		return fmt.Sprintf("%.0f", v), nil
+	case json.Number:
+		return v.String(), nil
+	default:
+		return "", fmt.Errorf("%s: unexpected id type %T", provider, id)
+	}
+}
+
 func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string, p *OAuthProviderConfig, accessToken string) (providerUserID, email, name string, emailVerified bool, err error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", p.UserInfoURL, nil)
 	if err != nil {
@@ -259,37 +301,39 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 		return "", "", "", false, fmt.Errorf("userinfo request failed: %d", resp.StatusCode)
 	}
 
-	var userInfo map[string]any
-	if err := json.Unmarshal(body, &userInfo); err != nil {
-		return "", "", "", false, fmt.Errorf("parse userinfo: %w", err)
-	}
-
 	switch provider {
-	case "google", "github":
-		if idVal, ok := userInfo["id"].(float64); ok {
-			providerUserID = fmt.Sprintf("%.0f", idVal)
-		} else if idStr, ok := userInfo["id"].(string); ok {
-			providerUserID = idStr
-		} else {
-			return "", "", "", false, fmt.Errorf("%s: missing or invalid id field", provider)
+	case "google":
+		var info googleUserInfo
+		if err := json.Unmarshal(body, &info); err != nil {
+			return "", "", "", false, fmt.Errorf("parse google userinfo: %w", err)
 		}
-		email, _ = userInfo["email"].(string)
-		name, _ = userInfo["name"].(string)
-		emailVerified, _ = userInfo["email_verified"].(bool)
+		id, err := normalizeProviderID(info.ID, "google")
+		if err != nil {
+			return "", "", "", false, err
+		}
+		return id, info.Email, info.Name, info.EmailVerified, nil
+	case "github":
+		var info githubUserInfo
+		if err := json.Unmarshal(body, &info); err != nil {
+			return "", "", "", false, fmt.Errorf("parse github userinfo: %w", err)
+		}
+		id, err := normalizeProviderID(info.ID, "github")
+		if err != nil {
+			return "", "", "", false, err
+		}
+		return id, info.Email, info.Name, false, nil
 	case "wechat":
-		openid, ok := userInfo["openid"].(string)
-		if !ok || openid == "" {
+		var info wechatUserInfo
+		if err := json.Unmarshal(body, &info); err != nil {
+			return "", "", "", false, fmt.Errorf("parse wechat userinfo: %w", err)
+		}
+		if info.OpenID == "" {
 			return "", "", "", false, fmt.Errorf("wechat: missing or empty openid")
 		}
-		providerUserID = openid
-		nickname, _ := userInfo["nickname"].(string)
-		name = nickname
-		// WeChat does not provide email_verified; default false
+		return info.OpenID, "", info.Nickname, false, nil
 	default:
 		return "", "", "", false, fmt.Errorf("%w: %s", accountDomain.ErrUnsupportedProvider, provider)
 	}
-
-	return providerUserID, email, name, emailVerified, nil
 }
 
 func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, ip, userAgent string) (result *LoginResult, err error) {
