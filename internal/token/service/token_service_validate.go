@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -34,6 +35,13 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 
 	claims, ok := token.Claims.(*domain.AccessTokenClaims)
 	if !ok || !token.Valid {
+		return nil, ErrInvalidToken
+	}
+
+	// OAuth client-bound tokens must carry an audience matching their client_id.
+	// This keeps newly issued tokens standards-compliant and rejects malformed
+	// tokens that include client_id but omit or mismatch aud.
+	if claims.ClientID != "" && !slices.Contains(claims.Audience, claims.ClientID) {
 		return nil, ErrInvalidToken
 	}
 
@@ -129,6 +137,9 @@ func (s *TokenService) IntrospectToken(ctx context.Context, tokenString string) 
 		"client_id":  claims.ClientID,
 		"scope":      claims.Scope,
 		"token_type": "Bearer",
+	}
+	if len(claims.Audience) > 0 {
+		result["aud"] = claims.Audience
 	}
 	if claims.ExpiresAt != nil {
 		result["exp"] = claims.ExpiresAt.Unix()
