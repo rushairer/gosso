@@ -10,6 +10,7 @@ env:
   GO_VERSION: "1.26"
   COVERAGE_MIN: "60"
   TEST_POSTGRES_PASSWORD: "gosso_test_password"
+  MIGRATE_VERSION: "v4.19.0"
 
 jobs:
   lint:
@@ -94,7 +95,6 @@ jobs:
           echo "| Module | Coverage | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|----------|--------|" >> $GITHUB_STEP_SUMMARY
 
-          FAIL=0
           for dir in internal/*/; do
             module=$(basename "$dir")
             # Skip directories without Go files
@@ -142,7 +142,7 @@ jobs:
         env:
           POSTGRES_DB: gosso_test
           POSTGRES_USER: gosso
-          POSTGRES_PASSWORD: ${{ env.TEST_POSTGRES_PASSWORD }}
+          POSTGRES_PASSWORD: gosso_test_password
         ports:
           - 5434:5432
         options: >-
@@ -186,7 +186,7 @@ jobs:
         env:
           POSTGRES_DB: gosso_test
           POSTGRES_USER: gosso
-          POSTGRES_PASSWORD: ${{ env.TEST_POSTGRES_PASSWORD }}
+          POSTGRES_PASSWORD: gosso_test_password
         ports:
           - 5434:5432
         options: >-
@@ -200,12 +200,12 @@ jobs:
 
       - name: Install golang-migrate
         run: |
-          curl -L https://github.com/golang-migrate/migrate/releases/latest/download/migrate.linux-amd64.tar.gz | tar xz
+          curl -L "https://github.com/golang-migrate/migrate/releases/download/${MIGRATE_VERSION}/migrate.linux-amd64.tar.gz" | tar xz
           sudo mv migrate /usr/local/bin/migrate
 
       - name: Test migration up/down/up cycle
         run: |
-          DATABASE_URL="postgres://gosso:${{ env.TEST_POSTGRES_PASSWORD }}@127.0.0.1:5434/gosso_test?sslmode=disable"
+          DATABASE_URL="postgres://gosso:${TEST_POSTGRES_PASSWORD}@127.0.0.1:5434/gosso_test?sslmode=disable"
           echo "▶ Migrate up (all)..."
           migrate -path db/migrations -database "$DATABASE_URL" up
           echo "▶ Migrate down (all)..."
