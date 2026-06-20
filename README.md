@@ -39,7 +39,7 @@ gosso provides a complete SSO server with OAuth 2.0 authorization, OIDC discover
 - Health and readiness probes (`/health`, `/readiness`)
 - OpenAPI spec and Swagger UI (debug mode)
 - Docker and docker-compose for dev, test, and production
-- GitHub Actions CI (lint, unit tests with 50% coverage threshold across the coverage-gate package set, critical service package coverage gates, govulncheck, integration tests, build, Docker build)
+- GitHub Actions CI (lint, unit tests with 60% coverage threshold across the coverage-gate package set, critical service package coverage gates, govulncheck, integration tests, build, Docker build)
 
 ## Prerequisites
 
@@ -312,7 +312,7 @@ make docker-test-up
 make test-integration
 ```
 
-Unit tests use `testify/assert`, `go-sqlmock`, and `miniredis`. The CI pipeline requires a minimum of 50% test coverage across the coverage-gate package set and package-level coverage floors for critical auth, OAuth2, OIDC, token, and session services.
+Unit tests use `testify/assert`, `go-sqlmock`, and `miniredis`. The CI pipeline requires a minimum of 60% test coverage across the coverage-gate package set and package-level coverage floors for critical auth, OAuth2, OIDC, token, and session services.
 
 ## Configuration Reference
 
@@ -411,7 +411,7 @@ gosso 提供完整的 SSO 服务器，包含 OAuth 2.0 授权、OIDC 发现、JW
 - 健康检查和就绪探针（`/health`、`/readiness`）
 - OpenAPI 规范和 Swagger UI（调试模式）
 - Docker + docker-compose 支持开发、测试和生产环境
-- GitHub Actions CI（lint、覆盖率门禁包集合最低 50% 覆盖率、关键服务包覆盖率门禁、govulncheck、集成测试、构建、Docker 构建）
+- GitHub Actions CI（lint、覆盖率门禁包集合最低 60% 覆盖率、关键服务包覆盖率门禁、govulncheck、集成测试、构建、Docker 构建）
 
 ## 前置条件
 
@@ -514,7 +514,7 @@ make docker-test-up
 make test-integration
 ```
 
-单元测试使用 `testify/assert`、`go-sqlmock` 和 `miniredis`。CI 管线对覆盖率门禁包集合要求最低 50% 测试覆盖率，并对 auth、OAuth2、OIDC、token、session 等关键服务包设置单包覆盖率门禁。
+单元测试使用 `testify/assert`、`go-sqlmock` 和 `miniredis`。CI 管线对覆盖率门禁包集合要求最低 60% 测试覆盖率，并对 auth、OAuth2、OIDC、token、session 等关键服务包设置单包覆盖率门禁。
 
 ## 贡献
 
