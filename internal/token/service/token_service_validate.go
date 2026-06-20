@@ -16,9 +16,11 @@ import (
 	"github.com/rushairer/gosso/internal/utility"
 )
 
+const accessTokenClockSkew = 30 * time.Second
+
 // ValidateAccessTokenWithContext validates a JWT access token using the request context
 func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*domain.AccessTokenClaims, error) {
-	parser := jwt.NewParser(jwt.WithIssuer(s.issuer))
+	parser := jwt.NewParser(jwt.WithIssuer(s.issuer), jwt.WithLeeway(accessTokenClockSkew))
 	token, err := parser.ParseWithClaims(tokenString, &domain.AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -58,9 +60,8 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 		return nil, ErrTokenRevoked
 	}
 
-	// Reject tokens with a not-before claim in the future.
-	// Allow 30 seconds of clock skew to handle minor time differences between servers.
-	if claims.NotBefore != nil && claims.NotBefore.After(time.Now().Add(30*time.Second)) {
+	// Reject tokens with a not-before claim in the future beyond the configured clock skew.
+	if claims.NotBefore != nil && claims.NotBefore.After(time.Now().Add(accessTokenClockSkew)) {
 		return nil, ErrInvalidToken
 	}
 
