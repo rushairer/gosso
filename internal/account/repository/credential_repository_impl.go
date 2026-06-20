@@ -285,19 +285,29 @@ func (r *credentialRepositoryImpl) FindByAccountAndTypeForUpdate(ctx context.Con
 
 // VerifyFirstUnverifiedTOTP atomically verifies the first unverified TOTP credential for an account.
 func (r *credentialRepositoryImpl) VerifyFirstUnverifiedTOTP(ctx context.Context, tx *sql.Tx, accountID string) (bool, error) {
-	query := `
+	// First check if there's an unverified TOTP credential to avoid masking
+	// subquery errors behind a silent rowsAffected=0.
+	checkQuery := `
+		SELECT id FROM account_credentials
+		WHERE account_id = $1 AND credential_type = $2 AND verified = false AND deleted_at IS NULL
+		ORDER BY created_at DESC
+		LIMIT 1
+		FOR UPDATE SKIP LOCKED
+	`
+	var credID string
+	if err := tx.QueryRowContext(ctx, checkQuery, accountID, string(domain.CredentialTypeTOTP)).Scan(&credID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("find unverified TOTP credential: %w", err)
+	}
+
+	updateQuery := `
 		UPDATE account_credentials
 		SET verified = true, verified_at = NOW()
-		WHERE id = (
-			SELECT id FROM account_credentials
-			WHERE account_id = $1 AND credential_type = $2 AND verified = false AND deleted_at IS NULL
-			ORDER BY created_at DESC
-			LIMIT 1
-			FOR UPDATE SKIP LOCKED
-		)
+		WHERE id = $1
 	`
-
-	result, err := tx.ExecContext(ctx, query, accountID, string(domain.CredentialTypeTOTP))
+	result, err := tx.ExecContext(ctx, updateQuery, credID)
 	if err != nil {
 		return false, fmt.Errorf("verify first unverified TOTP: %w", err)
 	}

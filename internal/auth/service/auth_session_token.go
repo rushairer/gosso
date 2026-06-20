@@ -3,9 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
@@ -18,17 +16,13 @@ import (
 
 // createSessionAndTokens creates a session, generates access and refresh tokens.
 func (s *AuthService) createSessionAndTokens(ctx context.Context, account *accountDomain.Account, ip, userAgent string) (retSession *sessionDomain.Session, retAccessToken string, retRefreshToken *tokenDomain.RefreshToken, retErr error) {
-	now := time.Now()
-	session := &sessionDomain.Session{
-		ID:           uuid.New().String(),
-		AccountID:    account.ID,
-		IP:           ip,
-		UserAgent:    userAgent,
-		CreatedAt:    now,
-		LastActiveAt: now,
-	}
+	var username string
 	if account.Username != nil {
-		session.Username = *account.Username
+		username = *account.Username
+	}
+	session, err := sessionDomain.NewSession(account.ID, username, ip, userAgent, false)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("create session: %w", err)
 	}
 
 	if err := s.sessionSvc.CreateSession(ctx, session); err != nil {

@@ -33,7 +33,7 @@ type OAuth2Client struct {
 // Uses constant-time comparison throughout: all registered URIs are checked even
 // after a match is found, to avoid leaking the matched position via timing.
 func (c *OAuth2Client) ValidateRedirectURI(uri string) bool {
-	if !isValidRedirectScheme(uri) {
+	if c == nil || !isValidRedirectScheme(uri) {
 		return false
 	}
 	uriBytes := []byte(uri)
@@ -49,7 +49,7 @@ func (c *OAuth2Client) ValidateRedirectURI(uri string) bool {
 // ValidatePostLogoutRedirectURI validates that the post-logout redirect URI is in the registered list.
 // Uses constant-time comparison throughout to avoid leaking the matched position via timing.
 func (c *OAuth2Client) ValidatePostLogoutRedirectURI(uri string) bool {
-	if !isValidRedirectScheme(uri) {
+	if c == nil || !isValidRedirectScheme(uri) {
 		return false
 	}
 	uriBytes := []byte(uri)
@@ -89,11 +89,17 @@ func IsLoopback(host string) bool {
 
 // HasGrantType checks whether the specified grant type is supported
 func (c *OAuth2Client) HasGrantType(gt string) bool {
+	if c == nil {
+		return false
+	}
 	return slices.Contains(c.GrantTypes, gt)
 }
 
 // ValidateScope validates and returns the subset of scopes supported by the client
 func (c *OAuth2Client) ValidateScope(requestedScopes []string) []string {
+	if c == nil {
+		return nil
+	}
 	var valid []string
 	for _, s := range requestedScopes {
 		if slices.Contains(c.Scopes, s) {

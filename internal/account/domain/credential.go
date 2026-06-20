@@ -170,6 +170,9 @@ func NewPhoneCredential(accountID string, phone string) (*Credential, error) {
 
 // IsDeleted reports whether the credential has been soft-deleted.
 func (c *Credential) IsDeleted() bool {
+	if c == nil {
+		return false
+	}
 	return c.DeletedAt != nil
 }
 
@@ -181,7 +184,7 @@ func (c *Credential) IsVerified() bool {
 // Verify marks the credential as verified.
 // Idempotent: if already verified, does not overwrite VerifiedAt.
 func (c *Credential) Verify() {
-	if c.Verified {
+	if c == nil || c.Verified {
 		return
 	}
 	now := time.Now()
@@ -191,6 +194,9 @@ func (c *Credential) Verify() {
 
 // MarkUsed updates the last-used timestamp.
 func (c *Credential) MarkUsed() {
+	if c == nil {
+		return
+	}
 	now := time.Now()
 	c.LastUsedAt = &now
 }
@@ -199,6 +205,9 @@ func (c *Credential) MarkUsed() {
 // Clears the Value and Identifier fields to avoid retaining sensitive data
 // (e.g., password hashes, email addresses, phone numbers) in memory.
 func (c *Credential) SoftDelete() error {
+	if c == nil {
+		return nil
+	}
 	if c.IsDeleted() {
 		return ErrCredentialAlreadyDeleted
 	}
@@ -212,7 +221,7 @@ func (c *Credential) SoftDelete() error {
 
 // VerifyPassword verifies the plaintext password against the stored Argon2id hash.
 func (c *Credential) VerifyPassword(plainPassword string) bool {
-	if c.Type != CredentialTypePassword {
+	if c == nil || c.Type != CredentialTypePassword {
 		return false
 	}
 	return verifyArgon2id(plainPassword, c.Value)
@@ -221,6 +230,9 @@ func (c *Credential) VerifyPassword(plainPassword string) bool {
 // MarshalLogObject implements zapcore.ObjectMarshaler to safely log credentials
 // without exposing the Value field (password hash or other sensitive data).
 func (c *Credential) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	if c == nil {
+		return nil
+	}
 	enc.AddString("id", c.ID)
 	enc.AddString("account_id", c.AccountID)
 	enc.AddString("credential_type", string(c.Type))

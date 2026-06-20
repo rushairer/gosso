@@ -52,10 +52,16 @@ func NewSession(accountID, username, ip, userAgent string, mfaVerified bool) (*S
 
 // IsExpired reports whether the session has expired.
 func (s *Session) IsExpired(ttl time.Duration) bool {
+	if s == nil {
+		return true
+	}
 	return time.Since(s.LastActiveAt) > ttl
 }
 
 // UpdateActivity updates the last-active timestamp.
 func (s *Session) UpdateActivity() {
+	if s == nil {
+		return
+	}
 	s.LastActiveAt = time.Now()
 }

@@ -362,6 +362,7 @@ return 1
 // or the client_id does not match. ARGV[1] = client_id to verify ownership.
 var claimAuthorizedScript = redis.NewScript(`
 local cjson = require('cjson')
+assert(ARGV[1] ~= '', 'client_id is required')
 local data = redis.call('GET', KEYS[1])
 if not data then
     return nil

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
@@ -416,8 +417,15 @@ func TestVerifyFirstUnverifiedTOTP_Found(t *testing.T) {
 	mock.ExpectBegin()
 	tx, _ := db.Begin()
 
-	mock.ExpectExec("UPDATE account_credentials").
+	// Step 1: SELECT finds an unverified TOTP credential
+	rows := sqlmock.NewRows([]string{"id"}).AddRow("cred-001")
+	mock.ExpectQuery("SELECT id FROM account_credentials").
 		WithArgs("account-001", "totp").
+		WillReturnRows(rows)
+
+	// Step 2: UPDATE verifies it
+	mock.ExpectExec("UPDATE account_credentials").
+		WithArgs("cred-001").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewCredentialRepository(db)
@@ -436,9 +444,10 @@ func TestVerifyFirstUnverifiedTOTP_NotFound(t *testing.T) {
 	mock.ExpectBegin()
 	tx, _ := db.Begin()
 
-	mock.ExpectExec("UPDATE account_credentials").
+	// SELECT finds no unverified TOTP credentials
+	mock.ExpectQuery("SELECT id FROM account_credentials").
 		WithArgs("account-001", "totp").
-		WillReturnResult(sqlmock.NewResult(0, 0))
+		WillReturnError(sql.ErrNoRows)
 
 	repo := NewCredentialRepository(db)
 	updated, err := repo.VerifyFirstUnverifiedTOTP(context.Background(), tx, "account-001")
