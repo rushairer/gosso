@@ -218,11 +218,16 @@ type accountValidatorAdapter struct {
 	cache        sync.Map // map[string]*accountValidatorCacheEntry
 	cacheTTL     time.Duration
 	lastCleanup  atomic.Int64 // UnixNano timestamp; read/written atomically for lock-free fast-path check
+	cacheSize    atomic.Int32 // approximate number of entries in cache; used to enforce max size
 	cleanupMutex sync.Mutex
 }
 
 // cacheCleanupInterval is how often (in seconds) the cache is scanned for expired entries.
 const cacheCleanupInterval = 30 * time.Second
+
+// accountValidatorCacheMaxSize is the maximum number of entries allowed in the cache.
+// New entries are dropped when this limit is reached; expired entries are still evicted by cleanup.
+const accountValidatorCacheMaxSize = 1024
 
 // newAccountValidatorAdapter creates an accountValidatorAdapter with the lastCleanup timer initialized.
 func newAccountValidatorAdapter(svc accountService.AccountService, logger *zap.Logger, ttl time.Duration) *accountValidatorAdapter {
@@ -245,6 +250,7 @@ func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID
 			a.cache.Range(func(key, value any) bool {
 				if entry, ok := value.(*accountValidatorCacheEntry); ok && now.After(entry.expiresAt) {
 					a.cache.Delete(key)
+					a.cacheSize.Add(-1)
 				}
 				return true
 			})
@@ -253,14 +259,17 @@ func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID
 		a.cleanupMutex.Unlock()
 	}
 
-	// Check cache first
+	// Check cache first.
+	replacing := false
 	if entry, ok := a.cache.Load(accountID); ok {
 		cached := entry.(*accountValidatorCacheEntry)
 		if time.Now().Before(cached.expiresAt) {
 			return cached.active
 		}
-		// Expired — evict and fall through to DB lookup
+		// Expired — evict and fall through to DB lookup.
+		// The subsequent store will replace this entry, so no net size change.
 		a.cache.Delete(accountID)
+		replacing = true
 	}
 
 	account, err := a.accountSvc.FindAccountByID(ctx, accountID)
@@ -274,19 +283,29 @@ func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID
 		// Transient DB errors (timeout, connection refused) should NOT be cached
 		// to avoid rejecting valid accounts until the cache expires.
 		if errors.Is(err, accountRepo.ErrAccountNotFound) {
-			a.cache.Store(accountID, &accountValidatorCacheEntry{
-				active:    false,
-				expiresAt: time.Now().Add(a.cacheTTL),
-			})
+			if replacing || a.cacheSize.Load() < accountValidatorCacheMaxSize {
+				a.cache.Store(accountID, &accountValidatorCacheEntry{
+					active:    false,
+					expiresAt: time.Now().Add(a.cacheTTL),
+				})
+				if !replacing {
+					a.cacheSize.Add(1)
+				}
+			}
 		}
 		return false
 	}
 
 	active := account.IsActive()
-	a.cache.Store(accountID, &accountValidatorCacheEntry{
-		active:    active,
-		expiresAt: time.Now().Add(a.cacheTTL),
-	})
+	if replacing || a.cacheSize.Load() < accountValidatorCacheMaxSize {
+		a.cache.Store(accountID, &accountValidatorCacheEntry{
+			active:    active,
+			expiresAt: time.Now().Add(a.cacheTTL),
+		})
+		if !replacing {
+			a.cacheSize.Add(1)
+		}
+	}
 	return active
 }
 

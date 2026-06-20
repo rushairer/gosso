@@ -95,6 +95,9 @@ type OAuth2Controller struct {
 }
 
 // NewOAuth2Controller creates a new OAuth2 controller instance.
+//
+// Deprecated: Use NewOAuth2ControllerFromConfig instead, which provides a named-config struct
+// for better readability and forward compatibility.
 func NewOAuth2Controller(
 	clientSvc oauth2Service.OAuth2ClientService,
 	authCodeSvc AuthCodeManager,

@@ -9,6 +9,8 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/account/repository"
@@ -1187,6 +1189,38 @@ func TestSetOptions_LateBind(t *testing.T) {
 
 	assert.NotNil(t, svc.sessionRevoker)
 	assert.NotNil(t, svc.oauth2ClientDeleter)
+}
+
+// TestSetOptions_DuplicateCallLogsWarning tests that a second SetOptions call produces a warning log.
+func TestSetOptions_DuplicateCallLogsWarning(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	core, logs := observer.New(zap.WarnLevel)
+	logger := zap.New(core)
+
+	svc := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, logger, nil)
+
+	// First call should apply without warning.
+	svc.SetOptions(&AccountServiceOptions{
+		SessionRevoker:      &stubSessionRevoker{},
+		OAuth2ClientDeleter: &stubOAuth2ClientDeleter{},
+	})
+	assert.Equal(t, 0, logs.Len(), "first call should not produce warnings")
+
+	// Second call should log a warning and not overwrite the first.
+	svc.SetOptions(&AccountServiceOptions{
+		SessionRevoker:      &stubSessionRevoker{},
+		OAuth2ClientDeleter: &stubOAuth2ClientDeleter{},
+	})
+	assert.Equal(t, 1, logs.Len(), "second call should produce one warning")
+	assert.Equal(t, "SetOptions called multiple times; subsequent calls are ignored", logs.All()[0].Message)
 }
 
 // TestSetOptions_FakeImplementation tests that SetOptions works with non-impl types

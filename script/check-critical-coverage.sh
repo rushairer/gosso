@@ -28,8 +28,8 @@ check_package() {
 	}
 }
 
-check_package ./internal/auth/service "${AUTH_SERVICE_COVERAGE_MIN:-34.9}"
-check_package ./internal/oauth2/service "${OAUTH2_SERVICE_COVERAGE_MIN:-22.3}"
-check_package ./internal/token/service "${TOKEN_SERVICE_COVERAGE_MIN:-19.5}"
-check_package ./internal/oidc/service "${OIDC_SERVICE_COVERAGE_MIN:-31.7}"
-check_package ./internal/session/service "${SESSION_SERVICE_COVERAGE_MIN:-20}"
+check_package ./internal/auth/service "${AUTH_SERVICE_COVERAGE_MIN:-45}"
+check_package ./internal/oauth2/service "${OAUTH2_SERVICE_COVERAGE_MIN:-35}"
+check_package ./internal/token/service "${TOKEN_SERVICE_COVERAGE_MIN:-30}"
+check_package ./internal/oidc/service "${OIDC_SERVICE_COVERAGE_MIN:-45}"
+check_package ./internal/session/service "${SESSION_SERVICE_COVERAGE_MIN:-30}"

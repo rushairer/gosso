@@ -52,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Nginx configuration now includes OCSP Stapling (`ssl_stapling on`) for improved TLS handshake performance (`config/nginx.conf`).
 - `VerifyFirstUnverifiedTOTP` now uses a two-step SELECT + UPDATE pattern instead of an embedded subquery — properly surfaces `sql.ErrNoRows` when no unverified TOTP credential exists (`internal/account/repository/credential_repository_impl.go`).
 - `createSessionAndTokens` now uses `domain.NewSession()` constructor instead of a raw struct literal — ensures `accountID` validation is always applied (`internal/auth/service/auth_session_token.go`).
+- `AccountService.SetOptions` now logs a warning when called multiple times — aids debugging in tests and unexpected wiring scenarios (`internal/account/service/account_service.go`).
+- `accountValidatorAdapter` cache now enforces a hard size limit of 1024 entries — prevents unbounded memory growth in high-cardinality token exchange scenarios between cleanup cycles (`cmd/gosso/web_modules.go`).
+- `NewOAuth2Controller` marked as deprecated in favor of `NewOAuth2ControllerFromConfig` — guides contributors toward the named-config struct pattern (`internal/oauth2/controller/oauth2_controller.go`).
+- Raised overall test coverage threshold from 60% to 70% and per-module critical coverage floors to 30–45% — reflects improved test maturity for security-critical services (`Makefile`, `script/check-critical-coverage.sh`).
 
 ### Security
 - Removed CSRF token leakage in `X-CSRF-Token` response headers — SPAs should read the token directly from the cookie; response headers doubled the attack surface if an XSS vulnerability existed (`middleware/csrf.go`).

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -120,6 +121,7 @@ type accountServiceImpl struct {
 	consentCacheInvalidator ConsentCacheInvalidator
 	logger                  *zap.Logger
 	optionsOnce             sync.Once
+	setOptionsCalls         atomic.Int32
 }
 
 // auditLogSync writes an audit record synchronously and logs any error.
@@ -162,10 +164,14 @@ func NewAccountService(
 
 // SetOptions configures optional cross-module dependencies.
 // Thread-safe: uses sync.Once to ensure configuration happens exactly once.
-// Subsequent calls are silently ignored.
+// Subsequent calls are logged as warnings and ignored.
 func (s *accountServiceImpl) SetOptions(opts *AccountServiceOptions) {
 	if opts == nil {
 		return
+	}
+	if s.setOptionsCalls.Add(1) > 1 && s.logger != nil {
+		s.logger.Warn("SetOptions called multiple times; subsequent calls are ignored",
+			zap.Int32("call_count", s.setOptionsCalls.Load()))
 	}
 	s.optionsOnce.Do(func() {
 		s.sessionRevoker = opts.SessionRevoker

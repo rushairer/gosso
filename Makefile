@@ -23,7 +23,7 @@ GOPATH_BIN := $(shell go env GOPATH)/bin
 LOCAL_GOCACHE ?= /tmp/gosso-go-build-cache
 LOCAL_GOLANGCI_CACHE ?= /tmp/gosso-golangci-lint-cache
 GO_TEST_ENV := GOCACHE=$(LOCAL_GOCACHE)
-COVERAGE_MIN ?= 60
+COVERAGE_MIN ?= 70
 
 lint:
 	@if ! command -v golangci-lint >/dev/null 2>&1 && ! [ -f "$(GOPATH_BIN)/golangci-lint" ]; then \
