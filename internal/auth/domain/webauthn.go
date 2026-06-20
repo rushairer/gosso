@@ -38,31 +38,43 @@ type WebAuthnCredential struct {
 	DeletedAt       *time.Time `json:"deleted_at,omitempty"`
 }
 
+// NewWebAuthnCredentialParams holds the parameters for creating a WebAuthnCredential.
+type NewWebAuthnCredentialParams struct {
+	AccountID       string
+	CredentialID    []byte
+	PublicKey       []byte
+	AttestationType string
+	Transports      []string
+	SignCount       uint32
+	AAGUID          []byte
+	Name            string
+}
+
 // NewWebAuthnCredential creates a new WebAuthnCredential with validation.
-func NewWebAuthnCredential(accountID string, credentialID, publicKey []byte, attestationType string, transports []string, signCount uint32, aagUID []byte, name string) (*WebAuthnCredential, error) {
-	if accountID == "" {
+func NewWebAuthnCredential(params NewWebAuthnCredentialParams) (*WebAuthnCredential, error) {
+	if params.AccountID == "" {
 		return nil, ErrWebAuthnAccountIDRequired
 	}
-	if len(credentialID) == 0 {
+	if len(params.CredentialID) == 0 {
 		return nil, ErrWebAuthnCredentialIDRequired
 	}
-	if len(publicKey) == 0 {
+	if len(params.PublicKey) == 0 {
 		return nil, ErrWebAuthnPublicKeyRequired
 	}
-	if len(name) > maxWebAuthnNameLength {
+	if len(params.Name) > maxWebAuthnNameLength {
 		return nil, ErrWebAuthnNameTooLong
 	}
 	now := time.Now()
 	return &WebAuthnCredential{
 		ID:              uuid.New().String(),
-		AccountID:       accountID,
-		CredentialID:    credentialID,
-		PublicKey:       publicKey,
-		AttestationType: attestationType,
-		Transports:      transports,
-		SignCount:       signCount,
-		AAGUID:          aagUID,
-		Name:            name,
+		AccountID:       params.AccountID,
+		CredentialID:    params.CredentialID,
+		PublicKey:       params.PublicKey,
+		AttestationType: params.AttestationType,
+		Transports:      params.Transports,
+		SignCount:       params.SignCount,
+		AAGUID:          params.AAGUID,
+		Name:            params.Name,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}, nil

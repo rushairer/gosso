@@ -168,16 +168,16 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, ac
 	}
 
 	// Save credential to database
-	cred, err := domain.NewWebAuthnCredential(
-		accountID,
-		credential.ID,
-		credential.PublicKey,
-		credential.AttestationType,
-		transportsToStrings(credential.Transport),
-		credential.Authenticator.SignCount,
-		credential.Authenticator.AAGUID,
-		"Passkey",
-	)
+	cred, err := domain.NewWebAuthnCredential(domain.NewWebAuthnCredentialParams{
+		AccountID:       accountID,
+		CredentialID:    credential.ID,
+		PublicKey:       credential.PublicKey,
+		AttestationType: credential.AttestationType,
+		Transports:      transportsToStrings(credential.Transport),
+		SignCount:       credential.Authenticator.SignCount,
+		AAGUID:          credential.Authenticator.AAGUID,
+		Name:            "Passkey",
+	})
 	if err != nil {
 		return nil, fmt.Errorf("create webauthn credential: %w", err)
 	}

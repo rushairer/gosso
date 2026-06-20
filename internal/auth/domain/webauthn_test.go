@@ -121,16 +121,16 @@ func TestWebAuthnUser_ImplementsInterface(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestNewWebAuthnCredential_Success(t *testing.T) {
-	cred, err := NewWebAuthnCredential(
-		"account-001",
-		[]byte("cred-id"),
-		[]byte("public-key"),
-		"none",
-		[]string{"internal"},
-		0,
-		[]byte("aaguid"),
-		"My Passkey",
-	)
+	cred, err := NewWebAuthnCredential(NewWebAuthnCredentialParams{
+		AccountID:       "account-001",
+		CredentialID:    []byte("cred-id"),
+		PublicKey:       []byte("public-key"),
+		AttestationType: "none",
+		Transports:      []string{"internal"},
+		SignCount:       0,
+		AAGUID:          []byte("aaguid"),
+		Name:            "My Passkey",
+	})
 	require.NoError(t, err)
 	assert.NotEmpty(t, cred.ID)
 	assert.Equal(t, "account-001", cred.AccountID)
@@ -142,17 +142,29 @@ func TestNewWebAuthnCredential_Success(t *testing.T) {
 }
 
 func TestNewWebAuthnCredential_EmptyAccountID(t *testing.T) {
-	_, err := NewWebAuthnCredential("", []byte("cred-id"), []byte("pk"), "none", nil, 0, nil, "name")
+	_, err := NewWebAuthnCredential(NewWebAuthnCredentialParams{
+		CredentialID: []byte("cred-id"),
+		PublicKey:    []byte("pk"),
+		Name:         "name",
+	})
 	assert.ErrorIs(t, err, ErrWebAuthnAccountIDRequired)
 }
 
 func TestNewWebAuthnCredential_EmptyCredentialID(t *testing.T) {
-	_, err := NewWebAuthnCredential("account-001", nil, []byte("pk"), "none", nil, 0, nil, "name")
+	_, err := NewWebAuthnCredential(NewWebAuthnCredentialParams{
+		AccountID: "account-001",
+		PublicKey: []byte("pk"),
+		Name:      "name",
+	})
 	assert.ErrorIs(t, err, ErrWebAuthnCredentialIDRequired)
 }
 
 func TestNewWebAuthnCredential_EmptyPublicKey(t *testing.T) {
-	_, err := NewWebAuthnCredential("account-001", []byte("cred-id"), nil, "none", nil, 0, nil, "name")
+	_, err := NewWebAuthnCredential(NewWebAuthnCredentialParams{
+		AccountID:    "account-001",
+		CredentialID: []byte("cred-id"),
+		Name:         "name",
+	})
 	assert.ErrorIs(t, err, ErrWebAuthnPublicKeyRequired)
 }
 
