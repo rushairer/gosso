@@ -91,7 +91,7 @@ func (s *LogoutService) ValidateIDTokenHint(tokenString string, clientID string)
 
 	// Manual validation: issuer must match, audience must be non-empty
 	if claims.Issuer != s.issuer {
-		return nil, fmt.Errorf("id_token_hint issuer mismatch: got %q, want %q", claims.Issuer, s.issuer)
+		return nil, fmt.Errorf("id_token_hint issuer mismatch")
 	}
 	if len(claims.Audience) == 0 {
 		return nil, fmt.Errorf("id_token_hint has no audience")

@@ -407,6 +407,8 @@ func (c *GoUnoConfig) validateAuthDurations() error {
 		{"authorization_code_expiry", c.AuthConfig.AuthorizationCodeExpiry},
 		{"device_code_expiry", c.AuthConfig.DeviceCodeExpiry},
 		{"device_code_interval", c.AuthConfig.DeviceCodeInterval},
+		{"login_rate_limit_window", c.AuthConfig.LoginRateLimitWindow},
+		{"mfa_account_rate_limit_window", c.AuthConfig.MFAAccountRateLimitWindow},
 	}
 	for _, check := range positive {
 		if check.value <= 0 {
@@ -429,9 +431,7 @@ func (c *GoUnoConfig) validateAuthDurations() error {
 		{"verify_code_ttl", c.AuthConfig.VerifyCodeTTL},
 		{"verify_cooldown_ttl", c.AuthConfig.VerifyCooldownTTL},
 		{"challenge_ttl", c.AuthConfig.ChallengeTTL},
-		{"login_rate_limit_window", c.AuthConfig.LoginRateLimitWindow},
 		{"password_reset_wait_timeout", c.AuthConfig.PasswordResetWaitTimeout},
-		{"mfa_account_rate_limit_window", c.AuthConfig.MFAAccountRateLimitWindow},
 	}
 	for _, check := range negativeChecks {
 		if check.value < 0 {
@@ -454,6 +454,10 @@ func (c *GoUnoConfig) validateAuthDurations() error {
 		if check.value < 0 {
 			return fmt.Errorf("auth: %s must not be negative (got %d)", check.name, check.value)
 		}
+	}
+	// password_reset_revoke_concurrency must be strictly positive (used as semaphore capacity).
+	if c.AuthConfig.PasswordResetRevokeConcurrency <= 0 {
+		return fmt.Errorf("auth: password_reset_revoke_concurrency must be positive (got %d)", c.AuthConfig.PasswordResetRevokeConcurrency)
 	}
 	return nil
 }

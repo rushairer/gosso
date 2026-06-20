@@ -93,7 +93,8 @@ func (s *AuthService) handleMFARequirement(ctx context.Context, account *account
 	}
 	mfaTypes, err := s.mfaSvc.GetMFATypes(ctx, account.ID)
 	if err != nil {
-		return nil, fmt.Errorf("get mfa types: %w", err)
+		s.logger.Error("Failed to get MFA types", zap.String("account_id", utility.MaskOpaqueID(account.ID)), zap.Error(err))
+		return nil, ErrServiceUnavailable
 	}
 	return buildMFAResult(account, mfaToken, mfaTypes), nil
 }

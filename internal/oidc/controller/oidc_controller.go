@@ -77,11 +77,13 @@ func (c *OIDCController) RegisterRoutes(server *gin.RouterGroup, authMiddleware 
 
 // Discovery GET /.well-known/openid-configuration
 func (c *OIDCController) Discovery(ctx *gin.Context) {
+	ctx.Header("Cache-Control", "public, max-age=3600")
 	ctx.JSON(http.StatusOK, c.discoverySvc.GetDiscoveryDocument())
 }
 
 // JWKS GET /.well-known/jwks.json
 func (c *OIDCController) JWKS(ctx *gin.Context) {
+	ctx.Header("Cache-Control", "public, max-age=3600")
 	ctx.JSON(http.StatusOK, c.jwksSvc.GetJWKS())
 }
 
@@ -89,13 +91,13 @@ func (c *OIDCController) JWKS(ctx *gin.Context) {
 func (c *OIDCController) UserInfo(ctx *gin.Context) {
 	jwtClaims, exists := ctx.Get(middleware.ContextKeyClaims)
 	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "no claims"))
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
 		return
 	}
 
 	claims, ok := jwtClaims.(*tokenDomain.AccessTokenClaims)
 	if !ok {
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "invalid claims type"))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "invalid token"))
 		return
 	}
 
@@ -180,7 +182,7 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 		// No id_token_hint, no Bearer token — unable to identify the user.
 		// Per OIDC RP-Initiated Logout, return 401 rather than a misleading 200.
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized,
-			"unable to identify user for logout; provide id_token_hint or Bearer token"))
+			"authentication required"))
 		return
 	}
 
@@ -288,6 +290,12 @@ func (c *OIDCController) handlePostLogoutRedirect(ctx *gin.Context, req logoutRe
 
 	redirectURI := req.PostLogoutRedirectURI
 	if req.State != "" {
+		// Validate state parameter length to prevent abuse (e.g., excessively long URLs).
+		const maxStateLength = 256
+		if len(req.State) > maxStateLength {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "state parameter too long"))
+			return
+		}
 		u, err := url.Parse(redirectURI)
 		if err == nil {
 			params := u.Query()

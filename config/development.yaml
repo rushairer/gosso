@@ -78,6 +78,10 @@ auth:
     # MFA rate limiting (0 = use default)
     mfa_account_max_attempts: 10
     mfa_account_rate_limit_window: 5m
+    # Login rate limiting
+    login_rate_limit_window: 15m
+    # Password reset
+    password_reset_revoke_concurrency: 5
 cors:
     allowed_origins:
         - "http://localhost:3000"

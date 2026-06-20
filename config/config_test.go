@@ -70,6 +70,9 @@ func validConfig() GoUnoConfig {
 			DeviceCodeExpiry:        10 * time.Minute,
 			DeviceCodeInterval:      5 * time.Second,
 			TOTPEncryptionKey:       "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899", // 32 bytes, fake, differs from dev default
+			LoginRateLimitWindow:        15 * time.Minute,
+			MFAAccountRateLimitWindow:   15 * time.Minute,
+			PasswordResetRevokeConcurrency: 5,
 		},
 		CORSConfig: CORSConfig{
 			AllowedOrigins: []string{"https://app.example.com"},

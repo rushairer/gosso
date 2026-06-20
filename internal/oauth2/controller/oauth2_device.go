@@ -183,10 +183,12 @@ func (c *OAuth2Controller) DeviceUserSubmit(ctx *gin.Context) {
 		return
 	}
 
-	// Look up device code by user_code if device_code is not provided.
+	// Look up device code by user_code if provided.
 	// Use the hash-based methods since the raw device code is not stored in Redis.
+	// When both device_code and user_code are provided, prefer user_code lookup
+	// to ensure the device_code corresponds to the same authorization session.
 	dcHash := ""
-	if req.DeviceCode == "" && req.UserCode != "" {
+	if req.UserCode != "" {
 		dc, err := c.deviceCodeSvc.GetDeviceCodeByUserCode(ctx, req.UserCode)
 		if err != nil {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid or expired user code"})

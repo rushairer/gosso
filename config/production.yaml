@@ -72,6 +72,9 @@ auth:
     device_code_expiry: 10m
     device_code_interval: 5s
     id_token_expiry: 15m
+    login_rate_limit_window: 15m
+    mfa_account_rate_limit_window: 15m
+    password_reset_revoke_concurrency: 5
     default_scopes:
         - openid
         - profile

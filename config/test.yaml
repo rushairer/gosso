@@ -68,3 +68,6 @@ auth:
     private_key_path: ""
     key_id: "test-key"
     password_reset_base_url: "http://localhost:3000/reset-password"
+    login_rate_limit_window: 15m
+    mfa_account_rate_limit_window: 15m
+    password_reset_revoke_concurrency: 5

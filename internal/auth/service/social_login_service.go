@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"strings"
 	"time"
@@ -323,6 +324,15 @@ func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, i
 // it attempts to link to an existing account first (via linkByEmailIfVerified).
 // Handles race conditions when concurrent social logins share the same email.
 func (s *SocialLoginService) createNewUser(ctx context.Context, provider, providerUserID, email, name string, emailVerified bool, ip, userAgent string) (*LoginResult, error) {
+	// Validate email format from social provider before using it.
+	if email != "" {
+		if _, err := mail.ParseAddress(email); err != nil {
+			s.logger.Warn("Invalid email from social provider, ignoring",
+				zap.String("provider", provider), zap.String("email", utility.MaskEmail(email)), zap.Error(err))
+			email = ""
+		}
+	}
+
 	// If email is provided, check if an account already exists with that email.
 	// This prevents duplicate accounts when a user registers via email/password first
 	// and later uses social login with the same email.

@@ -228,18 +228,20 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 		return nil, err
 	}
 
-	// 4. Blacklist MFA token to prevent reuse
-	if err := s.blacklistMFAToken(ctx, claims); err != nil {
-		return nil, err
-	}
-
-	// 5. Find account
+	// 4. Find account before blacklisting MFA token.
+	// If the account lookup fails, the MFA token remains valid so the user can retry
+	// without restarting the entire passkey flow.
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
 		return nil, ErrInvalidCredentials
 	}
 	if !account.IsActive() {
 		return nil, ErrInvalidCredentials
+	}
+
+	// 5. Blacklist MFA token to prevent reuse
+	if err := s.blacklistMFAToken(ctx, claims); err != nil {
+		return nil, err
 	}
 
 	// 6. Complete login (session, tokens, rate limit clear, audit)
@@ -343,6 +345,10 @@ func (s *AuthService) ClearLoginRateLimitsByUsername(ctx context.Context, userna
 	var firstErr error
 	const maxIterations = 1000
 	for i := 0; i < maxIterations; i++ {
+		// Respect context cancellation (e.g., graceful shutdown).
+		if ctx.Err() != nil {
+			return firstErr
+		}
 		keys, nextCursor, err := s.redis.ScanKeys(ctx, cursor, pattern, 100)
 		if err != nil {
 			s.logger.Warn("Failed to scan login rate limit keys during cleanup",

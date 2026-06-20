@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `CompletePasskeyMFALogin` now verifies the account exists before blacklisting the MFA token — prevents user lockout when a transient DB failure occurs after the token is consumed but before the account is found (`internal/auth/service/auth_login.go`).
+- OAuth2 `AuthenticateClient` now performs a dummy bcrypt comparison for public clients that provide a `client_secret` — eliminates a timing side-channel that could reveal whether a `client_id` is confidential or public (~100ms vs ~0ms) (`internal/oauth2/service/client_auth_service.go`).
+- `handleMFARequirement` now maps `GetMFATypes` failures to `ErrServiceUnavailable` instead of leaking raw database/Redis error details to the caller (`internal/auth/service/auth_login_helpers.go`).
+- OIDC controller error messages sanitized — replaced internal terms like `"no claims"`, `"invalid claims type"`, and `"unable to identify user for logout"` with generic `"authentication required"` / `"invalid token"` to prevent architecture fingerprinting (`internal/oidc/controller/oidc_controller.go`).
+- `ValidateIDTokenHint` no longer includes the server's issuer URL in the issuer mismatch error message — prevents information leakage if the error propagates to an HTTP response (`internal/oidc/service/logout_service.go`).
+- CSRF token validation no longer uses a `len()` short-circuit before `subtle.ConstantTimeCompare` — removes a minor length oracle that could leak whether the header and cookie lengths match (`middleware/csrf.go`).
+- Config validation now requires `login_rate_limit_window`, `mfa_account_rate_limit_window`, and `password_reset_revoke_concurrency` to be strictly positive — a zero value previously silently disabled rate limiting or created a zero-capacity semaphore (`config/config.go`).
+- Social login email from OAuth providers is now validated with `net/mail.ParseAddress` before account creation — malformed emails (control characters, etc.) are logged and discarded rather than passed to the database (`internal/auth/service/social_login_service.go`).
+- Discovery and JWKS endpoints now set `Cache-Control: public, max-age=3600` — reduces unnecessary load from relying parties that validate JWTs on every request (`internal/oidc/controller/oidc_controller.go`).
+- Logout `state` parameter is now validated for length (max 256 characters) before being reflected into the post-logout redirect URI (`internal/oidc/controller/oidc_controller.go`).
+- `ClearLoginRateLimitsByUsername` SCAN loop now checks `ctx.Err()` on each iteration — supports graceful shutdown by aborting the scan when the context is cancelled (`internal/auth/service/auth_login.go`).
+- Device authorization submit now prefers `user_code` lookup when both `device_code` and `user_code` are provided — ensures the device code corresponds to the same authorization session (`internal/oauth2/controller/oauth2_device.go`).
+
 ### Added
 - `IsValidGrantType` function and grant type validation in `NewOAuth2Client` constructor — rejects unknown grant types with `ErrClientInvalidGrantType` (`internal/oauth2/domain/client.go`).
 - `IsValidDeviceCodeStatus` function for consistency with other `IsValid*` validation functions (`internal/oauth2/domain/device_code.go`).

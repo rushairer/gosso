@@ -94,7 +94,7 @@ func CSRFMiddleware(secure bool, logger *zap.Logger, maxAge time.Duration, skipP
 		if header == "" {
 			header = ctx.PostForm("csrf_token")
 		}
-		if header == "" || len(header) != len(cookie) || subtle.ConstantTimeCompare([]byte(header), []byte(cookie)) != 1 {
+		if header == "" || subtle.ConstantTimeCompare([]byte(header), []byte(cookie)) != 1 {
 			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "CSRF token mismatch"))
 			ctx.Abort()
 			return
