@@ -1,6 +1,7 @@
 package gosso
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -16,6 +17,8 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/spf13/cobra"
 )
+
+const migrationAdvisoryLockKey int64 = 6742767655786865513 // stable key for "gosso:migrate"
 
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
@@ -161,6 +164,31 @@ func closeMigrate(m *migrate.Migrate) {
 	}
 }
 
+// acquireMigrationLock holds a PostgreSQL advisory lock on a dedicated connection.
+// The lock serializes migrations across concurrently starting app instances and is
+// released either explicitly or when the connection closes.
+func acquireMigrationLock(db *sql.DB) (func(), error) {
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire migration lock connection: %w", err)
+	}
+
+	if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", migrationAdvisoryLockKey); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("acquire migration advisory lock: %w", err)
+	}
+
+	return func() {
+		if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", migrationAdvisoryLockKey); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to release migration advisory lock: %v\n", err)
+		}
+		if err := conn.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to close migration lock connection: %v\n", err)
+		}
+	}, nil
+}
+
 // withMigrateResources initializes migrate resources, runs the given function,
 // then ensures proper cleanup. Returns the function's exit code.
 func withMigrateResources(cmd *cobra.Command, fn func(*migrate.Migrate) error) {
@@ -169,8 +197,18 @@ func withMigrateResources(cmd *cobra.Command, fn func(*migrate.Migrate) error) {
 		fmt.Fprintf(os.Stderr, "Migration init failed: %v\n", err)
 		os.Exit(1)
 	}
+
+	unlock, lockErr := acquireMigrationLock(db)
+	if lockErr != nil {
+		closeMigrate(m)
+		_ = db.Close()
+		fmt.Fprintf(os.Stderr, "Migration lock failed: %v\n", lockErr)
+		os.Exit(1)
+	}
+
 	// Cleanup always runs — no deferred log.Fatal to skip it.
 	err = fn(m)
+	unlock()
 	closeMigrate(m)
 	_ = db.Close()
 	if err != nil {
@@ -319,7 +357,7 @@ func parseSteps(s string) (int, error) {
 	return steps, nil
 }
 
-// parseVersion parses a version string using strconv.Atoi for idiomatic Go parsing.
+// parseVersion parses a migration version string using strconv.Atoi for idiomatic Go parsing.
 func parseVersion(s string) (int, error) {
 	version, err := strconv.Atoi(s)
 	if err != nil {
