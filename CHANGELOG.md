@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `IsValidGrantType` function and grant type validation in `NewOAuth2Client` constructor — rejects unknown grant types with `ErrClientInvalidGrantType` (`internal/oauth2/domain/client.go`).
+- `IsValidDeviceCodeStatus` function for consistency with other `IsValid*` validation functions (`internal/oauth2/domain/device_code.go`).
+- `NewWebAuthnCredentialParams` struct replacing 8 positional parameters — improves readability and maintainability of WebAuthn credential creation (`internal/auth/domain/webauthn.go`).
+- `MFAAccountMaxAttempts` and `MFAAccountRateLimitWindow` configurable parameters — previously hardcoded at 10 attempts and 5 minutes, now configurable via `auth.mfa_account_max_attempts` and `auth.mfa_account_rate_limit_window` in YAML/env vars with backward-compatible defaults (`config/config.go`, `internal/auth/service/auth_service.go`).
 - `db.Queryable` interface abstracting `*sql.DB` and `*sql.Tx` for query/exec operations — eliminates duplication between standalone and transactional repository methods (`internal/db/queryable.go`).
 - `NewTokenBlacklist` constructor with JTI and expiry validation — prevents creation of invalid blacklist entries (`internal/token/domain/blacklist.go`).
 - `NewRefreshToken` constructor with token, account ID, and expiry validation — prevents creation of invalid refresh tokens (`internal/token/domain/token.go`).
@@ -25,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Pagination `page` upper bound (`maxPage = 21_000_000`) — prevents integer overflow in offset calculation (`internal/account/repository/account_repository_impl.go`).
 
 ### Changed
+- Nil receiver protection expanded to `Account` (IsDeleted, IsActive, IsSuspended, SoftDelete, Suspend, Activate), `Credential.IsVerified`, `WebAuthnCredential` (MarkUsed, IncrementSignCount, IsDeleted, SoftDelete), `AuthorizationCode` (IsExpired, VerifyPKCE), and `TokenBlacklist.IsExpired` — follows the existing nil-safety pattern established by `Credential` and `Session` (`internal/*/domain/*.go`).
+- Error messages in `account/domain` and `credential/domain` standardized to entity-prefixed format (`"account: ..."`, `"credential: ..."`) — aligns with the convention used by `token/`, `oauth2/`, and `webauthn/` domains (`internal/account/domain/account.go`, `internal/account/domain/credential.go`).
 - `accountRepositoryImpl.FindByID`, `FindByIDTx`, and `FindByIDIncludingDeletedTx` now share a single `findAccountByID` helper via the `Queryable` interface — removes ~40 lines of duplicated SQL/error-handling logic (`internal/account/repository/account_repository_impl.go`).
 - `accountValidatorAdapter.lastCleanup` changed from `time.Time` to `atomic.Int64` — fixes non-atomic read on ARM architectures where the lock-free fast-path check could observe stale values (`cmd/gosso/web_modules.go`).
 - Removed deprecated `SetTokenRevoker`, `SetMaxSessions`, `SetSessionTTL`, and `SetMaxSessionAge` methods from `SessionService` — all production callers already use `NewSessionServiceWithConfig`; test files migrated accordingly (`internal/session/service/session_service.go` + 6 test files).
@@ -73,6 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `SoftDeleteByID` and `SoftDeleteByAccountID` for federated identities now clear `profile` and `provider_user_id` PII data on soft delete — previously these fields were retained after deletion, risking PII exposure in the database (`internal/account/repository/federated_identity_repository_impl.go`).
 
 ### Fixed
+- `RoleRepository.FindAll` now caps `page` to 21,000,000 to prevent integer overflow in offset calculation — matches the existing protection in `AccountRepository.FindAll` (`internal/account/repository/role_repository_impl.go`).
 - `PasswordResetService.Wait()` now uses `sync.Once` to prevent goroutine leak on repeated calls — previously each call spawned a new goroutine that blocked indefinitely (`internal/auth/service/password_reset_service.go`).
 - `Credential.Verify()` is now idempotent — won't overwrite `VerifiedAt` on already-verified credentials (`internal/account/domain/credential.go`).
 - `ChangePassword` now rejects same-password changes to avoid unnecessary session revocation (`internal/account/service/account_service_manage.go`).
