@@ -93,10 +93,12 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 	}
 
 	authSvc := service.NewAuthServiceWithConfig(cfg.DB, cfg.AccountSvc, sessionSvc, cfg.TokenSvc, cfg.CredentialRepo, cfg.RoleRepo, cfg.Redis, cfg.Logger, cfg.Auditor, mfaSvc, passkeySvc, service.AuthServiceConfig{
-		LoginRateLimitWindow:  cfg.AuthConfig.LoginRateLimitWindow,
-		LoginMaxAttempts:      cfg.AuthConfig.LoginMaxAttempts,
-		LoginMaxAttemptsPerIP: cfg.AuthConfig.LoginMaxAttemptsPerIP,
-		MFAVerificationTTL:    cfg.AuthConfig.MFAVerificationTTL,
+		LoginRateLimitWindow:      cfg.AuthConfig.LoginRateLimitWindow,
+		LoginMaxAttempts:          cfg.AuthConfig.LoginMaxAttempts,
+		LoginMaxAttemptsPerIP:     cfg.AuthConfig.LoginMaxAttemptsPerIP,
+		MFAVerificationTTL:        cfg.AuthConfig.MFAVerificationTTL,
+		MFAAccountMaxAttempts:     cfg.AuthConfig.MFAAccountMaxAttempts,
+		MFAAccountRateLimitWindow: cfg.AuthConfig.MFAAccountRateLimitWindow,
 	})
 
 	var socialSvc *service.SocialLoginService

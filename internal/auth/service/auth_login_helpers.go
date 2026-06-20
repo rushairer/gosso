@@ -187,12 +187,12 @@ func (s *AuthService) checkIPRateLimit(ctx context.Context, ip string) error {
 // Fail-closed: if Redis is unavailable, deny the attempt.
 func (s *AuthService) checkMFAAccountRateLimit(ctx context.Context, accountID string) error {
 	key := fmt.Sprintf("mfa_attempts:%s", accountID)
-	count, incrErr := s.redis.CheckAndIncr(ctx, key, mfaAccountMaxAttempts, mfaAccountRateLimitWindow)
+	count, incrErr := s.redis.CheckAndIncr(ctx, key, s.mfaAccountMaxAttempts, s.mfaAccountRateLimitWindow)
 	if incrErr != nil {
 		s.logger.Error("Failed to check MFA account rate limit, denying attempt", zap.Error(incrErr))
 		return ErrServiceUnavailable
 	}
-	if count >= int64(mfaAccountMaxAttempts) {
+	if count >= int64(s.mfaAccountMaxAttempts) {
 		return ErrMFARateLimited
 	}
 	return nil

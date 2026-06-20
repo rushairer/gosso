@@ -75,6 +75,9 @@ auth:
     webauthn_rp_id: "localhost"
     webauthn_rp_name: "gouno-dev"
     webauthn_rp_origin: "http://localhost:3000"
+    # MFA rate limiting (0 = use default)
+    mfa_account_max_attempts: 10
+    mfa_account_rate_limit_window: 5m
 cors:
     allowed_origins:
         - "http://localhost:3000"

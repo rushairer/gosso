@@ -31,10 +31,10 @@ const (
 	defaultLoginMaxAttempts = 5
 	// defaultLoginMaxAttemptsPerIP is the default max login attempts per IP.
 	defaultLoginMaxAttemptsPerIP = 30
-	// mfaAccountMaxAttempts is the max MFA verification attempts per account within the rate limit window.
-	mfaAccountMaxAttempts = 10
-	// mfaAccountRateLimitWindow is the window for per-account MFA rate limiting.
-	mfaAccountRateLimitWindow = 5 * time.Minute
+	// mfaAccountMaxAttemptsConst is the default max MFA verification attempts per account.
+	mfaAccountMaxAttemptsConst = 10
+	// mfaAccountRateLimitWindowConst is the default window for per-account MFA rate limiting.
+	mfaAccountRateLimitWindowConst = 5 * time.Minute
 )
 
 // LoginCommand represents a username+password login request from the controller layer.
@@ -78,19 +78,23 @@ type AuthService struct {
 	logger         *zap.Logger
 
 	// Configurable security parameters (with built-in defaults)
-	loginRateLimitWindow  time.Duration
-	loginMaxAttempts      int
-	loginMaxAttemptsPerIP int
-	mfaVerificationTTL    time.Duration
+	loginRateLimitWindow    time.Duration
+	loginMaxAttempts        int
+	loginMaxAttemptsPerIP   int
+	mfaVerificationTTL      time.Duration
+	mfaAccountMaxAttempts   int
+	mfaAccountRateLimitWindow time.Duration
 }
 
 // AuthServiceConfig holds optional configuration for AuthService.
 // Zero-valued fields use package defaults.
 type AuthServiceConfig struct {
-	LoginRateLimitWindow  time.Duration // default: defaultLoginRateLimitWindow
-	LoginMaxAttempts      int           // default: defaultLoginMaxAttempts
-	LoginMaxAttemptsPerIP int           // default: defaultLoginMaxAttemptsPerIP
-	MFAVerificationTTL    time.Duration // default: defaultMFAVerificationTTL
+	LoginRateLimitWindow    time.Duration // default: defaultLoginRateLimitWindow
+	LoginMaxAttempts        int           // default: defaultLoginMaxAttempts
+	LoginMaxAttemptsPerIP   int           // default: defaultLoginMaxAttemptsPerIP
+	MFAVerificationTTL      time.Duration // default: defaultMFAVerificationTTL
+	MFAAccountMaxAttempts   int           // default: mfaAccountMaxAttempts (10)
+	MFAAccountRateLimitWindow time.Duration // default: mfaAccountRateLimitWindow (5min)
 }
 
 // NewAuthService creates a new auth service instance
@@ -139,10 +143,12 @@ func NewAuthServiceWithConfig(
 		auditor:               auditor,
 		logger:                logger,
 		passkeySvc:            passkeySvc,
-		loginRateLimitWindow:  defaultLoginRateLimitWindow,
-		loginMaxAttempts:      defaultLoginMaxAttempts,
-		loginMaxAttemptsPerIP: defaultLoginMaxAttemptsPerIP,
-		mfaVerificationTTL:    defaultMFAVerificationTTL,
+		loginRateLimitWindow:    defaultLoginRateLimitWindow,
+		loginMaxAttempts:        defaultLoginMaxAttempts,
+		loginMaxAttemptsPerIP:   defaultLoginMaxAttemptsPerIP,
+		mfaVerificationTTL:      defaultMFAVerificationTTL,
+		mfaAccountMaxAttempts:   mfaAccountMaxAttemptsConst,
+		mfaAccountRateLimitWindow: mfaAccountRateLimitWindowConst,
 	}
 	if cfg.LoginRateLimitWindow > 0 {
 		svc.loginRateLimitWindow = cfg.LoginRateLimitWindow
@@ -155,6 +161,12 @@ func NewAuthServiceWithConfig(
 	}
 	if cfg.MFAVerificationTTL > 0 {
 		svc.mfaVerificationTTL = cfg.MFAVerificationTTL
+	}
+	if cfg.MFAAccountMaxAttempts > 0 {
+		svc.mfaAccountMaxAttempts = cfg.MFAAccountMaxAttempts
+	}
+	if cfg.MFAAccountRateLimitWindow > 0 {
+		svc.mfaAccountRateLimitWindow = cfg.MFAAccountRateLimitWindow
 	}
 	return svc
 }

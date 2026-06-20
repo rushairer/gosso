@@ -159,6 +159,8 @@ type AuthConfig struct {
 	RSAKeyBits                     int           `mapstructure:"rsa_key_bits"`
 	AccountValidatorCacheTTL       time.Duration `mapstructure:"account_validator_cache_ttl"`
 	EnforceIPBinding               bool          `mapstructure:"enforce_ip_binding"`
+	MFAAccountMaxAttempts          int           `mapstructure:"mfa_account_max_attempts"`
+	MFAAccountRateLimitWindow      time.Duration `mapstructure:"mfa_account_rate_limit_window"`
 }
 
 type CORSConfig struct {
@@ -370,6 +372,9 @@ func (c *GoUnoConfig) validateAuth() error {
 	if c.AuthConfig.RSAKeyBits != 0 && c.AuthConfig.RSAKeyBits < 2048 {
 		return fmt.Errorf("auth: rsa_key_bits must be 0 (use default) or at least 2048 (got %d)", c.AuthConfig.RSAKeyBits)
 	}
+	if c.AuthConfig.MFAAccountMaxAttempts < 0 {
+		return fmt.Errorf("auth: mfa_account_max_attempts must not be negative (got %d)", c.AuthConfig.MFAAccountMaxAttempts)
+	}
 	return c.validateWebAuthn()
 }
 
@@ -426,6 +431,7 @@ func (c *GoUnoConfig) validateAuthDurations() error {
 		{"challenge_ttl", c.AuthConfig.ChallengeTTL},
 		{"login_rate_limit_window", c.AuthConfig.LoginRateLimitWindow},
 		{"password_reset_wait_timeout", c.AuthConfig.PasswordResetWaitTimeout},
+		{"mfa_account_rate_limit_window", c.AuthConfig.MFAAccountRateLimitWindow},
 	}
 	for _, check := range negativeChecks {
 		if check.value < 0 {
