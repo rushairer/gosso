@@ -125,3 +125,20 @@ func TestDeviceCode_MarkUsed_Denied(t *testing.T) {
 	err := dc.MarkUsed()
 	assert.ErrorIs(t, err, ErrDeviceCodeNotAuthorized)
 }
+
+// ──────────────────────────────────────────────
+// IsValidDeviceCodeStatus
+// ──────────────────────────────────────────────
+
+func TestIsValidDeviceCodeStatus_AllValid(t *testing.T) {
+	assert.True(t, IsValidDeviceCodeStatus(DeviceCodeStatusPending))
+	assert.True(t, IsValidDeviceCodeStatus(DeviceCodeStatusAuthorized))
+	assert.True(t, IsValidDeviceCodeStatus(DeviceCodeStatusDenied))
+	assert.True(t, IsValidDeviceCodeStatus(DeviceCodeStatusUsed))
+}
+
+func TestIsValidDeviceCodeStatus_Invalid(t *testing.T) {
+	assert.False(t, IsValidDeviceCodeStatus(""))
+	assert.False(t, IsValidDeviceCodeStatus("unknown"))
+	assert.False(t, IsValidDeviceCodeStatus("revoked"))
+}

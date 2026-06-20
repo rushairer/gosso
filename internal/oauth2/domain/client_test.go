@@ -159,3 +159,25 @@ func TestNewOAuth2Client_EmptyGrantTypes(t *testing.T) {
 	_, err := NewOAuth2Client("account-1", "Test App", "client-123", []string{})
 	assert.ErrorIs(t, err, ErrClientGrantTypesRequired)
 }
+
+// ──────────────────────────────────────────────
+// IsValidGrantType
+// ──────────────────────────────────────────────
+
+func TestIsValidGrantType_AllValid(t *testing.T) {
+	assert.True(t, IsValidGrantType("authorization_code"))
+	assert.True(t, IsValidGrantType("refresh_token"))
+	assert.True(t, IsValidGrantType("client_credentials"))
+	assert.True(t, IsValidGrantType("urn:ietf:params:oauth:grant-type:device_code"))
+}
+
+func TestIsValidGrantType_Invalid(t *testing.T) {
+	assert.False(t, IsValidGrantType(""))
+	assert.False(t, IsValidGrantType("totally_fake_grant"))
+	assert.False(t, IsValidGrantType("implicit"))
+}
+
+func TestNewOAuth2Client_InvalidGrantType(t *testing.T) {
+	_, err := NewOAuth2Client("account-1", "Test App", "client-123", []string{"authorization_code", "fake_grant"})
+	assert.ErrorIs(t, err, ErrClientInvalidGrantType)
+}

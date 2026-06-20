@@ -63,6 +63,16 @@ const (
 	DeviceCodeStatusUsed       DeviceCodeStatus = "used"
 )
 
+// IsValidDeviceCodeStatus reports whether s is a known device code status.
+func IsValidDeviceCodeStatus(s DeviceCodeStatus) bool {
+	switch s {
+	case DeviceCodeStatusPending, DeviceCodeStatusAuthorized,
+		DeviceCodeStatusDenied, DeviceCodeStatusUsed:
+		return true
+	}
+	return false
+}
+
 // DeviceCode represents an OAuth2 Device Authorization Grant code (RFC 8628).
 type DeviceCode struct {
 	DeviceCode   string           `json:"device_code"`

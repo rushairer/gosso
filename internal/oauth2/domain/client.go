@@ -3,6 +3,7 @@ package domain
 import (
 	"crypto/subtle"
 	"errors"
+	"fmt"
 	"net/url"
 	"slices"
 	"time"
@@ -117,6 +118,16 @@ const (
 	GrantTypeDeviceCode        = "urn:ietf:params:oauth:grant-type:device_code"
 )
 
+// IsValidGrantType reports whether gt is a known OAuth2 grant type.
+func IsValidGrantType(gt string) bool {
+	switch gt {
+	case GrantTypeAuthorizationCode, GrantTypeRefreshToken,
+		GrantTypeClientCredentials, GrantTypeDeviceCode:
+		return true
+	}
+	return false
+}
+
 // Error definitions
 var (
 	ErrClientNotFound               = errors.New("oauth2 client not found")
@@ -125,6 +136,7 @@ var (
 	ErrClientGrantTypesRequired     = errors.New("oauth2 client: grant_types must not be empty")
 	ErrClientAccountIDRequired      = errors.New("oauth2 client: account_id is required")
 	ErrClientConcurrentModification = errors.New("oauth2 client was modified concurrently")
+	ErrClientInvalidGrantType       = errors.New("oauth2 client: invalid grant type")
 )
 
 // NewOAuth2Client creates a new OAuth2Client with the required fields validated.
@@ -142,6 +154,11 @@ func NewOAuth2Client(accountID, name, clientID string, grantTypes []string) (*OA
 	}
 	if len(grantTypes) == 0 {
 		return nil, ErrClientGrantTypesRequired
+	}
+	for _, gt := range grantTypes {
+		if !IsValidGrantType(gt) {
+			return nil, fmt.Errorf("%w: %s", ErrClientInvalidGrantType, gt)
+		}
 	}
 	now := time.Now()
 	return &OAuth2Client{
