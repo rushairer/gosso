@@ -117,7 +117,7 @@ var (
 	ErrClientIDRequired             = errors.New("oauth2 client: client_id is required")
 	ErrClientNameRequired           = errors.New("oauth2 client: name is required")
 	ErrClientGrantTypesRequired     = errors.New("oauth2 client: grant_types must not be empty")
-	ErrAccountIDRequired            = errors.New("oauth2 client: account_id is required")
+	ErrClientAccountIDRequired      = errors.New("oauth2 client: account_id is required")
 	ErrClientConcurrentModification = errors.New("oauth2 client was modified concurrently")
 )
 
@@ -126,7 +126,7 @@ var (
 // Additional fields (RedirectURIs, Scopes, etc.) should be set after construction.
 func NewOAuth2Client(accountID, name, clientID string, grantTypes []string) (*OAuth2Client, error) {
 	if accountID == "" {
-		return nil, ErrAccountIDRequired
+		return nil, ErrClientAccountIDRequired
 	}
 	if clientID == "" {
 		return nil, ErrClientIDRequired

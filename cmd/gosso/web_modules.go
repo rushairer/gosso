@@ -74,6 +74,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		redis,
 		blacklistSvc,
 		auditor,
+		cfg.AuthConfig.EnforceIPBinding,
 		logger,
 	)
 	if err != nil {

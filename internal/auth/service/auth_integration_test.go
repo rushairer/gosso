@@ -52,7 +52,7 @@ func initAuthService(t *testing.T, e *testutil.TestEnv) *service.AuthService {
 	require.NoError(t, err)
 	blacklistSvc, err := tokenService.NewBlacklistService(e.Redis, e.Logger)
 	require.NoError(t, err)
-	tokenSvc, err := tokenService.NewTokenService(keySvc, "http://localhost:8080", 15*time.Minute, 720*time.Hour, e.Redis, blacklistSvc, nil, e.Logger)
+	tokenSvc, err := tokenService.NewTokenService(keySvc, "http://localhost:8080", 15*time.Minute, 720*time.Hour, e.Redis, blacklistSvc, nil, false, e.Logger)
 	require.NoError(t, err)
 	authMod, err := authModule.InitializeAuthModule(authModule.AuthModuleConfig{
 		DB:                    e.DB,

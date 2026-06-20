@@ -191,7 +191,7 @@ func (r *oauth2ClientRepositoryImpl) Update(ctx context.Context, tx *sql.Tx, cli
 }
 
 func (r *oauth2ClientRepositoryImpl) SoftDelete(ctx context.Context, tx *sql.Tx, id string, deletedAt time.Time) error {
-	query := `UPDATE oauth2_clients SET deleted_at = $1, updated_at = $1 WHERE id = $2 AND deleted_at IS NULL`
+	query := `UPDATE oauth2_clients SET deleted_at = $1, updated_at = $1, client_secret_hash = '' WHERE id = $2 AND deleted_at IS NULL`
 	result, err := tx.ExecContext(ctx, query, deletedAt, id)
 	if err != nil {
 		return fmt.Errorf("soft delete oauth2_client: %w", err)
@@ -209,7 +209,7 @@ func (r *oauth2ClientRepositoryImpl) SoftDelete(ctx context.Context, tx *sql.Tx,
 // SoftDeleteByAccountID soft deletes all OAuth2 clients of an account.
 // Returns nil even if zero rows are affected (idempotent for bulk delete).
 func (r *oauth2ClientRepositoryImpl) SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
-	query := `UPDATE oauth2_clients SET deleted_at = $1, updated_at = $1 WHERE account_id = $2 AND deleted_at IS NULL`
+	query := `UPDATE oauth2_clients SET deleted_at = $1, updated_at = $1, client_secret_hash = '' WHERE account_id = $2 AND deleted_at IS NULL`
 	_, err := tx.ExecContext(ctx, query, deletedAt, accountID)
 	if err != nil {
 		return fmt.Errorf("soft delete oauth2_clients by account_id: %w", err)

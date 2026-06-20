@@ -25,7 +25,7 @@ func setupTestLogoutService(t *testing.T) (*LogoutService, *tokenService.KeyServ
 	redisClient, _ := testutil.SetupTestRedis(t)
 	blacklistSvc, err := tokenService.NewBlacklistService(redisClient, logger)
 	require.NoError(t, err)
-	tokenSvc, err := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, nil, logger)
+	tokenSvc, err := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, nil, false, logger)
 	require.NoError(t, err)
 	logoutSvc := NewLogoutService(tokenSvc, nil, nil, "https://sso.example.com", logger)
 
@@ -158,7 +158,7 @@ func setupTestLogoutServiceWithSession(t *testing.T) (*LogoutService, *tokenServ
 	redisClient, _ := testutil.SetupTestRedis(t)
 	blacklistSvc, err := tokenService.NewBlacklistService(redisClient, logger)
 	require.NoError(t, err)
-	tokenSvc, err := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, nil, logger)
+	tokenSvc, err := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, nil, false, logger)
 	require.NoError(t, err)
 	sessionSvc, err := sessionService.NewSessionServiceWithConfig(redisClient, logger, sessionService.SessionConfig{
 		TokenRevoker: tokenSvc,
@@ -220,7 +220,7 @@ func TestLogoutByAccountID_SessionServiceError(t *testing.T) {
 	redisClient, _ := testutil.SetupTestRedis(t)
 	blacklistSvc, err := tokenService.NewBlacklistService(redisClient, logger)
 	require.NoError(t, err)
-	tokenSvc, err := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, nil, logger)
+	tokenSvc, err := tokenService.NewTokenService(keySvc, "https://sso.example.com", 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, nil, false, logger)
 	require.NoError(t, err)
 
 	// Create session service WITHOUT setting tokenRevoker.

@@ -142,6 +142,7 @@ func setupTestIDTokenService(t *testing.T) (*IDTokenService, func()) {
 		redisClient,
 		blacklist,
 		nil,
+		false,
 		logger,
 	)
 	require.NoError(t, err)

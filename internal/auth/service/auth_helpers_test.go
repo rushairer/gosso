@@ -259,6 +259,7 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 		redisClient,
 		blacklistSvc,
 		nil,
+		false,
 		logger,
 	)
 	if err != nil {

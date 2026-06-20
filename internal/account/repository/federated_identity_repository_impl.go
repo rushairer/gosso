@@ -79,39 +79,26 @@ func findFederatedIdentityByProvider(ctx context.Context, queryRow func(context.
 	return identity, nil
 }
 
+const federatedIdentityByAccountIDQuery = `
+	SELECT id, account_id, provider, provider_user_id, profile, created_at, updated_at, deleted_at
+	FROM federated_identities
+	WHERE account_id = $1 AND deleted_at IS NULL
+	ORDER BY created_at DESC
+`
+
 // FindByAccountID finds all federated identities by account ID
 func (r *federatedIdentityRepositoryImpl) FindByAccountID(ctx context.Context, accountID string) ([]*domain.FederatedIdentity, error) {
-	query := `
-		SELECT id, account_id, provider, provider_user_id, profile, created_at, updated_at, deleted_at
-		FROM federated_identities
-		WHERE account_id = $1 AND deleted_at IS NULL
-		ORDER BY created_at DESC
-	`
-
-	rows, err := r.db.QueryContext(ctx, query, accountID)
-	if err != nil {
-		return nil, fmt.Errorf("query federated identities: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	identities, err := scanFederatedIdentities(rows)
-	if err != nil {
-		return nil, err
-	}
-
-	return identities, nil
+	return findFederatedIdentitiesByAccountID(ctx, r.db.QueryContext, accountID)
 }
 
 // FindByAccountIDTx finds all federated identities by account ID within a transaction.
 func (r *federatedIdentityRepositoryImpl) FindByAccountIDTx(ctx context.Context, tx *sql.Tx, accountID string) ([]*domain.FederatedIdentity, error) {
-	query := `
-		SELECT id, account_id, provider, provider_user_id, profile, created_at, updated_at, deleted_at
-		FROM federated_identities
-		WHERE account_id = $1 AND deleted_at IS NULL
-		ORDER BY created_at DESC
-	`
+	return findFederatedIdentitiesByAccountID(ctx, tx.QueryContext, accountID)
+}
 
-	rows, err := tx.QueryContext(ctx, query, accountID)
+// findFederatedIdentitiesByAccountID is the shared implementation for both transactional and non-transactional variants.
+func findFederatedIdentitiesByAccountID(ctx context.Context, queryFunc func(context.Context, string, ...any) (*sql.Rows, error), accountID string) ([]*domain.FederatedIdentity, error) {
+	rows, err := queryFunc(ctx, federatedIdentityByAccountIDQuery, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("query federated identities: %w", err)
 	}

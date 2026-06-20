@@ -137,7 +137,7 @@ func TestNewOAuth2Client_Success(t *testing.T) {
 
 func TestNewOAuth2Client_MissingAccountID(t *testing.T) {
 	_, err := NewOAuth2Client("", "Test App", "client-123", []string{"authorization_code"})
-	assert.ErrorIs(t, err, ErrAccountIDRequired)
+	assert.ErrorIs(t, err, ErrClientAccountIDRequired)
 }
 
 func TestNewOAuth2Client_MissingClientID(t *testing.T) {

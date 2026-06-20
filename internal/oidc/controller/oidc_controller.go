@@ -141,6 +141,11 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 		return
 	}
 
+	// CSRF protection for id_token_hint (without Bearer) is handled by CSRFMiddleware
+	// applied at the router layer: POST without a Bearer token → CSRF cookie validated.
+	// No additional check is needed here — the middleware enforces double-submit cookie
+	// validation before this handler runs.
+
 	// Try logout paths in order: id_token_hint → Bearer token → anonymous
 	var clientID string
 	logoutPerformed := false

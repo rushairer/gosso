@@ -210,6 +210,12 @@ type AuthConfig struct {
 	// AccountValidatorCacheTTL is the TTL for the account validation cache
 	// used by the OAuth2 token endpoint. 0 = 5s default.
 	AccountValidatorCacheTTL time.Duration `mapstructure:"account_validator_cache_ttl"`
+
+	// EnforceIPBinding rejects refresh token creation when the client IP is unavailable.
+	// When true, the AuditMetadataMiddleware MUST populate the IP in the request context;
+	// otherwise token creation fails with an error. Defaults to false for backward compatibility.
+	// Recommended: true in production deployments behind a properly configured reverse proxy.
+	EnforceIPBinding bool `mapstructure:"enforce_ip_binding"`
 }
 
 // CORSConfig configures Cross-Origin Resource Sharing (CORS) headers.

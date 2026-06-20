@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `db.Queryable` interface abstracting `*sql.DB` and `*sql.Tx` for query/exec operations — eliminates duplication between standalone and transactional repository methods (`internal/db/queryable.go`).
 - `NewTokenBlacklist` constructor with JTI and expiry validation — prevents creation of invalid blacklist entries (`internal/token/domain/blacklist.go`).
 - `NewRefreshToken` constructor with token, account ID, and expiry validation — prevents creation of invalid refresh tokens (`internal/token/domain/token.go`).
+- `AuthConfig.EnforceIPBinding` config flag — when true, rejects refresh token creation when client IP is unavailable, closing a defense-in-depth gap in IP-based theft detection (`config/config.go`, `internal/token/service/token_service.go`).
+- `ErrRoleAssignmentNotFound` sentinel error — distinguishes "role not assigned to account" from "role not found" in `RemoveRoleFromAccount` (`internal/account/repository/role_repository.go`).
+- `ErrSessionAccountIDRequired` sentinel error and `NewSession` input validation — prevents creation of sessions without an account ID (`internal/session/domain/session.go`).
+- `ErrDeviceAccountIDRequired` sentinel error and `DeviceCode.Authorize` validation — prevents authorization of device codes without an account ID (`internal/oauth2/domain/device_code.go`).
+- `ErrConsentDuplicateScope` sentinel error and scope uniqueness validation in `NewConsent` — prevents duplicate scopes in consent records (`internal/oauth2/domain/consent.go`).
+- `ErrClientAccountIDRequired` sentinel error replacing `ErrAccountIDRequired` in `oauth2/domain` — eliminates name collision with the identically-named error in `account/domain` (`internal/oauth2/domain/client.go`).
 
 ### Changed
 - `accountRepositoryImpl.FindByID`, `FindByIDTx`, and `FindByIDIncludingDeletedTx` now share a single `findAccountByID` helper via the `Queryable` interface — removes ~40 lines of duplicated SQL/error-handling logic (`internal/account/repository/account_repository_impl.go`).
@@ -22,9 +28,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `VerifyFirstUnverifiedTOTP` now parameterizes the `'totp'` credential type as a SQL argument instead of a hardcoded string literal (`internal/account/repository/credential_repository_impl.go`).
 - `BlacklistService.RevokeToken` and `RotateRefreshToken` now use domain constructors (`NewTokenBlacklist`, `NewRefreshToken`) for validation (`internal/token/service/blacklist_service.go`, `internal/token/service/token_service_revoke.go`).
 - `Session.Metadata` JSON tag changed from `"metadata,omitempty"` to `"metadata"` — `omitempty` on a non-nil empty map (`make(map[string]any)`) has no effect and was misleading (`internal/session/domain/session.go`).
-- `AccountService.SetOptions` comment now explicitly documents it is NOT goroutine-safe and must be called during initialization (`internal/account/service/account_service.go`).
+- `AccountService.SetOptions` now uses `sync.Once` for goroutine-safe configuration — prevents race conditions if called concurrently during initialization (`internal/account/service/account_service.go`).
+- `NewSession` now validates `accountID` is non-empty and returns `(*Session, error)` — aligns with the validation pattern used by other domain constructors (`internal/session/domain/session.go`).
+- `findFederatedIdentitiesByAccountID` extracted as shared helper for `FindByAccountID`/`FindByAccountIDTx` — removes duplicated SQL and scan logic following the existing `findFederatedIdentityByProvider` pattern (`internal/account/repository/federated_identity_repository_impl.go`).
+- `Consent` struct definition moved before `NewConsent` constructor — follows conventional Go ordering (`internal/oauth2/domain/consent.go`).
+- `DeviceCode` sentinel errors consolidated into a single `var` block — removes split declaration across two blocks (`internal/oauth2/domain/device_code.go`).
+- `ClearLoginRateLimitsByUsername` SCAN loop now has a maximum iteration guard of 1000 — prevents infinite loops if Redis cursor never returns 0 (`internal/auth/service/auth_login.go`).
 
 ### Security
+- Removed CSRF token leakage in `X-CSRF-Token` response headers — SPAs should read the token directly from the cookie; response headers doubled the attack surface if an XSS vulnerability existed (`middleware/csrf.go`).
+- Refresh token creation now supports IP binding enforcement via `AuthConfig.EnforceIPBinding` — when enabled, rejects token creation when client IP is unavailable, closing a defense-in-depth gap (`config/config.go`, `internal/token/service/token_service.go`).
+- OIDC logout now documents that CSRF protection for `id_token_hint` (without Bearer token) is enforced by the CSRFMiddleware at the router layer — `POST /oidc/logout` without a Bearer token requires a valid CSRF cookie (`internal/oidc/controller/oidc_controller.go`).
+- MFA token blacklisting now fails closed — if blacklisting fails after MFA verification, the login is rejected instead of proceeding with a potentially reusable MFA token (`internal/auth/service/auth_login.go`).
+- OAuth2 client soft-delete now clears `client_secret_hash` — previously the secret hash was retained after deletion, risking secret exposure in the database (`internal/oauth2/repository/client_repository_impl.go`).
+- WebAuthn credential soft-delete now clears `public_key` and `credential_id` — previously these fields were retained after deletion, risking credential exposure in the database (`internal/auth/repository/webauthn_repository_impl.go`).
 - `FederatedIdentity.UpdateProfile` now validates profile JSON size against `maxProfileSize` (4096 bytes) — prevents storage of excessively large payloads on update, matching the existing creation-time check (`internal/account/domain/federated_identity.go`).
 - `ClearLoginRateLimitsByUsername` error messages now mask the Redis key with `MaskRateLimitKey` — prevents PII (username) leakage in error logs (`internal/auth/service/auth_login.go`).
 - Social login audit log in `loginExistingUser` now uses the explicit `ip`/`userAgent` parameters instead of re-extracting from context — ensures consistent IP source when context values differ (`internal/auth/service/social_login_service.go`).
@@ -38,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `BigEndianBytes` now returns an error instead of panicking on negative input — callers get graceful error handling instead of runtime panics (`internal/utility/bigendian.go`, `internal/oidc/service/jwks_service.go`).
 - `OAuth2Client.NewOAuth2Client` now initializes `Metadata` and `Scopes` fields — previously nil map/slice could cause panic on write (`internal/oauth2/domain/client.go`).
 - `DeviceCode.MarkUsed` now returns `ErrDeviceCodeAlreadyUsed` for already-used codes instead of the generic `ErrDeviceCodeNotAuthorized` — improves error semantics for debugging (`internal/oauth2/domain/device_code.go`).
+- Consent `SoftDelete` now also updates `updated_at` — previously `updated_at` was stale after soft-deleting a consent record, inconsistent with every other soft-delete in the codebase (`internal/oauth2/repository/consent_repository_impl.go`).
 - `ListAccounts` now clamps pagination parameters to valid ranges (page ≥ 1, pageSize in [1, 100]) — prevents invalid queries with negative or excessively large page sizes (`internal/account/service/account_service_manage.go`).
 - `SaveConsent` now validates consent is non-nil and required fields (AccountID, ClientID) are non-empty — prevents nil pointer dereference and invalid consent records (`internal/oauth2/service/consent_service.go`).
 - `AuditRecord.CorrelationID` JSON tag changed from `"tx_id"` to `"correlation_id"` — aligns JSON output with field semantics (DB column name remains `tx_id`) (`internal/audit/domain/audit.go`).

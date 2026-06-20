@@ -182,10 +182,12 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	}
 
 	// 4. Blacklist MFA token after successful verification and account validation
-	// to prevent reuse before session creation.
+	// to prevent reuse before session creation. Fail-closed: if blacklisting fails,
+	// reject the login to prevent potential MFA token reuse.
 	if err := s.blacklistMFAToken(ctx, claims); err != nil {
-		s.logger.Error("Failed to blacklist MFA token after verification",
+		s.logger.Error("Failed to blacklist MFA token after verification — rejecting login for safety",
 			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.String("jti", utility.MaskOpaqueID(claims.ID)), zap.Error(err))
+		return nil, ErrInvalidCredentials
 	}
 
 	// 5. Complete login (session, tokens, rate limit clear, audit)
@@ -339,7 +341,8 @@ func (s *AuthService) ClearLoginRateLimitsByUsername(ctx context.Context, userna
 	pattern := fmt.Sprintf("login_attempts:*:%s", strings.ToLower(username))
 	cursor := uint64(0)
 	var firstErr error
-	for {
+	const maxIterations = 1000
+	for i := 0; i < maxIterations; i++ {
 		keys, nextCursor, err := s.redis.ScanKeys(ctx, cursor, pattern, 100)
 		if err != nil {
 			s.logger.Warn("Failed to scan login rate limit keys during cleanup",

@@ -244,7 +244,7 @@ func (r *roleRepositoryImpl) RemoveRoleFromAccount(ctx context.Context, tx *sql.
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("%w: account=%s role=%s", ErrRoleNotFound, accountID, roleID)
+		return fmt.Errorf("%w: account=%s role=%s", ErrRoleAssignmentNotFound, accountID, roleID)
 	}
 
 	return nil

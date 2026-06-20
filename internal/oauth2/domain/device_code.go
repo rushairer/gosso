@@ -18,6 +18,9 @@ var (
 	ErrDeviceCodeAlreadyDenied     = errors.New("device code: already denied")
 	ErrDeviceCodeAlreadyUsed       = errors.New("device code: already used")
 	ErrDeviceCodeNotAuthorized     = errors.New("device code: not authorized")
+	ErrDeviceAccountIDRequired     = errors.New("device code: account_id is required")
+	ErrDeviceCodeExpired           = errors.New("device code expired")
+	ErrSlowDown                    = errors.New("slow down")
 )
 
 // NewDeviceCode creates a new DeviceCode with the required fields.
@@ -91,6 +94,9 @@ func (d *DeviceCode) IsPending() bool {
 
 // Authorize transitions the device code from pending to authorized.
 func (d *DeviceCode) Authorize(accountID string) error {
+	if accountID == "" {
+		return ErrDeviceAccountIDRequired
+	}
 	if d.Status == DeviceCodeStatusAuthorized {
 		return ErrDeviceCodeAlreadyAuthorized
 	}
@@ -132,9 +138,3 @@ func (d *DeviceCode) MarkUsed() error {
 	d.Status = DeviceCodeStatusUsed
 	return nil
 }
-
-// Sentinel errors for device code operations.
-var (
-	ErrDeviceCodeExpired = errors.New("device code expired")
-	ErrSlowDown          = errors.New("slow down")
-)

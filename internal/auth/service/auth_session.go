@@ -24,8 +24,8 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	// 2. Verify IP binding — reject refresh from a different IP to prevent token theft.
 	// NOTE: If the token was generated without an IP (oldRT.IP == ""), the check is skipped.
 	// This is a known degradation path: if an upstream middleware failure causes IP loss at
-	// token creation time, the resulting token will never be IP-protected. A stricter fix
-	// (e.g. enforceIPBinding flag in TokenService) is left for a future architecture change.
+	// token creation time, the resulting token will never be IP-protected. In production,
+	// enable AuthConfig.EnforceIPBinding to reject token creation when IP is unavailable.
 	if oldRT.IP != "" {
 		currentIP := audit.IPFromContext(ctx)
 		if currentIP == "" {

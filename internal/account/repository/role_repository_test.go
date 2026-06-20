@@ -252,8 +252,8 @@ func TestRoleRepo_RemoveRoleFromAccount_NotFound(t *testing.T) {
 	})
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "role not found")
-	assert.True(t, errors.Is(err, ErrRoleNotFound))
+	assert.Contains(t, err.Error(), "role assignment not found")
+	assert.True(t, errors.Is(err, ErrRoleAssignmentNotFound))
 }
 
 func TestRoleRepo_SoftDeleteRolesByAccountID(t *testing.T) {

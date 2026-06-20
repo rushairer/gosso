@@ -140,7 +140,7 @@ func (r *webAuthnCredentialRepositoryImpl) UpdateCredential(ctx context.Context,
 }
 
 func (r *webAuthnCredentialRepositoryImpl) SoftDeleteCredential(ctx context.Context, tx *sql.Tx, id string, deletedAt time.Time) error {
-	query := `UPDATE webauthn_credentials SET deleted_at = $2, updated_at = $2 WHERE id = $1 AND deleted_at IS NULL`
+	query := `UPDATE webauthn_credentials SET deleted_at = $2, updated_at = $2, public_key = '', credential_id = '' WHERE id = $1 AND deleted_at IS NULL`
 	result, err := tx.ExecContext(ctx, query, id, deletedAt)
 	if err != nil {
 		return fmt.Errorf("soft delete webauthn credential: %w", err)
@@ -156,7 +156,7 @@ func (r *webAuthnCredentialRepositoryImpl) SoftDeleteCredential(ctx context.Cont
 }
 
 func (r *webAuthnCredentialRepositoryImpl) SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
-	query := `UPDATE webauthn_credentials SET deleted_at = $2, updated_at = $2 WHERE account_id = $1 AND deleted_at IS NULL`
+	query := `UPDATE webauthn_credentials SET deleted_at = $2, updated_at = $2, public_key = '', credential_id = '' WHERE account_id = $1 AND deleted_at IS NULL`
 	_, err := tx.ExecContext(ctx, query, accountID, deletedAt)
 	if err != nil {
 		return fmt.Errorf("soft delete webauthn credentials by account_id: %w", err)

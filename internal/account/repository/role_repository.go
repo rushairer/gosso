@@ -11,7 +11,8 @@ import (
 
 // Sentinel errors for repository operations
 var (
-	ErrRoleNotFound = errors.New("role not found")
+	ErrRoleNotFound             = errors.New("role not found")
+	ErrRoleAssignmentNotFound   = errors.New("role assignment not found")
 )
 
 // RoleRepository defines the interface for role repository

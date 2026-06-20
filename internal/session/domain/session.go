@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +12,9 @@ import (
 type SessionValidator interface {
 	ValidateSession(ctx context.Context, sessionID string) (*Session, error)
 }
+
+// ErrSessionAccountIDRequired is returned when creating a session without an account ID.
+var ErrSessionAccountIDRequired = errors.New("session: account_id is required")
 
 // Session is the session entity.
 type Session struct {
@@ -27,7 +31,11 @@ type Session struct {
 }
 
 // NewSession creates a new session with the given parameters.
-func NewSession(accountID, username, ip, userAgent string, mfaVerified bool) *Session {
+// Validates that accountID is non-empty.
+func NewSession(accountID, username, ip, userAgent string, mfaVerified bool) (*Session, error) {
+	if accountID == "" {
+		return nil, ErrSessionAccountIDRequired
+	}
 	now := time.Now()
 	return &Session{
 		ID:           uuid.New().String(),
@@ -39,7 +47,7 @@ func NewSession(accountID, username, ip, userAgent string, mfaVerified bool) *Se
 		CreatedAt:    now,
 		LastActiveAt: now,
 		Metadata:     make(map[string]any),
-	}
+	}, nil
 }
 
 // IsExpired reports whether the session has expired.

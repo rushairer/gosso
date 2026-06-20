@@ -45,14 +45,15 @@ var storeRefreshTokenScript = redis.NewScript(`
 
 // TokenService JWT and refresh token service
 type TokenService struct {
-	keySvc        *KeyService
-	issuer        string
-	accessExpiry  time.Duration
-	refreshExpiry time.Duration
-	redis         *cache.RedisClient
-	blacklist     *BlacklistService
-	auditor       *auditService.Auditor
-	logger        *zap.Logger
+	keySvc           *KeyService
+	issuer           string
+	accessExpiry     time.Duration
+	refreshExpiry    time.Duration
+	redis            *cache.RedisClient
+	blacklist        *BlacklistService
+	auditor          *auditService.Auditor
+	enforceIPBinding bool
+	logger           *zap.Logger
 }
 
 // NewTokenService creates a new token service instance.
@@ -65,6 +66,7 @@ func NewTokenService(
 	redis *cache.RedisClient,
 	blacklist *BlacklistService,
 	auditor *auditService.Auditor,
+	enforceIPBinding bool,
 	logger *zap.Logger,
 ) (*TokenService, error) {
 	logger = utility.EnsureLogger(logger)
@@ -85,14 +87,15 @@ func NewTokenService(
 		return nil, errors.New("token service: refreshExpiry must be positive")
 	}
 	return &TokenService{
-		keySvc:        keySvc,
-		issuer:        issuer,
-		accessExpiry:  accessExpiry,
-		refreshExpiry: refreshExpiry,
-		redis:         redis,
-		blacklist:     blacklist,
-		auditor:       auditor,
-		logger:        logger,
+		keySvc:           keySvc,
+		issuer:           issuer,
+		accessExpiry:     accessExpiry,
+		refreshExpiry:    refreshExpiry,
+		redis:            redis,
+		blacklist:        blacklist,
+		auditor:          auditor,
+		enforceIPBinding: enforceIPBinding,
+		logger:           logger,
 	}, nil
 }
 
@@ -180,12 +183,12 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 	rt.ExpiresAt = now.Add(s.refreshExpiry)
 	rt.CreatedAt = now
 
-	// KNOWN LIMITATION: When IP is empty (e.g. missing audit metadata middleware),
-	// the token is still created. The IP binding check in RefreshTokens will skip
-	// validation for IP-less tokens, effectively disabling theft detection for them.
-	// A production-hardened fix would add an enforceIPBinding config flag to reject
-	// token creation when IP is empty, but that requires config plumbing beyond this scope.
+	// When IP binding enforcement is enabled, reject token creation when IP is empty.
+	// Without enforcement, log a warning — IP-based theft detection will be unavailable.
 	if rt.IP == "" {
+		if s.enforceIPBinding {
+			return nil, errors.New("refresh token: IP binding required but client IP is unavailable; check AuditMetadataMiddleware")
+		}
 		s.logger.Warn("Generating refresh token without IP binding; IP-based theft detection will be unavailable",
 			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 	}

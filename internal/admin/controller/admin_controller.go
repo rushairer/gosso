@@ -30,6 +30,7 @@ var adminDeleteAccountErrorMap = []controllerutil.ErrorRule{
 var adminRoleErrorMap = []controllerutil.ErrorRule{
 	{Sentinel: accountService.ErrAccountNotActive, Mapping: controllerutil.ErrorMapping{Status: http.StatusConflict, Message: "account is not active"}},
 	{Sentinel: accountRepository.ErrRoleNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "role not found"}},
+	{Sentinel: accountRepository.ErrRoleAssignmentNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "role assignment not found"}},
 }
 
 // AdminController handles admin operations

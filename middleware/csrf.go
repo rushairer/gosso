@@ -133,8 +133,8 @@ func setCSRFCookie(ctx *gin.Context, cookieName string, secure bool, maxAge time
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	// Also return in response header for SPA consumption
-	ctx.Header(csrfHeaderName, cookie)
+	// Do NOT return the CSRF token in a response header. SPAs should read it
+	// directly from the cookie (HttpOnly=false is required for double-submit cookie).
 }
 
 // rotateCSRFCookie generates a new CSRF token and replaces the existing cookie.
@@ -156,7 +156,7 @@ func rotateCSRFCookie(ctx *gin.Context, cookieName string, secure bool, logger *
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode, // See setCSRFCookie for rationale
 	})
-	ctx.Header(csrfHeaderName, newToken)
+		// Do NOT return the rotated token in a response header — SPAs read from cookie.
 }
 
 // generateCSRFToken generates a cryptographically secure random CSRF token.

@@ -401,7 +401,7 @@ func setupTestTokenService(t *testing.T, keySvc *tokenService.KeyService, issuer
 		blacklistSvc, err = tokenService.NewBlacklistService(redisClient, zap.NewNop())
 		require.NoError(t, err)
 	}
-	tokenSvc, err := tokenService.NewTokenService(keySvc, issuer, 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, nil, zap.NewNop())
+	tokenSvc, err := tokenService.NewTokenService(keySvc, issuer, 15*time.Minute, 720*time.Hour, redisClient, blacklistSvc, nil, false, zap.NewNop())
 	require.NoError(t, err)
 	return tokenSvc
 }

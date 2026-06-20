@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -118,6 +119,7 @@ type accountServiceImpl struct {
 	oauth2ClientDeleter     OAuth2ClientDeleter
 	consentCacheInvalidator ConsentCacheInvalidator
 	logger                  *zap.Logger
+	optionsOnce             sync.Once
 }
 
 // auditLogSync writes an audit record synchronously and logs any error.
@@ -159,13 +161,17 @@ func NewAccountService(
 }
 
 // SetOptions configures optional cross-module dependencies.
-// NOT goroutine-safe. Must be called during initialization before any concurrent access.
+// Thread-safe: uses sync.Once to ensure configuration happens exactly once.
+// Subsequent calls are silently ignored.
 func (s *accountServiceImpl) SetOptions(opts *AccountServiceOptions) {
-	if opts != nil {
+	if opts == nil {
+		return
+	}
+	s.optionsOnce.Do(func() {
 		s.sessionRevoker = opts.SessionRevoker
 		s.oauth2ClientDeleter = opts.OAuth2ClientDeleter
 		s.consentCacheInvalidator = opts.ConsentCacheInvalidator
-	}
+	})
 }
 
 // requireActiveAccount looks up an account by ID and returns it only if it exists and is active.

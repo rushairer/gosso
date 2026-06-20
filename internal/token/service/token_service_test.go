@@ -37,6 +37,7 @@ func setupTestTokenService(t *testing.T) (*TokenService, func()) {
 		redisClient,
 		blacklist,
 		nil,
+		false,
 		logger,
 	)
 	require.NoError(t, err)
@@ -46,7 +47,7 @@ func setupTestTokenService(t *testing.T) (*TokenService, func()) {
 
 func TestNewTokenService_NilInputs(t *testing.T) {
 	logger := zap.NewNop()
-	_, err := NewTokenService(nil, "http://localhost:8080", 15*time.Minute, 7*24*time.Hour, nil, nil, nil, logger)
+	_, err := NewTokenService(nil, "http://localhost:8080", 15*time.Minute, 7*24*time.Hour, nil, nil, nil, false, logger)
 	assert.Error(t, err)
 }
 

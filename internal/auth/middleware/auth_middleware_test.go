@@ -52,6 +52,7 @@ func setupRealTokenService(t *testing.T) (*tokenService.TokenService, func()) {
 		redisClient,
 		blacklist,
 		nil,
+		false,
 		logger,
 	)
 	require.NoError(t, err)
