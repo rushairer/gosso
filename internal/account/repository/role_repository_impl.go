@@ -154,6 +154,13 @@ func (r *roleRepositoryImpl) FindAll(ctx context.Context, page, pageSize int) ([
 	if pageSize < 1 || pageSize > MaxPageSize {
 		pageSize = 20
 	}
+	// Cap page to prevent integer overflow in offset calculation.
+	// With MaxPageSize=100, this limits offset to ~2.1 billion which is
+	// well within int range even on 32-bit platforms.
+	const maxPage = 21_000_000
+	if page > maxPage {
+		page = maxPage
+	}
 	offset := (page - 1) * pageSize
 
 	var total int
