@@ -9,6 +9,7 @@ on:
 env:
   GO_VERSION: "1.26"
   COVERAGE_MIN: "60"
+  TEST_POSTGRES_PASSWORD: "gosso_test_password"
 
 jobs:
   lint:
@@ -141,7 +142,7 @@ jobs:
         env:
           POSTGRES_DB: gosso_test
           POSTGRES_USER: gosso
-          POSTGRES_PASSWORD: ${{ secrets.TEST_POSTGRES_PASSWORD }}
+          POSTGRES_PASSWORD: ${{ env.TEST_POSTGRES_PASSWORD }}
         ports:
           - 5434:5432
         options: >-
@@ -171,7 +172,7 @@ jobs:
       - name: Run integration tests
         run: go test -p 1 -tags=integration -v -count=1 -timeout=120s ./internal/auth/service/ ./internal/session/service/ ./internal/token/service/ ./internal/account/ ./middleware/
         env:
-          GOUNO_DATABASE_DRIVERS_POSTGRES_DSN: "host=127.0.0.1 user=gosso password=${{ secrets.TEST_POSTGRES_PASSWORD }} dbname=gosso_test port=5434 sslmode=disable"
+          GOUNO_DATABASE_DRIVERS_POSTGRES_DSN: "host=127.0.0.1 user=gosso password=${{ env.TEST_POSTGRES_PASSWORD }} dbname=gosso_test port=5434 sslmode=disable"
           GOUNO_REDIS_DSN: "redis://127.0.0.1:6381/0"
 
   migration-test:
@@ -185,7 +186,7 @@ jobs:
         env:
           POSTGRES_DB: gosso_test
           POSTGRES_USER: gosso
-          POSTGRES_PASSWORD: ${{ secrets.TEST_POSTGRES_PASSWORD }}
+          POSTGRES_PASSWORD: ${{ env.TEST_POSTGRES_PASSWORD }}
         ports:
           - 5434:5432
         options: >-
@@ -204,7 +205,7 @@ jobs:
 
       - name: Test migration up/down/up cycle
         run: |
-          DATABASE_URL="postgres://gosso:${{ secrets.TEST_POSTGRES_PASSWORD }}@127.0.0.1:5434/gosso_test?sslmode=disable"
+          DATABASE_URL="postgres://gosso:${{ env.TEST_POSTGRES_PASSWORD }}@127.0.0.1:5434/gosso_test?sslmode=disable"
           echo "▶ Migrate up (all)..."
           migrate -path db/migrations -database "$DATABASE_URL" up
           echo "▶ Migrate down (all)..."
@@ -298,7 +299,7 @@ jobs:
             .
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: gosso-scan:${{ github.sha }}
           format: table
