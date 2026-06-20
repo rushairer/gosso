@@ -110,6 +110,12 @@ func (s *TokenService) GenerateAccessToken(claims *domain.AccessTokenClaims) (st
 	clonedClaims.Subject = clonedClaims.AccountID
 	clonedClaims.IssuedAt = jwt.NewNumericDate(now)
 	clonedClaims.ExpiresAt = jwt.NewNumericDate(now.Add(s.accessExpiry))
+	if clonedClaims.ClientID != "" && len(clonedClaims.Audience) == 0 {
+		// OAuth access tokens are client-bound. Mirroring client_id into aud gives
+		// downstream validators a standards-based audience claim to enforce and
+		// prevents malformed client-bound tokens from omitting audience entirely.
+		clonedClaims.Audience = jwt.ClaimStrings{clonedClaims.ClientID}
+	}
 
 	return s.signToken(&clonedClaims, "access token")
 }
@@ -129,6 +135,9 @@ func (s *TokenService) GenerateShortLivedToken(claims *domain.AccessTokenClaims)
 	clonedClaims.IssuedAt = jwt.NewNumericDate(now)
 	if clonedClaims.ExpiresAt == nil || clonedClaims.ExpiresAt.IsZero() {
 		clonedClaims.ExpiresAt = jwt.NewNumericDate(now.Add(s.accessExpiry))
+	}
+	if clonedClaims.ClientID != "" && len(clonedClaims.Audience) == 0 {
+		clonedClaims.Audience = jwt.ClaimStrings{clonedClaims.ClientID}
 	}
 
 	// Enforce maximum TTL for short-lived tokens to prevent callers from
@@ -213,7 +222,7 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 	tokenHash := domain.HashToken(tokenString)
 	if err := s.redis.RunScript(ctx, storeRefreshTokenScript,
 		[]string{key, sessionKey}, data, ttlSecs, tokenHash,
-		).Err(); err != nil {
+	).Err(); err != nil {
 		s.logger.Error("Failed to store refresh token (atomic)", zap.Error(err))
 		return nil, fmt.Errorf("store refresh token: %w", err)
 	}
