@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/rushairer/gosso/config"
 
@@ -18,7 +19,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const migrationAdvisoryLockKey int64 = 6742767655786865513 // stable key for "gosso:migrate"
+const (
+	migrationAdvisoryLockKey int64 = 6742767655786865513 // stable key for "gosso:migrate"
+	defaultMigrationLockTimeout   = 5 * time.Minute
+)
 
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
@@ -78,6 +82,7 @@ func init() {
 	migrateCmd.PersistentFlags().StringP("env", "e", "production", "env: development, test, production")
 	migrateCmd.PersistentFlags().StringP("migrations_path", "m", "./db/migrations", "migrations directory path")
 	migrateCmd.PersistentFlags().StringP("schema", "s", "public", "database schema name")
+	migrateCmd.PersistentFlags().Duration("lock-timeout", defaultMigrationLockTimeout, "maximum time to wait for the PostgreSQL advisory migration lock")
 
 	// Safety flag for destructive operations
 	migrateDownCmd.Flags().Bool("force", false, "required to confirm destructive down migration")
@@ -167,20 +172,25 @@ func closeMigrate(m *migrate.Migrate) {
 // acquireMigrationLock holds a PostgreSQL advisory lock on a dedicated connection.
 // The lock serializes migrations across concurrently starting app instances and is
 // released either explicitly or when the connection closes.
-func acquireMigrationLock(db *sql.DB) (func(), error) {
-	ctx := context.Background()
-	conn, err := db.Conn(ctx)
+func acquireMigrationLock(db *sql.DB, timeout time.Duration) (func(), error) {
+	if timeout <= 0 {
+		timeout = defaultMigrationLockTimeout
+	}
+
+	conn, err := db.Conn(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("acquire migration lock connection: %w", err)
 	}
 
-	if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", migrationAdvisoryLockKey); err != nil {
+	lockCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if _, err := conn.ExecContext(lockCtx, "SELECT pg_advisory_lock($1)", migrationAdvisoryLockKey); err != nil {
 		_ = conn.Close()
-		return nil, fmt.Errorf("acquire migration advisory lock: %w", err)
+		return nil, fmt.Errorf("acquire migration advisory lock within %s: %w", timeout, err)
 	}
 
 	return func() {
-		if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", migrationAdvisoryLockKey); err != nil {
+		if _, err := conn.ExecContext(context.Background(), "SELECT pg_advisory_unlock($1)", migrationAdvisoryLockKey); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: Failed to release migration advisory lock: %v\n", err)
 		}
 		if err := conn.Close(); err != nil {
@@ -198,7 +208,11 @@ func withMigrateResources(cmd *cobra.Command, fn func(*migrate.Migrate) error) {
 		os.Exit(1)
 	}
 
-	unlock, lockErr := acquireMigrationLock(db)
+	lockTimeout, err := cmd.Flags().GetDuration("lock-timeout")
+	if err != nil || lockTimeout <= 0 {
+		lockTimeout = defaultMigrationLockTimeout
+	}
+	unlock, lockErr := acquireMigrationLock(db, lockTimeout)
 	if lockErr != nil {
 		closeMigrate(m)
 		_ = db.Close()
@@ -206,11 +220,21 @@ func withMigrateResources(cmd *cobra.Command, fn func(*migrate.Migrate) error) {
 		os.Exit(1)
 	}
 
+	cleaned := false
+	cleanup := func() {
+		if cleaned {
+			return
+		}
+		cleaned = true
+		unlock()
+		closeMigrate(m)
+		_ = db.Close()
+	}
+	defer cleanup()
+
 	// Cleanup always runs — no deferred log.Fatal to skip it.
 	err = fn(m)
-	unlock()
-	closeMigrate(m)
-	_ = db.Close()
+	cleanup()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
