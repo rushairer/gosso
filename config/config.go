@@ -249,14 +249,23 @@ func (c *GoUnoConfig) validateWebServer() error {
 }
 
 func validateRateLimits(rl RateLimitsConfig) error {
-	checks := map[string]int{
-		"login": rl.Login, "token": rl.Token, "passkey": rl.Passkey,
-		"api": rl.API, "admin": rl.Admin, "introspect": rl.Introspect,
-		"device_code": rl.DeviceCode, "password": rl.Password, "verify": rl.Verify,
+	checks := []struct {
+		name  string
+		value int
+	}{
+		{"login", rl.Login},
+		{"token", rl.Token},
+		{"passkey", rl.Passkey},
+		{"api", rl.API},
+		{"admin", rl.Admin},
+		{"introspect", rl.Introspect},
+		{"device_code", rl.DeviceCode},
+		{"password", rl.Password},
+		{"verify", rl.Verify},
 	}
-	for name, value := range checks {
-		if value <= 0 {
-			return fmt.Errorf("web_server: rate_limits.%s must be positive (got %d)", name, value)
+	for _, check := range checks {
+		if check.value <= 0 {
+			return fmt.Errorf("web_server: rate_limits.%s must be positive (got %d)", check.name, check.value)
 		}
 	}
 	return nil
@@ -382,18 +391,21 @@ func (c *GoUnoConfig) validateTOTPKey() error {
 }
 
 func (c *GoUnoConfig) validateAuthDurations() error {
-	positive := map[string]time.Duration{
-		"access_token_expiry":       c.AuthConfig.AccessTokenExpiry,
-		"refresh_token_expiry":      c.AuthConfig.RefreshTokenExpiry,
-		"id_token_expiry":           c.AuthConfig.IDTokenExpiry,
-		"session_ttl":               c.AuthConfig.SessionTTL,
-		"authorization_code_expiry": c.AuthConfig.AuthorizationCodeExpiry,
-		"device_code_expiry":        c.AuthConfig.DeviceCodeExpiry,
-		"device_code_interval":      c.AuthConfig.DeviceCodeInterval,
+	positive := []struct {
+		name  string
+		value time.Duration
+	}{
+		{"access_token_expiry", c.AuthConfig.AccessTokenExpiry},
+		{"refresh_token_expiry", c.AuthConfig.RefreshTokenExpiry},
+		{"id_token_expiry", c.AuthConfig.IDTokenExpiry},
+		{"session_ttl", c.AuthConfig.SessionTTL},
+		{"authorization_code_expiry", c.AuthConfig.AuthorizationCodeExpiry},
+		{"device_code_expiry", c.AuthConfig.DeviceCodeExpiry},
+		{"device_code_interval", c.AuthConfig.DeviceCodeInterval},
 	}
-	for name, value := range positive {
-		if value <= 0 {
-			return fmt.Errorf("auth: %s must be positive", name)
+	for _, check := range positive {
+		if check.value <= 0 {
+			return fmt.Errorf("auth: %s must be positive", check.name)
 		}
 	}
 	if c.AuthConfig.MaxSessionAge < 0 {
@@ -402,33 +414,39 @@ func (c *GoUnoConfig) validateAuthDurations() error {
 	if c.AuthConfig.MaxSessionAge > 0 && c.AuthConfig.MaxSessionAge < c.AuthConfig.SessionTTL {
 		return fmt.Errorf("auth: max_session_age (%s) must not be shorter than session_ttl (%s)", c.AuthConfig.MaxSessionAge, c.AuthConfig.SessionTTL)
 	}
-	negativeChecks := map[string]time.Duration{
-		"mfa_verification_ttl":       c.AuthConfig.MFAVerificationTTL,
-		"password_reset_token_ttl":   c.AuthConfig.PasswordResetTokenTTL,
-		"password_reset_cooldown_ttl": c.AuthConfig.PasswordResetCooldownTTL,
-		"verify_code_ttl":            c.AuthConfig.VerifyCodeTTL,
-		"verify_cooldown_ttl":        c.AuthConfig.VerifyCooldownTTL,
-		"challenge_ttl":              c.AuthConfig.ChallengeTTL,
-		"login_rate_limit_window":    c.AuthConfig.LoginRateLimitWindow,
-		"password_reset_wait_timeout": c.AuthConfig.PasswordResetWaitTimeout,
+	negativeChecks := []struct {
+		name  string
+		value time.Duration
+	}{
+		{"mfa_verification_ttl", c.AuthConfig.MFAVerificationTTL},
+		{"password_reset_token_ttl", c.AuthConfig.PasswordResetTokenTTL},
+		{"password_reset_cooldown_ttl", c.AuthConfig.PasswordResetCooldownTTL},
+		{"verify_code_ttl", c.AuthConfig.VerifyCodeTTL},
+		{"verify_cooldown_ttl", c.AuthConfig.VerifyCooldownTTL},
+		{"challenge_ttl", c.AuthConfig.ChallengeTTL},
+		{"login_rate_limit_window", c.AuthConfig.LoginRateLimitWindow},
+		{"password_reset_wait_timeout", c.AuthConfig.PasswordResetWaitTimeout},
 	}
-	for name, value := range negativeChecks {
-		if value < 0 {
-			return fmt.Errorf("auth: %s must not be negative (got %s)", name, value)
+	for _, check := range negativeChecks {
+		if check.value < 0 {
+			return fmt.Errorf("auth: %s must not be negative (got %s)", check.name, check.value)
 		}
 	}
-	intChecks := map[string]int{
-		"login_max_attempts":                c.AuthConfig.LoginMaxAttempts,
-		"login_max_attempts_per_ip":         c.AuthConfig.LoginMaxAttemptsPerIP,
-		"backup_code_count":                 c.AuthConfig.BackupCodeCount,
-		"backup_code_length":                c.AuthConfig.BackupCodeLength,
-		"password_reset_max_attempts":        c.AuthConfig.PasswordResetMaxAttempts,
-		"password_reset_revoke_concurrency":  c.AuthConfig.PasswordResetRevokeConcurrency,
-		"verify_code_max_attempts":           c.AuthConfig.VerifyCodeMaxAttempts,
+	intChecks := []struct {
+		name  string
+		value int
+	}{
+		{"login_max_attempts", c.AuthConfig.LoginMaxAttempts},
+		{"login_max_attempts_per_ip", c.AuthConfig.LoginMaxAttemptsPerIP},
+		{"backup_code_count", c.AuthConfig.BackupCodeCount},
+		{"backup_code_length", c.AuthConfig.BackupCodeLength},
+		{"password_reset_max_attempts", c.AuthConfig.PasswordResetMaxAttempts},
+		{"password_reset_revoke_concurrency", c.AuthConfig.PasswordResetRevokeConcurrency},
+		{"verify_code_max_attempts", c.AuthConfig.VerifyCodeMaxAttempts},
 	}
-	for name, value := range intChecks {
-		if value < 0 {
-			return fmt.Errorf("auth: %s must not be negative (got %d)", name, value)
+	for _, check := range intChecks {
+		if check.value < 0 {
+			return fmt.Errorf("auth: %s must not be negative (got %d)", check.name, check.value)
 		}
 	}
 	return nil
