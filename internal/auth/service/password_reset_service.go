@@ -19,6 +19,9 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
+	"github.com/rushairer/gosso/internal/audit"
+	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
+	auditService "github.com/rushairer/gosso/internal/audit/service"
 	"github.com/rushairer/gosso/internal/cache"
 	dbutil "github.com/rushairer/gosso/internal/db"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
@@ -93,6 +96,7 @@ type PasswordResetService struct {
 	tokenRevoker          AccountTokenRevoker
 	accountSvc            accountService.AccountService
 	loginRateLimitClearer LoginRateLimitClearer
+	auditor               *auditService.Auditor
 	db                    *sql.DB
 	baseURL               string
 	logger                *zap.Logger
@@ -116,6 +120,7 @@ type PasswordResetServiceConfig struct {
 	MaxAttempts          int                  // default: passwordResetMaxAttempts
 	RevokeConcurrency    int                  // default: 10
 	LoginRateLimitClearer LoginRateLimitClearer // optional; clears login rate-limit counters after reset
+	Auditor               *auditService.Auditor // optional; audit logging for password resets
 }
 
 // NewPasswordResetService creates a new password reset service instance
@@ -187,6 +192,9 @@ func NewPasswordResetServiceWithConfig(
 		svc.loginRateLimitClearer = cfg.LoginRateLimitClearer
 	} else {
 		svc.logger.Warn("LoginRateLimitClearer not configured; login rate limits will not be cleared after password reset")
+	}
+	if cfg.Auditor != nil {
+		svc.auditor = cfg.Auditor
 	}
 	return svc
 }
@@ -406,6 +414,16 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	}
 
 	s.logger.Info("Password reset successfully", zap.String("account_id", utility.MaskOpaqueID(data.AccountID)))
+
+	// Audit log for password reset (security-sensitive event)
+	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+		auditDomain.ActionPasswordReset,
+		audit.IPFromContext(ctx),
+		&data.AccountID,
+		utility.MarshalJSONOrEmpty(map[string]any{"account_id": data.AccountID}),
+		utility.MarshalJSONOrEmpty(map[string]any{"ip": audit.IPFromContext(ctx), "user_agent": audit.UserAgentFromContext(ctx)}),
+	))
+
 	return nil
 }
 

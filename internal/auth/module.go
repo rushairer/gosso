@@ -139,6 +139,7 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 		MaxAttempts:          cfg.AuthConfig.PasswordResetMaxAttempts,
 		RevokeConcurrency:    cfg.AuthConfig.PasswordResetRevokeConcurrency,
 		LoginRateLimitClearer: authSvc,
+		Auditor:              cfg.Auditor,
 	})
 
 	return &AuthModule{

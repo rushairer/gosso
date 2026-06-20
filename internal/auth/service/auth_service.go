@@ -31,10 +31,10 @@ const (
 	defaultLoginMaxAttempts = 5
 	// defaultLoginMaxAttemptsPerIP is the default max login attempts per IP.
 	defaultLoginMaxAttemptsPerIP = 30
-	// mfaAccountMaxAttemptsConst is the default max MFA verification attempts per account.
-	mfaAccountMaxAttemptsConst = 10
-	// mfaAccountRateLimitWindowConst is the default window for per-account MFA rate limiting.
-	mfaAccountRateLimitWindowConst = 5 * time.Minute
+	// defaultMFAAccountMaxAttempts is the default max MFA verification attempts per account.
+	defaultMFAAccountMaxAttempts = 10
+	// defaultMFAAccountRateLimitWindow is the default window for per-account MFA rate limiting.
+	defaultMFAAccountRateLimitWindow = 5 * time.Minute
 )
 
 // LoginCommand represents a username+password login request from the controller layer.
@@ -147,8 +147,8 @@ func NewAuthServiceWithConfig(
 		loginMaxAttempts:        defaultLoginMaxAttempts,
 		loginMaxAttemptsPerIP:   defaultLoginMaxAttemptsPerIP,
 		mfaVerificationTTL:      defaultMFAVerificationTTL,
-		mfaAccountMaxAttempts:   mfaAccountMaxAttemptsConst,
-		mfaAccountRateLimitWindow: mfaAccountRateLimitWindowConst,
+		mfaAccountMaxAttempts:   defaultMFAAccountMaxAttempts,
+		mfaAccountRateLimitWindow: defaultMFAAccountRateLimitWindow,
 	}
 	if cfg.LoginRateLimitWindow > 0 {
 		svc.loginRateLimitWindow = cfg.LoginRateLimitWindow

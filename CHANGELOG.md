@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- Social login OAuth state parameter now includes IP subnet binding — the client IP is encoded into the state (`nonce:ip` format) and validated on callback with /24 subnet matching, preventing CSRF attacks via stolen `oauth_state` cookies from different network locations (`internal/auth/controller/auth_social.go`).
+- Password reset now emits an audit log with request IP after successful password change — previously this security-sensitive event was not logged (`internal/auth/service/password_reset_service.go`).
+- CORS configuration now exposes `X-Request-ID` header by default — allows SPA clients to read the request ID for correlation and debugging (`cmd/gosso/web_engine.go`, `config/config.go`).
+
 ### Fixed
 - `CompletePasskeyMFALogin` now verifies the account exists before blacklisting the MFA token — prevents user lockout when a transient DB failure occurs after the token is consumed but before the account is found (`internal/auth/service/auth_login.go`).
 - OAuth2 `AuthenticateClient` now performs a dummy bcrypt comparison for public clients that provide a `client_secret` — eliminates a timing side-channel that could reveal whether a `client_id` is confidential or public (~100ms vs ~0ms) (`internal/oauth2/service/client_auth_service.go`).
@@ -84,6 +89,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `accountValidatorAdapter` cache now enforces a hard size limit of 1024 entries — prevents unbounded memory growth in high-cardinality token exchange scenarios between cleanup cycles (`cmd/gosso/web_modules.go`).
 - `NewOAuth2Controller` marked as deprecated in favor of `NewOAuth2ControllerFromConfig` — guides contributors toward the named-config struct pattern (`internal/oauth2/controller/oauth2_controller.go`).
 - Raised overall test coverage threshold from 60% to 70% and per-module critical coverage floors to 30–45% — reflects improved test maturity for security-critical services (`Makefile`, `script/check-critical-coverage.sh`).
+- `auth_controller.go` (800 lines) split into 7 focused files by functional domain — `helpers.go` (shared utilities), `auth_session.go`, `auth_mfa.go`, `auth_social.go`, `auth_verification.go`, `auth_password.go`, with `auth_controller.go` retaining only core login/refresh/MFA-verify handlers and `RegisterRoutes` (`internal/auth/controller/`).
+- `auth_controller_test.go` (2056 lines) split into 7 test files matching the handler split — shared mocks and setup helpers extracted to `test_helpers_test.go` (`internal/auth/controller/`).
+- `RegisterRoutes` rate-limit middleware wiring simplified with `withOptionalLimit` helper — replaces 11 repetitive `if cfg.XLimit != nil` blocks with single-line calls (`internal/auth/controller/auth_controller.go`).
+- MFA rate-limit constants renamed from `mfaAccountMaxAttemptsConst`/`mfaAccountRateLimitWindowConst` to `defaultMFAAccountMaxAttempts`/`defaultMFAAccountRateLimitWindow` — aligns with `defaultLoginRateLimitWindow` naming convention (`internal/auth/service/auth_service.go`).
+- Social login `fetchUserInfo` now uses typed response structs (`googleUserInfo`, `githubUserInfo`, `wechatUserInfo`) instead of `map[string]any` with runtime type assertions — prevents silent failures from field name mismatches (`internal/auth/service/social_login_service.go`).
+- Test coverage threshold raised from 70% to 75% — reflects improved test maturity after the refactoring (`Makefile`).
 
 ### Security
 - Removed CSRF token leakage in `X-CSRF-Token` response headers — SPAs should read the token directly from the cookie; response headers doubled the attack surface if an XSS vulnerability existed (`middleware/csrf.go`).

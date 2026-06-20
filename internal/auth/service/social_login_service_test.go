@@ -599,7 +599,7 @@ func TestFetchUserInfo_MissingID(t *testing.T) {
 
 	_, _, _, _, err := svc.fetchUserInfo(context.Background(), "google", p, "tok")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "missing or invalid id")
+	assert.Contains(t, err.Error(), "missing id field")
 }
 
 func TestFetchUserInfo_ErrorStatus(t *testing.T) {
