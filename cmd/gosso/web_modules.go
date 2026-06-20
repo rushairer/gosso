@@ -123,7 +123,20 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	if accountValidatorCacheTTL <= 0 {
 		accountValidatorCacheTTL = 5 * time.Second
 	}
-	oauth2Ctrl, err := oauth2Controller.NewOAuth2Controller(oauth2Mod.ClientService, oauth2Mod.AuthCodeService, oauth2Mod.ConsentService, tokenSvc, oidcMod.IDTokenService, oauth2Mod.DeviceCodeService, &oauth2Service.ClientAuthenticator{}, newAccountValidatorAdapter(accountMod.Service, logger, accountValidatorCacheTTL), authMod.SessionService, redis, cfg.AuthConfig.Issuer, logger)
+	oauth2Ctrl, err := oauth2Controller.NewOAuth2ControllerFromConfig(oauth2Controller.OAuth2ControllerConfig{
+		ClientSvc:        oauth2Mod.ClientService,
+		AuthCodeSvc:      oauth2Mod.AuthCodeService,
+		ConsentSvc:       oauth2Mod.ConsentService,
+		TokenSvc:         tokenSvc,
+		IDTokenSvc:       oidcMod.IDTokenService,
+		DeviceCodeSvc:    oauth2Mod.DeviceCodeService,
+		ClientAuth:       &oauth2Service.ClientAuthenticator{},
+		AccountValidator: newAccountValidatorAdapter(accountMod.Service, logger, accountValidatorCacheTTL),
+		SessionValidator: authMod.SessionService,
+		Redis:            redis,
+		Issuer:           cfg.AuthConfig.Issuer,
+		Logger:           logger,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
 	}

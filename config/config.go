@@ -4,8 +4,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -306,6 +308,11 @@ func (c *GoUnoConfig) validateWebServer() error {
 	if c.WebServerConfig.Production && len(c.WebServerConfig.TrustedProxies) == 0 {
 		return fmt.Errorf("web_server: trusted_proxies must not be empty in production (set to proxy CIDRs, e.g. [\"172.22.0.0/16\"])")
 	}
+	if c.WebServerConfig.Address != "" {
+		if net.ParseIP(c.WebServerConfig.Address) == nil {
+			return fmt.Errorf("web_server: address must be a valid IP address (got %q)", c.WebServerConfig.Address)
+		}
+	}
 	rl := c.WebServerConfig.RateLimits
 	if rl.Login <= 0 {
 		return fmt.Errorf("web_server: rate_limits.login must be positive (got %d)", rl.Login)
@@ -418,6 +425,11 @@ func (c *GoUnoConfig) validateAuth() error {
 			return fmt.Errorf("auth: issuer must not point to localhost in production")
 		}
 	}
+	// OIDC spec requires exact issuer claim matching — a trailing slash would cause
+	// token validation to fail when clients compare issuer strings.
+	if strings.HasSuffix(c.AuthConfig.Issuer, "/") {
+		return fmt.Errorf("auth: issuer must not have a trailing slash (got %q)", c.AuthConfig.Issuer)
+	}
 	if c.AuthConfig.TOTPEncryptionKey == "" {
 		return fmt.Errorf("auth: totp_encryption_key is required")
 	}
@@ -458,6 +470,9 @@ func (c *GoUnoConfig) validateAuth() error {
 				if c.WebServerConfig.Production {
 					return fmt.Errorf("auth: private_key_path file does not exist: %s", c.AuthConfig.PrivateKeyPath)
 				}
+				// Non-production: warn so developers notice the misconfiguration.
+				// KeyService will generate an ephemeral key, invalidating all existing JWTs on restart.
+				fmt.Fprintf(os.Stderr, "Warning: auth: private_key_path file does not exist: %s (an ephemeral key will be generated on each restart)\n", c.AuthConfig.PrivateKeyPath)
 			} else {
 				return fmt.Errorf("auth: cannot access private_key_path: %w", err)
 			}
@@ -465,12 +480,18 @@ func (c *GoUnoConfig) validateAuth() error {
 			return fmt.Errorf("auth: private_key_path is a directory, not a file: %s", c.AuthConfig.PrivateKeyPath)
 		}
 	}
+	if c.AuthConfig.PrivateKeyPath != "" && c.AuthConfig.KeyID == "" {
+		return fmt.Errorf("auth: key_id is required when private_key_path is set")
+	}
 	if c.AuthConfig.MaxSessions <= 0 {
 		return fmt.Errorf("auth: max_sessions must be positive")
 	}
 	// Validate optional TTL fields — zero means "use built-in default", but negative is always wrong.
 	if c.AuthConfig.MaxSessionAge < 0 {
 		return fmt.Errorf("auth: max_session_age must not be negative (got %s)", c.AuthConfig.MaxSessionAge)
+	}
+	if c.AuthConfig.MaxSessionAge > 0 && c.AuthConfig.MaxSessionAge < c.AuthConfig.SessionTTL {
+		return fmt.Errorf("auth: max_session_age (%s) must not be shorter than session_ttl (%s)", c.AuthConfig.MaxSessionAge, c.AuthConfig.SessionTTL)
 	}
 	if c.AuthConfig.MFAVerificationTTL < 0 {
 		return fmt.Errorf("auth: mfa_verification_ttl must not be negative (got %s)", c.AuthConfig.MFAVerificationTTL)
@@ -532,8 +553,8 @@ func (c *GoUnoConfig) validateAuth() error {
 		if err != nil || (origin.Scheme != "http" && origin.Scheme != "https") {
 			return fmt.Errorf("auth: webauthn_rp_origin must be a valid URL with http or https scheme")
 		}
-		if origin.Scheme == "http" && origin.Hostname() != "localhost" && origin.Hostname() != "127.0.0.1" {
-			return fmt.Errorf("auth: webauthn_rp_origin with http scheme is only allowed for localhost or 127.0.0.1")
+		if origin.Scheme == "http" && origin.Hostname() != "localhost" && origin.Hostname() != "127.0.0.1" && origin.Hostname() != "::1" {
+			return fmt.Errorf("auth: webauthn_rp_origin with http scheme is only allowed for localhost, 127.0.0.1, or ::1")
 		}
 		if origin.Path != "" && origin.Path != "/" {
 			return fmt.Errorf("auth: webauthn_rp_origin must not contain a path component (got %q)", origin.Path)
@@ -589,6 +610,14 @@ func (c *GoUnoConfig) validateCORS() error {
 	}
 	if c.WebServerConfig.Production && len(c.CORSConfig.AllowedOrigins) == 0 {
 		return fmt.Errorf("cors: allowed_origins is required in production mode")
+	}
+	for _, origin := range c.CORSConfig.AllowedOrigins {
+		if origin != "*" {
+			u, err := url.Parse(origin)
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+				return fmt.Errorf("cors: allowed_origins contains invalid origin %q (must be a full URL with scheme and host, or \"*\")", origin)
+			}
+		}
 	}
 	return nil
 }

@@ -25,8 +25,8 @@ web_server:
         password: 5
         verify: 5
 database:
-    # Dev uses Go defaults for pool sizing (unlimited open conns).
-    # Production should set max_open_conns explicitly — see production.yaml for sizing notes.
+    # Dev uses Viper defaults for pool sizing (max_open_conns=25, max_idle_conns=15).
+    # Override via GOUNO_DATABASE_MAX_OPEN_CONNS env var or uncomment below.
     default: postgres
     drivers:
         postgres:
@@ -36,7 +36,7 @@ database:
             log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
 redis:
     dsn: redis://redis:6379
-    max_active_conns: 100
+    max_active_conns: 20
     pool_timeout_seconds: 60
 task_pipeline:
     flush_size: 32
@@ -68,6 +68,7 @@ auth:
         - profile
         - email
     private_key_path: "./keys/private.pem"
+    key_id: "gosso-dev"
     password_reset_base_url: "http://localhost:3000/reset-password"
     account_validator_cache_ttl: 5s
     # WebAuthn / Passkey configuration

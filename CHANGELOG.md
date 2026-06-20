@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ErrDeviceAccountIDRequired` sentinel error and `DeviceCode.Authorize` validation — prevents authorization of device codes without an account ID (`internal/oauth2/domain/device_code.go`).
 - `ErrConsentDuplicateScope` sentinel error and scope uniqueness validation in `NewConsent` — prevents duplicate scopes in consent records (`internal/oauth2/domain/consent.go`).
 - `ErrClientAccountIDRequired` sentinel error replacing `ErrAccountIDRequired` in `oauth2/domain` — eliminates name collision with the identically-named error in `account/domain` (`internal/oauth2/domain/client.go`).
+- `OAuth2ControllerConfig` struct and `NewOAuth2ControllerFromConfig` constructor — improves readability of OAuth2 controller wiring by replacing a 12-argument function call with a named struct (`internal/oauth2/controller/oauth2_controller.go`).
+- Config validation for `AuthConfig.KeyID` (required when `PrivateKeyPath` is set), `WebServerConfig.Address` (must be a valid IP), CORS `AllowedOrigins` format (must be valid URLs or `*`), issuer trailing slash, and `MaxSessionAge` vs `SessionTTL` cross-validation (`config/config.go`).
+- Config tests for all new validation rules including IPv6 loopback pass-through for WebAuthn HTTP origins (`config/config_test.go`).
 
 ### Changed
 - `accountRepositoryImpl.FindByID`, `FindByIDTx`, and `FindByIDIncludingDeletedTx` now share a single `findAccountByID` helper via the `Queryable` interface — removes ~40 lines of duplicated SQL/error-handling logic (`internal/account/repository/account_repository_impl.go`).
@@ -34,10 +37,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Consent` struct definition moved before `NewConsent` constructor — follows conventional Go ordering (`internal/oauth2/domain/consent.go`).
 - `DeviceCode` sentinel errors consolidated into a single `var` block — removes split declaration across two blocks (`internal/oauth2/domain/device_code.go`).
 - `ClearLoginRateLimitsByUsername` SCAN loop now has a maximum iteration guard of 1000 — prevents infinite loops if Redis cursor never returns 0 (`internal/auth/service/auth_login.go`).
+- `initModules` now uses `NewOAuth2ControllerFromConfig` with a named struct instead of a 12-argument positional call (`cmd/gosso/web_modules.go`).
+- WebAuthn HTTP origin validation now accepts IPv6 loopback `::1` alongside `localhost` and `127.0.0.1` (`config/config.go`).
+- Missing config file warning now suggests checking the `-c` flag value (`config/config_manager.go`).
+- Development config: corrected misleading comment about pool sizing defaults, reduced `redis.max_active_conns` from 100 to 20, added `key_id` field (`config/development.yaml`).
+- Production config: raised `database.log_level` from 1 (Silent) to 2 (Error) so SQL errors are logged (`config/production.yaml`).
+- Non-production `PrivateKeyPath` validation now emits a stderr warning when the file does not exist, alerting developers to the ephemeral key fallback (`config/config.go`).
 
 ### Security
 - Removed CSRF token leakage in `X-CSRF-Token` response headers — SPAs should read the token directly from the cookie; response headers doubled the attack surface if an XSS vulnerability existed (`middleware/csrf.go`).
 - Refresh token creation now supports IP binding enforcement via `AuthConfig.EnforceIPBinding` — when enabled, rejects token creation when client IP is unavailable, closing a defense-in-depth gap (`config/config.go`, `internal/token/service/token_service.go`).
+- Issuer validation now rejects trailing slashes — prevents OIDC token verification failures caused by string mismatch between issuer claim and discovery document (`config/config.go`).
+- CORS `AllowedOrigins` entries are now validated as well-formed URLs — prevents silent CORS misconfiguration where non-matching origins silently fail (`config/config.go`).
+- Production database log level raised from Silent to Error — ensures SQL errors are visible in production logs for incident diagnosis (`config/production.yaml`).
 - OIDC logout now documents that CSRF protection for `id_token_hint` (without Bearer token) is enforced by the CSRFMiddleware at the router layer — `POST /oidc/logout` without a Bearer token requires a valid CSRF cookie (`internal/oidc/controller/oidc_controller.go`).
 - MFA token blacklisting now fails closed — if blacklisting fails after MFA verification, the login is rejected instead of proceeding with a potentially reusable MFA token (`internal/auth/service/auth_login.go`).
 - OAuth2 client soft-delete now clears `client_secret_hash` — previously the secret hash was retained after deletion, risking secret exposure in the database (`internal/oauth2/repository/client_repository_impl.go`).

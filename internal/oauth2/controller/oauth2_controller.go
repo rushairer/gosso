@@ -140,6 +140,34 @@ func NewOAuth2Controller(
 	}, nil
 }
 
+// OAuth2ControllerConfig holds all dependencies for OAuth2Controller construction.
+// Use NewOAuth2ControllerFromConfig to create a controller from this struct.
+type OAuth2ControllerConfig struct {
+	ClientSvc        oauth2Service.OAuth2ClientService
+	AuthCodeSvc      AuthCodeManager
+	ConsentSvc       ConsentManager
+	TokenSvc         authService.TokenManager
+	IDTokenSvc       IDTokenManager
+	DeviceCodeSvc    DeviceCodeManager
+	ClientAuth       ClientAuthManager
+	AccountValidator AccountValidator
+	SessionValidator sessionDomain.SessionValidator
+	Redis            *cache.RedisClient
+	Issuer           string
+	Logger           *zap.Logger
+}
+
+// NewOAuth2ControllerFromConfig creates a new OAuth2 controller from a config struct.
+// This is a convenience wrapper around NewOAuth2Controller for better readability
+// when many dependencies are passed.
+func NewOAuth2ControllerFromConfig(cfg OAuth2ControllerConfig) (*OAuth2Controller, error) {
+	return NewOAuth2Controller(
+		cfg.ClientSvc, cfg.AuthCodeSvc, cfg.ConsentSvc, cfg.TokenSvc,
+		cfg.IDTokenSvc, cfg.DeviceCodeSvc, cfg.ClientAuth, cfg.AccountValidator,
+		cfg.SessionValidator, cfg.Redis, cfg.Issuer, cfg.Logger,
+	)
+}
+
 // authenticateRequest extracts and validates the access token from the Authorization header.
 // Returns the account ID on success, or an empty string and writes an error response on failure.
 //

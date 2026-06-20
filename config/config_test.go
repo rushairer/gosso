@@ -94,6 +94,7 @@ func TestConfigManager_ProductionConfigLoadsFromEnv(t *testing.T) {
 	t.Setenv("GOUNO_REDIS_DSN", "redis://:strong@redis:6379/0")
 	t.Setenv("GOUNO_AUTH_ISSUER", "https://sso.example.com")
 	t.Setenv("GOUNO_AUTH_PRIVATE_KEY_PATH", keyPath)
+	t.Setenv("GOUNO_AUTH_KEY_ID", "test-key-id")
 	t.Setenv("GOUNO_AUTH_PASSWORD_RESET_BASE_URL", "https://sso.example.com/reset-password")
 	t.Setenv("GOUNO_AUTH_TOTP_ENCRYPTION_KEY", "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899")
 	t.Setenv("GOUNO_CORS_ALLOWED_ORIGINS", "https://sso.example.com")
@@ -458,6 +459,64 @@ func TestValidate_Errors(t *testing.T) {
 			},
 			wantErr: "auth: webauthn_rp_origin with http scheme is only allowed for localhost",
 		},
+
+		// ── Issuer trailing slash ─────────────
+		{
+			name: "issuer with trailing slash",
+			mutate: func(c *GoUnoConfig) {
+				c.AuthConfig.Issuer = "https://sso.example.com/"
+			},
+			wantErr: "auth: issuer must not have a trailing slash",
+		},
+
+		// ── KeyID required ────────────────────
+		{
+			name: "missing key_id when private_key_path set",
+			mutate: func(c *GoUnoConfig) {
+				c.AuthConfig.PrivateKeyPath = "/path/to/key.pem"
+				c.AuthConfig.KeyID = ""
+			},
+			wantErr: "auth: key_id is required when private_key_path is set",
+		},
+
+		// ── Address validation ────────────────
+		{
+			name: "invalid web_server address",
+			mutate: func(c *GoUnoConfig) {
+				c.WebServerConfig.Address = "not-an-ip"
+			},
+			wantErr: "web_server: address must be a valid IP address",
+		},
+
+		// ── CORS origin format ────────────────
+		{
+			name: "cors invalid origin format",
+			mutate: func(c *GoUnoConfig) {
+				c.CORSConfig.AllowedOrigins = []string{"not-a-url"}
+			},
+			wantErr: "cors: allowed_origins contains invalid origin",
+		},
+
+		// ── MaxSessionAge cross-validation ────
+		{
+			name: "max_session_age shorter than session_ttl",
+			mutate: func(c *GoUnoConfig) {
+				c.AuthConfig.MaxSessionAge = 1 * time.Hour
+				c.AuthConfig.SessionTTL = 24 * time.Hour
+			},
+			wantErr: "auth: max_session_age (1h0m0s) must not be shorter than session_ttl (24h0m0s)",
+		},
+
+		// ── WebAuthn IPv6 loopback (should pass) ──
+		{
+			name: "webauthn http origin allows IPv6 loopback",
+			mutate: func(c *GoUnoConfig) {
+				c.AuthConfig.WebAuthnRPID = "localhost"
+				c.AuthConfig.WebAuthnRPName = "Test"
+				c.AuthConfig.WebAuthnRPOrigin = "http://[::1]:3000"
+			},
+			wantErr: "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -465,8 +524,12 @@ func TestValidate_Errors(t *testing.T) {
 			cfg := validConfig()
 			tt.mutate(&cfg)
 			err := cfg.Validate()
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+			}
 		})
 	}
 }

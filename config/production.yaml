@@ -43,7 +43,7 @@ database:
             name: postgres
             driver: pgx
             dsn: ""
-            log_level: 1 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
+            log_level: 2 #日志级别, 1:Silent 2:Error 3:Warn 4:Info
 redis:
     dsn: ""
     max_active_conns: 100
@@ -77,6 +77,7 @@ auth:
         - profile
         - email
     private_key_path: "/app/keys/private.pem"
+    key_id: ""
     password_reset_base_url: ""
     account_validator_cache_ttl: 5s
     # WebAuthn / Passkey configuration (REQUIRED for passkey support)

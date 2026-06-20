@@ -67,7 +67,7 @@ func NewConfigManager(
 		if !errors.As(err, &configFileNotFoundError) {
 			return nil, fmt.Errorf("read config: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "Warning: config file not found at %s, using defaults and environment variables\n", configPath)
+		fmt.Fprintf(os.Stderr, "Warning: config file not found at %s, using defaults and environment variables. If you intended to use a config file, check the -c flag value.\n", configPath)
 	}
 
 	newConfig := GoUnoConfig{}
