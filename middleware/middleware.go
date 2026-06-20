@@ -66,8 +66,11 @@ func SecurityHeadersMiddleware(isProduction bool) gin.HandlerFunc {
 			ctx.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
 		}
 		ctx.Header("Permissions-Policy", "geolocation=(), camera=(), microphone=(), payment=(), usb=(), midi=(), autoplay=(), fullscreen=()")
-		ctx.Header("Content-Security-Policy",
-			"default-src 'self'; script-src 'self' 'nonce-"+nonce+"'; style-src 'self' 'nonce-"+nonce+"'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; frame-ancestors 'none'")
+		csp := "default-src 'self'; script-src 'self' 'nonce-" + nonce + "'; style-src 'self' 'nonce-" + nonce + "'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		if isProduction {
+			csp += "; upgrade-insecure-requests"
+		}
+		ctx.Header("Content-Security-Policy", csp)
 		ctx.Header("Cross-Origin-Opener-Policy", "same-origin")
 		ctx.Header("Cross-Origin-Resource-Policy", "same-origin")
 		ctx.Next()
