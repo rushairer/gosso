@@ -46,6 +46,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Development config: corrected misleading comment about pool sizing defaults, reduced `redis.max_active_conns` from 100 to 20, added `key_id` field (`config/development.yaml`).
 - Production config: raised `database.log_level` from 1 (Silent) to 2 (Error) so SQL errors are logged (`config/production.yaml`).
 - Non-production `PrivateKeyPath` validation now emits a stderr warning when the file does not exist, alerting developers to the ephemeral key fallback (`config/config.go`).
+- Unified session ID masking logic — replaced the private `maskSessionID` function with the shared `utility.MaskOpaqueID` helper for consistent masking across log output (`internal/session/service/session_service.go`, `internal/session/service/session_service_manage.go`).
+- Removed deprecated `MustMarshalJSON` alias — callers should use `MarshalJSONOrEmpty` directly (`internal/utility/jsonutil.go`).
+- Production mode now requires `auth.key_id` even when `private_key_path` is not set — ensures JWKS `kid` is always configured in production deployments (`config/config.go`).
+- Nginx configuration now includes OCSP Stapling (`ssl_stapling on`) for improved TLS handshake performance (`config/nginx.conf`).
 - `VerifyFirstUnverifiedTOTP` now uses a two-step SELECT + UPDATE pattern instead of an embedded subquery — properly surfaces `sql.ErrNoRows` when no unverified TOTP credential exists (`internal/account/repository/credential_repository_impl.go`).
 - `createSessionAndTokens` now uses `domain.NewSession()` constructor instead of a raw struct literal — ensures `accountID` validation is always applied (`internal/auth/service/auth_session_token.go`).
 

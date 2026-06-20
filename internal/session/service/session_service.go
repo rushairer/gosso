@@ -34,17 +34,6 @@ type TokenRevoker interface {
 	RevokeAllForSession(ctx context.Context, sessionID string) error
 }
 
-// maskSessionID returns a masked version of the session ID for safe logging.
-// Retains the first 8 characters (enough to correlate across log lines) and
-// replaces the rest with "***". Satisfies the L2 invariant: no raw session IDs
-// in log output.
-func maskSessionID(id string) string {
-	if len(id) <= 8 {
-		return "***"
-	}
-	return id[:8] + "***"
-}
-
 // SessionConfig holds configuration for SessionService.
 // Prefer passing this to NewSessionServiceWithConfig over using individual setters.
 type SessionConfig struct {
@@ -125,7 +114,7 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 	// Serialize session data
 	data, err := json.Marshal(session)
 	if err != nil {
-		s.logger.Error("Failed to marshal session", zap.Error(err), zap.String("session_id", maskSessionID(session.ID)))
+		s.logger.Error("Failed to marshal session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(session.ID)))
 		return fmt.Errorf("marshal session: %w", err)
 	}
 
@@ -141,7 +130,7 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 		[]string{sessionKey, indexKey}, string(data), ttlSecs, session.ID,
 	).Result(); err != nil {
 		s.logger.Error("Failed to create session (atomic)", zap.Error(err),
-			zap.String("session_id", maskSessionID(session.ID)))
+			zap.String("session_id", utility.MaskOpaqueID(session.ID)))
 		return fmt.Errorf("create session: %w", err)
 	}
 
@@ -157,7 +146,7 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 	}
 
 	s.logger.Info("Session created",
-		zap.String("session_id", maskSessionID(session.ID)),
+		zap.String("session_id", utility.MaskOpaqueID(session.ID)),
 		zap.String("account_id", utility.MaskOpaqueID(session.AccountID)),
 		zap.String("ip", utility.MaskOpaqueID(session.IP)),
 		zap.Duration("ttl", s.sessionTTL))
@@ -173,13 +162,13 @@ func (s *SessionService) GetSession(ctx context.Context, sessionID string) (*dom
 		return nil, ErrSessionNotFound
 	}
 	if err != nil {
-		s.logger.Error("Failed to get session", zap.Error(err), zap.String("session_id", maskSessionID(sessionID)))
+		s.logger.Error("Failed to get session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 		return nil, fmt.Errorf("get session: %w", err)
 	}
 
 	var session domain.Session
 	if err := json.Unmarshal([]byte(data), &session); err != nil {
-		s.logger.Error("Failed to unmarshal session", zap.Error(err), zap.String("session_id", maskSessionID(sessionID)))
+		s.logger.Error("Failed to unmarshal session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 		return nil, fmt.Errorf("unmarshal session: %w", err)
 	}
 
@@ -195,7 +184,7 @@ func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Sess
 	// Serialize session data
 	data, err := json.Marshal(session)
 	if err != nil {
-		s.logger.Error("Failed to marshal session", zap.Error(err), zap.String("session_id", maskSessionID(session.ID)))
+		s.logger.Error("Failed to marshal session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(session.ID)))
 		return fmt.Errorf("marshal session: %w", err)
 	}
 
@@ -203,12 +192,12 @@ func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Sess
 	key := s.buildSessionKey(session.ID)
 	ok, err := s.redis.SetIfExists(ctx, key, data, s.sessionTTL)
 	if err != nil {
-		s.logger.Error("Failed to update session", zap.Error(err), zap.String("session_id", maskSessionID(session.ID)))
+		s.logger.Error("Failed to update session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(session.ID)))
 		return fmt.Errorf("update session: %w", err)
 	}
 	if !ok {
-		s.logger.Debug("Session expired during update, skipping", zap.String("session_id", maskSessionID(session.ID)))
-		return fmt.Errorf("session %s no longer exists", maskSessionID(session.ID))
+		s.logger.Debug("Session expired during update, skipping", zap.String("session_id", utility.MaskOpaqueID(session.ID)))
+		return fmt.Errorf("session %s no longer exists", utility.MaskOpaqueID(session.ID))
 	}
 
 	// Refresh the account sessions index TTL to prevent it from expiring before the session
@@ -217,7 +206,7 @@ func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Sess
 		s.logger.Warn("Failed to refresh account sessions index TTL", zap.String("account_id", utility.MaskOpaqueID(session.AccountID)), zap.Error(err))
 	}
 
-	s.logger.Debug("Session updated", zap.String("session_id", maskSessionID(session.ID)))
+	s.logger.Debug("Session updated", zap.String("session_id", utility.MaskOpaqueID(session.ID)))
 	return nil
 }
 
@@ -230,7 +219,7 @@ func (s *SessionService) DeleteSession(ctx context.Context, sessionID string) er
 
 	key := s.buildSessionKey(sessionID)
 	if err := s.redis.Del(ctx, key); err != nil {
-		s.logger.Error("Failed to delete session", zap.Error(err), zap.String("session_id", maskSessionID(sessionID)))
+		s.logger.Error("Failed to delete session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 		return fmt.Errorf("delete session: %w", err)
 	}
 
@@ -241,14 +230,14 @@ func (s *SessionService) DeleteSession(ctx context.Context, sessionID string) er
 		indexKey := s.buildAccountSessionsKey(session.AccountID)
 		if err := s.redis.SRem(ctx, indexKey, sessionID); err != nil {
 			s.logger.Warn("Failed to remove session from account index",
-				zap.String("session_id", maskSessionID(sessionID)), zap.Error(err))
+				zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(err))
 		}
 	} else if getErr != nil {
 		s.logger.Debug("Session data unavailable for index cleanup, stale entry will be cleaned by ListSessionsByAccount",
-			zap.String("session_id", maskSessionID(sessionID)), zap.Error(getErr))
+			zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(getErr))
 	}
 
-	s.logger.Info("Session deleted", zap.String("session_id", maskSessionID(sessionID)))
+	s.logger.Info("Session deleted", zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 	return nil
 }
 
@@ -269,18 +258,18 @@ func (s *SessionService) RefreshSession(ctx context.Context, sessionID string) e
 
 	data, err := json.Marshal(session)
 	if err != nil {
-		s.logger.Error("Failed to marshal session", zap.Error(err), zap.String("session_id", maskSessionID(sessionID)))
+		s.logger.Error("Failed to marshal session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 		return fmt.Errorf("marshal session: %w", err)
 	}
 
 	key := s.buildSessionKey(sessionID)
 	ok, err := s.redis.SetIfExists(ctx, key, data, s.sessionTTL)
 	if err != nil {
-		s.logger.Error("Failed to refresh session", zap.Error(err), zap.String("session_id", maskSessionID(sessionID)))
+		s.logger.Error("Failed to refresh session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 		return fmt.Errorf("refresh session: %w", err)
 	}
 	if !ok {
-		return fmt.Errorf("session %s no longer exists", maskSessionID(sessionID))
+		return fmt.Errorf("session %s no longer exists", utility.MaskOpaqueID(sessionID))
 	}
 
 	// Refresh the account sessions index TTL to prevent it from expiring before the session
@@ -303,7 +292,7 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 	// Check absolute max session lifetime (prevents indefinite session extension)
 	if s.maxSessionAge > 0 && time.Since(session.CreatedAt) > s.maxSessionAge {
 		s.logger.Warn("Session exceeded max lifetime",
-			zap.String("session_id", maskSessionID(sessionID)),
+			zap.String("session_id", utility.MaskOpaqueID(sessionID)),
 			zap.Duration("max_age", s.maxSessionAge))
 		s.expireSession(ctx, sessionID, s.buildAccountSessionsKey(session.AccountID))
 		return nil, ErrSessionExpired
@@ -311,7 +300,7 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 
 	// Check if session has expired due to inactivity
 	if session.IsExpired(s.sessionTTL) {
-		s.logger.Warn("Session expired", zap.String("session_id", maskSessionID(sessionID)))
+		s.logger.Warn("Session expired", zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 		s.expireSession(ctx, sessionID, s.buildAccountSessionsKey(session.AccountID))
 		return nil, ErrSessionExpired
 	}
@@ -322,7 +311,7 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 	sessionKey := s.buildSessionKey(sessionID)
 	if err := s.redis.Expire(ctx, sessionKey, s.sessionTTL); err != nil {
 		s.logger.Warn("Failed to refresh session TTL",
-			zap.String("session_id", maskSessionID(sessionID)), zap.Error(err))
+			zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(err))
 	}
 
 	return session, nil
@@ -337,7 +326,7 @@ func (s *SessionService) expireSession(ctx context.Context, sessionID string, ac
 	if s.tokenRevoker != nil {
 		if err := s.tokenRevoker.RevokeAllForSession(ctx, sessionID); err != nil {
 			s.logger.Warn("Failed to revoke tokens for expired session",
-				zap.String("session_id", maskSessionID(sessionID)), zap.Error(err))
+				zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(err))
 		}
 	}
 
@@ -346,21 +335,21 @@ func (s *SessionService) expireSession(ctx context.Context, sessionID string, ac
 		[]string{sessionKey, accountSessionsKey}, sessionID).Int()
 	if err != nil {
 		s.logger.Warn("Failed to atomically check and delete expired session",
-			zap.String("session_id", maskSessionID(sessionID)), zap.Error(err))
+			zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(err))
 		// Fallback to non-atomic delete
 		if delErr := s.redis.Del(ctx, sessionKey); delErr != nil {
 			s.logger.Warn("Failed to delete expired session (fallback)",
-				zap.String("session_id", maskSessionID(sessionID)), zap.Error(delErr))
+				zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(delErr))
 		}
 		if accountSessionsKey != "" {
 			if remErr := s.redis.SRem(ctx, accountSessionsKey, sessionID); remErr != nil {
 				s.logger.Warn("Failed to remove stale session index entry (fallback)",
-					zap.String("session_id", maskSessionID(sessionID)), zap.Error(remErr))
+					zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(remErr))
 			}
 		}
 	} else if result == 0 {
 		s.logger.Info("Session was refreshed concurrently, skipping expiry",
-			zap.String("session_id", maskSessionID(sessionID)))
+			zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 		return
 	}
 }

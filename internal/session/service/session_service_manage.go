@@ -32,13 +32,13 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 		}
 	} else {
 		s.logger.Warn("Token revoker not configured, skipping token revocation during session revoke",
-			zap.String("session_id", maskSessionID(sessionID)))
+			zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 	}
 
 	// Delete session key
 	key := s.buildSessionKey(sessionID)
 	if err := s.redis.Del(ctx, key); err != nil {
-		s.logger.Error("Failed to delete session", zap.Error(err), zap.String("session_id", maskSessionID(sessionID)))
+		s.logger.Error("Failed to delete session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 		return fmt.Errorf("delete session: %w", err)
 	}
 
@@ -46,13 +46,13 @@ func (s *SessionService) RevokeSession(ctx context.Context, accountID string, se
 	indexKey := s.buildAccountSessionsKey(accountID)
 	if err := s.redis.SRem(ctx, indexKey, sessionID); err != nil {
 		s.logger.Warn("Failed to remove session from account index during revocation",
-			zap.String("session_id", maskSessionID(sessionID)),
+			zap.String("session_id", utility.MaskOpaqueID(sessionID)),
 			zap.String("account_id", utility.MaskOpaqueID(accountID)),
 			zap.Error(err))
 	}
 
 	s.logger.Info("Session revoked",
-		zap.String("session_id", maskSessionID(sessionID)),
+		zap.String("session_id", utility.MaskOpaqueID(sessionID)),
 		zap.String("account_id", utility.MaskOpaqueID(accountID)))
 	return nil
 }
@@ -81,7 +81,7 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 		for _, sid := range sessionIDs {
 			if err := s.tokenRevoker.RevokeAllForSession(ctx, sid); err != nil {
 				s.logger.Warn("Failed to revoke tokens for session during account revocation",
-					zap.String("session_id", maskSessionID(sid)), zap.Error(err))
+					zap.String("session_id", utility.MaskOpaqueID(sid)), zap.Error(err))
 			}
 		}
 	} else {
@@ -178,7 +178,7 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 	// Clean up stale index entries
 	for _, sid := range staleIDs {
 		if err := s.redis.SRem(ctx, indexKey, sid); err != nil {
-			s.logger.Warn("Failed to remove stale session index entry", zap.String("session_id", maskSessionID(sid)), zap.Error(err))
+			s.logger.Warn("Failed to remove stale session index entry", zap.String("session_id", utility.MaskOpaqueID(sid)), zap.Error(err))
 		}
 	}
 
@@ -222,12 +222,12 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 			continue
 		}
 		s.logger.Info("Evicted oldest session due to limit",
-			zap.String("session_id", maskSessionID(sid)),
+			zap.String("session_id", utility.MaskOpaqueID(sid)),
 			zap.String("account_id", utility.MaskOpaqueID(accountID)))
 
 		if err := s.tokenRevoker.RevokeAllForSession(ctx, sid); err != nil {
 			s.logger.Warn("Failed to revoke tokens for evicted session",
-				zap.String("session_id", maskSessionID(sid)), zap.Error(err))
+				zap.String("session_id", utility.MaskOpaqueID(sid)), zap.Error(err))
 		}
 	}
 

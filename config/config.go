@@ -454,6 +454,9 @@ func (c *GoUnoConfig) validateAuthDurations() error {
 
 func (c *GoUnoConfig) validatePrivateKeyPath() error {
 	if c.AuthConfig.PrivateKeyPath == "" {
+		if c.WebServerConfig.Production && c.AuthConfig.KeyID == "" {
+			return fmt.Errorf("auth: key_id is required in production mode")
+		}
 		return nil
 	}
 	stat, err := os.Stat(c.AuthConfig.PrivateKeyPath)

@@ -478,6 +478,15 @@ func TestValidate_Errors(t *testing.T) {
 			},
 			wantErr: "auth: key_id is required when private_key_path is set",
 		},
+		{
+			name: "missing key_id in production without private_key_path",
+			mutate: func(c *GoUnoConfig) {
+				c.WebServerConfig.Production = true
+				c.AuthConfig.PrivateKeyPath = ""
+				c.AuthConfig.KeyID = ""
+			},
+			wantErr: "auth: key_id is required in production mode",
+		},
 
 		// ── Address validation ────────────────
 		{
