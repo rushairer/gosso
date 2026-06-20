@@ -18,15 +18,15 @@ import (
 )
 
 var (
-	ErrAccountIDRequired            = errors.New("account ID is required")
-	ErrMustUseNewPasswordCredential = errors.New("must use NewPasswordCredential for password type")
-	ErrPasswordRequired             = errors.New("password must not be empty")
-	ErrPasswordTooLong              = errors.New("password exceeds maximum length")
-	ErrEmailRequired                = errors.New("email is required")
-	ErrInvalidEmailFormat           = errors.New("invalid email format")
-	ErrPhoneRequired                = errors.New("phone is required")
-	ErrInvalidPhoneFormat           = errors.New("invalid phone format")
-	ErrCredentialAlreadyDeleted     = errors.New("credential is already deleted")
+	ErrAccountIDRequired            = errors.New("credential: account_id is required")
+	ErrMustUseNewPasswordCredential = errors.New("credential: must use NewPasswordCredential for password type")
+	ErrPasswordRequired             = errors.New("credential: password must not be empty")
+	ErrPasswordTooLong              = errors.New("credential: password exceeds maximum length")
+	ErrEmailRequired                = errors.New("credential: email is required")
+	ErrInvalidEmailFormat           = errors.New("credential: invalid email format")
+	ErrPhoneRequired                = errors.New("credential: phone is required")
+	ErrInvalidPhoneFormat           = errors.New("credential: invalid phone format")
+	ErrCredentialAlreadyDeleted     = errors.New("credential: already deleted")
 )
 
 // CredentialType represents the type of credential.
@@ -178,6 +178,9 @@ func (c *Credential) IsDeleted() bool {
 
 // IsVerified reports whether the credential has been verified.
 func (c *Credential) IsVerified() bool {
+	if c == nil {
+		return false
+	}
 	return c.Verified
 }
 

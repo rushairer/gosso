@@ -11,16 +11,16 @@ import (
 
 // Account domain sentinel errors.
 var (
-	ErrDisplayNameRequired   = errors.New("display name is required")
-	ErrDisplayNameTooLong    = errors.New("display name must not exceed 255 characters")
-	ErrUsernameTooLong       = errors.New("username must not exceed 64 characters")
-	ErrLocaleRequired        = errors.New("locale is required")
-	ErrLocaleTooLong         = errors.New("locale must not exceed 10 characters")
-	ErrTimezoneRequired      = errors.New("timezone is required")
-	ErrAccountAlreadyDeleted = errors.New("account is already deleted")
-	ErrCannotSuspendDeleted  = errors.New("cannot suspend a deleted account")
-	ErrCannotActivateDeleted = errors.New("cannot activate a deleted account")
-	ErrInvalidAccountStatus  = errors.New("invalid account status for this operation")
+	ErrDisplayNameRequired   = errors.New("account: display name is required")
+	ErrDisplayNameTooLong    = errors.New("account: display name must not exceed 255 characters")
+	ErrUsernameTooLong       = errors.New("account: username must not exceed 64 characters")
+	ErrLocaleRequired        = errors.New("account: locale is required")
+	ErrLocaleTooLong         = errors.New("account: locale must not exceed 10 characters")
+	ErrTimezoneRequired      = errors.New("account: timezone is required")
+	ErrAccountAlreadyDeleted = errors.New("account: already deleted")
+	ErrCannotSuspendDeleted  = errors.New("account: cannot suspend a deleted account")
+	ErrCannotActivateDeleted = errors.New("account: cannot activate a deleted account")
+	ErrInvalidAccountStatus  = errors.New("account: invalid status for this operation")
 )
 
 // AccountStatus represents the account lifecycle state.
@@ -128,21 +128,33 @@ func (a *Account) Validate() error {
 
 // IsDeleted reports whether the account has been soft-deleted.
 func (a *Account) IsDeleted() bool {
+	if a == nil {
+		return false
+	}
 	return a.DeletedAt != nil
 }
 
 // IsActive reports whether the account is in active status.
 func (a *Account) IsActive() bool {
+	if a == nil {
+		return false
+	}
 	return a.Status == AccountStatusActive && !a.IsDeleted()
 }
 
 // IsSuspended reports whether the account has been suspended.
 func (a *Account) IsSuspended() bool {
+	if a == nil {
+		return false
+	}
 	return a.Status == AccountStatusSuspended && !a.IsDeleted()
 }
 
 // SoftDelete soft-deletes the account. Returns an error if already deleted.
 func (a *Account) SoftDelete() error {
+	if a == nil {
+		return ErrAccountAlreadyDeleted
+	}
 	if a.IsDeleted() {
 		return ErrAccountAlreadyDeleted
 	}
@@ -155,6 +167,9 @@ func (a *Account) SoftDelete() error {
 
 // Suspend suspends the account. Only active accounts can be suspended.
 func (a *Account) Suspend() error {
+	if a == nil {
+		return ErrInvalidAccountStatus
+	}
 	if a.IsDeleted() {
 		return ErrCannotSuspendDeleted
 	}
@@ -169,6 +184,9 @@ func (a *Account) Suspend() error {
 
 // Activate reactivates the account. Only suspended accounts can be activated.
 func (a *Account) Activate() error {
+	if a == nil {
+		return ErrInvalidAccountStatus
+	}
 	if a.IsDeleted() {
 		return ErrCannotActivateDeleted
 	}

@@ -41,5 +41,8 @@ func NewTokenBlacklist(jti, reason string, expiresAt time.Time) (*TokenBlacklist
 
 // IsExpired checks if the token has expired (blacklist records can be cleaned up)
 func (t *TokenBlacklist) IsExpired() bool {
+	if t == nil {
+		return true
+	}
 	return time.Now().After(t.ExpiresAt)
 }

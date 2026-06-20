@@ -70,22 +70,34 @@ func NewWebAuthnCredential(accountID string, credentialID, publicKey []byte, att
 
 // MarkUsed updates LastUsedAt to now.
 func (c *WebAuthnCredential) MarkUsed() {
+	if c == nil {
+		return
+	}
 	now := time.Now()
 	c.LastUsedAt = &now
 }
 
 // IncrementSignCount increments the sign counter (clone detection).
 func (c *WebAuthnCredential) IncrementSignCount() {
+	if c == nil {
+		return
+	}
 	c.SignCount++
 }
 
 // IsDeleted returns true if the credential has been soft-deleted.
 func (c *WebAuthnCredential) IsDeleted() bool {
+	if c == nil {
+		return false
+	}
 	return c.DeletedAt != nil
 }
 
 // SoftDelete marks the credential as deleted. Returns ErrWebAuthnAlreadyDeleted if already deleted.
 func (c *WebAuthnCredential) SoftDelete() error {
+	if c == nil {
+		return ErrWebAuthnAlreadyDeleted
+	}
 	if c.DeletedAt != nil {
 		return ErrWebAuthnAlreadyDeleted
 	}

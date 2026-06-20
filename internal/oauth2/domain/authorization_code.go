@@ -58,11 +58,17 @@ func NewAuthorizationCode(code, clientID, accountID, redirectURI string, scopes 
 
 // IsExpired checks if the authorization code has expired
 func (a *AuthorizationCode) IsExpired() bool {
+	if a == nil {
+		return true
+	}
 	return time.Now().After(a.ExpiresAt)
 }
 
 // VerifyPKCE verifies the PKCE code_verifier
 func (a *AuthorizationCode) VerifyPKCE(verifier string) bool {
+	if a == nil {
+		return false
+	}
 	if a.CodeChallenge == "" {
 		return true // No PKCE requirement, pass through
 	}
