@@ -32,7 +32,7 @@ COPY --from=builder /build/config/production.yaml /app/config/production.yaml
 COPY --from=builder /build/db/migrations /app/db/migrations
 COPY --from=builder /build/script/entrypoint.sh /app/entrypoint.sh
 
-RUN chown -R gosso:gosso /app
+RUN chown -R gosso:gosso /app && chmod 0755 /app/entrypoint.sh
 
 USER gosso
 
