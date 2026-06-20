@@ -12,8 +12,8 @@ import (
 )
 
 // GoUnoConfig is the top-level application configuration loaded from YAML and
-// environment variables (prefix GOUNO_). It is populated by ConfigManager and
-// validated before the application starts.
+environment variables (prefix GOUNO_). It is populated by ConfigManager and
+validated before the application starts.
 type GoUnoConfig struct {
 	WebServerConfig    WebServerConfig      `mapstructure:"web_server"`
 	DatabaseConfig     DatabaseConfig       `mapstructure:"database"`
@@ -616,6 +616,9 @@ func (c *GoUnoConfig) validateCORS() error {
 			u, err := url.Parse(origin)
 			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 				return fmt.Errorf("cors: allowed_origins contains invalid origin %q (must be a full URL with scheme and host, or \"*\")", origin)
+			}
+			if u.Path != "" && u.Path != "/" || u.RawQuery != "" || u.Fragment != "" {
+				return fmt.Errorf("cors: allowed_origins contains invalid origin %q (origins must not include path, query, or fragment)", origin)
 			}
 		}
 	}
