@@ -1,6 +1,8 @@
 #!/bin/sh
 
 # Run database migrations before starting the application.
+# The Go migrate command serializes concurrent app starts with a PostgreSQL
+# advisory lock, so multiple replicas do not apply migrations at the same time.
 # Exit code 0 from "migrate up" means migrations were applied.
 # Exit code 1 with "no change" in output means DB is already up to date.
 echo "Running database migrations..."
