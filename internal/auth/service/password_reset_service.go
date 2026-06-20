@@ -185,6 +185,8 @@ func NewPasswordResetServiceWithConfig(
 	}
 	if cfg.LoginRateLimitClearer != nil {
 		svc.loginRateLimitClearer = cfg.LoginRateLimitClearer
+	} else {
+		svc.logger.Warn("LoginRateLimitClearer not configured; login rate limits will not be cleared after password reset")
 	}
 	return svc
 }

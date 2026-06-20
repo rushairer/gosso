@@ -29,11 +29,12 @@ func NewJWKSService(keySvc *tokenService.KeyService) *JWKSService {
 	return s
 }
 
-// GetJWKS returns the JWKS document.
+// GetJWKS returns a copy of the JWKS document.
+// Returns a copy to prevent callers from mutating the shared state.
 func (s *JWKSService) GetJWKS() map[string]any {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.jwks
+	return copyMap(s.jwks)
 }
 
 // GetPublicKeyByKID returns the RSA public key matching the given key ID.

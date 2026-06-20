@@ -92,23 +92,36 @@ func NewFederatedIdentity(accountID string, provider Provider, providerUserID st
 
 // IsDeleted reports whether the federated identity has been soft-deleted.
 func (fi *FederatedIdentity) IsDeleted() bool {
+	if fi == nil {
+		return false
+	}
 	return fi.DeletedAt != nil
 }
 
 // SoftDelete soft-deletes the federated identity.
 func (fi *FederatedIdentity) SoftDelete() error {
+	if fi == nil {
+		return ErrFederatedIdentityAlreadyDeleted
+	}
 	if fi.IsDeleted() {
 		return ErrFederatedIdentityAlreadyDeleted
 	}
 	now := time.Now()
 	fi.DeletedAt = &now
 	fi.UpdatedAt = now
+	// Clear sensitive data in memory to match the repository-level soft-delete
+	// which clears profile and provider_user_id in the database.
+	fi.ProviderUserID = ""
+	fi.Profile = nil
 	return nil
 }
 
 // UpdateProfile updates the profile data.
 // Returns ErrProfileTooLarge if the profile JSON exceeds maxProfileSize.
 func (fi *FederatedIdentity) UpdateProfile(profile map[string]any) error {
+	if fi == nil {
+		return nil
+	}
 	if profile == nil {
 		profile = make(map[string]any)
 	}

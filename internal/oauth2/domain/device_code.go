@@ -94,16 +94,25 @@ type DeviceCode struct {
 
 // IsExpired returns true if the device code has passed its expiration time.
 func (d *DeviceCode) IsExpired() bool {
+	if d == nil {
+		return true
+	}
 	return time.Now().After(d.ExpiresAt)
 }
 
 // IsPending returns true if the device code is still awaiting user authorization.
 func (d *DeviceCode) IsPending() bool {
+	if d == nil {
+		return false
+	}
 	return d.Status == DeviceCodeStatusPending
 }
 
 // Authorize transitions the device code from pending to authorized.
 func (d *DeviceCode) Authorize(accountID string) error {
+	if d == nil {
+		return ErrDeviceCodeNotFound
+	}
 	if accountID == "" {
 		return ErrDeviceAccountIDRequired
 	}
@@ -124,6 +133,9 @@ func (d *DeviceCode) Authorize(accountID string) error {
 
 // Deny transitions the device code from pending to denied.
 func (d *DeviceCode) Deny() error {
+	if d == nil {
+		return ErrDeviceCodeNotFound
+	}
 	if d.Status == DeviceCodeStatusAuthorized {
 		return ErrDeviceCodeAlreadyAuthorized
 	}
@@ -139,6 +151,9 @@ func (d *DeviceCode) Deny() error {
 
 // MarkUsed transitions the device code from authorized to used.
 func (d *DeviceCode) MarkUsed() error {
+	if d == nil {
+		return ErrDeviceCodeNotFound
+	}
 	if d.Status == DeviceCodeStatusUsed {
 		return ErrDeviceCodeAlreadyUsed
 	}

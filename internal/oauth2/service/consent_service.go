@@ -161,7 +161,8 @@ func (s *ConsentService) DeleteConsentsByAccount(ctx context.Context, accountID 
 	var cursor uint64
 	var totalDeleted int
 
-	for {
+	const maxIterations = 1000
+	for i := 0; i < maxIterations; i++ {
 		keys, nextCursor, err := s.redis.GetClient().Scan(ctx, cursor, pattern, 100).Result()
 		if err != nil {
 			return fmt.Errorf("scan consent keys: %w", err)
@@ -176,6 +177,11 @@ func (s *ConsentService) DeleteConsentsByAccount(ctx context.Context, accountID 
 		if cursor == 0 {
 			break
 		}
+	}
+	if cursor != 0 {
+		s.logger.Warn("DeleteConsentsByAccount SCAN exceeded max iterations",
+			zap.String("account_id", utility.MaskOpaqueID(accountID)),
+			zap.Int("max_iterations", maxIterations))
 	}
 
 	if totalDeleted > 0 {

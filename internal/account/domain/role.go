@@ -54,11 +54,17 @@ func NewRole(name string, description *string) (*Role, error) {
 
 // IsDeleted reports whether the role has been soft-deleted.
 func (r *Role) IsDeleted() bool {
+	if r == nil {
+		return false
+	}
 	return r.DeletedAt != nil
 }
 
 // SoftDelete soft-deletes the role.
 func (r *Role) SoftDelete() error {
+	if r == nil {
+		return ErrRoleAlreadyDeleted
+	}
 	if r.IsDeleted() {
 		return ErrRoleAlreadyDeleted
 	}
@@ -71,6 +77,9 @@ func (r *Role) SoftDelete() error {
 // AddPermission adds a permission to the role.
 // Empty or whitespace-only permissions are silently ignored.
 func (r *Role) AddPermission(permission string) {
+	if r == nil {
+		return
+	}
 	permission = strings.TrimSpace(permission)
 	if permission == "" {
 		return
@@ -87,6 +96,9 @@ func (r *Role) AddPermission(permission string) {
 
 // RemovePermission removes a permission from the role.
 func (r *Role) RemovePermission(permission string) {
+	if r == nil {
+		return
+	}
 	permission = strings.TrimSpace(permission)
 	for i, p := range r.Permissions {
 		if p == permission {
@@ -99,6 +111,9 @@ func (r *Role) RemovePermission(permission string) {
 
 // HasPermission reports whether the role has the given permission.
 func (r *Role) HasPermission(permission string) bool {
+	if r == nil {
+		return false
+	}
 	permission = strings.TrimSpace(permission)
 	for _, p := range r.Permissions {
 		if p == permission {

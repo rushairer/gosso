@@ -60,12 +60,12 @@ func (r *roleRepositoryImpl) CreateRole(ctx context.Context, tx *sql.Tx, role *d
 	return nil
 }
 
-// UpdateRole updates a role
+// UpdateRole updates a role with optimistic locking on updated_at.
 func (r *roleRepositoryImpl) UpdateRole(ctx context.Context, tx *sql.Tx, role *domain.Role) error {
 	query := `
 		UPDATE roles
 		SET name = $1, description = $2, permissions = $3, metadata = $4, updated_at = $5
-		WHERE id = $6 AND deleted_at IS NULL
+		WHERE id = $6 AND deleted_at IS NULL AND updated_at = $7
 	`
 
 	permissionsJSON, err := json.Marshal(role.Permissions)
@@ -78,13 +78,18 @@ func (r *roleRepositoryImpl) UpdateRole(ctx context.Context, tx *sql.Tx, role *d
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
+	// Save expected value for optimistic locking
+	expectedUpdatedAt := role.UpdatedAt
+	newUpdatedAt := time.Now()
+
 	result, err := tx.ExecContext(ctx, query,
 		role.Name,
 		role.Description,
 		permissionsJSON,
 		metadataJSON,
-		role.UpdatedAt,
+		newUpdatedAt,
 		role.ID,
+		expectedUpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("update role: %w", err)
@@ -98,6 +103,7 @@ func (r *roleRepositoryImpl) UpdateRole(ctx context.Context, tx *sql.Tx, role *d
 		return fmt.Errorf("%w: %s", ErrRoleNotFound, role.ID)
 	}
 
+	role.UpdatedAt = newUpdatedAt
 	return nil
 }
 

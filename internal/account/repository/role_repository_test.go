@@ -318,7 +318,7 @@ func TestRoleRepo_UpdateRole_Success(t *testing.T) {
 	mock.ExpectExec("UPDATE roles").
 		WithArgs(role.Name, role.Description,
 			sqlmock.AnyArg(), sqlmock.AnyArg(),
-			sqlmock.AnyArg(), role.ID).
+			sqlmock.AnyArg(), role.ID, sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewRoleRepository(sqlDB)
@@ -340,7 +340,7 @@ func TestRoleRepo_UpdateRole_NotFound(t *testing.T) {
 	mock.ExpectExec("UPDATE roles").
 		WithArgs(role.Name, role.Description,
 			sqlmock.AnyArg(), sqlmock.AnyArg(),
-			sqlmock.AnyArg(), role.ID).
+			sqlmock.AnyArg(), role.ID, sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	repo := NewRoleRepository(sqlDB)
