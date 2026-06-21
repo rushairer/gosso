@@ -24,9 +24,6 @@ var (
 	// Token errors
 	ErrInvalidRefreshToken = errors.New("invalid refresh token")
 
-	// General input errors
-	ErrInvalidSessionID = errors.New("invalid session id")
-
 	// Passkey/WebAuthn errors
 	ErrChallengeNotFound   = errors.New("challenge not found or expired")
 	ErrPasskeyNotFound     = errors.New("no passkey found for account")

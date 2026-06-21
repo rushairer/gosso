@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/rushairer/gosso/internal/session/domain"
 	"github.com/rushairer/gosso/internal/utility"
@@ -77,13 +79,20 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 
 	// Revoke tokens for each session before deleting session keys.
 	// Token revocation is idempotent — if a session has no tokens, this is a no-op.
+	// Uses errgroup to parallelize Redis round-trips for each session's token revocation.
 	if s.tokenRevoker != nil {
+		g, gctx := errgroup.WithContext(ctx)
+		g.SetLimit(min(len(sessionIDs), runtime.NumCPU()))
 		for _, sid := range sessionIDs {
-			if err := s.tokenRevoker.RevokeAllForSession(ctx, sid); err != nil {
-				s.logger.Warn("Failed to revoke tokens for session during account revocation",
-					zap.String("session_id", utility.MaskOpaqueID(sid)), zap.Error(err))
-			}
+			g.Go(func() error {
+				if err := s.tokenRevoker.RevokeAllForSession(gctx, sid); err != nil {
+					s.logger.Warn("Failed to revoke tokens for session during account revocation",
+						zap.String("session_id", utility.MaskOpaqueID(sid)), zap.Error(err))
+				}
+				return nil // non-fatal: warning already logged
+			})
 		}
+		_ = g.Wait() // all goroutines return nil; wait for completion
 	} else {
 		s.logger.Warn("Token revoker not configured, skipping token revocation for account sessions",
 			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Int("count", len(sessionIDs)))

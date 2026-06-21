@@ -9,6 +9,8 @@ import (
 	"net/mail"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/account/repository"
 	"github.com/rushairer/gosso/internal/audit"
@@ -317,19 +319,38 @@ func nonNilMap(m map[string]any) map[string]any {
 // insert commits between the transaction failure and this query). The impact is
 // limited to the user-facing error message — no data integrity is affected.
 func (s *accountServiceImpl) classifyRegistrationConflict(ctx context.Context, req *RegisterAccountRequest) error {
-	// Check email credential first (most common conflict)
-	if req.Email != "" {
-		cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, domain.CredentialTypeEmail, req.Email)
-		if err == nil && cred != nil {
-			return ErrEmailAlreadyRegistered
-		}
+	// Run email and phone credential lookups concurrently to reduce latency
+	// on this error path. Both queries are independent reads outside the
+	// failed transaction, so parallelizing them is safe.
+	type credResult struct {
+		cred *domain.Credential
+		err  error
 	}
-	// Check phone credential
+
+	g, gctx := errgroup.WithContext(ctx)
+
+	var emailResult, phoneResult credResult
+
+	if req.Email != "" {
+		g.Go(func() error {
+			emailResult.cred, emailResult.err = s.credentialRepo.FindByTypeAndIdentifier(gctx, domain.CredentialTypeEmail, req.Email)
+			return nil // lookup errors are non-fatal; fall through to username conflict
+		})
+	}
 	if req.Phone != "" {
-		cred, err := s.credentialRepo.FindByTypeAndIdentifier(ctx, domain.CredentialTypePhone, req.Phone)
-		if err == nil && cred != nil {
-			return ErrPhoneAlreadyRegistered
-		}
+		g.Go(func() error {
+			phoneResult.cred, phoneResult.err = s.credentialRepo.FindByTypeAndIdentifier(gctx, domain.CredentialTypePhone, req.Phone)
+			return nil // lookup errors are non-fatal; fall through to username conflict
+		})
+	}
+	_ = g.Wait()
+
+	// Check email first (most common conflict), then phone
+	if req.Email != "" && emailResult.err == nil && emailResult.cred != nil {
+		return ErrEmailAlreadyRegistered
+	}
+	if req.Phone != "" && phoneResult.err == nil && phoneResult.cred != nil {
+		return ErrPhoneAlreadyRegistered
 	}
 	// If neither credential conflicts, it must be a username conflict
 	return ErrUsernameAlreadyTaken

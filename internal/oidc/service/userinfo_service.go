@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"go.uber.org/zap"
@@ -49,6 +48,37 @@ func (s *UserInfoService) GetUserInfo(ctx context.Context, accountID string, sco
 		"sub": accountID,
 	}
 
+	// Pre-fetch email and phone credentials in a single DB round-trip
+	// if both scopes are requested.
+	needEmail, needPhone := false, false
+	for _, scope := range scopes {
+		switch scope {
+		case "email":
+			needEmail = true
+		case "phone":
+			needPhone = true
+		}
+	}
+
+	var credsByType map[accountDomain.CredentialType][]*accountDomain.Credential
+	if needEmail || needPhone {
+		var credTypes []accountDomain.CredentialType
+		if needEmail {
+			credTypes = append(credTypes, accountDomain.CredentialTypeEmail)
+		}
+		if needPhone {
+			credTypes = append(credTypes, accountDomain.CredentialTypePhone)
+		}
+		creds, err := s.credentialRepo.FindByAccountAndTypes(ctx, accountID, credTypes...)
+		if err != nil {
+			return nil, fmt.Errorf("find credentials: %w", err)
+		}
+		credsByType = make(map[accountDomain.CredentialType][]*accountDomain.Credential, len(credTypes))
+		for _, cred := range creds {
+			credsByType[cred.Type] = append(credsByType[cred.Type], cred)
+		}
+	}
+
 	for _, scope := range scopes {
 		switch scope {
 		case "profile":
@@ -61,45 +91,25 @@ func (s *UserInfoService) GetUserInfo(ctx context.Context, accountID string, sco
 			}
 			info["locale"] = account.Locale
 		case "email":
-			if err := s.addEmailInfo(ctx, accountID, info); err != nil {
-				return nil, err
-			}
+			s.addEmailInfo(credsByType[accountDomain.CredentialTypeEmail], info)
 		case "phone":
-			if err := s.addPhoneInfo(ctx, accountID, info); err != nil {
-				return nil, err
-			}
+			s.addPhoneInfo(credsByType[accountDomain.CredentialTypePhone], info)
 		}
 	}
 
 	return info, nil
 }
 
-func (s *UserInfoService) addEmailInfo(ctx context.Context, accountID string, info map[string]any) error {
-	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeEmail)
-	if err != nil {
-		if errors.Is(err, accountRepo.ErrCredentialNotFound) {
-			return nil // no email credential is not an error
-		}
-		return fmt.Errorf("find email credential: %w", err)
-	}
+func (s *UserInfoService) addEmailInfo(creds []*accountDomain.Credential, info map[string]any) {
 	if len(creds) > 0 && creds[0].Identifier != nil {
 		info["email"] = *creds[0].Identifier
 		info["email_verified"] = creds[0].IsVerified()
 	}
-	return nil
 }
 
-func (s *UserInfoService) addPhoneInfo(ctx context.Context, accountID string, info map[string]any) error {
-	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypePhone)
-	if err != nil {
-		if errors.Is(err, accountRepo.ErrCredentialNotFound) {
-			return nil // no phone credential is not an error
-		}
-		return fmt.Errorf("find phone credential: %w", err)
-	}
+func (s *UserInfoService) addPhoneInfo(creds []*accountDomain.Credential, info map[string]any) {
 	if len(creds) > 0 && creds[0].Identifier != nil {
 		info["phone_number"] = *creds[0].Identifier
 		info["phone_number_verified"] = creds[0].IsVerified()
 	}
-	return nil
 }

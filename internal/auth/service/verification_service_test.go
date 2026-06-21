@@ -288,6 +288,13 @@ func (m *mockCredRepoForVerification) FindByAccountAndType(_ context.Context, _ 
 	return m.creds, nil
 }
 
+func (m *mockCredRepoForVerification) FindByAccountAndTypes(_ context.Context, _ string, _ ...accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.creds, nil
+}
+
 func (m *mockCredRepoForVerification) FindByTypeAndIdentifier(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
 	return nil, fmt.Errorf("not implemented")
 }

@@ -115,6 +115,37 @@ func findByAccountAndType(ctx context.Context, queryFunc func(context.Context, s
 	return credentials, nil
 }
 
+// FindByAccountAndTypes finds credentials by account ID and multiple types in a single query.
+func (r *credentialRepositoryImpl) FindByAccountAndTypes(ctx context.Context, accountID string, credTypes ...domain.CredentialType) ([]*domain.Credential, error) {
+	if len(credTypes) == 0 {
+		return nil, nil
+	}
+
+	var buf strings.Builder
+	args := []any{accountID}
+	buf.WriteString(`SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
+	       metadata, created_at, updated_at, verified_at, last_used_at
+	FROM account_credentials
+	WHERE account_id = $1 AND deleted_at IS NULL AND credential_type IN (`)
+
+	for i, ct := range credTypes {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		fmt.Fprintf(&buf, "$%d", i+2)
+		args = append(args, ct)
+	}
+	buf.WriteString(")\n\tORDER BY primary_credential DESC, created_at ASC")
+
+	rows, err := r.db.QueryContext(ctx, buf.String(), args...)
+	if err != nil {
+		return nil, fmt.Errorf("query credentials: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanCredentials(rows)
+}
+
 // FindByTypeAndIdentifier finds a credential by type and identifier
 func (r *credentialRepositoryImpl) FindByTypeAndIdentifier(ctx context.Context, credType domain.CredentialType, identifier string) (*domain.Credential, error) {
 	return findByTypeAndIdentifier(ctx, r.db.QueryRowContext, credType, identifier)

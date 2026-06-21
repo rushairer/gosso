@@ -37,6 +37,20 @@ func (m *mockCredentialRepo) FindByAccountAndType(_ context.Context, accountID s
 	return nil, nil
 }
 
+func (m *mockCredentialRepo) FindByAccountAndTypes(_ context.Context, accountID string, credTypes ...accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	if m.findByAccountAndTypeErr != nil {
+		return nil, m.findByAccountAndTypeErr
+	}
+	var result []*accountDomain.Credential
+	for _, ct := range credTypes {
+		key := accountID + ":" + string(ct)
+		if creds, ok := m.credMap[key]; ok {
+			result = append(result, creds...)
+		}
+	}
+	return result, nil
+}
+
 func (m *mockCredentialRepo) FindByTypeAndIdentifier(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
 	return nil, nil
 }
@@ -292,6 +306,9 @@ func (m *mockWebAuthnCredRepo) SoftDeleteCredential(_ context.Context, _ *sql.Tx
 }
 func (m *mockWebAuthnCredRepo) SoftDeleteByAccountID(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	return nil
+}
+func (m *mockWebAuthnCredRepo) HasPasskeys(_ context.Context, _ string) (bool, error) {
+	return len(m.findByAccountIDResult) > 0, m.findByAccountIDErr
 }
 
 func newTestMFAServiceWithPasskeys(t *testing.T, credRepo *mockCredentialRepo, waRepo *mockWebAuthnCredRepo) *MFAService {
@@ -688,6 +705,98 @@ func TestVerifyBackupCode_NoCodes(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, valid)
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+// ──────────────────────────────────────────────
+// GetMFAStatus
+// ──────────────────────────────────────────────
+
+func TestGetMFAStatus_TOTPVerified(t *testing.T) {
+	credRepo := &mockCredentialRepo{
+		credMap: map[string][]*accountDomain.Credential{
+			"account-001:totp": {
+				{ID: "totp-1", Type: accountDomain.CredentialTypeTOTP, Verified: true},
+			},
+		},
+	}
+	svc := newTestMFAService(credRepo)
+
+	status, err := svc.GetMFAStatus(context.Background(), "account-001")
+	require.NoError(t, err)
+	assert.True(t, status.Enabled)
+	assert.Contains(t, status.Types, "totp")
+}
+
+func TestGetMFAStatus_NoTOTP(t *testing.T) {
+	credRepo := &mockCredentialRepo{credMap: map[string][]*accountDomain.Credential{}}
+	svc := newTestMFAService(credRepo)
+
+	status, err := svc.GetMFAStatus(context.Background(), "account-001")
+	require.NoError(t, err)
+	assert.False(t, status.Enabled)
+	assert.Empty(t, status.Types)
+}
+
+func TestGetMFAStatus_WithPasskey(t *testing.T) {
+	credRepo := &mockCredentialRepo{credMap: map[string][]*accountDomain.Credential{}}
+	waRepo := &mockWebAuthnCredRepo{
+		findByAccountIDResult: []*authDomain.WebAuthnCredential{
+			{ID: "wa-1"},
+		},
+	}
+	svc := newTestMFAServiceWithPasskeys(t, credRepo, waRepo)
+
+	status, err := svc.GetMFAStatus(context.Background(), "account-001")
+	require.NoError(t, err)
+	assert.True(t, status.Enabled)
+	assert.Contains(t, status.Types, "passkey")
+	assert.NotContains(t, status.Types, "totp")
+}
+
+func TestGetMFAStatus_WithTOTPAndPasskey(t *testing.T) {
+	credRepo := &mockCredentialRepo{
+		credMap: map[string][]*accountDomain.Credential{
+			"account-001:totp": {
+				{ID: "totp-1", Type: accountDomain.CredentialTypeTOTP, Verified: true},
+			},
+		},
+	}
+	waRepo := &mockWebAuthnCredRepo{
+		findByAccountIDResult: []*authDomain.WebAuthnCredential{
+			{ID: "wa-1"},
+		},
+	}
+	svc := newTestMFAServiceWithPasskeys(t, credRepo, waRepo)
+
+	status, err := svc.GetMFAStatus(context.Background(), "account-001")
+	require.NoError(t, err)
+	assert.True(t, status.Enabled)
+	assert.Contains(t, status.Types, "totp")
+	assert.Contains(t, status.Types, "passkey")
+}
+
+func TestGetMFAStatus_TOTPError(t *testing.T) {
+	credRepo := &mockCredentialRepo{
+		credMap:                 map[string][]*accountDomain.Credential{},
+		findByAccountAndTypeErr: errors.New("db error"),
+	}
+	svc := newTestMFAService(credRepo)
+
+	status, err := svc.GetMFAStatus(context.Background(), "account-001")
+	assert.Error(t, err)
+	assert.Nil(t, status)
+}
+
+func TestGetMFAStatus_PasskeyError(t *testing.T) {
+	credRepo := &mockCredentialRepo{credMap: map[string][]*accountDomain.Credential{}}
+	waRepo := &mockWebAuthnCredRepo{
+		findByAccountIDErr: errors.New("redis down"),
+	}
+	svc := newTestMFAServiceWithPasskeys(t, credRepo, waRepo)
+
+	status, err := svc.GetMFAStatus(context.Background(), "account-001")
+	assert.Error(t, err)
+	assert.Nil(t, status)
 }
 
 // ──────────────────────────────────────────────

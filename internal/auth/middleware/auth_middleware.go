@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -67,9 +68,10 @@ func ValidateBearerToken(ctx *gin.Context, tokenSvc TokenValidator, sessionValid
 // JWTAuthMiddleware is the JWT authentication middleware.
 // sessionValidator is required — it verifies the session still exists in Redis,
 // ensuring revoked sessions (e.g. after account deletion or suspension) are rejected.
-func JWTAuthMiddleware(tokenSvc TokenValidator, sessionValidator sessionDomain.SessionValidator) gin.HandlerFunc {
+// Returns an error if sessionValidator is nil.
+func JWTAuthMiddleware(tokenSvc TokenValidator, sessionValidator sessionDomain.SessionValidator) (gin.HandlerFunc, error) {
 	if sessionValidator == nil {
-		panic("JWTAuthMiddleware: sessionValidator must not be nil — session validation is required for security")
+		return nil, fmt.Errorf("JWTAuthMiddleware: sessionValidator must not be nil — session validation is required for security")
 	}
 	return func(ctx *gin.Context) {
 		claims, err := ValidateBearerToken(ctx, tokenSvc, sessionValidator)
@@ -87,7 +89,7 @@ func JWTAuthMiddleware(tokenSvc TokenValidator, sessionValidator sessionDomain.S
 		ctx.Set(middleware.ContextKeyAccountID, claims.AccountID)
 		ctx.Set(middleware.ContextKeyClaims, claims)
 		ctx.Next()
-	}
+	}, nil
 }
 
 func extractBearerToken(ctx *gin.Context) string {

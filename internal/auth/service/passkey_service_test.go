@@ -78,6 +78,16 @@ func (m *mockWebAuthnRepo) SoftDeleteByAccountID(_ context.Context, _ *sql.Tx, _
 	return nil
 }
 
+func (m *mockWebAuthnRepo) HasPasskeys(_ context.Context, accountID string) (bool, error) {
+	if m.findByAccountIDErr != nil {
+		return false, m.findByAccountIDErr
+	}
+	if creds, ok := m.creds[accountID]; ok {
+		return len(creds) > 0, nil
+	}
+	return false, nil
+}
+
 func newTestPasskeyService(credRepo *mockWebAuthnRepo) *PasskeyService {
 	return &PasskeyService{
 		credRepo: credRepo,

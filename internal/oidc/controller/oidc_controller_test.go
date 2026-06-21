@@ -95,6 +95,12 @@ func (m *mockCredentialRepo) FindByAccountAndType(_ context.Context, _ string, _
 	}
 	return nil, nil
 }
+func (m *mockCredentialRepo) FindByAccountAndTypes(_ context.Context, _ string, _ ...accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	if m.findByAcctTypeFn != nil {
+		return m.findByAcctTypeFn()
+	}
+	return nil, nil
+}
 func (m *mockCredentialRepo) FindByTypeAndIdentifier(_ context.Context, _ accountDomain.CredentialType, _ string) (*accountDomain.Credential, error) {
 	return nil, fmt.Errorf("not implemented")
 }
@@ -269,7 +275,7 @@ func TestUserInfo_EmailScope(t *testing.T) {
 	credRepo := &mockCredentialRepo{
 		findByAcctTypeFn: func() ([]*accountDomain.Credential, error) {
 			return []*accountDomain.Credential{
-				{Identifier: &email, Verified: true},
+				{Type: accountDomain.CredentialTypeEmail, Identifier: &email, Verified: true},
 			}, nil
 		},
 	}
@@ -361,7 +367,7 @@ func TestUserInfo_PhoneScope(t *testing.T) {
 	credRepo := &mockCredentialRepo{
 		findByAcctTypeFn: func() ([]*accountDomain.Credential, error) {
 			return []*accountDomain.Credential{
-				{Identifier: &phone, Verified: false},
+				{Type: accountDomain.CredentialTypePhone, Identifier: &phone, Verified: false},
 			}, nil
 		},
 	}

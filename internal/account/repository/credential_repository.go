@@ -22,6 +22,10 @@ type CredentialRepository interface {
 	// FindByAccountAndType finds credentials by account ID and type
 	FindByAccountAndType(ctx context.Context, accountID string, credType domain.CredentialType) ([]*domain.Credential, error)
 
+	// FindByAccountAndTypes finds credentials by account ID and multiple types in a single query.
+	// Returns all matching credentials; callers should filter by type from the result set.
+	FindByAccountAndTypes(ctx context.Context, accountID string, credTypes ...domain.CredentialType) ([]*domain.Credential, error)
+
 	// FindByAccountAndTypeTx finds credentials by account ID and type within a transaction.
 	// Use this variant inside RunInTransaction to avoid TOCTOU race conditions.
 	FindByAccountAndTypeTx(ctx context.Context, tx *sql.Tx, accountID string, credType domain.CredentialType) ([]*domain.Credential, error)

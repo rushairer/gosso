@@ -397,9 +397,11 @@ func TestJWTAuthMiddleware_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	engine := setupGin()
-	engine.GET("/protected", JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
+	handler, err := JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
 		session: &sessionDomain.Session{ID: "sess-001"},
-	}), func(ctx *gin.Context) {
+	})
+	require.NoError(t, err)
+	engine.GET("/protected", handler, func(ctx *gin.Context) {
 		accountID, _ := ctx.Get(gm.ContextKeyAccountID)
 		claims, _ := ctx.Get(gm.ContextKeyClaims)
 		ctx.JSON(http.StatusOK, gin.H{
@@ -426,9 +428,11 @@ func TestJWTAuthMiddleware_MissingToken(t *testing.T) {
 	defer cleanup()
 
 	engine := setupGin()
-	engine.GET("/protected", JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
+	handler, err := JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
 		session: &sessionDomain.Session{},
-	}), func(ctx *gin.Context) {
+	})
+	require.NoError(t, err)
+	engine.GET("/protected", handler, func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
@@ -444,9 +448,11 @@ func TestJWTAuthMiddleware_InvalidToken(t *testing.T) {
 	defer cleanup()
 
 	engine := setupGin()
-	engine.GET("/protected", JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
+	handler2, err2 := JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
 		session: &sessionDomain.Session{},
-	}), func(ctx *gin.Context) {
+	})
+	require.NoError(t, err2)
+	engine.GET("/protected", handler2, func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
@@ -470,9 +476,11 @@ func TestJWTAuthMiddleware_MFAToken_Returns403(t *testing.T) {
 	require.NoError(t, err)
 
 	engine := setupGin()
-	engine.GET("/protected", JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
+	handler, err := JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
 		session: &sessionDomain.Session{ID: "sess-001"},
-	}), func(ctx *gin.Context) {
+	})
+	require.NoError(t, err)
+	engine.GET("/protected", handler, func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
@@ -495,9 +503,11 @@ func TestJWTAuthMiddleware_ExpiredSession_Returns401(t *testing.T) {
 	require.NoError(t, err)
 
 	engine := setupGin()
-	engine.GET("/protected", JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
+	handler, err := JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
 		err: fmt.Errorf("session not found"),
-	}), func(ctx *gin.Context) {
+	})
+	require.NoError(t, err)
+	engine.GET("/protected", handler, func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
@@ -509,13 +519,13 @@ func TestJWTAuthMiddleware_ExpiredSession_Returns401(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
-func TestJWTAuthMiddleware_NilSessionValidator_Panics(t *testing.T) {
+func TestJWTAuthMiddleware_NilSessionValidator_ReturnsError(t *testing.T) {
 	tokenSvc, cleanup := setupRealTokenService(t)
 	defer cleanup()
 
-	assert.Panics(t, func() {
-		JWTAuthMiddleware(tokenSvc, nil)
-	})
+	_, err := JWTAuthMiddleware(tokenSvc, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "sessionValidator must not be nil")
 }
 
 func TestJWTAuthMiddleware_BlacklistedToken_Returns401(t *testing.T) {
@@ -536,9 +546,11 @@ func TestJWTAuthMiddleware_BlacklistedToken_Returns401(t *testing.T) {
 	require.NoError(t, err)
 
 	engine := setupGin()
-	engine.GET("/protected", JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
+	handler, err := JWTAuthMiddleware(tokenSvc, &mockSessionValidator{
 		session: &sessionDomain.Session{ID: "sess-001"},
-	}), func(ctx *gin.Context) {
+	})
+	require.NoError(t, err)
+	engine.GET("/protected", handler, func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 

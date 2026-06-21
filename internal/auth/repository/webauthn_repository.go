@@ -22,4 +22,5 @@ type WebAuthnCredentialRepository interface {
 	UpdateCredential(ctx context.Context, tx *sql.Tx, cred *domain.WebAuthnCredential) error
 	SoftDeleteCredential(ctx context.Context, tx *sql.Tx, id string, deletedAt time.Time) error
 	SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+	HasPasskeys(ctx context.Context, accountID string) (bool, error)
 }

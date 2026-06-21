@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -52,6 +53,12 @@ type SessionConfig struct {
 	IndexFailClosed bool
 }
 
+// cachedSession holds a parsed session and the raw JSON bytes for staleness detection.
+type cachedSession struct {
+	session *domain.Session
+	json    []byte
+}
+
 // SessionService manages user sessions backed by Redis.
 type SessionService struct {
 	redis           *cache.RedisClient
@@ -61,6 +68,9 @@ type SessionService struct {
 	maxSessions     int
 	tokenRevoker    TokenRevoker
 	indexFailClosed bool
+	// sessionCache caches parsed sessions keyed by sessionID to avoid
+	// repeated JSON unmarshal on the validation hot path.
+	sessionCache sync.Map // map[string]cachedSession
 }
 
 // NewSessionService creates a new session service instance with default configuration.
@@ -151,6 +161,9 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 		zap.String("ip", utility.MaskOpaqueID(session.IP)),
 		zap.Duration("ttl", s.sessionTTL))
 
+	// Pre-populate local cache to avoid re-fetching on the next validation.
+	s.sessionCache.Store(session.ID, cachedSession{session: session, json: data})
+
 	return nil
 }
 
@@ -166,11 +179,23 @@ func (s *SessionService) GetSession(ctx context.Context, sessionID string) (*dom
 		return nil, fmt.Errorf("get session: %w", err)
 	}
 
+	raw := []byte(data)
+
+	// Return cached parsed session if the raw JSON has not changed.
+	if cached, ok := s.sessionCache.Load(sessionID); ok {
+		cs := cached.(cachedSession)
+		if string(cs.json) == data {
+			return cs.session, nil
+		}
+	}
+
 	var session domain.Session
-	if err := json.Unmarshal([]byte(data), &session); err != nil {
+	if err := json.Unmarshal(raw, &session); err != nil {
 		s.logger.Error("Failed to unmarshal session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 		return nil, fmt.Errorf("unmarshal session: %w", err)
 	}
+
+	s.sessionCache.Store(sessionID, cachedSession{session: &session, json: raw})
 
 	return &session, nil
 }
@@ -206,6 +231,9 @@ func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Sess
 		s.logger.Warn("Failed to refresh account sessions index TTL", zap.String("account_id", utility.MaskOpaqueID(session.AccountID)), zap.Error(err))
 	}
 
+	// Invalidate cached entry so the next GetSession re-parses.
+	s.sessionCache.Delete(session.ID)
+
 	s.logger.Debug("Session updated", zap.String("session_id", utility.MaskOpaqueID(session.ID)))
 	return nil
 }
@@ -222,6 +250,9 @@ func (s *SessionService) DeleteSession(ctx context.Context, sessionID string) er
 		s.logger.Error("Failed to delete session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 		return fmt.Errorf("delete session: %w", err)
 	}
+
+	// Evict from local cache.
+	s.sessionCache.Delete(sessionID)
 
 	// Always attempt to clean up the account session index.
 	// If the session was loaded, use its accountID. Otherwise, the stale
@@ -278,6 +309,9 @@ func (s *SessionService) RefreshSession(ctx context.Context, sessionID string) e
 		s.logger.Warn("Failed to refresh account sessions index TTL",
 			zap.String("account_id", utility.MaskOpaqueID(session.AccountID)), zap.Error(err))
 	}
+
+	// Invalidate cached entry so the next GetSession re-parses with updated LastActiveAt.
+	s.sessionCache.Delete(sessionID)
 
 	return nil
 }

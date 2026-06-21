@@ -179,12 +179,12 @@ func (s *TokenService) AccessExpiry() time.Duration {
 
 // GenerateRefreshToken generates a random refresh token and stores it in Redis
 func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clientID, sessionID, scope string) (*domain.RefreshToken, error) {
-	bytes := make([]byte, refreshTokenLength)
-	if _, err := rand.Read(bytes); err != nil {
+	randomBytes := make([]byte, refreshTokenLength)
+	if _, err := rand.Read(randomBytes); err != nil {
 		s.logger.Error("Failed to generate random bytes", zap.Error(err))
 		return nil, fmt.Errorf("generate refresh token: %w", err)
 	}
-	tokenString := hex.EncodeToString(bytes)
+	tokenString := hex.EncodeToString(randomBytes)
 
 	rt := &domain.RefreshToken{
 		Token:     tokenString,

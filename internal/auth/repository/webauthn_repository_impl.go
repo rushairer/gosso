@@ -155,6 +155,16 @@ func (r *webAuthnCredentialRepositoryImpl) SoftDeleteCredential(ctx context.Cont
 	return nil
 }
 
+func (r *webAuthnCredentialRepositoryImpl) HasPasskeys(ctx context.Context, accountID string) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM webauthn_credentials WHERE account_id = $1 AND deleted_at IS NULL)`
+	var exists bool
+	err := r.db.QueryRowContext(ctx, query, accountID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check webauthn credentials existence: %w", err)
+	}
+	return exists, nil
+}
+
 func (r *webAuthnCredentialRepositoryImpl) SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `UPDATE webauthn_credentials SET deleted_at = $2, updated_at = $2, public_key = '', credential_id = '' WHERE account_id = $1 AND deleted_at IS NULL`
 	_, err := tx.ExecContext(ctx, query, accountID, deletedAt)

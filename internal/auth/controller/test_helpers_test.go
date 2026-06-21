@@ -180,6 +180,19 @@ func (m *mockCredentialRepoForController) FindByAccountAndType(_ context.Context
 	return m.findByAccountAndTypeResults[credType], nil
 }
 
+func (m *mockCredentialRepoForController) FindByAccountAndTypes(_ context.Context, _ string, credTypes ...accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	if m.findByAccountAndTypeErr != nil {
+		return nil, m.findByAccountAndTypeErr
+	}
+	var result []*accountDomain.Credential
+	for _, ct := range credTypes {
+		if m.findByAccountAndTypeResults != nil {
+			result = append(result, m.findByAccountAndTypeResults[ct]...)
+		}
+	}
+	return result, nil
+}
+
 func (m *mockCredentialRepoForController) FindByTypeAndIdentifier(ctx context.Context, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error) {
 	if m.findByTypeAndIdentifierFn != nil {
 		return m.findByTypeAndIdentifierFn(ctx, credType, identifier)

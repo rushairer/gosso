@@ -346,6 +346,9 @@ func (m *mockSocialCredentialRepo) CreateCredentials(ctx context.Context, tx *sq
 func (m *mockSocialCredentialRepo) FindByAccountAndType(_ context.Context, _ string, _ accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
 	panic("not implemented")
 }
+func (m *mockSocialCredentialRepo) FindByAccountAndTypes(_ context.Context, _ string, _ ...accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	panic("not implemented")
+}
 func (m *mockSocialCredentialRepo) FindByTypeAndIdentifier(ctx context.Context, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error) {
 	return m.findByTypeAndIdentifier(ctx, credType, identifier)
 }

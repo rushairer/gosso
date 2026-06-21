@@ -87,13 +87,10 @@ func TestBlacklistService_GetRevokeInfo(t *testing.T) {
 	err := service.RevokeToken(ctx, jti, reason, expiresAt)
 	require.NoError(t, err)
 
-	// Get revoke info
+	// Get revoke info — returns minimal struct with JTI only
 	info, err := service.GetRevokeInfo(ctx, jti)
 	require.NoError(t, err)
 	assert.Equal(t, jti, info.JTI)
-	assert.Equal(t, reason, info.Reason)
-	assert.True(t, info.RevokedAt.Before(time.Now().Add(1*time.Second)))
-	assert.True(t, info.ExpiresAt.After(time.Now()))
 
 	// Clean up
 	_ = service.removeFromBlacklist(ctx, jti)
@@ -246,17 +243,18 @@ func TestBlacklistService_GetRevokeInfo_ClosedRedis(t *testing.T) {
 	assert.Contains(t, err.Error(), "get token blacklist")
 }
 
-func TestBlacklistService_GetRevokeInfo_CorruptData(t *testing.T) {
+func TestBlacklistService_GetRevokeInfo_ExistsRegardlessOfValue(t *testing.T) {
 	service, cleanup, _ := setupTestBlacklistService(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	key := service.buildBlacklistKey("corrupt-jti")
-	require.NoError(t, service.redis.Set(ctx, key, "not-json", 10*time.Second))
+	key := service.buildBlacklistKey("manual-jti")
+	require.NoError(t, service.redis.Set(ctx, key, "any-value", 10*time.Second))
 
-	_, err := service.GetRevokeInfo(ctx, "corrupt-jti")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unmarshal token blacklist")
+	// GetRevokeInfo checks key existence, not the stored value
+	info, err := service.GetRevokeInfo(ctx, "manual-jti")
+	require.NoError(t, err)
+	assert.Equal(t, "manual-jti", info.JTI)
 }
 
 func TestBlacklistService_removeFromBlacklist_ClosedRedis(t *testing.T) {

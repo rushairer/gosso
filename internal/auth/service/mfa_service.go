@@ -114,35 +114,16 @@ func (s *MFAService) RequireTOTPEncryption() error {
 	return nil
 }
 
-// IsMFAEnabled checks whether the account has TOTP activated or has Passkeys
-func (s *MFAService) IsMFAEnabled(ctx context.Context, accountID string) (bool, error) {
-	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
-	if err != nil {
-		return false, err
-	}
-	for _, c := range creds {
-		if c.Verified && !c.IsDeleted() {
-			return true, nil
-		}
-	}
-
-	if s.passkeySvc != nil {
-		has, err := s.passkeySvc.HasPasskeys(ctx, accountID)
-		if err != nil {
-			return false, fmt.Errorf("check passkeys for MFA: %w", err)
-		} else if has {
-			return true, nil
-		}
-	}
-
-	return false, nil
+// MFAStatus holds the combined MFA status for an account.
+type MFAStatus struct {
+	Enabled bool
+	Types   []string
 }
 
-// GetMFATypes gets the list of available MFA types for the account.
-// Returns an error if credential or passkey queries fail, preventing silent degradation
-// that could omit available MFA types from the login response.
-func (s *MFAService) GetMFATypes(ctx context.Context, accountID string) ([]string, error) {
-	var types []string
+// GetMFAStatus returns the MFA enabled flag and the list of available MFA types
+// in a single pass, avoiding redundant DB queries when both values are needed.
+func (s *MFAService) GetMFAStatus(ctx context.Context, accountID string) (*MFAStatus, error) {
+	status := &MFAStatus{}
 
 	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
 	if err != nil {
@@ -150,7 +131,8 @@ func (s *MFAService) GetMFATypes(ctx context.Context, accountID string) ([]strin
 	}
 	for _, c := range creds {
 		if c.Verified && !c.IsDeleted() {
-			types = append(types, "totp")
+			status.Enabled = true
+			status.Types = append(status.Types, "totp")
 			break
 		}
 	}
@@ -161,11 +143,32 @@ func (s *MFAService) GetMFATypes(ctx context.Context, accountID string) ([]strin
 			return nil, fmt.Errorf("check passkeys: %w", err)
 		}
 		if has {
-			types = append(types, "passkey")
+			status.Enabled = true
+			status.Types = append(status.Types, "passkey")
 		}
 	}
 
-	return types, nil
+	return status, nil
+}
+
+// IsMFAEnabled checks whether the account has TOTP activated or has Passkeys
+func (s *MFAService) IsMFAEnabled(ctx context.Context, accountID string) (bool, error) {
+	status, err := s.GetMFAStatus(ctx, accountID)
+	if err != nil {
+		return false, err
+	}
+	return status.Enabled, nil
+}
+
+// GetMFATypes gets the list of available MFA types for the account.
+// Returns an error if credential or passkey queries fail, preventing silent degradation
+// that could omit available MFA types from the login response.
+func (s *MFAService) GetMFATypes(ctx context.Context, accountID string) ([]string, error) {
+	status, err := s.GetMFAStatus(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	return status.Types, nil
 }
 
 // EnrollTOTP starts TOTP enrollment (generates secret, saves to credential, verified=false)

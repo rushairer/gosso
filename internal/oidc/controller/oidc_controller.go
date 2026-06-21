@@ -297,12 +297,15 @@ func (c *OIDCController) handlePostLogoutRedirect(ctx *gin.Context, req logoutRe
 			return
 		}
 		u, err := url.Parse(redirectURI)
-		if err == nil {
-			params := u.Query()
-			params.Set("state", req.State)
-			u.RawQuery = params.Encode()
-			redirectURI = u.String()
+		if err != nil {
+			c.logger.Warn("Failed to parse post-logout redirect URI", zap.String("redirect_uri", redirectURI), zap.Error(err))
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid post_logout_redirect_uri"))
+			return
 		}
+		params := u.Query()
+		params.Set("state", req.State)
+		u.RawQuery = params.Encode()
+		redirectURI = u.String()
 	}
 	ctx.Redirect(http.StatusFound, redirectURI)
 }

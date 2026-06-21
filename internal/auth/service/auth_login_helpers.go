@@ -71,12 +71,12 @@ func buildMFAResult(account *accountDomain.Account, mfaToken string, mfaTypes []
 // Returns nil, nil if MFA is not required.
 // Fail-closed: if the MFA status check fails, login is denied rather than bypassed.
 func (s *AuthService) handleMFARequirement(ctx context.Context, account *accountDomain.Account) (*LoginResult, error) {
-	mfaEnabled, err := s.mfaSvc.IsMFAEnabled(ctx, account.ID)
+	mfaStatus, err := s.mfaSvc.GetMFAStatus(ctx, account.ID)
 	if err != nil {
 		s.logger.Error("Failed to check MFA status, denying login", zap.String("account_id", utility.MaskOpaqueID(account.ID)), zap.Error(err))
 		return nil, ErrServiceUnavailable
 	}
-	if !mfaEnabled {
+	if !mfaStatus.Enabled {
 		return nil, nil
 	}
 
@@ -91,12 +91,7 @@ func (s *AuthService) handleMFARequirement(ctx context.Context, account *account
 	if err != nil {
 		return nil, fmt.Errorf("generate mfa token: %w", err)
 	}
-	mfaTypes, err := s.mfaSvc.GetMFATypes(ctx, account.ID)
-	if err != nil {
-		s.logger.Error("Failed to get MFA types", zap.String("account_id", utility.MaskOpaqueID(account.ID)), zap.Error(err))
-		return nil, ErrServiceUnavailable
-	}
-	return buildMFAResult(account, mfaToken, mfaTypes), nil
+	return buildMFAResult(account, mfaToken, mfaStatus.Types), nil
 }
 
 // CheckMFA implements the MFAChecker interface for use by SocialLoginService.

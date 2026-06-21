@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"time"
 
@@ -98,6 +97,8 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 	}
 
 	// Add claims based on scope
+	// Batch email+phone credential queries into a single DB round-trip when both are needed.
+	needEmail, needPhone := false, false
 	for _, scope := range scopes {
 		switch scope {
 		case "profile":
@@ -106,13 +107,14 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 			claims.Picture = utility.DerefString(account.AvatarURL)
 			claims.Locale = account.Locale
 		case "email":
-			if err := s.addEmailClaims(ctx, accountID, claims); err != nil {
-				return "", err
-			}
+			needEmail = true
 		case "phone":
-			if err := s.addPhoneClaims(ctx, accountID, claims); err != nil {
-				return "", err
-			}
+			needPhone = true
+		}
+	}
+	if needEmail || needPhone {
+		if err := s.addContactClaims(ctx, accountID, claims, needEmail, needPhone); err != nil {
+			return "", err
 		}
 	}
 
@@ -133,34 +135,36 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 	return tokenString, nil
 }
 
-func (s *IDTokenService) addEmailClaims(ctx context.Context, accountID string, claims *IDTokenClaims) error {
-	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeEmail)
-	if err != nil {
-		if errors.Is(err, accountRepo.ErrCredentialNotFound) {
-			return nil // no email credential is not an error
-		}
-		return fmt.Errorf("query email credential for ID token: %w", err)
+// addContactClaims fetches email and/or phone credentials in a single DB query
+// and populates the corresponding claims on the ID token.
+func (s *IDTokenService) addContactClaims(ctx context.Context, accountID string, claims *IDTokenClaims, needEmail, needPhone bool) error {
+	var credTypes []accountDomain.CredentialType
+	if needEmail {
+		credTypes = append(credTypes, accountDomain.CredentialTypeEmail)
 	}
-	if len(creds) > 0 && creds[0].Identifier != nil {
-		claims.Email = *creds[0].Identifier
-		verified := creds[0].IsVerified()
-		claims.EmailVerified = &verified
+	if needPhone {
+		credTypes = append(credTypes, accountDomain.CredentialTypePhone)
 	}
-	return nil
-}
 
-func (s *IDTokenService) addPhoneClaims(ctx context.Context, accountID string, claims *IDTokenClaims) error {
-	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypePhone)
+	creds, err := s.credentialRepo.FindByAccountAndTypes(ctx, accountID, credTypes...)
 	if err != nil {
-		if errors.Is(err, accountRepo.ErrCredentialNotFound) {
-			return nil // no phone credential is not an error
-		}
-		return fmt.Errorf("query phone credential for ID token: %w", err)
+		return fmt.Errorf("query contact credentials for ID token: %w", err)
 	}
-	if len(creds) > 0 && creds[0].Identifier != nil {
-		claims.PhoneNumber = *creds[0].Identifier
-		verified := creds[0].IsVerified()
-		claims.PhoneVerified = &verified
+
+	for _, c := range creds {
+		if c.Identifier == nil {
+			continue
+		}
+		switch c.Type {
+		case accountDomain.CredentialTypeEmail:
+			claims.Email = *c.Identifier
+			verified := c.IsVerified()
+			claims.EmailVerified = &verified
+		case accountDomain.CredentialTypePhone:
+			claims.PhoneNumber = *c.Identifier
+			verified := c.IsVerified()
+			claims.PhoneVerified = &verified
+		}
 	}
 	return nil
 }

@@ -349,11 +349,7 @@ func (s *PasskeyService) completeLoginInternal(ctx context.Context, requestID, e
 
 // HasPasskeys checks if the account has any available passkey
 func (s *PasskeyService) HasPasskeys(ctx context.Context, accountID string) (bool, error) {
-	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
-	if err != nil {
-		return false, err
-	}
-	return len(creds) > 0, nil
+	return s.credRepo.HasPasskeys(ctx, accountID)
 }
 
 // ListCredentials lists all passkeys for the account

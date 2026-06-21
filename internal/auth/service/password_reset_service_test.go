@@ -240,6 +240,10 @@ func (m *mockCredentialRepoForReset) FindByAccountAndType(_ context.Context, _ s
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *mockCredentialRepoForReset) FindByAccountAndTypes(_ context.Context, _ string, _ ...accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 func (m *mockCredentialRepoForReset) FindByTypeAndIdentifier(ctx context.Context, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error) {
 	if m.findByTypeAndIdentifierFn != nil {
 		return m.findByTypeAndIdentifierFn(ctx, credType, identifier)

@@ -43,7 +43,7 @@ type RouterDeps struct {
 }
 
 // RegisterWebRouter registers all routes
-func RegisterWebRouter(deps RouterDeps) {
+func RegisterWebRouter(deps RouterDeps) error {
 	// Health check (no auth, no rate limiting)
 	registerHealthRoutes(deps.Server, deps.DB, deps.Redis)
 
@@ -59,7 +59,10 @@ func RegisterWebRouter(deps RouterDeps) {
 	}
 
 	// JWT auth middleware
-	jwtAuth := authMiddleware.JWTAuthMiddleware(deps.TokenSvc, deps.SessionValidator)
+	jwtAuth, err := authMiddleware.JWTAuthMiddleware(deps.TokenSvc, deps.SessionValidator)
+	if err != nil {
+		return err
+	}
 
 	// Per-endpoint rate limiting middleware
 	// Security-sensitive endpoints fail-closed (reject if Redis is unavailable)
@@ -148,6 +151,8 @@ func RegisterWebRouter(deps RouterDeps) {
 		}
 		ctx.Data(http.StatusNotFound, "text/html; charset=utf-8", []byte(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>404 Not Found</title></head><body><h1>404 - Page Not Found</h1><p>The requested resource was not found on this server.</p></body></html>`))
 	})
+
+	return nil
 }
 
 func registerWebTestRouter(server *gin.Engine) {

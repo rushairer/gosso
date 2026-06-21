@@ -202,5 +202,5 @@ func TestUserInfo_GetUserInfo_CredentialRepoError(t *testing.T) {
 	info, err := svc.GetUserInfo(context.Background(), "account-001", []string{"openid", "email"})
 	assert.Error(t, err)
 	assert.Nil(t, info)
-	assert.Contains(t, err.Error(), "find email credential")
+	assert.Contains(t, err.Error(), "find credentials")
 }

@@ -49,7 +49,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		),
 	)
 
-	router.RegisterWebRouter(router.RouterDeps{
+	if err := router.RegisterWebRouter(router.RouterDeps{
 		Server:           engine,
 		DB:               db,
 		AuthCtrl:         m.authCtrl,
@@ -64,7 +64,9 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		Debug:            cfg.WebServerConfig.Debug,
 		SessionValidator: m.sessionSvc,
 		Logger:           logger,
-	})
+	}); err != nil {
+		return nil, err
+	}
 
 	return engine, nil
 }

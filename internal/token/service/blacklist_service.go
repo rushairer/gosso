@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -44,19 +43,10 @@ func NewBlacklistService(redis *cache.RedisClient, logger *zap.Logger) (*Blackli
 	}, nil
 }
 
-// RevokeToken revokes a token (adds it to the blacklist)
+// RevokeToken revokes a token (adds it to the blacklist).
+// Only the key's existence matters; we store a minimal placeholder
+// value instead of the full JSON payload to reduce Redis memory usage.
 func (s *BlacklistService) RevokeToken(ctx context.Context, jti string, reason string, expiresAt time.Time) error {
-	blacklist, err := domain.NewTokenBlacklist(jti, reason, expiresAt)
-	if err != nil {
-		return fmt.Errorf("create token blacklist: %w", err)
-	}
-
-	data, err := json.Marshal(blacklist)
-	if err != nil {
-		s.logger.Error("Failed to marshal token blacklist", zap.Error(err), zap.String("jti", utility.MaskOpaqueID(jti)))
-		return fmt.Errorf("marshal token blacklist: %w", err)
-	}
-
 	// Calculate TTL: time from now until token expiration, with a 5-minute buffer
 	// to account for clock skew between Redis and JWT validation.
 	ttl := time.Until(expiresAt) + 5*time.Minute
@@ -67,7 +57,7 @@ func (s *BlacklistService) RevokeToken(ctx context.Context, jti string, reason s
 	}
 
 	key := s.buildBlacklistKey(jti)
-	if err := s.redis.Set(ctx, key, data, ttl); err != nil {
+	if err := s.redis.Set(ctx, key, "1", ttl); err != nil {
 		s.logger.Error("Failed to revoke token", zap.Error(err), zap.String("jti", utility.MaskOpaqueID(jti)))
 		return fmt.Errorf("revoke token: %w", err)
 	}
@@ -92,25 +82,23 @@ func (s *BlacklistService) IsTokenRevoked(ctx context.Context, jti string) (bool
 	return exists, nil
 }
 
-// GetRevokeInfo retrieves the revocation information for a token
+// GetRevokeInfo retrieves the revocation information for a token.
+// Since RevokeToken now stores only a minimal placeholder value,
+// this returns a TokenBlacklist with the JTI populated and zero-value
+// metadata. It remains useful for checking whether a token is revoked
+// with structured access.
 func (s *BlacklistService) GetRevokeInfo(ctx context.Context, jti string) (*domain.TokenBlacklist, error) {
 	key := s.buildBlacklistKey(jti)
-	data, err := s.redis.Get(ctx, key)
-	if errors.Is(err, cache.ErrKeyNotFound) {
-		return nil, ErrTokenNotRevoked
-	}
+	exists, err := s.redis.Exists(ctx, key)
 	if err != nil {
 		s.logger.Error("Failed to get token blacklist", zap.Error(err), zap.String("jti", utility.MaskOpaqueID(jti)))
 		return nil, fmt.Errorf("get token blacklist: %w", err)
 	}
-
-	var blacklist domain.TokenBlacklist
-	if err := json.Unmarshal([]byte(data), &blacklist); err != nil {
-		s.logger.Error("Failed to unmarshal token blacklist", zap.Error(err), zap.String("jti", utility.MaskOpaqueID(jti)))
-		return nil, fmt.Errorf("unmarshal token blacklist: %w", err)
+	if !exists {
+		return nil, ErrTokenNotRevoked
 	}
 
-	return &blacklist, nil
+	return &domain.TokenBlacklist{JTI: jti}, nil
 }
 
 // removeFromBlacklist is used only in tests to reset state between test runs.
@@ -202,6 +190,62 @@ func (s *BlacklistService) GetAccountRevokedAfter(ctx context.Context, accountID
 	}
 
 	return time.Unix(unixTimestamp, 0), nil
+}
+
+// TokenRevocationResult holds the pipelined results of a combined
+// blacklist + account-revocation check, avoiding two sequential round-trips.
+type TokenRevocationResult struct {
+	TokenRevoked    bool
+	AccountRevokedAfter time.Time
+}
+
+// CheckTokenAndAccountRevocation pipelines the token blacklist (EXISTS) and
+// account revoked-after (GET) checks into a single Redis round-trip.
+// If accountID is empty, the account check is skipped.
+func (s *BlacklistService) CheckTokenAndAccountRevocation(ctx context.Context, jti string, accountID string) (*TokenRevocationResult, error) {
+	pipe := s.redis.GetClient().Pipeline()
+
+	tokenExistsCmd := pipe.Exists(ctx, s.buildBlacklistKey(jti))
+
+	var accountGetCmd *redis.StringCmd
+	if accountID != "" {
+		accountGetCmd = pipe.Get(ctx, s.buildAccountRevokedAfterKey(accountID))
+	}
+
+	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
+		s.logger.Error("Failed to pipeline token+account revocation check", zap.Error(err))
+		return nil, fmt.Errorf("pipeline revocation check: %w", err)
+	}
+
+	result := &TokenRevocationResult{}
+
+	count, err := tokenExistsCmd.Result()
+	if err != nil {
+		s.logger.Error("Failed to check token blacklist", zap.Error(err), zap.String("jti", utility.MaskOpaqueID(jti)))
+		return nil, fmt.Errorf("check token blacklist: %w", err)
+	}
+	result.TokenRevoked = count > 0
+
+	if accountGetCmd != nil {
+		val, err := accountGetCmd.Result()
+		if errors.Is(err, redis.Nil) {
+			// No revocation record — zero time is correct.
+		} else if err != nil {
+			s.logger.Error("Failed to get account revoked-after timestamp",
+				zap.Error(err), zap.String("account_id", utility.MaskOpaqueID(accountID)))
+			return nil, fmt.Errorf("get account revoked after: %w", err)
+		} else {
+			unixTimestamp, parseErr := strconv.ParseInt(val, 10, 64)
+			if parseErr != nil {
+				s.logger.Error("Failed to parse account revoked-after timestamp",
+					zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.String("value", val), zap.Error(parseErr))
+				return nil, fmt.Errorf("parse account revoked after: %w", parseErr)
+			}
+			result.AccountRevokedAfter = time.Unix(unixTimestamp, 0)
+		}
+	}
+
+	return result, nil
 }
 
 // buildAccountRevokedAfterKey constructs the Redis key for account-level revocation.

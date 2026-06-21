@@ -142,6 +142,10 @@ func (m *mockWebAuthnCredRepo) SoftDeleteByAccountID(_ context.Context, _ *sql.T
 	return nil
 }
 
+func (m *mockWebAuthnCredRepo) HasPasskeys(_ context.Context, _ string) (bool, error) {
+	return len(m.findByAccountIDResults) > 0, nil
+}
+
 // newTestPasskeyServiceWithDB creates a PasskeyService with mocked webauthn repo and sqlmock DB.
 func newTestPasskeyServiceWithDB(t *testing.T, credRepo repository.WebAuthnCredentialRepository, db *sql.DB) *service.PasskeyService {
 	t.Helper()

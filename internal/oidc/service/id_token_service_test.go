@@ -81,6 +81,20 @@ func (m *mockCredentialRepo) FindByAccountAndType(_ context.Context, accountID s
 	return nil, nil
 }
 
+func (m *mockCredentialRepo) FindByAccountAndTypes(_ context.Context, accountID string, credTypes ...accountDomain.CredentialType) ([]*accountDomain.Credential, error) {
+	if m.findByAccountAndTypeErr != nil {
+		return nil, m.findByAccountAndTypeErr
+	}
+	var result []*accountDomain.Credential
+	for _, ct := range credTypes {
+		key := accountID + ":" + string(ct)
+		if creds, ok := m.credentials[key]; ok {
+			result = append(result, creds...)
+		}
+	}
+	return result, nil
+}
+
 func (m *mockCredentialRepo) FindByTypeAndIdentifier(_ context.Context, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error) {
 	for _, creds := range m.credentials {
 		for _, c := range creds {

@@ -47,16 +47,23 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 		return nil, ErrInvalidToken
 	}
 
-	// Blacklist check — require JTI for all access tokens
+	// Pipeline blacklist + account-revocation checks in a single Redis round-trip.
+	// Require JTI for all access tokens.
 	if claims.ID == "" {
 		return nil, ErrInvalidToken
 	}
-	revoked, err := s.blacklist.IsTokenRevoked(ctx, claims.ID)
+
+	accountID := ""
+	if claims.IssuedAt != nil && claims.AccountID != "" {
+		accountID = claims.AccountID
+	}
+
+	revocation, err := s.blacklist.CheckTokenAndAccountRevocation(ctx, claims.ID, accountID)
 	if err != nil {
-		s.logger.Error("Failed to check token blacklist, rejecting token", zap.Error(err), zap.String("jti", utility.MaskOpaqueID(claims.ID)))
+		s.logger.Error("Failed to check token/account revocation, rejecting token", zap.Error(err), zap.String("jti", utility.MaskOpaqueID(claims.ID)))
 		return nil, ErrBlacklistUnavailable
 	}
-	if revoked {
+	if revocation.TokenRevoked {
 		return nil, ErrTokenRevoked
 	}
 
@@ -67,16 +74,8 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 
 	// Account-level revocation check — rejects all tokens issued before the
 	// account's revocation timestamp (e.g., after OIDC logout).
-	if claims.IssuedAt != nil && claims.AccountID != "" {
-		revokedAfter, err := s.blacklist.GetAccountRevokedAfter(ctx, claims.AccountID)
-		if err != nil {
-			s.logger.Error("Failed to check account revoked-after, rejecting token",
-				zap.Error(err), zap.String("account_id", utility.MaskOpaqueID(claims.AccountID)))
-			return nil, ErrBlacklistUnavailable
-		}
-		if !revokedAfter.IsZero() && claims.IssuedAt.Before(revokedAfter) {
-			return nil, ErrTokenRevoked
-		}
+	if !revocation.AccountRevokedAfter.IsZero() && claims.IssuedAt != nil && claims.IssuedAt.Before(revocation.AccountRevokedAfter) {
+		return nil, ErrTokenRevoked
 	}
 
 	return claims, nil
