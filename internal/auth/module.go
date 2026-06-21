@@ -96,6 +96,7 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 		LoginRateLimitWindow:      cfg.AuthConfig.LoginRateLimitWindow,
 		LoginMaxAttempts:          cfg.AuthConfig.LoginMaxAttempts,
 		LoginMaxAttemptsPerIP:     cfg.AuthConfig.LoginMaxAttemptsPerIP,
+		LoginIPAllowlist:          cfg.AuthConfig.LoginIPAllowlist,
 		MFAVerificationTTL:        cfg.AuthConfig.MFAVerificationTTL,
 		MFAAccountMaxAttempts:     cfg.AuthConfig.MFAAccountMaxAttempts,
 		MFAAccountRateLimitWindow: cfg.AuthConfig.MFAAccountRateLimitWindow,

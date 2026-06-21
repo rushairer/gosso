@@ -11,7 +11,7 @@ import (
 
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/controllerutil"
-	utility "github.com/rushairer/gosso/internal/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // validSocialProviders is the allowlist of supported social login providers.

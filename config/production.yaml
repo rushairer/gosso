@@ -73,6 +73,14 @@ auth:
     device_code_interval: 5s
     id_token_expiry: 15m
     login_rate_limit_window: 15m
+    # Per-IP rate limit exemption for known NAT/proxy exit addresses.
+    # The per-IP counter is intentionally NOT cleared after successful login
+    # to prevent attackers from resetting the budget with stolen credentials.
+    # If legitimate users share a public IP (NAT/proxy), add it here.
+    # Per-IP+username limits still apply regardless of this allowlist.
+    # login_ip_allowlist:
+    #     - "203.0.113.0/24"
+    #     - "198.51.100.5"
     mfa_account_rate_limit_window: 15m
     password_reset_revoke_concurrency: 5
     default_scopes:

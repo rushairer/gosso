@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -311,12 +312,13 @@ func maskIdentifier(credType, identifier string) string {
 	return utility.MaskIdentifier(credType, identifier)
 }
 
-// pepperHash returns the hex-encoded SHA-256 hash of the input string,
-// prepended with the application pepper if configured. The pepper prevents
+// pepperHash returns the hex-encoded HMAC-SHA-256 hash of the input string,
+// keyed with the application pepper if configured. The pepper prevents
 // precomputation attacks (rainbow tables) against the stored hashes.
 func (s *VerificationService) pepperHash(code string) string {
-	h := sha256.Sum256([]byte(s.hashPepper + code))
-	return hex.EncodeToString(h[:])
+	mac := hmac.New(sha256.New, []byte(s.hashPepper))
+	mac.Write([]byte(code))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // ValidateCredentialOwnership checks that the given identifier belongs to the specified account.

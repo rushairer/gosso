@@ -167,7 +167,16 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 	return nil
 }
 
-// GetSession retrieves session information.
+// GetSession retrieves session information from Redis.
+//
+// IMPORTANT: GetSession does NOT check whether the session has logically
+// expired (i.e., whether LastActiveAt + sessionTTL has passed). Callers that
+// require expiry validation must use ValidateSession instead, or call
+// session.IsExpired(s.sessionTTL) on the returned session.
+//
+// This is intentional — methods like DeleteSession and RefreshSession need
+// access to session metadata (e.g., AccountID) even when the session has
+// logically expired, so they can perform cleanup operations.
 func (s *SessionService) GetSession(ctx context.Context, sessionID string) (*domain.Session, error) {
 	key := s.buildSessionKey(sessionID)
 	data, err := s.redis.Get(ctx, key)

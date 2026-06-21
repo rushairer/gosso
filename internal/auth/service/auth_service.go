@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
 	"runtime"
 	"time"
 
@@ -87,6 +88,12 @@ type AuthService struct {
 	mfaAccountMaxAttempts   int
 	mfaAccountRateLimitWindow time.Duration
 
+	// IP allowlist: addresses/ranges exempt from per-IP login rate limiting.
+	// Intended for known NAT/proxy exit IPs shared by many legitimate users.
+	// Only per-IP limits (login_attempts_ip:{ip}) are skipped; per-IP+username
+	// limits (login_attempts:{ip}:{user}) still apply to every address.
+	loginIPAllowlist        []*net.IPNet
+
 	// Concurrency limiter for dummy Argon2id hashes to prevent resource exhaustion.
 	dummyHashSem *semaphore.Weighted
 }
@@ -101,6 +108,12 @@ type AuthServiceConfig struct {
 	MFAAccountMaxAttempts   int           // default: mfaAccountMaxAttempts (10)
 	MFAAccountRateLimitWindow time.Duration // default: mfaAccountRateLimitWindow (5min)
 	DummyHashConcurrency      int           // max concurrent dummy Argon2id hashes; 0 = runtime.NumCPU()
+
+	// LoginIPAllowlist contains IP addresses or CIDR ranges that are exempt from
+	// per-IP login rate limiting (login_attempts_ip:{ip}). Use this for known
+	// NAT/proxy exit IPs shared by many legitimate users.
+	// Per-IP+username counters (login_attempts:{ip}:{user}) still apply to all addresses.
+	LoginIPAllowlist        []string      // e.g. ["203.0.113.0/24", "198.51.100.5"]
 }
 
 // NewAuthService creates a new auth service instance
@@ -179,6 +192,15 @@ func NewAuthServiceWithConfig(
 		dummyConcurrency = runtime.NumCPU()
 	}
 	svc.dummyHashSem = semaphore.NewWeighted(int64(dummyConcurrency))
+	if len(cfg.LoginIPAllowlist) > 0 {
+		nets, err := parseIPAllowlist(cfg.LoginIPAllowlist)
+		if err != nil {
+			logger.Warn("Invalid entry in login_ip_allowlist, skipping",
+				zap.Error(err))
+		} else {
+			svc.loginIPAllowlist = nets
+		}
+	}
 	return svc
 }
 
@@ -319,4 +341,28 @@ func (s *AuthService) buildTokenClaims(ctx context.Context, accountID, sessionID
 		Permissions: allPermissions,
 		SessionID:   sessionID,
 	}, nil
+}
+
+// parseIPAllowlist parses a list of IP addresses and CIDR ranges into []*net.IPNet.
+// Individual IP addresses (e.g. "198.51.100.5") are converted to /32 or /128 masks.
+// Returns the first parse error encountered.
+func parseIPAllowlist(entries []string) ([]*net.IPNet, error) {
+	nets := make([]*net.IPNet, 0, len(entries))
+	for _, entry := range entries {
+		if ip := net.ParseIP(entry); ip != nil {
+			// Single IP address — wrap in a /32 (v4) or /128 (v6) network.
+			if ip.To4() != nil {
+				nets = append(nets, &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)})
+			} else {
+				nets = append(nets, &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)})
+			}
+			continue
+		}
+		_, ipNet, err := net.ParseCIDR(entry)
+		if err != nil {
+			return nil, fmt.Errorf("parse IP allowlist entry %q: %w", entry, err)
+		}
+		nets = append(nets, ipNet)
+	}
+	return nets, nil
 }

@@ -205,7 +205,7 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	// (<button name="approved" value="true">). Gin's ShouldBind may not parse button
 	// values correctly, so we read it explicitly from the form data.
 	approved := ctx.PostForm("approved")
-	req.Approved = approved == "true"
+	req.Approved = strings.EqualFold(approved, "true")
 
 	if !req.Approved {
 		// Validate redirect_uri against client registration before redirecting

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -161,11 +162,42 @@ func (s *AuthService) verifyMFACode(ctx context.Context, mfaType, accountID, mfa
 	}
 }
 
+// isIPAllowlisted returns true if the given normalized IP falls within any of
+// the configured allowlist CIDR ranges. Returns false immediately if the
+// allowlist is empty or the IP cannot be parsed.
+func (s *AuthService) isIPAllowlisted(normalizedIP string) bool {
+	if len(s.loginIPAllowlist) == 0 {
+		return false
+	}
+	ip := net.ParseIP(normalizedIP)
+	if ip == nil {
+		return false
+	}
+	for _, network := range s.loginIPAllowlist {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 // checkIPRateLimit checks and increments the per-IP login rate limit.
 // Returns ErrIPLocked if the limit is exceeded. Returns ErrServiceUnavailable
 // if Redis is unavailable (fail-closed for rate limiting).
+//
+// NOTE: The per-IP counter is intentionally NOT cleared on successful login
+// (unlike the per-IP+username counter). This prevents an attacker from
+// clearing the IP budget by logging in with stolen credentials after each
+// batch of guesses. Operators of deployments behind shared NAT/proxy exits
+// should configure login_ip_allowlist in config to exempt known proxy CIDRs.
 func (s *AuthService) checkIPRateLimit(ctx context.Context, ip string) error {
 	normalizedIP := utility.NormalizeIP(ip)
+
+	// Exempt allowlisted IPs (e.g. shared NAT/proxy exit addresses).
+	if s.isIPAllowlisted(normalizedIP) {
+		return nil
+	}
+
 	ipAttemptsKey := fmt.Sprintf("login_attempts_ip:%s", normalizedIP)
 	ipCount, ipIncrErr := s.redis.CheckAndIncr(ctx, ipAttemptsKey, s.loginMaxAttemptsPerIP, s.loginRateLimitWindow)
 	if ipIncrErr != nil {
@@ -195,8 +227,9 @@ func (s *AuthService) checkMFAAccountRateLimit(ctx context.Context, accountID st
 }
 
 // clearLoginRateLimits removes per-user rate limit counters after successful login.
-// Per-IP limits are intentionally preserved to prevent abuse from distributed attacks
-// that use many accounts from the same IP.
+// Per-IP limits (login_attempts_ip:{ip}) are intentionally preserved to prevent
+// abuse from distributed attacks that use many accounts from the same IP.
+// Operators behind shared NAT/proxy should configure login_ip_allowlist instead.
 func (s *AuthService) clearLoginRateLimits(ctx context.Context, ip string, username *string) {
 	if username != nil {
 		normalizedIP := utility.NormalizeIP(ip)

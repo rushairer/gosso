@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	authService "github.com/rushairer/gosso/internal/auth/service"
-	utility "github.com/rushairer/gosso/internal/utility"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // ForgotPasswordRequest forgot password request body

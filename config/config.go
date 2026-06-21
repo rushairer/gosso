@@ -141,6 +141,12 @@ type AuthConfig struct {
 	LoginRateLimitWindow           time.Duration `mapstructure:"login_rate_limit_window"`
 	LoginMaxAttempts               int           `mapstructure:"login_max_attempts"`
 	LoginMaxAttemptsPerIP          int           `mapstructure:"login_max_attempts_per_ip"`
+	// LoginIPAllowlist contains IP addresses or CIDR ranges that are exempt from
+	// per-IP login rate limiting. Use this for known proxy/NAT exit IPs where
+	// multiple legitimate users share the same public IP.
+	// Example: ["203.0.113.0/24", "198.51.100.5"]
+	// Note: Per-IP+username counters (login_attempts:{ip}:{user}) still apply.
+	LoginIPAllowlist               []string      `mapstructure:"login_ip_allowlist"`
 	MFAVerificationTTL             time.Duration `mapstructure:"mfa_verification_ttl"`
 	ChallengeTTL                   time.Duration `mapstructure:"challenge_ttl"`
 	BackupCodeCount                int           `mapstructure:"backup_code_count"`
@@ -481,6 +487,12 @@ func (c *GoUnoConfig) validateAuthDurations() error {
 	}
 	if c.AuthConfig.BackupCodeLength > 0 && c.AuthConfig.BackupCodeLength > 12 {
 		return fmt.Errorf("auth: backup_code_length must not exceed 12 (got %d)", c.AuthConfig.BackupCodeLength)
+	}
+	// Validate login_ip_allowlist entries are valid IP addresses or CIDR ranges.
+	for _, entry := range c.AuthConfig.LoginIPAllowlist {
+		if net.ParseIP(entry) == nil && !isValidCIDR(entry) {
+			return fmt.Errorf("auth: login_ip_allowlist entry %q is not a valid IP address or CIDR notation", entry)
+		}
 	}
 	// password_reset_revoke_concurrency must be strictly positive (used as semaphore capacity).
 	if c.AuthConfig.PasswordResetRevokeConcurrency <= 0 {

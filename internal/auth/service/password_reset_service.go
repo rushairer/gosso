@@ -231,7 +231,7 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 
 	// Check account status
 	account, err := s.accountSvc.FindAccountByID(ctx, cred.AccountID)
-	if err != nil || !account.IsActive() {
+	if err != nil || account == nil || !account.IsActive() {
 		s.dummyWork(ctx)
 		s.logger.Debug("Password reset requested for inactive account", zap.String("email", utility.MaskEmail(email)))
 		return nil

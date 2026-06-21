@@ -1,8 +1,11 @@
 // Package service provides notification services (email, SMS).
 //
-// NOTE: SMS functionality is currently a STUB implementation.
+// NOTE: SMS functionality is currently a stub implementation.
 // All SMS verification code requests will return ErrSMSNotImplemented.
-// To enable SMS support, replace StubSMSService with a real gateway implementation.
+// To enable SMS support:
+//  1. Add SMS gateway config to config package (e.g., config.SMSConfig)
+//  2. Create a real SMSService implementation using the gateway SDK
+//  3. Replace StubSMSService with the real implementation in the notification module wiring
 package service
 
 import (
@@ -23,12 +26,9 @@ type SMSService interface {
 // ErrSMSNotImplemented is returned when SMS verification is attempted without a real SMS gateway.
 var ErrSMSNotImplemented = errors.New("SMS verification is not yet supported, please use email verification")
 
-// StubSMSService stub implementation of the SMS service.
-// TODO: Replace with a real SMS gateway implementation (e.g., Twilio, Aliyun SMS).
-// Steps to implement:
-// 1. Add SMS gateway config to config package (e.g., config.SMSConfig)
-// 2. Create a real SMSService implementation using the gateway SDK
-// 3. Replace StubSMSService with the real implementation in the notification module wiring
+// StubSMSService is a no-op placeholder that always returns ErrSMSNotImplemented.
+// Replace with a real gateway implementation when SMS support is needed.
+// See package-level docs for implementation guidance.
 type StubSMSService struct {
 	logger *zap.Logger
 }

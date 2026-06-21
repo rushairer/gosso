@@ -77,6 +77,9 @@ func NewConfigManager(
 	if err := newConfig.Validate(); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
+	if !newConfig.WebServerConfig.Production && newConfig.AuthConfig.TOTPEncryptionKey == defaultTOTPEncryptionKey {
+		fmt.Fprintln(os.Stderr, "[GOSSO] Warning: using the default TOTP encryption key. This is acceptable for local development only — never deploy to production with this key.")
+	}
 	configManager.config = newConfig
 	return &configManager, nil
 }
