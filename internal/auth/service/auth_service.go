@@ -65,9 +65,10 @@ type LoginResult struct {
 
 // RefreshResult refresh token result
 type RefreshResult struct {
-	AccessToken  string
-	RefreshToken string
-	SessionID    string
+	AccessToken           string
+	RefreshToken          string
+	SessionID             string
+	SessionRefreshFailed  bool // true if session TTL extension failed (best-effort); tokens are still valid
 }
 
 // AuthService authentication orchestration service
@@ -308,12 +309,27 @@ func (s *AuthService) MarkPasskeyMFAVerified(ctx context.Context, mfaTokenJTI st
 
 
 // updateCredentialLastUsed updates only the last_used_at timestamp of a credential.
-// Uses UpdateLastUsedAt to avoid overwriting concurrent modifications to other fields.
+// Executes directly on the connection pool without a transaction since this is a
+// non-critical, fire-and-forget update that does not need transactional guarantees.
 func (s *AuthService) updateCredentialLastUsed(ctx context.Context, cred *accountDomain.Credential) error {
 	now := time.Now()
-	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.credentialRepo.UpdateLastUsedAt(ctx, tx, cred.ID, now)
-	})
+	query := `
+		UPDATE account_credentials
+		SET last_used_at = $1
+		WHERE id = $2 AND deleted_at IS NULL
+	`
+	result, err := s.db.ExecContext(ctx, query, now, cred.ID)
+	if err != nil {
+		return fmt.Errorf("update last_used_at: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("credential not found: %s", cred.ID)
+	}
+	return nil
 }
 
 // roleCacheKey returns the Redis key for cached account roles.

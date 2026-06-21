@@ -140,6 +140,107 @@ func (r *accountRepositoryImpl) FindByUsername(ctx context.Context, username str
 	return account, nil
 }
 
+// FindByUsernameWithPasswordCredential finds an account by username and its
+// primary password credential in a single JOIN query. Returns
+// ErrAccountNotFound if the account does not exist and ErrCredentialNotFound
+// if the account has no password credential.
+func (r *accountRepositoryImpl) FindByUsernameWithPasswordCredential(ctx context.Context, username string) (*domain.Account, *domain.Credential, error) {
+	query := `
+		SELECT
+			a.id, a.username, a.display_name, a.avatar_url, a.status, a.locale, a.timezone,
+			a.metadata, a.created_at, a.updated_at, a.deleted_at,
+			c.id, c.account_id, c.credential_type, c.identifier, c.credential_value,
+			c.verified, c.primary_credential, c.metadata, c.created_at, c.updated_at,
+			c.verified_at, c.last_used_at
+		FROM accounts a
+		LEFT JOIN account_credentials c
+			ON c.account_id = a.id
+			AND c.credential_type = $2
+			AND c.deleted_at IS NULL
+		WHERE a.username = $1 AND a.deleted_at IS NULL
+		ORDER BY c.primary_credential DESC NULLS LAST, c.created_at ASC NULLS LAST
+		LIMIT 1
+	`
+
+	var account domain.Account
+	var accountMetadataJSON []byte
+	var cred domain.Credential
+	var credMetadataJSON []byte
+	var credID, credAccountID, credType, credIdentifier, credValue sql.NullString
+	var credVerified, credPrimary sql.NullBool
+	var credCreatedAt, credUpdatedAt, credVerifiedAt, credLastUsedAt sql.NullTime
+
+	err := r.db.QueryRowContext(ctx, query, username, domain.CredentialTypePassword).Scan(
+		&account.ID,
+		&account.Username,
+		&account.DisplayName,
+		&account.AvatarURL,
+		&account.Status,
+		&account.Locale,
+		&account.Timezone,
+		&accountMetadataJSON,
+		&account.CreatedAt,
+		&account.UpdatedAt,
+		&account.DeletedAt,
+		&credID,
+		&credAccountID,
+		&credType,
+		&credIdentifier,
+		&credValue,
+		&credVerified,
+		&credPrimary,
+		&credMetadataJSON,
+		&credCreatedAt,
+		&credUpdatedAt,
+		&credVerifiedAt,
+		&credLastUsedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, fmt.Errorf("%w: %s", ErrAccountNotFound, username)
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("query account with password credential: %w", err)
+	}
+
+	// Parse account metadata
+	account.Metadata = make(map[string]any)
+	if err := dbPkg.UnmarshalJSONField(accountMetadataJSON, &account.Metadata, "metadata"); err != nil {
+		return nil, nil, err
+	}
+
+	// If the LEFT JOIN produced no credential row, credID will be NULL.
+	if !credID.Valid {
+		return &account, nil, fmt.Errorf("%w: account=%s", ErrCredentialNotFound, account.ID)
+	}
+
+	// Populate the credential from scanned nullable values.
+	cred = domain.Credential{
+		ID:                credID.String,
+		AccountID:         credAccountID.String,
+		Type:              domain.CredentialType(credType.String),
+		Value:             credValue.String,
+		Verified:          credVerified.Bool,
+		PrimaryCredential: credPrimary.Bool,
+		CreatedAt:         credCreatedAt.Time,
+		UpdatedAt:         credUpdatedAt.Time,
+	}
+	if credIdentifier.Valid {
+		cred.Identifier = &credIdentifier.String
+	}
+	if credVerifiedAt.Valid {
+		cred.VerifiedAt = &credVerifiedAt.Time
+	}
+	if credLastUsedAt.Valid {
+		cred.LastUsedAt = &credLastUsedAt.Time
+	}
+	cred.Metadata = make(map[string]any)
+	if err := dbPkg.UnmarshalJSONField(credMetadataJSON, &cred.Metadata, "metadata"); err != nil {
+		return nil, nil, err
+	}
+
+	return &account, &cred, nil
+}
+
 // UpdateAccount updates an account with optimistic locking.
 func (r *accountRepositoryImpl) UpdateAccount(ctx context.Context, tx *sql.Tx, account *domain.Account, expectedUpdatedAt time.Time) error {
 	query := `
@@ -218,7 +319,10 @@ func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int,
 		return nil, 0, fmt.Errorf("%w: %q", ErrInvalidStatusFilter, status)
 	}
 
-	// Build WHERE clause with consistent parameter numbering
+	// Build WHERE clause with consistent parameter numbering.
+	// SECURITY: The `where` string is interpolated into the query via fmt.Sprintf.
+	// Only append hardcoded SQL fragments and $N placeholders here — never
+	// interpolate user-supplied values directly into the where string.
 	where := "deleted_at IS NULL"
 	args := []interface{}{}
 	paramIdx := 1

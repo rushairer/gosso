@@ -148,30 +148,29 @@ func TestHandleClientAuthError_SecretRequired(t *testing.T) {
 	secretRequired := errors.New("client secret required")
 	err := secretRequired
 
-	HandleClientAuthError(ctx, zap.NewNop(), err, secretRequired, "client secret is required", "invalid client credentials")
+	HandleClientAuthError(ctx, zap.NewNop(), err)
 
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
 
 	var body map[string]interface{}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
 	assert.Equal(t, "invalid_client", body["error"])
-	assert.Equal(t, "client secret is required", body["error_description"])
+	assert.Equal(t, "client authentication failed", body["error_description"])
 }
 
 func TestHandleClientAuthError_InvalidClient(t *testing.T) {
 	ctx, recorder := setupTestContext()
 
-	secretRequired := errors.New("client secret required")
 	err := errors.New("bad credentials")
 
-	HandleClientAuthError(ctx, zap.NewNop(), err, secretRequired, "client secret is required", "invalid client credentials")
+	HandleClientAuthError(ctx, zap.NewNop(), err)
 
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
 
 	var body map[string]interface{}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
 	assert.Equal(t, "invalid_client", body["error"])
-	assert.Equal(t, "invalid client credentials", body["error_description"])
+	assert.Equal(t, "client authentication failed", body["error_description"])
 }
 
 func TestHandleClientAuthError_WrappedSecretRequired(t *testing.T) {
@@ -180,12 +179,12 @@ func TestHandleClientAuthError_WrappedSecretRequired(t *testing.T) {
 	secretRequired := errors.New("client secret required")
 	err := fmt.Errorf("auth failed: %w", secretRequired)
 
-	HandleClientAuthError(ctx, zap.NewNop(), err, secretRequired, "secret required", "bad creds")
+	HandleClientAuthError(ctx, zap.NewNop(), err)
 
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
 
 	var body map[string]interface{}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
 	assert.Equal(t, "invalid_client", body["error"])
-	assert.Equal(t, "secret required", body["error_description"])
+	assert.Equal(t, "client authentication failed", body["error_description"])
 }

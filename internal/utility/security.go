@@ -3,6 +3,7 @@ package utility
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"sync/atomic"
 	"time"
 )
@@ -36,7 +37,9 @@ func SetDummyWorkDuration(d time.Duration) error {
 // accumulation when the server is stopping. If the context is cancelled before the
 // duration elapses, the function returns immediately.
 func DummyWorkWithContext(ctx context.Context) {
-	duration := time.Duration(dummyWorkDuration.Load())
+	base := time.Duration(dummyWorkDuration.Load())
+	jitter := time.Duration(rand.Int64N(int64(base) / 2))
+	duration := base + jitter
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
 	select {

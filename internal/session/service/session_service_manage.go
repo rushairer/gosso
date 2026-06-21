@@ -184,10 +184,18 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 		sessions = append(sessions, &session)
 	}
 
-	// Clean up stale index entries
-	for _, sid := range staleIDs {
-		if err := s.redis.SRem(ctx, indexKey, sid); err != nil {
-			s.logger.Warn("Failed to remove stale session index entry", zap.String("session_id", utility.MaskOpaqueID(sid)), zap.Error(err))
+	// Clean up stale index entries using a pipeline to batch SREM calls
+	// into a single Redis round-trip instead of one per stale entry.
+	if len(staleIDs) > 0 {
+		pipe := rdb.Pipeline()
+		for _, sid := range staleIDs {
+			pipe.SRem(ctx, indexKey, sid)
+		}
+		if _, err := pipe.Exec(ctx); err != nil {
+			s.logger.Warn("Failed to remove stale session index entries via pipeline",
+				zap.Int("count", len(staleIDs)),
+				zap.String("account_id", utility.MaskOpaqueID(accountID)),
+				zap.Error(err))
 		}
 	}
 

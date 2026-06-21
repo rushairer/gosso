@@ -309,6 +309,10 @@ func (m *mockAccountSvcForReset) FindAccountByUsername(_ context.Context, _ stri
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *mockAccountSvcForReset) FindByUsernameWithPasswordCredential(_ context.Context, _ string) (*accountDomain.Account, *accountDomain.Credential, error) {
+	return nil, nil, fmt.Errorf("not implemented")
+}
+
 func (m *mockAccountSvcForReset) UpdateAccount(_ context.Context, _ *accountDomain.Account) error {
 	return fmt.Errorf("not implemented")
 }

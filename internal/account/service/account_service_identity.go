@@ -360,7 +360,9 @@ func (s *accountServiceImpl) classifyRegistrationConflict(ctx context.Context, r
 			return nil // lookup errors are non-fatal; fall through to username conflict
 		})
 	}
-	_ = g.Wait()
+	if err := g.Wait(); err != nil {
+		return ErrUsernameAlreadyTaken
+	}
 
 	// Check email first (most common conflict), then phone
 	if req.Email != "" && emailResult.err == nil && emailResult.cred != nil {

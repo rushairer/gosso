@@ -366,6 +366,21 @@ func (r *RedisClient) SetIfExists(ctx context.Context, key string, value any, ex
 	return result == 1, nil
 }
 
+// GetEx atomically retrieves a key's value and refreshes its TTL (Redis GETEX).
+// Returns ErrKeyNotFound if the key does not exist. This combines GET and
+// EXPIRE into a single round-trip, useful for sliding-window session validation.
+func (r *RedisClient) GetEx(ctx context.Context, key string, expiration time.Duration) (string, error) {
+	val, err := r.client.GetEx(ctx, key, expiration).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", ErrKeyNotFound
+	}
+	if err != nil {
+		r.logger.Debug("Redis GETEX failed", zap.String("key", maskRedisKeySuffix(key)), zap.Error(err))
+		return "", fmt.Errorf("getex: %w", err)
+	}
+	return val, nil
+}
+
 // GetDel atomically retrieves and deletes a key in a single operation (Redis GETDEL).
 // Returns ErrKeyNotFound if the key does not exist, consistent with Get behavior.
 func (r *RedisClient) GetDel(ctx context.Context, key string) (string, error) {

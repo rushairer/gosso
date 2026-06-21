@@ -15,7 +15,6 @@ import (
 
 	"github.com/rushairer/gosso/internal/controllerutil"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
-	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
 	"github.com/rushairer/gosso/middleware"
@@ -65,9 +64,7 @@ func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
 
 	// Client authentication for confidential clients (RFC 8628 §3.1)
 	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-		controllerutil.HandleClientAuthError(ctx, c.logger, err,
-			oauth2Service.ErrClientSecretRequired,
-			"client_secret required for confidential client", "invalid client_secret")
+		controllerutil.HandleClientAuthError(ctx, c.logger, err)
 		return
 	}
 
@@ -262,9 +259,7 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 
 	// Client authentication for confidential clients
 	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-		controllerutil.HandleClientAuthError(ctx, c.logger, err,
-			oauth2Service.ErrClientSecretRequired,
-			"client_secret required", "invalid client_secret")
+		controllerutil.HandleClientAuthError(ctx, c.logger, err)
 		return
 	}
 

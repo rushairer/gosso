@@ -49,6 +49,9 @@ func (m *mockSocialAccountService) FindAccountByID(ctx context.Context, accountI
 func (m *mockSocialAccountService) FindAccountByUsername(_ context.Context, _ string) (*accountDomain.Account, error) {
 	panic("not implemented")
 }
+func (m *mockSocialAccountService) FindByUsernameWithPasswordCredential(_ context.Context, _ string) (*accountDomain.Account, *accountDomain.Credential, error) {
+	panic("not implemented")
+}
 func (m *mockSocialAccountService) UpdateAccount(_ context.Context, _ *accountDomain.Account) error {
 	panic("not implemented")
 }
@@ -316,6 +319,9 @@ func (m *mockSocialAccountRepo) FindByIDIncludingDeletedTx(_ context.Context, _ 
 	panic("not implemented")
 }
 func (m *mockSocialAccountRepo) FindByUsername(_ context.Context, _ string) (*accountDomain.Account, error) {
+	panic("not implemented")
+}
+func (m *mockSocialAccountRepo) FindByUsernameWithPasswordCredential(_ context.Context, _ string) (*accountDomain.Account, *accountDomain.Credential, error) {
 	panic("not implemented")
 }
 func (m *mockSocialAccountRepo) UpdateAccount(_ context.Context, _ *sql.Tx, _ *accountDomain.Account, _ time.Time) error {

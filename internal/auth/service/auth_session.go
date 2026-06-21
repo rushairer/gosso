@@ -5,10 +5,13 @@ import (
 	"fmt"
 
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
+	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/audit"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
 )
 
@@ -49,18 +52,31 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		return nil, ErrSessionInvalid
 	}
 
-	// 4. Validate account BEFORE rotation
-	account, err := s.accountSvc.FindAccountByID(ctx, oldRT.AccountID)
-	if err != nil || account == nil || !account.IsActive() {
-		return nil, accountService.ErrAccountNotActive
-	}
+	// 4 & 5. Validate account and build token claims in parallel — neither depends on the other.
+	var account *accountDomain.Account
+	var claims *tokenDomain.AccessTokenClaims
+	g, gctx := errgroup.WithContext(ctx)
 
-	// 5. Build claims and generate new access token BEFORE rotating refresh token.
-	// If access token generation fails, the old refresh token remains valid so the
-	// client can retry instead of being locked out.
-	claims, err := s.buildTokenClaims(ctx, oldRT.AccountID, session.ID)
-	if err != nil {
-		return nil, fmt.Errorf("build token claims: %w", err)
+	g.Go(func() error {
+		var err error
+		account, err = s.accountSvc.FindAccountByID(gctx, oldRT.AccountID)
+		if err != nil || account == nil || !account.IsActive() {
+			return accountService.ErrAccountNotActive
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		var err error
+		claims, err = s.buildTokenClaims(gctx, oldRT.AccountID, session.ID)
+		if err != nil {
+			return fmt.Errorf("build token claims: %w", err)
+		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
 	accessToken, err := s.tokenSvc.GenerateAccessToken(claims)
@@ -75,15 +91,20 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		return nil, ErrInvalidRefreshToken
 	}
 
-	// 7. Refresh session
+	// 7. Refresh session TTL (best-effort). If this fails the new tokens are
+	// still valid and usable, but the session may expire sooner than expected.
+	sessionRefreshOK := true
 	if err := s.sessionSvc.RefreshSession(ctx, sessionID); err != nil {
-		s.logger.Warn("Failed to refresh session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
+		sessionRefreshOK = false
+		s.logger.Warn("Failed to refresh session; tokens are still valid but session may expire early",
+			zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 	}
 
 	return &RefreshResult{
-		AccessToken:  accessToken,
-		RefreshToken: newRefreshToken.Token,
-		SessionID:    session.ID,
+		AccessToken:          accessToken,
+		RefreshToken:         newRefreshToken.Token,
+		SessionID:            session.ID,
+		SessionRefreshFailed: !sessionRefreshOK,
 	}, nil
 }
 

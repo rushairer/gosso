@@ -48,6 +48,9 @@ func (m *mockAccountService) FindAccountByID(_ context.Context, _ string) (*acco
 func (m *mockAccountService) FindAccountByUsername(_ context.Context, _ string) (*accountDomain.Account, error) {
 	return nil, fmt.Errorf("not implemented")
 }
+func (m *mockAccountService) FindByUsernameWithPasswordCredential(_ context.Context, _ string) (*accountDomain.Account, *accountDomain.Credential, error) {
+	return nil, nil, fmt.Errorf("not implemented")
+}
 func (m *mockAccountService) UpdateAccount(_ context.Context, _ *accountDomain.Account) error {
 	return nil
 }

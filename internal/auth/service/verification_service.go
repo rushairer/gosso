@@ -150,6 +150,9 @@ func NewVerificationServiceWithConfig(
 	}
 	if cfg.HashPepper != "" {
 		svc.hashPepper = cfg.HashPepper
+	} else {
+		svc.logger.Warn("Verification code hash pepper not configured; codes are stored with plain SHA-256. " +
+			"Set auth.totp_encryption_key (env GOUNO_AUTH_TOTP_ENCRYPTION_KEY) to enable HMAC-based hashing.")
 	}
 	return svc
 }
@@ -316,6 +319,18 @@ func generateNumericCode(length int) (string, error) {
 // maskIdentifier masks PII for logging (e.g., "user@example.com" -> "u***@e***.com")
 func maskIdentifier(credType, identifier string) string {
 	return utility.MaskIdentifier(credType, identifier)
+}
+
+// RequireHashPepper returns an error if no hash pepper is configured.
+// Call this during startup for production deployments to prevent verification
+// codes from being stored with plain SHA-256 (vulnerable to rainbow tables
+// on the 6-digit numeric keyspace if Redis is compromised).
+func (s *VerificationService) RequireHashPepper() error {
+	if s.hashPepper == "" {
+		return fmt.Errorf("hash pepper is required for production deployments. " +
+			"Set auth.totp_encryption_key (env GOUNO_AUTH_TOTP_ENCRYPTION_KEY).")
+	}
+	return nil
 }
 
 // pepperHash returns the hex-encoded HMAC-SHA-256 hash of the input string,

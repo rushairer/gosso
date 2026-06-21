@@ -8,6 +8,7 @@ import (
 	"time"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	"github.com/rushairer/gosso/internal/audit"
 	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
@@ -61,17 +62,29 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginCom
 		return nil, ErrInvalidCredentials
 	}
 
-	// 2. Find account
-	account, err := s.accountSvc.FindAccountByUsername(ctx, normalizedUsername)
+	// 2. Find account and password credential in a single JOIN query.
+	// This replaces the previous two sequential queries (FindAccountByUsername +
+	// FindPasswordCredential) to eliminate one DB round-trip on the login hot path.
+	account, cred, err := s.accountSvc.FindByUsernameWithPasswordCredential(ctx, normalizedUsername)
 	if err != nil {
-		// Mitigate timing side-channel: perform a dummy Argon2id hash so the response
-		// time is indistinguishable from "account found, wrong password."
-		// The semaphore prevents an attacker from exhausting server resources by
-		// sending many requests for non-existent usernames.
-		if acquireErr := s.dummyHashSem.Acquire(ctx, 1); acquireErr == nil {
-			_, _ = accountDomain.HashPassword(req.Password)
-			s.dummyHashSem.Release(1)
+		// Distinguish "account not found" from "credential not found" for the
+		// dummy-hash path — both produce ErrInvalidCredentials but trigger the
+		// same timing side-channel mitigation.
+		isAccountNotFound := errors.Is(err, accountRepo.ErrAccountNotFound)
+		isCredentialNotFound := errors.Is(err, accountRepo.ErrCredentialNotFound)
+
+		if isAccountNotFound || isCredentialNotFound {
+			// Mitigate timing side-channel: perform a dummy Argon2id hash so the response
+			// time is indistinguishable from "account found, wrong password."
+			// The semaphore prevents an attacker from exhausting server resources by
+			// sending many requests for non-existent usernames.
+			if acquireErr := s.dummyHashSem.Acquire(ctx, 1); acquireErr == nil {
+				_, _ = accountDomain.HashPassword(req.Password)
+				s.dummyHashSem.Release(1)
+			}
+			return nil, ErrInvalidCredentials
 		}
+		// Unexpected DB error — return service unavailable.
 		return nil, ErrInvalidCredentials
 	}
 
@@ -86,25 +99,12 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginCom
 		return nil, ErrInvalidCredentials
 	}
 
-	// 4. Find password credential
-	cred, err := s.credentialRepo.FindPasswordCredential(ctx, account.ID)
-	if err != nil {
-		// Mitigate timing side-channel: passkey-only accounts (no password credential)
-		// must perform dummy work to prevent leaking account type via response timing.
-		// Use the same semaphore as the not-found/inactive paths to prevent CPU exhaustion.
-		if acquireErr := s.dummyHashSem.Acquire(ctx, 1); acquireErr == nil {
-			_, _ = accountDomain.HashPassword(req.Password)
-			s.dummyHashSem.Release(1)
-		}
-		return nil, ErrInvalidCredentials
-	}
-
-	// 5. Verify password
+	// 4. Verify password
 	if !cred.VerifyPassword(req.Password) {
 		return nil, ErrInvalidCredentials
 	}
 
-	// 6. Check if MFA is required
+	// 5. Check if MFA is required
 	mfaResult, mfaErr := s.handleMFARequirement(ctx, account)
 	if mfaResult != nil || mfaErr != nil {
 		// Password was correct but MFA is required — do NOT clear rate limit yet.
@@ -113,13 +113,13 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginCom
 		return mfaResult, mfaErr
 	}
 
-	// 7. Create session and tokens
+	// 6. Create session and tokens
 	session, accessToken, refreshToken, err := s.createSessionAndTokens(ctx, account, req.IP, req.UserAgent)
 	if err != nil {
 		return nil, err
 	}
 
-	// 8. Update credential last used time
+	// 7. Update credential last used time
 	cred.MarkUsed()
 	if txErr := s.updateCredentialLastUsed(ctx, cred); txErr != nil {
 		s.logger.Warn("Failed to update credential last_used_at", zap.Error(txErr))
@@ -132,7 +132,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginCom
 	// Clear login failures count
 	s.clearLoginRateLimits(ctx, req.IP, account.Username)
 
-	// 9. Audit log
+	// 8. Audit log
 	s.loginAuditLogs(ctx, auditDomain.ActionLoginSuccess, req.IP, &account.ID,
 		map[string]any{"account_id": account.ID, "session_id": session.ID},
 		map[string]any{"ip": req.IP, "user_agent": req.UserAgent},

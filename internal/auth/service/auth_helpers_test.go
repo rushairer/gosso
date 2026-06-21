@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/cache"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
@@ -22,8 +23,9 @@ import (
 // ──────────────────────────────────────────────
 
 type testAccountService struct {
-	byID       map[string]*accountDomain.Account // key: accountID
-	byUsername map[string]*accountDomain.Account // key: username
+	byID        map[string]*accountDomain.Account // key: accountID
+	byUsername  map[string]*accountDomain.Account // key: username
+	passwordCred map[string]*accountDomain.Credential // key: username (populated by seedTestAccount)
 }
 
 func (m *testAccountService) RegisterAccount(_ context.Context, _ *accountService.RegisterAccountRequest) (*accountDomain.Account, error) {
@@ -42,6 +44,18 @@ func (m *testAccountService) FindAccountByUsername(_ context.Context, username s
 		return acct, nil
 	}
 	return nil, fmt.Errorf("account not found: %s", username)
+}
+
+func (m *testAccountService) FindByUsernameWithPasswordCredential(_ context.Context, username string) (*accountDomain.Account, *accountDomain.Credential, error) {
+	acct, ok := m.byUsername[username]
+	if !ok {
+		return nil, nil, fmt.Errorf("%w: %s", accountRepo.ErrAccountNotFound, username)
+	}
+	cred, ok := m.passwordCred[username]
+	if !ok {
+		return acct, nil, fmt.Errorf("%w: account=%s", accountRepo.ErrCredentialNotFound, acct.ID)
+	}
+	return acct, cred, nil
 }
 
 func (m *testAccountService) UpdateAccount(_ context.Context, _ *accountDomain.Account) error {
@@ -280,8 +294,9 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 
 	// Mock services
 	accountSvc := &testAccountService{
-		byID:       make(map[string]*accountDomain.Account),
-		byUsername: make(map[string]*accountDomain.Account),
+		byID:         make(map[string]*accountDomain.Account),
+		byUsername:   make(map[string]*accountDomain.Account),
+		passwordCred: make(map[string]*accountDomain.Credential),
 	}
 	credRepo := &authTestCredentialRepo{
 		mockCredentialRepo: &mockCredentialRepo{credMap: make(map[string][]*accountDomain.Credential)},
@@ -340,11 +355,13 @@ func (f *authServiceFixture) seedTestAccount(accountID, username, password strin
 	f.accountSvc.byUsername[username] = acct
 
 	hashedPW, _ := accountDomain.HashPassword(password)
-	f.credRepo.passwordCreds[accountID] = &accountDomain.Credential{
+	cred := &accountDomain.Credential{
 		ID:        "cred-" + accountID,
 		AccountID: accountID,
 		Type:      accountDomain.CredentialTypePassword,
 		Value:     hashedPW,
 		Verified:  true,
 	}
+	f.credRepo.passwordCreds[accountID] = cred
+	f.accountSvc.passwordCred[username] = cred
 }

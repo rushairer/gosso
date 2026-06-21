@@ -37,6 +37,9 @@ func (m *mockAccountService) RegisterAccount(_ context.Context, _ *accountServic
 func (m *mockAccountService) FindAccountByUsername(_ context.Context, _ string) (*accountDomain.Account, error) {
 	return nil, nil
 }
+func (m *mockAccountService) FindByUsernameWithPasswordCredential(_ context.Context, _ string) (*accountDomain.Account, *accountDomain.Credential, error) {
+	return nil, nil, nil
+}
 func (m *mockAccountService) UpdateAccount(_ context.Context, _ *accountDomain.Account) error {
 	return nil
 }

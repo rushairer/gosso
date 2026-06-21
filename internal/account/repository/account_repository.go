@@ -39,6 +39,15 @@ type AccountRepository interface {
 	// FindByUsername finds an account by username
 	FindByUsername(ctx context.Context, username string) (*domain.Account, error)
 
+	// FindByUsernameWithPasswordCredential finds an account by username and its
+	// primary password credential in a single JOIN query. Returns
+	// ErrAccountNotFound if the account does not exist and
+	// ErrCredentialNotFound if the account has no password credential.
+	// This is an optimisation for the login hot path: it eliminates one
+	// DB round-trip compared to calling FindByUsername + FindPasswordCredential
+	// sequentially.
+	FindByUsernameWithPasswordCredential(ctx context.Context, username string) (*domain.Account, *domain.Credential, error)
+
 	// UpdateAccount updates an account with optimistic locking.
 	// expectedUpdatedAt is the value of updated_at that was read earlier in the same
 	// transaction; the UPDATE will only succeed if the row still matches.

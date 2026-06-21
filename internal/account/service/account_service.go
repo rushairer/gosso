@@ -32,6 +32,13 @@ type AccountService interface {
 	// FindAccountByUsername finds an account by its username.
 	FindAccountByUsername(ctx context.Context, username string) (*domain.Account, error)
 
+	// FindByUsernameWithPasswordCredential finds an account by username and its
+	// primary password credential in a single JOIN query. Returns
+	// ErrAccountNotFound if the account does not exist and
+	// ErrCredentialNotFound if the account has no password credential.
+	// This is an optimisation for the login hot path.
+	FindByUsernameWithPasswordCredential(ctx context.Context, username string) (*domain.Account, *domain.Credential, error)
+
 	// UpdateAccount updates account information.
 	UpdateAccount(ctx context.Context, account *domain.Account) error
 
@@ -312,6 +319,14 @@ func (s *accountServiceImpl) FindAccountByID(ctx context.Context, accountID stri
 // FindAccountByUsername finds an account by username.
 func (s *accountServiceImpl) FindAccountByUsername(ctx context.Context, username string) (*domain.Account, error) {
 	return s.accountRepo.FindByUsername(ctx, username)
+}
+
+// FindByUsernameWithPasswordCredential finds an account by username and its
+// primary password credential in a single JOIN query. Delegates to the
+// account repository's combined query to eliminate one DB round-trip on the
+// login hot path.
+func (s *accountServiceImpl) FindByUsernameWithPasswordCredential(ctx context.Context, username string) (*domain.Account, *domain.Credential, error) {
+	return s.accountRepo.FindByUsernameWithPasswordCredential(ctx, username)
 }
 
 // UpdateAccount updates account information with optimistic locking.

@@ -59,18 +59,12 @@ func AbortWithServiceError(ctx *gin.Context, logger *zap.Logger, err error,
 }
 
 // HandleClientAuthError handles the common OAuth2 client authentication error pattern.
-// It distinguishes secretRequiredErr (e.g., ErrClientSecretRequired) from other auth errors
-// and returns a 401 with "invalid_client" error code per RFC 6749.
-// The caller passes the specific sentinel to check, avoiding import coupling.
+// It returns a 401 with "invalid_client" error code per RFC 6749 §5.2.
+// A single generic description is used for all authentication failures to avoid
+// leaking whether the client exists or its configuration type (confidential vs public).
 // Always logs the error at Warn level and calls ctx.Abort() after writing the response.
-func HandleClientAuthError(ctx *gin.Context, logger *zap.Logger, err error,
-	secretRequiredErr error, secretRequiredDesc, invalidClientDesc string) {
-	if errors.Is(err, secretRequiredErr) {
-		logger.Warn(secretRequiredDesc, zap.Error(err))
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": secretRequiredDesc})
-	} else {
-		logger.Warn(invalidClientDesc, zap.Error(err))
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": invalidClientDesc})
-	}
+func HandleClientAuthError(ctx *gin.Context, logger *zap.Logger, err error) {
+	logger.Warn("client authentication failed", zap.Error(err))
+	ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "client authentication failed"})
 	ctx.Abort()
 }

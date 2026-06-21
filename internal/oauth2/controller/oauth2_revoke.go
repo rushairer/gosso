@@ -8,7 +8,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/controllerutil"
-	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 )
 
 // Revoke POST /oauth2/revoke (RFC 7009)
@@ -60,8 +59,7 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 			return
 		}
 		if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-			controllerutil.HandleClientAuthError(ctx, c.logger, err,
-				oauth2Service.ErrClientSecretRequired, "client secret is required", "invalid client credentials")
+			controllerutil.HandleClientAuthError(ctx, c.logger, err)
 			return
 		}
 		clientIDMatch = req.ClientID
@@ -145,8 +143,7 @@ func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 		return
 	}
 	if err := c.clientAuth.AuthenticateClient(client, clientSecret); err != nil {
-		controllerutil.HandleClientAuthError(ctx, c.logger, err,
-			oauth2Service.ErrClientSecretRequired, "client secret is required", "invalid client credentials")
+		controllerutil.HandleClientAuthError(ctx, c.logger, err)
 		return
 	} else if !client.IsConfidential {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "public clients are not allowed to introspect"})

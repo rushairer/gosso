@@ -318,6 +318,10 @@ func (m *mockAccountServiceForSocial) FindAccountByUsername(_ context.Context, _
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *mockAccountServiceForSocial) FindByUsernameWithPasswordCredential(_ context.Context, _ string) (*accountDomain.Account, *accountDomain.Credential, error) {
+	return nil, nil, fmt.Errorf("not implemented")
+}
+
 func (m *mockAccountServiceForSocial) UpdateAccount(_ context.Context, _ *accountDomain.Account) error {
 	return fmt.Errorf("not implemented")
 }

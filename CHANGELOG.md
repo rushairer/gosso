@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `FindByUsernameWithPasswordCredential` repository and service method — single JOIN query that retrieves account and password credential together, eliminating one DB round-trip on the login hot path (`internal/account/repository/`, `internal/account/service/`).
+- `RedisClient.GetEx` method wrapping Redis GETEX — atomically retrieves and refreshes key TTL in a single round-trip, used by session validation (`internal/cache/redis_client.go`).
+- `VerificationService.RequireHashPepper` method — production startup check that returns an error when no hash pepper is configured, preventing verification codes from being stored with plain SHA-256 (`internal/auth/service/verification_service.go`).
+- `RefreshResult.SessionRefreshFailed` field — signals to callers that session TTL extension failed during token refresh while tokens themselves remain valid (`internal/auth/service/auth_service.go`).
+- Warning log when verification code hash pepper is not configured — alerts operators that codes are stored with plain SHA-256 (`internal/auth/service/verification_service.go`).
+- Security comment on `FindAll` WHERE clause builder documenting that only hardcoded SQL fragments and `$N` placeholders may be appended (`internal/account/repository/account_repository_impl.go`).
+
+### Changed
+- `LoginByUsernamePassword` now uses the combined `FindByUsernameWithPasswordCredential` query and distinguishes `ErrAccountNotFound` from `ErrCredentialNotFound` before applying timing side-channel mitigation (`internal/auth/service/auth_login.go`).
+- `updateCredentialLastUsed` now executes directly on the connection pool without a transaction — non-critical fire-and-forget update does not need transactional guarantees (`internal/auth/service/auth_service.go`).
+- `RefreshTokens` now validates account and builds token claims in parallel via `errgroup` — reduces latency on the refresh hot path (`internal/auth/service/auth_session.go`).
+- `ValidateSession` now uses `RedisClient.GetEx` to atomically retrieve and refresh TTL in one round-trip instead of separate GET + EXPIRE calls (`internal/session/service/session_service.go`).
+- `GetSession` cache comparison now uses `bytes.Equal` on raw bytes instead of `string(cs.json) == data` to avoid unnecessary string conversion (`internal/session/service/session_service.go`).
+- `ListSessionsByAccount` stale index cleanup now pipelines `SREM` calls into a single Redis round-trip instead of one per stale entry (`internal/session/service/session_service_manage.go`).
+- `HandleClientAuthError` signature simplified — removed `secretRequiredErr`, `secretRequiredDesc`, and `invalidClientDesc` parameters; uses a single generic error description to avoid leaking client configuration details (`internal/controllerutil/error_handler.go`).
+- `DummyWorkWithContext` now adds random jitter (up to 50% of base duration) to dummy Argon2id hash timing, further hardening against timing side-channel analysis (`internal/utility/security.go`).
+- `classifyRegistrationConflict` now handles `errgroup.Wait()` errors instead of discarding them (`internal/account/service/account_service_identity.go`).
+- `audit.Auditor.enrichMeta` now handles the second `json.Marshal` error instead of discarding it (`internal/audit/service/audit.go`).
+
+### Security
+- `HandleClientAuthError` now returns a single generic `"client authentication failed"` description for all failure modes — previously different messages for "secret required" vs "invalid credentials" could reveal whether a client ID is confidential or public (`internal/controllerutil/error_handler.go`).
+- Verification code hash pepper warning added to startup — operators without `GOUNO_AUTH_TOTP_ENCRYPTION_KEY` are now alerted that codes are stored with plain SHA-256, vulnerable to rainbow tables on the 6-digit keyspace if Redis is compromised (`internal/auth/service/verification_service.go`).
+- Session TTL refresh during validation is now atomic via GETEX — eliminates a race window where a session could expire between the GET and EXPIRE calls (`internal/session/service/session_service.go`).
+
 ### Security
 - MFA token validation now converts `ErrBlacklistUnavailable` to `ErrServiceUnavailable` — previously a Redis failure during blacklist check propagated as a raw token-layer error, causing the controller to return 501 instead of the mapped 503 (`internal/auth/service/auth_service.go`).
 - MFA enrollment now returns 503 (not 500) when TOTP encryption key is misconfigured — distinguishes configuration errors from runtime failures (`internal/auth/controller/auth_mfa.go`).

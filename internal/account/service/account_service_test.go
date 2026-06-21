@@ -1241,6 +1241,9 @@ func (f *fakeAccountService) FindAccountByID(_ context.Context, _ string) (*doma
 func (f *fakeAccountService) FindAccountByUsername(_ context.Context, _ string) (*domain.Account, error) {
 	return nil, nil
 }
+func (f *fakeAccountService) FindByUsernameWithPasswordCredential(_ context.Context, _ string) (*domain.Account, *domain.Credential, error) {
+	return nil, nil, nil
+}
 func (f *fakeAccountService) UpdateAccount(_ context.Context, _ *domain.Account) error  { return nil }
 func (f *fakeAccountService) SoftDeleteAccount(_ context.Context, _ string) error       { return nil }
 func (f *fakeAccountService) VerifyContactCredential(_ context.Context, _ string) error { return nil }

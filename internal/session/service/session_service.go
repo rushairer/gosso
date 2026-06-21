@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -193,7 +194,7 @@ func (s *SessionService) GetSession(ctx context.Context, sessionID string) (*dom
 	// Return cached parsed session if the raw JSON has not changed.
 	if cached, ok := s.sessionCache.Load(sessionID); ok {
 		cs := cached.(cachedSession)
-		if string(cs.json) == data {
+		if bytes.Equal(cs.json, raw) {
 			return cs.session, nil
 		}
 	}
@@ -327,9 +328,36 @@ func (s *SessionService) RefreshSession(ctx context.Context, sessionID string) e
 
 // ValidateSession validates whether a session is still active.
 func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) (*domain.Session, error) {
-	session, err := s.GetSession(ctx, sessionID)
+	// Use GETEX to atomically retrieve and refresh TTL, saving one round-trip
+	// compared to the previous GET + EXPIRE sequence.
+	key := s.buildSessionKey(sessionID)
+	data, err := s.redis.GetEx(ctx, key, s.sessionTTL)
+	if errors.Is(err, cache.ErrKeyNotFound) {
+		return nil, ErrSessionNotFound
+	}
 	if err != nil {
-		return nil, err
+		s.logger.Error("Failed to get session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
+		return nil, fmt.Errorf("get session: %w", err)
+	}
+
+	raw := []byte(data)
+
+	// Return cached parsed session if the raw JSON has not changed.
+	var session *domain.Session
+	if cached, ok := s.sessionCache.Load(sessionID); ok {
+		cs := cached.(cachedSession)
+		if bytes.Equal(cs.json, raw) {
+			session = cs.session
+		}
+	}
+	if session == nil {
+		var parsed domain.Session
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			s.logger.Error("Failed to unmarshal session", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
+			return nil, fmt.Errorf("unmarshal session: %w", err)
+		}
+		session = &parsed
+		s.sessionCache.Store(sessionID, cachedSession{session: session, json: raw})
 	}
 
 	// Check absolute max session lifetime (prevents indefinite session extension)
@@ -346,15 +374,6 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 		s.logger.Warn("Session expired", zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 		s.expireSession(ctx, sessionID, s.buildAccountSessionsKey(session.AccountID))
 		return nil, ErrSessionExpired
-	}
-
-	// Refresh session TTL on successful validation (sliding window).
-	// This ensures active sessions are not expired while the user is still making requests.
-	// Non-fatal: if this fails, the session is still valid for this request.
-	sessionKey := s.buildSessionKey(sessionID)
-	if err := s.redis.Expire(ctx, sessionKey, s.sessionTTL); err != nil {
-		s.logger.Warn("Failed to refresh session TTL",
-			zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(err))
 	}
 
 	return session, nil

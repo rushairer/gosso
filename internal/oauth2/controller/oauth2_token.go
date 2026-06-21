@@ -12,7 +12,6 @@ import (
 
 	"github.com/rushairer/gosso/internal/controllerutil"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
-	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
 )
@@ -94,9 +93,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 	}
 
 	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-		controllerutil.HandleClientAuthError(ctx, c.logger, err,
-			oauth2Service.ErrClientSecretRequired,
-			"client_secret required", "invalid client_secret")
+		controllerutil.HandleClientAuthError(ctx, c.logger, err)
 		return
 	} else if !client.IsConfidential && req.CodeVerifier == "" {
 		// Public clients MUST use PKCE (RFC 7636)
@@ -186,9 +183,7 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 	// Public clients are exempt — they are bound by the refresh token itself and optionally PKCE.
 	if client.IsConfidential {
 		if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-			controllerutil.HandleClientAuthError(ctx, c.logger, err,
-				oauth2Service.ErrClientSecretRequired,
-				"client_secret required for confidential clients", "invalid client_secret")
+			controllerutil.HandleClientAuthError(ctx, c.logger, err)
 			return
 		}
 	}

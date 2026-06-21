@@ -180,7 +180,12 @@ func (a *Auditor) enrichMeta(record *domain.AuditRecord, requestID string) {
 			a.logger.Warn("Failed to unmarshal audit meta, replacing with request_id only",
 				zap.Error(err), zap.String("request_id", requestID))
 			meta = map[string]any{"request_id": requestID, "parse_error": err.Error()}
-			marshaled, _ := json.Marshal(meta)
+			marshaled, err := json.Marshal(meta)
+			if err != nil {
+				a.logger.Warn("Failed to marshal audit meta after unmarshal error, preserving original",
+					zap.Error(err), zap.String("request_id", requestID))
+				return
+			}
 			record.Meta = marshaled
 			return
 		}

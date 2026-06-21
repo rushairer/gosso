@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/pquerna/otp/totp"
@@ -106,9 +107,10 @@ func TestLoginByUsernamePassword_Success(t *testing.T) {
 
 	fixture.seedTestAccount("account-001", "testuser", "password123")
 
-	// updateCredentialLastUsed -> RunInTransaction -> BeginTx + Commit
-	fixture.sqlMock.ExpectBegin()
-	fixture.sqlMock.ExpectCommit()
+	// updateCredentialLastUsed -> ExecContext directly on connection pool
+	fixture.sqlMock.ExpectExec("UPDATE account_credentials").
+		WithArgs(sqlmock.AnyArg(), "cred-account-001").
+		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username:  "testuser",
