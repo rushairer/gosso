@@ -24,6 +24,8 @@ import (
 // rotateAndDeleteAndCleanSessionScript atomically retrieves and deletes a refresh token,
 // then removes the token hash from the session index — all in a single Redis round-trip.
 // This prevents TOCTOU race conditions during refresh token rotation.
+// Uses cjson.decode for robust JSON parsing when available (real Redis), falling back
+// to string pattern matching for environments without cjson (e.g., miniredis in tests).
 // KEYS[1] = refresh token key
 // ARGV[1] = session tokens key prefix (session_tokens:)
 // ARGV[2] = token hash
@@ -32,7 +34,16 @@ var rotateAndDeleteScript = redis.NewScript(`
 local data = redis.call('GET', KEYS[1])
 if data then
     redis.call('DEL', KEYS[1])
-    local sessionID = data:match('"session_id":"([^"]*)"')
+    local sessionID
+    local cjson_ok, cjson = pcall(require, 'cjson')
+    if cjson_ok then
+        local ok, obj = pcall(cjson.decode, data)
+        if ok and obj then
+            sessionID = obj.session_id
+        end
+    else
+        sessionID = data:match('"session_id":"([^"]*)"')
+    end
     if sessionID and sessionID ~= '' then
         redis.call('SREM', ARGV[1] .. sessionID, ARGV[2])
     end
@@ -44,6 +55,8 @@ return data
 // updates the session index (SREM old hash, SADD new hash) in a single Lua script.
 // The session ID is parsed from the old token JSON inside the script, eliminating
 // the need for a separate pre-read round-trip in Go.
+// Uses cjson.decode for robust JSON parsing when available (real Redis), falling back
+// to string pattern matching for environments without cjson (e.g., miniredis in tests).
 // KEYS[1] = old token key
 // ARGV[1] = old token hash, ARGV[2] = new token hash, ARGV[3] = session key prefix,
 // ARGV[4] = expiry seconds (for session key TTL)
@@ -54,7 +67,16 @@ if not oldData then
     return nil
 end
 redis.call('DEL', KEYS[1])
-local sessionID = oldData:match('"session_id":"([^"]*)"')
+local sessionID
+local cjson_ok, cjson = pcall(require, 'cjson')
+if cjson_ok then
+    local ok, obj = pcall(cjson.decode, oldData)
+    if ok and obj then
+        sessionID = obj.session_id
+    end
+else
+    sessionID = oldData:match('"session_id":"([^"]*)"')
+end
 if sessionID and sessionID ~= '' then
     local sessionKey = ARGV[3] .. sessionID
     redis.call('SREM', sessionKey, ARGV[1])
@@ -84,6 +106,14 @@ return #members
 // The old token is read and deleted in a single Lua script that also updates the
 // session index, eliminating the separate pre-read round-trip. The new token is
 // then stored based on the old token data returned by the script.
+//
+// KNOWN TRADE-OFF: The old token deletion (step 3) and new token storage (step 5)
+// are NOT atomic — they are separate Redis commands. If the process crashes between
+// these steps, the old token is consumed and the new token is lost, forcing the user
+// to re-authenticate. This is a fail-safe design: the worst case is a lost session,
+// not a stolen token. Making this fully atomic would require a Lua script that
+// generates the new token token inside Redis (eliminating the Go-side step), but
+// that would couple token generation logic to Redis Lua and complicate error handling.
 func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) (*domain.RefreshToken, error) {
 	// 1. Generate new token
 	newBytes := make([]byte, refreshTokenLength)

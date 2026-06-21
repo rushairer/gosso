@@ -330,7 +330,7 @@ func (s *VerificationService) RequireHashPepper() error {
 func (s *VerificationService) pepperHash(code string) string {
 	if s.hashPepper == "" {
 		panic("verification_service: hashPepper is empty; " +
-			"set auth.totp_encryption_key (env GOUNO_AUTH_TOTP_ENCRYPTION_KEY) " +
+			"set auth.verify_hash_pepper (env GOUNO_AUTH_VERIFY_HASH_PEPPER) " +
 			"to a 64-char hex string (32 bytes)")
 	}
 	mac := hmac.New(sha256.New, []byte(s.hashPepper))

@@ -88,7 +88,7 @@ type OAuth2Controller struct {
 	sessionValidator sessionDomain.SessionValidator
 	redis            *cache.RedisClient
 	issuer           string
-	consentTmpl      *template.Template
+	consentTmpl      *template.Template // html/template — never use text/template (would enable XSS)
 	deviceTmpl       *template.Template
 	resultTmpl       *template.Template
 	logger           *zap.Logger

@@ -265,6 +265,9 @@ func (c *GoUnoConfig) validateWebServer() error {
 		case "127.0.0.1", "::1":
 			return fmt.Errorf("web_server: address %q is loopback-only and unreachable from other hosts in production (use 0.0.0.0 or a specific external IP)", c.WebServerConfig.Address)
 		}
+		if c.WebServerConfig.Debug {
+			return fmt.Errorf("web_server: debug mode must not be enabled in production (set GOUNO_WEB_SERVER_DEBUG=false)")
+		}
 	}
 	// Timeout relationship checks (Go's net/http warns if IdleTimeout < ReadTimeout)
 	if c.WebServerConfig.IdleTimeout < c.WebServerConfig.ReadTimeout {

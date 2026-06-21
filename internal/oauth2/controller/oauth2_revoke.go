@@ -90,10 +90,12 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 	if req.TokenHint != "refresh_token" {
 		claims, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx, req.Token)
 		if err == nil && (clientIDMatch == "" || claims.ClientID == clientIDMatch) {
-			if revokeErr := c.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); revokeErr != nil {
-				c.logger.Error("Failed to revoke access token", zap.Error(revokeErr))
-				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-				return
+			if claims.ExpiresAt != nil {
+				if revokeErr := c.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); revokeErr != nil {
+					c.logger.Error("Failed to revoke access token", zap.Error(revokeErr))
+					ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+					return
+				}
 			}
 		}
 	}

@@ -2,7 +2,6 @@ package controller
 
 import (
 	"bytes"
-	"crypto/subtle"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -52,7 +51,7 @@ func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
 	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
 	if err != nil {
 		c.clientAuth.DummyAuthenticate()
-		c.logger.Warn("Client lookup failed for device code request", zap.Error(err), zap.String("client_id", req.ClientID))
+		c.logger.Warn("Client lookup failed for device code request", zap.Error(err), zap.String("client_id", utility.MaskOpaqueID(req.ClientID)))
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}
@@ -158,18 +157,11 @@ type DeviceUserSubmitRequest struct {
 }
 
 // DeviceUserSubmit POST /oauth2/device
+// CSRF validation is handled by the global CSRFMiddleware (this path is not in the skip list).
 func (c *OAuth2Controller) DeviceUserSubmit(ctx *gin.Context) {
 	var req DeviceUserSubmitRequest
 	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
-		return
-	}
-
-	// Validate CSRF token (double-submit cookie pattern)
-	cookieToken := csrfTokenFromCookie(ctx)
-	formToken := ctx.PostForm("csrf_token")
-	if cookieToken == "" || formToken == "" || subtle.ConstantTimeCompare([]byte(cookieToken), []byte(formToken)) != 1 {
-		ctx.JSON(http.StatusForbidden, gin.H{"error": "invalid_csrf", "error_description": "CSRF token mismatch"})
 		return
 	}
 

@@ -403,10 +403,10 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		go func() {
 			defer s.wg.Done()
 			defer func() { <-s.revokeSem }()
-			// Use context.Background() so the goroutine can complete even after
-			// stopCtx is cancelled during graceful shutdown. The timeout provides
-			// the actual deadline.
-			bgCtx, cancel := context.WithTimeout(context.Background(), passwordResetRevokeTimeout)
+			// Derive from stopCtx so that Wait() can signal shutdown.
+			// WithTimeout ensures the goroutine doesn't hang indefinitely
+			// even if Redis is unreachable.
+			bgCtx, cancel := context.WithTimeout(s.stopCtx, passwordResetRevokeTimeout)
 			defer cancel()
 			if err := s.sessionSvc.RevokeAllForAccount(bgCtx, data.AccountID); err != nil {
 				s.logger.Error("Failed to revoke sessions after password reset",
@@ -453,12 +453,11 @@ func (s *PasswordResetService) buildCooldownKey(email string) string {
 // Call this during graceful shutdown to ensure in-flight operations finish.
 // Returns after the configured timeout even if goroutines are still running, to avoid
 // blocking shutdown indefinitely when Redis is unreachable.
-// NOTE: stopCancel() is called to signal shutdown, but background goroutines currently
-// use context.Background() for their Redis operations. The primary shutdown mechanism
-// is the wg.Wait() with the timer fallback below. stopCtx is reserved for future use
-// where goroutines may check for cancellation.
+// stopCancel() signals background goroutines to wind down — their contexts derive from
+// stopCtx, so cancellation propagates. The primary shutdown mechanism
+// is the wg.Wait() with the timer fallback below.
 func (s *PasswordResetService) Wait() {
-	s.stopCancel() // signal background goroutines to wind down (currently reserved for future use)
+	s.stopCancel() // signal background goroutines to wind down via stopCtx cancellation
 	s.waitOnce.Do(func() {
 		done := make(chan struct{})
 		go func() { s.wg.Wait(); close(done) }()

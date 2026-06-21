@@ -8,7 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
-- `updateCredentialLastUsed` error message now masks the credential ID using `MaskOpaqueID` instead of leaking it in plaintext (`internal/auth/service/auth_service.go`).
+- `VerificationService.pepperHash` panic message now correctly references `auth.verify_hash_pepper` / `GOUNO_AUTH_VERIFY_HASH_PEPPER` instead of the wrong env var `GOUNO_AUTH_TOTP_ENCRYPTION_KEY` (`internal/auth/service/verification_service.go`).
+- `Revoke` handler now checks `claims.ExpiresAt != nil` before accessing `.Time`, preventing a nil-pointer panic on malformed JWTs (`internal/oauth2/controller/oauth2_revoke.go`).
+- `DeviceUserSubmit` removed redundant manual CSRF validation — the global `CSRFMiddleware` already validates CSRF tokens for this path (`internal/oauth2/controller/oauth2_device.go`).
+- `hasSessionCookie` now checks against an explicit allowlist of known session cookie name patterns instead of matching any cookie containing "session" or "sid" as a substring, preventing false positives from unrelated cookies (`middleware/csrf.go`).
+- Device code token endpoint warn log now masks untrusted `client_id` with `MaskOpaqueID` to prevent log injection (`internal/oauth2/controller/oauth2_device.go`).
+- Lua scripts in `token_service_revoke.go` now prefer `cjson.decode` for JSON parsing (with fallback to string pattern matching for miniredis test environments), improving robustness against JSON field ordering changes (`internal/token/service/token_service_revoke.go`).
+- `RotateRefreshToken` documentation now explicitly describes the non-atomic window between old token deletion and new token storage as a known fail-safe trade-off (`internal/token/service/token_service_revoke.go`).
+- Password reset session revocation goroutine now derives its context from `stopCtx` instead of `context.Background()`, allowing `Wait()` to signal shutdown while still respecting the timeout (`internal/auth/service/password_reset_service.go`).
+- Config validation now rejects `debug=true` in production mode (`GOUNO_WEB_SERVER_DEBUG=true` with `production=true`) (`config/config.go`).
 - Password reset `VerifyAndReset` now finds the password credential inside the same transaction as the update, eliminating a TOCTOU race condition where the credential could be modified between the read and write (`internal/auth/service/password_reset_service.go`).
 - `fetchRolesCached` variable scoping fix — `jsonErr` was declared inside `if` init and used after the block; moved declaration to outer scope (`internal/auth/service/auth_service.go`).
 - Credential IDs in `PasskeyService` log statements now masked with `MaskOpaqueID` — `RegisterCredential`, `CompleteLogin`, and `DeleteCredential` previously logged raw UUIDs (`internal/auth/service/passkey_service.go`).
@@ -26,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `maxSocialLoginResponseBodySize` constant — replaces magic `1<<20` body size limit in social login HTTP reads (`internal/auth/service/social_login_service.go`).
 
 ### Changed
+- `consentTmpl` field comment now explicitly documents that it must be `*html/template.Template` (not `text/template`) to prevent XSS (`internal/oauth2/controller/oauth2_controller.go`).
 - `RoleCacheInvalidator` type assertion in `initModules` now checks the `ok` return value and logs a warning on failure, replacing the previous silent discard (`cmd/gosso/web_modules.go`).
 - Dummy Argon2id hash paths now check `HashPassword` errors and fall back to `DummyWorkWithContext` sleep-based padding, instead of silently discarding errors (`internal/auth/service/auth_login.go`, `internal/auth/service/auth_service.go`).
 - `blacklistMFAToken` now validates `ExpiresAt` is non-nil before using it, preventing a nil-pointer panic on malformed MFA tokens (`internal/auth/service/auth_login_helpers.go`).
