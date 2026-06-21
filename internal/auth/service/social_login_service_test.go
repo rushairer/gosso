@@ -361,6 +361,9 @@ func (m *mockSocialCredentialRepo) FindByTypeAndIdentifier(ctx context.Context, 
 func (m *mockSocialCredentialRepo) FindPasswordCredential(_ context.Context, _ string) (*accountDomain.Credential, error) {
 	panic("not implemented")
 }
+func (m *mockSocialCredentialRepo) FindPasswordCredentialTx(_ context.Context, _ *sql.Tx, _ string) (*accountDomain.Credential, error) {
+	panic("not implemented")
+}
 func (m *mockSocialCredentialRepo) UpdateCredential(_ context.Context, _ *sql.Tx, _ *accountDomain.Credential) error {
 	panic("not implemented")
 }

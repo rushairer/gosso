@@ -184,6 +184,10 @@ func (m *authTestCredentialRepo) FindPasswordCredential(_ context.Context, accou
 	return nil, fmt.Errorf("password credential not found for account %s", accountID)
 }
 
+func (m *authTestCredentialRepo) FindPasswordCredentialTx(ctx context.Context, _ *sql.Tx, accountID string) (*accountDomain.Credential, error) {
+	return m.FindPasswordCredential(ctx, accountID)
+}
+
 func (m *authTestCredentialRepo) FindByTypeAndIdentifier(_ context.Context, credType accountDomain.CredentialType, identifier string) (*accountDomain.Credential, error) {
 	if m.typeAndIDCreds != nil {
 		key := string(credType) + ":" + identifier

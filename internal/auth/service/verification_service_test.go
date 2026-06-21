@@ -303,6 +303,10 @@ func (m *mockCredRepoForVerification) FindPasswordCredential(_ context.Context, 
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *mockCredRepoForVerification) FindPasswordCredentialTx(ctx context.Context, _ *sql.Tx, accountID string) (*accountDomain.Credential, error) {
+	return m.FindPasswordCredential(ctx, accountID)
+}
+
 func (m *mockCredRepoForVerification) UpdateCredential(_ context.Context, _ *sql.Tx, _ *accountDomain.Credential) error {
 	return fmt.Errorf("not implemented")
 }

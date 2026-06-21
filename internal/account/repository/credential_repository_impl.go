@@ -172,6 +172,16 @@ func findByTypeAndIdentifier(ctx context.Context, queryRow func(context.Context,
 
 // FindPasswordCredential finds the primary password credential of an account.
 func (r *credentialRepositoryImpl) FindPasswordCredential(ctx context.Context, accountID string) (*domain.Credential, error) {
+	return findPasswordCredential(ctx, r.db.QueryRowContext, accountID)
+}
+
+// FindPasswordCredentialTx finds the primary password credential of an account within a transaction.
+func (r *credentialRepositoryImpl) FindPasswordCredentialTx(ctx context.Context, tx *sql.Tx, accountID string) (*domain.Credential, error) {
+	return findPasswordCredential(ctx, tx.QueryRowContext, accountID)
+}
+
+// findPasswordCredential is the shared implementation for both transactional and non-transactional variants.
+func findPasswordCredential(ctx context.Context, queryRow func(context.Context, string, ...any) *sql.Row, accountID string) (*domain.Credential, error) {
 	query := `
 		SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
 		       metadata, created_at, updated_at, verified_at, last_used_at
@@ -180,7 +190,7 @@ func (r *credentialRepositoryImpl) FindPasswordCredential(ctx context.Context, a
 		ORDER BY primary_credential DESC, created_at ASC
 		LIMIT 1`
 
-	cred, err := scanCredential(r.db.QueryRowContext(ctx, query, accountID, domain.CredentialTypePassword))
+	cred, err := scanCredential(queryRow(ctx, query, accountID, domain.CredentialTypePassword))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: account=%s", ErrCredentialNotFound, accountID)
 	}

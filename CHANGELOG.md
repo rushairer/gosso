@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `updateCredentialLastUsed` error message now masks the credential ID using `MaskOpaqueID` instead of leaking it in plaintext (`internal/auth/service/auth_service.go`).
+- Password reset `VerifyAndReset` now finds the password credential inside the same transaction as the update, eliminating a TOCTOU race condition where the credential could be modified between the read and write (`internal/auth/service/password_reset_service.go`).
+- `fetchRolesCached` variable scoping fix — `jsonErr` was declared inside `if` init and used after the block; moved declaration to outer scope (`internal/auth/service/auth_service.go`).
+
+### Added
+- `FindPasswordCredentialTx` repository method — transactional variant of `FindPasswordCredential` for use inside `RunInTransaction` to avoid TOCTOU race conditions (`internal/account/repository/credential_repository.go`).
+
 ### Changed
 - `RoleCacheInvalidator` type assertion in `initModules` now checks the `ok` return value and logs a warning on failure, replacing the previous silent discard (`cmd/gosso/web_modules.go`).
 - Dummy Argon2id hash paths now check `HashPassword` errors and fall back to `DummyWorkWithContext` sleep-based padding, instead of silently discarding errors (`internal/auth/service/auth_login.go`, `internal/auth/service/auth_service.go`).

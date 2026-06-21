@@ -339,19 +339,20 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 		return fmt.Errorf("hash password: %w", err)
 	}
 
-	// Find password credential and update it
-	cred, err := s.credentialRepo.FindPasswordCredential(ctx, data.AccountID)
-	if err != nil {
-		return fmt.Errorf("find password credential: %w", err)
-	}
-
-	cred.Value = hashedPassword
-
+	// Find and update password credential in a single transaction to avoid TOCTOU race.
+	// The credential could be modified or deleted between the find and update if they
+	// use separate connections.
+	//
 	// Update password first, then delete the reset token.
 	// If the process crashes between DB commit and Redis deletion, the password
 	// is already changed and the token will expire naturally via TTL — a safe
 	// failure mode that avoids locking the user out.
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		cred, findErr := s.credentialRepo.FindPasswordCredentialTx(ctx, tx, data.AccountID)
+		if findErr != nil {
+			return fmt.Errorf("find password credential: %w", findErr)
+		}
+		cred.Value = hashedPassword
 		return s.credentialRepo.UpdateCredential(ctx, tx, cred)
 	})
 	if err != nil {

@@ -330,7 +330,7 @@ func (s *AuthService) updateCredentialLastUsed(ctx context.Context, cred *accoun
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("credential not found: %s", cred.ID)
+		return fmt.Errorf("credential not found: %s", utility.MaskOpaqueID(cred.ID))
 	}
 	return nil
 }
@@ -372,7 +372,8 @@ func (s *AuthService) fetchRolesCached(ctx context.Context, accountID string) (r
 	cached, cacheErr := s.redis.Get(ctx, key)
 	if cacheErr == nil {
 		var entry roleCacheEntry
-		if jsonErr := json.Unmarshal([]byte(cached), &entry); jsonErr == nil {
+		jsonErr := json.Unmarshal([]byte(cached), &entry)
+		if jsonErr == nil {
 			return entry.Roles, entry.Permissions, nil
 		}
 		// Cache corruption — fall through to DB.

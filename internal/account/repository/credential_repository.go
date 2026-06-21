@@ -40,6 +40,10 @@ type CredentialRepository interface {
 	// FindPasswordCredential finds password credential of an account
 	FindPasswordCredential(ctx context.Context, accountID string) (*domain.Credential, error)
 
+	// FindPasswordCredentialTx finds password credential of an account within a transaction.
+	// Use this variant inside RunInTransaction to avoid TOCTOU race conditions.
+	FindPasswordCredentialTx(ctx context.Context, tx *sql.Tx, accountID string) (*domain.Credential, error)
+
 	// UpdateCredential updates a credential (requires transaction)
 	UpdateCredential(ctx context.Context, tx *sql.Tx, credential *domain.Credential) error
 

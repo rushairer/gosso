@@ -110,6 +110,9 @@ func (m *mockCredentialRepo) FindByTypeAndIdentifier(_ context.Context, _ accoun
 func (m *mockCredentialRepo) FindPasswordCredential(_ context.Context, _ string) (*accountDomain.Credential, error) {
 	return nil, fmt.Errorf("not implemented")
 }
+func (m *mockCredentialRepo) FindPasswordCredentialTx(ctx context.Context, _ *sql.Tx, accountID string) (*accountDomain.Credential, error) {
+	return m.FindPasswordCredential(ctx, accountID)
+}
 func (m *mockCredentialRepo) UpdateCredential(_ context.Context, _ *sql.Tx, _ *accountDomain.Credential) error {
 	return nil
 }

@@ -258,6 +258,10 @@ func (m *mockCredentialRepoForReset) FindPasswordCredential(ctx context.Context,
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *mockCredentialRepoForReset) FindPasswordCredentialTx(ctx context.Context, tx *sql.Tx, accountID string) (*accountDomain.Credential, error) {
+	return m.FindPasswordCredential(ctx, accountID)
+}
+
 func (m *mockCredentialRepoForReset) UpdateCredential(_ context.Context, _ *sql.Tx, _ *accountDomain.Credential) error {
 	return fmt.Errorf("not implemented")
 }

@@ -204,6 +204,10 @@ func (m *mockCredentialRepoForController) FindPasswordCredential(_ context.Conte
 	return nil, nil
 }
 
+func (m *mockCredentialRepoForController) FindPasswordCredentialTx(ctx context.Context, _ *sql.Tx, accountID string) (*accountDomain.Credential, error) {
+	return m.FindPasswordCredential(ctx, accountID)
+}
+
 func (m *mockCredentialRepoForController) UpdateCredential(_ context.Context, _ *sql.Tx, _ *accountDomain.Credential) error {
 	return nil
 }
