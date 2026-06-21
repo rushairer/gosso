@@ -501,15 +501,6 @@ func TestRevokeAccessToken(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestRevokeAccessToken_NilBlacklist(t *testing.T) {
-	svc, cleanup := setupTestTokenService(t)
-	defer cleanup()
-
-	svc.blacklist = nil
-	err := svc.RevokeAccessToken(context.Background(), "any-jti", time.Now().Add(time.Hour))
-	assert.ErrorIs(t, err, ErrBlacklistNotConfigured)
-}
-
 // ──────────────────────────────────────────────
 // RevokeAccountTokens
 // ──────────────────────────────────────────────
@@ -542,13 +533,4 @@ func TestRevokeAccountTokens(t *testing.T) {
 	// The previously valid token should now be rejected
 	_, err = svc.ValidateAccessTokenWithContext(ctx, tokenString)
 	assert.Error(t, err)
-}
-
-func TestRevokeAccountTokens_NilBlacklist(t *testing.T) {
-	svc, cleanup := setupTestTokenService(t)
-	defer cleanup()
-
-	svc.blacklist = nil
-	err := svc.RevokeAccountTokens(context.Background(), "any-account")
-	assert.ErrorIs(t, err, ErrBlacklistNotConfigured)
 }

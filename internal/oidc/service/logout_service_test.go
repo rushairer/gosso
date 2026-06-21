@@ -144,9 +144,7 @@ func TestValidateIDTokenHint_WrongAlgorithm(t *testing.T) {
 
 // ──────────────────────────────────────────────
 // setupTestLogoutServiceWithSession creates a LogoutService backed by a real
-// SessionService (miniredis) and a TokenService with nil blacklist.
-// This means RevokeAccountTokens will return ErrBlacklistNotConfigured,
-// which exercises the non-fatal warning path in LogoutByAccountID.
+// SessionService (miniredis) and a TokenService.
 // ──────────────────────────────────────────────
 func setupTestLogoutServiceWithSession(t *testing.T) (*LogoutService, *tokenService.KeyService, *sessionService.SessionService) {
 	t.Helper()
@@ -239,8 +237,6 @@ func TestLogoutByAccountID_RevokeAccountTokensNonFatal(t *testing.T) {
 
 	createTestSession(t, sessionSvc, "account-001", "session-001")
 
-	// TokenService blacklist is nil, so RevokeAccountTokens returns
-	// ErrBlacklistNotConfigured. The logout service treats this as non-fatal.
 	err := svc.LogoutByAccountID(ctx, "account-001")
 	assert.NoError(t, err)
 }

@@ -112,10 +112,12 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 
 	// Wire cross-module dependencies into account service via a single atomic call.
 	// This replaces the previous three Set* calls that had temporal coupling risks.
+	roleCacheInvalidator, _ := authMod.AuthService.(accountService.RoleCacheInvalidator)
 	accountMod.Service.SetOptions(&accountService.AccountServiceOptions{
 		SessionRevoker:          authMod.SessionService,
 		OAuth2ClientDeleter:     &oauth2ClientDeleterAdapter{clientRepo: oauth2Mod.ClientRepo},
 		ConsentCacheInvalidator: oauth2Mod.ConsentService,
+		RoleCacheInvalidator:    roleCacheInvalidator,
 	})
 
 	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, !cfg.WebServerConfig.Debug, logger)

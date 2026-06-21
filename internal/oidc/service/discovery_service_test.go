@@ -1,11 +1,20 @@
 package service
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// unmarshalDiscovery is a test helper that unmarshals the JSON bytes into a map.
+func unmarshalDiscovery(t *testing.T, raw []byte) map[string]any {
+	t.Helper()
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(raw, &doc))
+	return doc
+}
 
 func TestNewDiscoveryService(t *testing.T) {
 	svc := NewDiscoveryService("https://sso.example.com")
@@ -14,14 +23,14 @@ func TestNewDiscoveryService(t *testing.T) {
 
 func TestGetDiscoveryDocument_ContainsIssuer(t *testing.T) {
 	svc := NewDiscoveryService("https://sso.example.com")
-	doc := svc.GetDiscoveryDocument()
+	doc := unmarshalDiscovery(t, svc.GetDiscoveryDocument())
 
 	assert.Equal(t, "https://sso.example.com", doc["issuer"])
 }
 
 func TestGetDiscoveryDocument_Endpoints(t *testing.T) {
 	svc := NewDiscoveryService("https://sso.example.com")
-	doc := svc.GetDiscoveryDocument()
+	doc := unmarshalDiscovery(t, svc.GetDiscoveryDocument())
 
 	assert.Equal(t, "https://sso.example.com/oauth2/authorize", doc["authorization_endpoint"])
 	assert.Equal(t, "https://sso.example.com/oauth2/token", doc["token_endpoint"])
@@ -31,7 +40,7 @@ func TestGetDiscoveryDocument_Endpoints(t *testing.T) {
 
 func TestGetDiscoveryDocument_SupportedValues(t *testing.T) {
 	svc := NewDiscoveryService("https://sso.example.com")
-	doc := svc.GetDiscoveryDocument()
+	doc := unmarshalDiscovery(t, svc.GetDiscoveryDocument())
 
 	assert.Contains(t, doc["scopes_supported"], "openid")
 	assert.Contains(t, doc["scopes_supported"], "profile")
@@ -52,9 +61,10 @@ func TestGetDiscoveryDocument_SupportedValues(t *testing.T) {
 
 func TestGetDiscoveryDocument_TokenEndpointAuthMethods(t *testing.T) {
 	svc := NewDiscoveryService("https://sso.example.com")
-	doc := svc.GetDiscoveryDocument()
+	doc := unmarshalDiscovery(t, svc.GetDiscoveryDocument())
 
-	methods, ok := doc["token_endpoint_auth_methods_supported"].([]string)
+	// JSON unmarshal produces []interface{}, not []string
+	methods, ok := doc["token_endpoint_auth_methods_supported"].([]interface{})
 	require.True(t, ok)
 	assert.Contains(t, methods, "client_secret_post")
 	assert.Contains(t, methods, "client_secret_basic")
@@ -62,9 +72,9 @@ func TestGetDiscoveryDocument_TokenEndpointAuthMethods(t *testing.T) {
 
 func TestGetDiscoveryDocument_ClaimsSupported(t *testing.T) {
 	svc := NewDiscoveryService("https://sso.example.com")
-	doc := svc.GetDiscoveryDocument()
+	doc := unmarshalDiscovery(t, svc.GetDiscoveryDocument())
 
-	claims, ok := doc["claims_supported"].([]string)
+	claims, ok := doc["claims_supported"].([]interface{})
 	require.True(t, ok)
 	for _, c := range []string{"sub", "iss", "aud", "exp", "iat", "name", "email", "email_verified", "phone_number", "locale"} {
 		assert.Contains(t, claims, c)
@@ -73,7 +83,7 @@ func TestGetDiscoveryDocument_ClaimsSupported(t *testing.T) {
 
 func TestGetDiscoveryDocument_DifferentIssuer(t *testing.T) {
 	svc := NewDiscoveryService("http://localhost:8080")
-	doc := svc.GetDiscoveryDocument()
+	doc := unmarshalDiscovery(t, svc.GetDiscoveryDocument())
 
 	assert.Equal(t, "http://localhost:8080", doc["issuer"])
 	assert.Equal(t, "http://localhost:8080/oauth2/authorize", doc["authorization_endpoint"])
@@ -81,28 +91,35 @@ func TestGetDiscoveryDocument_DifferentIssuer(t *testing.T) {
 
 func TestGetDiscoveryDocument_EndSessionEndpoint(t *testing.T) {
 	svc := NewDiscoveryService("https://sso.example.com")
-	doc := svc.GetDiscoveryDocument()
+	doc := unmarshalDiscovery(t, svc.GetDiscoveryDocument())
 
 	assert.Equal(t, "https://sso.example.com/oidc/logout", doc["end_session_endpoint"])
 }
 
 func TestGetDiscoveryDocument_EndSessionEndpoint_Localhost(t *testing.T) {
 	svc := NewDiscoveryService("http://localhost:8080")
-	doc := svc.GetDiscoveryDocument()
+	doc := unmarshalDiscovery(t, svc.GetDiscoveryDocument())
 
 	assert.Equal(t, "http://localhost:8080/oidc/logout", doc["end_session_endpoint"])
 }
 
 func TestGetDiscoveryDocument_DeviceAuthorizationEndpoint(t *testing.T) {
 	svc := NewDiscoveryService("https://sso.example.com")
-	doc := svc.GetDiscoveryDocument()
+	doc := unmarshalDiscovery(t, svc.GetDiscoveryDocument())
 
 	assert.Equal(t, "https://sso.example.com/oauth2/device/code", doc["device_authorization_endpoint"])
 }
 
 func TestGetDiscoveryDocument_DeviceAuthorizationEndpoint_Localhost(t *testing.T) {
 	svc := NewDiscoveryService("http://localhost:8080")
-	doc := svc.GetDiscoveryDocument()
+	doc := unmarshalDiscovery(t, svc.GetDiscoveryDocument())
 
 	assert.Equal(t, "http://localhost:8080/oauth2/device/code", doc["device_authorization_endpoint"])
+}
+
+func TestGetDiscoveryDocument_ValidJSON(t *testing.T) {
+	svc := NewDiscoveryService("https://sso.example.com")
+	raw := svc.GetDiscoveryDocument()
+	require.NotEmpty(t, raw)
+	assert.Contains(t, string(raw), `"issuer":"https://sso.example.com"`)
 }

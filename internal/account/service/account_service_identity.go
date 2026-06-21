@@ -18,6 +18,7 @@ import (
 	auditService "github.com/rushairer/gosso/internal/audit/service"
 	dbutil "github.com/rushairer/gosso/internal/db"
 	"github.com/rushairer/gosso/internal/utility"
+	"go.uber.org/zap"
 )
 
 // BindFederatedIdentity binds a third-party identity.
@@ -169,6 +170,14 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 		return err
 	}
 
+	// Invalidate cached roles so the next token build fetches fresh data.
+	if s.roleCacheInvalidator != nil {
+		if invErr := s.roleCacheInvalidator.InvalidateRoleCache(ctx, accountID); invErr != nil {
+			s.logger.Warn("Failed to invalidate role cache after AssignRole",
+				zap.String("account_id", accountID), zap.Error(invErr))
+		}
+	}
+
 	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionRoleAssign,
 		audit.IPFromContext(ctx),
@@ -199,6 +208,14 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 	})
 	if err != nil {
 		return err
+	}
+
+	// Invalidate cached roles so the next token build fetches fresh data.
+	if s.roleCacheInvalidator != nil {
+		if invErr := s.roleCacheInvalidator.InvalidateRoleCache(ctx, accountID); invErr != nil {
+			s.logger.Warn("Failed to invalidate role cache after RemoveRole",
+				zap.String("account_id", accountID), zap.Error(invErr))
+		}
 	}
 
 	s.auditLogSync(ctx, auditDomain.NewRecord(

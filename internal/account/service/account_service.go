@@ -101,12 +101,19 @@ type ConsentCacheInvalidator interface {
 	DeleteConsentsByAccount(ctx context.Context, accountID string) error
 }
 
+// RoleCacheInvalidator clears cached roles/permissions for an account.
+// Called after role assignment or removal to keep the cache consistent.
+type RoleCacheInvalidator interface {
+	InvalidateRoleCache(ctx context.Context, accountID string) error
+}
+
 // AccountServiceOptions holds optional dependencies for NewAccountService.
 // All fields are optional — nil values are handled at runtime with safe fallbacks.
 type AccountServiceOptions struct {
 	SessionRevoker          SessionRevoker          // required for SoftDelete/ChangePassword/Suspend
 	OAuth2ClientDeleter     OAuth2ClientDeleter     // required for SoftDelete
 	ConsentCacheInvalidator ConsentCacheInvalidator // optional, non-critical
+	RoleCacheInvalidator    RoleCacheInvalidator    // optional, non-critical; invalidates cached roles on change
 }
 
 type accountServiceImpl struct {
@@ -119,6 +126,7 @@ type accountServiceImpl struct {
 	sessionRevoker          SessionRevoker
 	oauth2ClientDeleter     OAuth2ClientDeleter
 	consentCacheInvalidator ConsentCacheInvalidator
+	roleCacheInvalidator    RoleCacheInvalidator
 	logger                  *zap.Logger
 	optionsOnce             sync.Once
 	setOptionsCalls         atomic.Int32
@@ -158,6 +166,7 @@ func NewAccountService(
 		svc.sessionRevoker = opts.SessionRevoker
 		svc.oauth2ClientDeleter = opts.OAuth2ClientDeleter
 		svc.consentCacheInvalidator = opts.ConsentCacheInvalidator
+		svc.roleCacheInvalidator = opts.RoleCacheInvalidator
 	}
 	return svc
 }
@@ -177,6 +186,7 @@ func (s *accountServiceImpl) SetOptions(opts *AccountServiceOptions) {
 		s.sessionRevoker = opts.SessionRevoker
 		s.oauth2ClientDeleter = opts.OAuth2ClientDeleter
 		s.consentCacheInvalidator = opts.ConsentCacheInvalidator
+		s.roleCacheInvalidator = opts.RoleCacheInvalidator
 	})
 }
 
@@ -226,6 +236,13 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	}
 	account.Metadata = nonNilMap(req.Metadata)
 
+	// Hash password outside the transaction — Argon2id is CPU-intensive (~100ms)
+	// and holding a DB connection open during hashing wastes pool slots.
+	passwordCred, err := domain.NewPasswordCredential(account.ID, req.Password)
+	if err != nil {
+		return nil, fmt.Errorf("hash password: %w", err)
+	}
+
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		// Check credential uniqueness inside the transaction to eliminate TOCTOU window.
 		if req.Email != "" {
@@ -244,11 +261,6 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 		}
 
 		var credentials []*domain.Credential
-
-		passwordCred, err := domain.NewPasswordCredential(account.ID, req.Password)
-		if err != nil {
-			return fmt.Errorf("hash password: %w", err)
-		}
 		credentials = append(credentials, passwordCred)
 
 		if req.Email != "" {

@@ -3,6 +3,7 @@ package service
 import (
 	"crypto/rsa"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"sync"
@@ -15,26 +16,27 @@ import (
 type JWKSService struct {
 	keySvc      *tokenService.KeyService
 	mu          sync.RWMutex
-	jwks        map[string]any
+	jwksJSON    []byte           // pre-marshaled JWKS bytes, rebuilt on Reload/ClearPreviousKey
 	previousKey *map[string]string // previous key for rotation overlap, nil if none
 }
 
 // NewJWKSService creates a new instance of JWKSService.
-// The JWKS document is pre-computed once since the key is stable for the service lifetime.
+// The JWKS document is pre-marshaled once since the key is stable for the service lifetime.
 func NewJWKSService(keySvc *tokenService.KeyService) *JWKSService {
 	s := &JWKSService{
 		keySvc: keySvc,
 	}
-	s.jwks = s.buildJWKS()
+	s.jwksJSON = s.marshalJWKS()
 	return s
 }
 
-// GetJWKS returns a copy of the JWKS document.
-// Returns a copy to prevent callers from mutating the shared state.
-func (s *JWKSService) GetJWKS() map[string]any {
+// GetJWKS returns the pre-marshaled JWKS JSON bytes.
+// The returned slice is safe to send directly to a response writer; no copy is needed
+// because the bytes are only rebuilt on Reload/ClearPreviousKey, never mutated in place.
+func (s *JWKSService) GetJWKS() []byte {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return copyMap(s.jwks)
+	return s.jwksJSON
 }
 
 // GetPublicKeyByKID returns the RSA public key matching the given key ID.
@@ -115,7 +117,7 @@ func (s *JWKSService) Reload() {
 	// Save current key as previous before replacing
 	currentKey := s.buildCurrentKeyEntry()
 	s.previousKey = &currentKey
-	s.jwks = s.buildJWKS()
+	s.jwksJSON = s.marshalJWKS()
 }
 
 // ClearPreviousKey removes the previous key from the JWKS document.
@@ -124,7 +126,7 @@ func (s *JWKSService) ClearPreviousKey() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.previousKey = nil
-	s.jwks = s.buildJWKS()
+	s.jwksJSON = s.marshalJWKS()
 }
 
 // buildCurrentKeyEntry builds a single key entry from the current key service.
@@ -147,14 +149,21 @@ func (s *JWKSService) buildCurrentKeyEntry() map[string]string {
 	}
 }
 
-// buildJWKS constructs the JWKS document from the current key material,
-// including the previous key if one exists (for rotation overlap).
-func (s *JWKSService) buildJWKS() map[string]any {
+// marshalJWKS constructs the JWKS document from the current key material,
+// including the previous key if one exists (for rotation overlap),
+// and returns the pre-marshaled JSON bytes.
+func (s *JWKSService) marshalJWKS() []byte {
 	keys := []map[string]string{s.buildCurrentKeyEntry()}
 	if s.previousKey != nil {
 		keys = append(keys, *s.previousKey)
 	}
-	return map[string]any{
+	jwks := map[string]any{
 		"keys": keys,
 	}
+	b, err := json.Marshal(jwks)
+	if err != nil {
+		// This should never happen with deterministic types.
+		panic("jwks: marshal error: " + err.Error())
+	}
+	return b
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +11,18 @@ import (
 
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
+
+// jwksResult is a helper for unmarshaling JWKS JSON in tests.
+type jwksResult struct {
+	Keys []map[string]string `json:"keys"`
+}
+
+func unmarshalJWKS(t *testing.T, b []byte) jwksResult {
+	t.Helper()
+	var result jwksResult
+	require.NoError(t, json.Unmarshal(b, &result))
+	return result
+}
 
 func newTestJWKSService(t *testing.T) *JWKSService {
 	t.Helper()
@@ -20,19 +33,16 @@ func newTestJWKSService(t *testing.T) *JWKSService {
 
 func TestGetJWKS_ContainsKeys(t *testing.T) {
 	svc := newTestJWKSService(t)
-	jwks := svc.GetJWKS()
+	result := unmarshalJWKS(t, svc.GetJWKS())
 
-	keys, ok := jwks["keys"].([]map[string]string)
-	require.True(t, ok)
-	require.Len(t, keys, 1)
+	require.Len(t, result.Keys, 1)
 }
 
 func TestGetJWKS_KeyFields(t *testing.T) {
 	svc := newTestJWKSService(t)
-	jwks := svc.GetJWKS()
+	result := unmarshalJWKS(t, svc.GetJWKS())
 
-	keys := jwks["keys"].([]map[string]string)
-	key := keys[0]
+	key := result.Keys[0]
 
 	assert.Equal(t, "RSA", key["kty"])
 	assert.Equal(t, "test-kid", key["kid"])
@@ -44,10 +54,9 @@ func TestGetJWKS_KeyFields(t *testing.T) {
 
 func TestGetJWKS_ValidBase64(t *testing.T) {
 	svc := newTestJWKSService(t)
-	jwks := svc.GetJWKS()
+	result := unmarshalJWKS(t, svc.GetJWKS())
 
-	keys := jwks["keys"].([]map[string]string)
-	key := keys[0]
+	key := result.Keys[0]
 
 	_, errN := base64.RawURLEncoding.DecodeString(key["n"])
 	assert.NoError(t, errN)
@@ -58,10 +67,9 @@ func TestGetJWKS_ValidBase64(t *testing.T) {
 
 func TestGetJWKS_ExponentIsStandard(t *testing.T) {
 	svc := newTestJWKSService(t)
-	jwks := svc.GetJWKS()
+	result := unmarshalJWKS(t, svc.GetJWKS())
 
-	keys := jwks["keys"].([]map[string]string)
-	key := keys[0]
+	key := result.Keys[0]
 
 	eBytes, err := base64.RawURLEncoding.DecodeString(key["e"])
 	require.NoError(t, err)
@@ -71,19 +79,17 @@ func TestGetJWKS_ExponentIsStandard(t *testing.T) {
 
 func TestReload_RebuildsJWKS(t *testing.T) {
 	svc := newTestJWKSService(t)
-	before := svc.GetJWKS()
+	before := unmarshalJWKS(t, svc.GetJWKS())
 
 	// Capture the "n" value before reload
-	keysBefore := before["keys"].([]map[string]string)
-	nBefore := keysBefore[0]["n"]
+	nBefore := before.Keys[0]["n"]
 
 	svc.Reload()
 
-	after := svc.GetJWKS()
-	keysAfter := after["keys"].([]map[string]string)
+	after := unmarshalJWKS(t, svc.GetJWKS())
 
 	// Key material is unchanged (same RSA key), but the map is rebuilt
-	assert.Equal(t, nBefore, keysAfter[0]["n"])
-	assert.Equal(t, "test-kid", keysAfter[0]["kid"])
-	assert.Equal(t, "RS256", keysAfter[0]["alg"])
+	assert.Equal(t, nBefore, after.Keys[0]["n"])
+	assert.Equal(t, "test-kid", after.Keys[0]["kid"])
+	assert.Equal(t, "RS256", after.Keys[0]["alg"])
 }

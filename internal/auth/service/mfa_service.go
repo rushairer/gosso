@@ -14,6 +14,7 @@ import (
 	"github.com/pquerna/otp/totp"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/sync/errgroup"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
@@ -125,10 +126,36 @@ type MFAStatus struct {
 func (s *MFAService) GetMFAStatus(ctx context.Context, accountID string) (*MFAStatus, error) {
 	status := &MFAStatus{}
 
-	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
-	if err != nil {
-		return nil, fmt.Errorf("query TOTP credentials: %w", err)
+	g, gctx := errgroup.WithContext(ctx)
+
+	var creds []*accountDomain.Credential
+	var hasPasskeys bool
+
+	// Query TOTP credentials and passkey existence concurrently.
+	g.Go(func() error {
+		var err error
+		creds, err = s.credentialRepo.FindByAccountAndType(gctx, accountID, accountDomain.CredentialTypeTOTP)
+		if err != nil {
+			return fmt.Errorf("query TOTP credentials: %w", err)
+		}
+		return nil
+	})
+
+	if s.passkeySvc != nil {
+		g.Go(func() error {
+			var err error
+			hasPasskeys, err = s.passkeySvc.HasPasskeys(gctx, accountID)
+			if err != nil {
+				return fmt.Errorf("check passkeys: %w", err)
+			}
+			return nil
+		})
 	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
 	for _, c := range creds {
 		if c.Verified && !c.IsDeleted() {
 			status.Enabled = true
@@ -137,15 +164,9 @@ func (s *MFAService) GetMFAStatus(ctx context.Context, accountID string) (*MFASt
 		}
 	}
 
-	if s.passkeySvc != nil {
-		has, err := s.passkeySvc.HasPasskeys(ctx, accountID)
-		if err != nil {
-			return nil, fmt.Errorf("check passkeys: %w", err)
-		}
-		if has {
-			status.Enabled = true
-			status.Types = append(status.Types, "passkey")
-		}
+	if hasPasskeys {
+		status.Enabled = true
+		status.Types = append(status.Types, "passkey")
 	}
 
 	return status, nil

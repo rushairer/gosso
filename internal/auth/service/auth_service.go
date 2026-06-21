@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -38,6 +39,9 @@ const (
 	defaultMFAAccountMaxAttempts = 10
 	// defaultMFAAccountRateLimitWindow is the default window for per-account MFA rate limiting.
 	defaultMFAAccountRateLimitWindow = 5 * time.Minute
+	// roleCacheTTL is the TTL for cached roles in Redis.
+	// Short-lived to balance performance gain against stale-role risk.
+	roleCacheTTL = 5 * time.Minute
 )
 
 // LoginCommand represents a username+password login request from the controller layer.
@@ -193,11 +197,12 @@ func NewAuthServiceWithConfig(
 	}
 	svc.dummyHashSem = semaphore.NewWeighted(int64(dummyConcurrency))
 	if len(cfg.LoginIPAllowlist) > 0 {
-		nets, err := parseIPAllowlist(cfg.LoginIPAllowlist)
-		if err != nil {
+		nets, errs := parseIPAllowlist(cfg.LoginIPAllowlist)
+		for _, err := range errs {
 			logger.Warn("Invalid entry in login_ip_allowlist, skipping",
 				zap.Error(err))
-		} else {
+		}
+		if len(nets) > 0 {
 			svc.loginIPAllowlist = nets
 		}
 	}
@@ -311,17 +316,59 @@ func (s *AuthService) updateCredentialLastUsed(ctx context.Context, cred *accoun
 	})
 }
 
+// roleCacheKey returns the Redis key for cached account roles.
+func roleCacheKey(accountID string) string {
+	return fmt.Sprintf("auth:roles:%s", accountID)
+}
+
+// roleCacheEntry is the JSON-serializable form of cached role data.
+type roleCacheEntry struct {
+	Roles       []string `json:"roles"`
+	Permissions []string `json:"permissions"`
+}
+
 // buildTokenClaims fetches roles and permissions for an account and builds token claims.
+// Results are cached in Redis for roleCacheTTL to avoid repeated DB queries on every
+// login and token refresh. Cache is invalidated by InvalidateRoleCache on role changes.
 func (s *AuthService) buildTokenClaims(ctx context.Context, accountID, sessionID string) (*tokenDomain.AccessTokenClaims, error) {
-	roles, err := s.roleRepo.FindRolesByAccountID(ctx, accountID)
+	roleNames, permissions, err := s.fetchRolesCached(ctx, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("fetch roles for token: %w", err)
+		return nil, err
 	}
 
-	var roleNames []string
+	return &tokenDomain.AccessTokenClaims{
+		AccountID:   accountID,
+		Roles:       roleNames,
+		Permissions: permissions,
+		SessionID:   sessionID,
+	}, nil
+}
+
+// fetchRolesCached returns deduplicated role names and permissions for the account.
+// It checks Redis first; on cache miss it queries the DB and populates the cache.
+func (s *AuthService) fetchRolesCached(ctx context.Context, accountID string) (roleNames, permissions []string, err error) {
+	key := roleCacheKey(accountID)
+
+	// Try cache first.
+	cached, cacheErr := s.redis.Get(ctx, key)
+	if cacheErr == nil {
+		var entry roleCacheEntry
+		if jsonErr := json.Unmarshal([]byte(cached), &entry); jsonErr == nil {
+			return entry.Roles, entry.Permissions, nil
+		}
+		// Cache corruption — fall through to DB.
+		s.logger.Debug("Role cache deserialization failed; falling back to DB",
+			zap.String("account_id", accountID), zap.Error(cacheErr))
+	}
+
+	// Cache miss or error — fetch from DB.
+	roles, err := s.roleRepo.FindRolesByAccountID(ctx, accountID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fetch roles for token: %w", err)
+	}
+
 	roleSet := make(map[string]struct{})
 	permSet := make(map[string]struct{})
-	var allPermissions []string
 	for _, role := range roles {
 		if _, exists := roleSet[role.Name]; !exists {
 			roleSet[role.Name] = struct{}{}
@@ -330,24 +377,34 @@ func (s *AuthService) buildTokenClaims(ctx context.Context, accountID, sessionID
 		for _, p := range role.Permissions {
 			if _, exists := permSet[p]; !exists {
 				permSet[p] = struct{}{}
-				allPermissions = append(allPermissions, p)
+				permissions = append(permissions, p)
 			}
 		}
 	}
 
-	return &tokenDomain.AccessTokenClaims{
-		AccountID:   accountID,
-		Roles:       roleNames,
-		Permissions: allPermissions,
-		SessionID:   sessionID,
-	}, nil
+	// Populate cache. Failure is non-fatal — we already have the data.
+	entry := roleCacheEntry{Roles: roleNames, Permissions: permissions}
+	if data, jsonErr := json.Marshal(entry); jsonErr == nil {
+		if setErr := s.redis.Set(ctx, key, string(data), roleCacheTTL); setErr != nil {
+			s.logger.Debug("Failed to cache roles", zap.String("account_id", accountID), zap.Error(setErr))
+		}
+	}
+
+	return roleNames, permissions, nil
 }
 
-// parseIPAllowlist parses a list of IP addresses and CIDR ranges into []*net.IPNet.
+// InvalidateRoleCache removes the cached roles/permissions for an account.
+// Called by the account service after role assignment or removal.
+func (s *AuthService) InvalidateRoleCache(ctx context.Context, accountID string) error {
+	return s.redis.Del(ctx, roleCacheKey(accountID))
+}
+
+// parseIPAllowlist parses a list of IP addresses or CIDR ranges into net.IPNet entries.
 // Individual IP addresses (e.g. "198.51.100.5") are converted to /32 or /128 masks.
-// Returns the first parse error encountered.
-func parseIPAllowlist(entries []string) ([]*net.IPNet, error) {
+// Invalid entries are skipped and collected as errors; valid entries are still returned.
+func parseIPAllowlist(entries []string) ([]*net.IPNet, []error) {
 	nets := make([]*net.IPNet, 0, len(entries))
+	var errs []error
 	for _, entry := range entries {
 		if ip := net.ParseIP(entry); ip != nil {
 			// Single IP address — wrap in a /32 (v4) or /128 (v6) network.
@@ -360,9 +417,10 @@ func parseIPAllowlist(entries []string) ([]*net.IPNet, error) {
 		}
 		_, ipNet, err := net.ParseCIDR(entry)
 		if err != nil {
-			return nil, fmt.Errorf("parse IP allowlist entry %q: %w", entry, err)
+			errs = append(errs, fmt.Errorf("parse IP allowlist entry %q: %w", entry, err))
+			continue
 		}
 		nets = append(nets, ipNet)
 	}
-	return nets, nil
+	return nets, errs
 }

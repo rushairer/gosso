@@ -1,15 +1,18 @@
 package service
 
+import "encoding/json"
+
 // DiscoveryService OIDC Discovery service
 type DiscoveryService struct {
-	doc map[string]any
+	jsonBytes []byte
 }
 
 // NewDiscoveryService creates a new instance of DiscoveryService.
-// The discovery document is pre-computed once since it is static for the lifetime of the service.
+// The discovery document is pre-marshaled to JSON once since it is static
+// for the lifetime of the service. This avoids per-request map copying and
+// JSON marshaling.
 func NewDiscoveryService(issuer string) *DiscoveryService {
-	s := &DiscoveryService{}
-	s.doc = map[string]any{
+	doc := map[string]any{
 		"issuer":                        issuer,
 		"authorization_endpoint":        issuer + "/oauth2/authorize",
 		"token_endpoint":                issuer + "/oauth2/token",
@@ -58,39 +61,17 @@ func NewDiscoveryService(issuer string) *DiscoveryService {
 		},
 		"authorization_response_iss_parameter_supported": true,
 	}
-	return s
-}
 
-// GetDiscoveryDocument returns a copy of the OIDC Discovery document.
-// Returns a copy to prevent callers from mutating the shared state.
-func (s *DiscoveryService) GetDiscoveryDocument() map[string]any {
-	return copyMap(s.doc)
-}
-
-// copyMap performs a deep copy of a map[string]any, cloning slice and map values
-// to prevent concurrent handlers from mutating the shared state.
-// Handles []string and []map[string]string (used by JWKS keys array).
-func copyMap(m map[string]any) map[string]any {
-	cp := make(map[string]any, len(m))
-	for k, v := range m {
-		switch val := v.(type) {
-		case []string:
-			clone := make([]string, len(val))
-			copy(clone, val)
-			cp[k] = clone
-		case []map[string]string:
-			clone := make([]map[string]string, len(val))
-			for i, inner := range val {
-				innerCopy := make(map[string]string, len(inner))
-				for ik, iv := range inner {
-					innerCopy[ik] = iv
-				}
-				clone[i] = innerCopy
-			}
-			cp[k] = clone
-		default:
-			cp[k] = v
-		}
+	jsonBytes, err := json.Marshal(doc)
+	if err != nil {
+		panic("discovery service: failed to marshal discovery document: " + err.Error())
 	}
-	return cp
+
+	return &DiscoveryService{jsonBytes: jsonBytes}
+}
+
+// GetDiscoveryDocument returns the pre-computed JSON bytes of the OIDC Discovery document.
+// Safe for concurrent use — the returned slice must not be modified by callers.
+func (s *DiscoveryService) GetDiscoveryDocument() []byte {
+	return s.jsonBytes
 }

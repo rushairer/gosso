@@ -238,9 +238,6 @@ func (s *TokenService) RevokeAllForSession(ctx context.Context, sessionID string
 
 // RevokeAccessToken blacklists an access token by its JTI so it can no longer be used.
 func (s *TokenService) RevokeAccessToken(ctx context.Context, jti string, expiresAt time.Time) error {
-	if s.blacklist == nil {
-		return ErrBlacklistNotConfigured
-	}
 	return s.blacklist.RevokeToken(ctx, jti, "logout", expiresAt)
 }
 
@@ -248,10 +245,6 @@ func (s *TokenService) RevokeAccessToken(ctx context.Context, jti string, expire
 // Tokens issued before this call will be rejected by ValidateAccessTokenWithContext.
 // The revocation record automatically expires after accessExpiry duration.
 func (s *TokenService) RevokeAccountTokens(ctx context.Context, accountID string) error {
-	if s.blacklist == nil {
-		return ErrBlacklistNotConfigured
-	}
-
 	// Double the TTL to ensure the revocation key outlives even the latest-issued token.
 	// A token issued at T=(accessExpiry - ε) has IssuedAt near the original expiry;
 	// the revocation key must still exist to reject it.

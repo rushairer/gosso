@@ -358,10 +358,8 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 
 	// One-time use: delete token after successful password update.
 	// This runs synchronously but is fast (single Redis DEL).
-	// If the deletion fails, the token will expire naturally via TTL — a safe fallback.
 	if err := s.redis.Del(ctx, tokenKey); err != nil {
-		s.logger.Warn("Failed to delete reset token from Redis, token will expire via TTL",
-			zap.Error(err), zap.String("token_hash", tokenHash))
+		return fmt.Errorf("delete reset token from redis: %w", err)
 	}
 
 	// Clear login rate-limit counters so the account is not locked out

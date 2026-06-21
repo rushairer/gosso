@@ -20,6 +20,7 @@ type LogoutService struct {
 	jwksSvc    *JWKSService // for key rotation fallback in id_token_hint validation
 	issuer     string
 	logger     *zap.Logger
+	parser     *jwt.Parser
 }
 
 // NewLogoutService creates a new LogoutService.
@@ -36,6 +37,7 @@ func NewLogoutService(
 		jwksSvc:    jwksSvc,
 		issuer:     issuer,
 		logger:     logger,
+		parser:     jwt.NewParser(jwt.WithoutClaimsValidation()),
 	}
 }
 
@@ -48,7 +50,7 @@ func (s *LogoutService) ValidateIDTokenHint(tokenString string, clientID string)
 		return nil, fmt.Errorf("empty id_token_hint")
 	}
 
-	parser := jwt.NewParser(jwt.WithoutClaimsValidation())
+	parser := s.parser
 	claims := &IDTokenClaims{}
 
 	// keyFunc resolves the RSA public key for signature verification.

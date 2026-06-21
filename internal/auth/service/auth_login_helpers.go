@@ -253,8 +253,7 @@ func (s *AuthService) completeLogin(ctx context.Context, account *accountDomain.
 	if mfaVerified {
 		session.MFAVerified = true
 		if updateErr := s.sessionSvc.UpdateSession(ctx, session); updateErr != nil {
-			s.logger.Warn("Failed to mark session as MFA-verified",
-				zap.String("session_id", utility.MaskOpaqueID(session.ID)), zap.Error(updateErr))
+			return nil, fmt.Errorf("failed to mark session as MFA-verified: %w", updateErr)
 		}
 	}
 

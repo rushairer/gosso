@@ -55,6 +55,7 @@ type TokenService struct {
 	auditor          *auditService.Auditor
 	enforceIPBinding bool
 	logger           *zap.Logger
+	parser           *jwt.Parser
 }
 
 // NewTokenService creates a new token service instance.
@@ -97,6 +98,7 @@ func NewTokenService(
 		auditor:          auditor,
 		enforceIPBinding: enforceIPBinding,
 		logger:           logger,
+		parser:           jwt.NewParser(jwt.WithIssuer(issuer), jwt.WithLeeway(accessTokenClockSkew)),
 	}, nil
 }
 

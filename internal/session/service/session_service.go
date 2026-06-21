@@ -372,7 +372,12 @@ func (s *SessionService) expireSession(ctx context.Context, sessionID string, ac
 	if err != nil {
 		s.logger.Warn("Failed to atomically check and delete expired session",
 			zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(err))
-		// Fallback to non-atomic delete
+		// Fallback to non-atomic delete.
+		// NOTE: There is a small race window — if a concurrent RefreshSession
+		// re-creates this session key between the failed Lua script and this
+		// DEL, the newly-refreshed session will be incorrectly deleted. This
+		// is acceptable as a rare edge case since the Lua script failure itself
+		// is uncommon and the TTL-based refresh window is short.
 		if delErr := s.redis.Del(ctx, sessionKey); delErr != nil {
 			s.logger.Warn("Failed to delete expired session (fallback)",
 				zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(delErr))

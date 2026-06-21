@@ -20,8 +20,7 @@ const accessTokenClockSkew = 30 * time.Second
 
 // ValidateAccessTokenWithContext validates a JWT access token using the request context
 func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*domain.AccessTokenClaims, error) {
-	parser := jwt.NewParser(jwt.WithIssuer(s.issuer), jwt.WithLeeway(accessTokenClockSkew))
-	token, err := parser.ParseWithClaims(tokenString, &domain.AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
+	token, err := s.parser.ParseWithClaims(tokenString, &domain.AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}

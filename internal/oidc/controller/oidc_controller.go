@@ -78,13 +78,13 @@ func (c *OIDCController) RegisterRoutes(server *gin.RouterGroup, authMiddleware 
 // Discovery GET /.well-known/openid-configuration
 func (c *OIDCController) Discovery(ctx *gin.Context) {
 	ctx.Header("Cache-Control", "public, max-age=3600")
-	ctx.JSON(http.StatusOK, c.discoverySvc.GetDiscoveryDocument())
+	ctx.Data(http.StatusOK, "application/json; charset=utf-8", c.discoverySvc.GetDiscoveryDocument())
 }
 
 // JWKS GET /.well-known/jwks.json
 func (c *OIDCController) JWKS(ctx *gin.Context) {
 	ctx.Header("Cache-Control", "public, max-age=3600")
-	ctx.JSON(http.StatusOK, c.jwksSvc.GetJWKS())
+	ctx.Data(http.StatusOK, "application/json; charset=utf-8", c.jwksSvc.GetJWKS())
 }
 
 // UserInfo GET /oidc/userinfo

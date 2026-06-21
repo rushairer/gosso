@@ -216,16 +216,22 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 	switch credType {
 	case "email":
 		if err := s.emailSvc.SendVerificationCode(ctx, identifier, code); err != nil {
-			_ = s.redis.Del(ctx, codeKey) // rollback stored code
+			if delErr := s.redis.Del(ctx, codeKey); delErr != nil {
+				s.logger.Warn("Failed to rollback stored code after email send failure", zap.Error(delErr))
+			}
 			return fmt.Errorf("send email: %w", err)
 		}
 	case "phone":
 		if err := s.smsSvc.SendVerificationCode(ctx, identifier, code); err != nil {
-			_ = s.redis.Del(ctx, codeKey) // rollback stored code
+			if delErr := s.redis.Del(ctx, codeKey); delErr != nil {
+				s.logger.Warn("Failed to rollback stored code after SMS send failure", zap.Error(delErr))
+			}
 			return fmt.Errorf("send SMS: %w", err)
 		}
 	default:
-		_ = s.redis.Del(ctx, codeKey) // rollback stored code
+		if delErr := s.redis.Del(ctx, codeKey); delErr != nil {
+			s.logger.Warn("Failed to rollback stored code for unsupported type", zap.Error(delErr))
+		}
 		return fmt.Errorf("%w: %s", ErrUnsupportedType, credType)
 	}
 
