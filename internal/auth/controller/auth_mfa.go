@@ -70,7 +70,7 @@ func (c *AuthController) MFAActivate(ctx *gin.Context) {
 
 // MFADisableRequest MFA disable request body
 type MFADisableRequest struct {
-	CurrentPassword string `json:"current_password" binding:"required"`
+	CurrentPassword string `json:"current_password" binding:"required,max=72"`
 }
 
 // MFADisable DELETE /api/auth/mfa

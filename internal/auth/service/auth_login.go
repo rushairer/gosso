@@ -28,7 +28,7 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginCom
 	}()
 
 	// Prevent brute-force attacks via extremely long inputs.
-	// Argon2id allows longer passwords than bcrypt, but we still cap it at utility.MaxPasswordLength.
+	// Capped at utility.MaxPasswordLength (72) to prevent excessive Argon2id resource usage.
 	const maxUsernameLen = 254
 	const maxPasswordLen = utility.MaxPasswordLength
 

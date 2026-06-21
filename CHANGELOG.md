@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- Password maximum length lowered from 128 to 72 bytes at both controller binding and service layer — prevents potential Argon2id DoS via oversized password inputs that consume excessive memory (64 MiB × proportional CPU time). The 72-byte limit provides sufficient entropy while capping computation cost (`internal/auth/controller/auth_controller.go`, `internal/auth/controller/auth_password.go`, `internal/auth/controller/auth_mfa.go`, `internal/utility/password.go`).
 - Social login OAuth state parameter now includes IP subnet binding — the client IP is encoded into the state (`nonce:ip` format) and validated on callback with /24 subnet matching, preventing CSRF attacks via stolen `oauth_state` cookies from different network locations (`internal/auth/controller/auth_social.go`).
 - Password reset now emits an audit log with request IP after successful password change — previously this security-sensitive event was not logged (`internal/auth/service/password_reset_service.go`).
 - CORS configuration now exposes `X-Request-ID` header by default — allows SPA clients to read the request ID for correlation and debugging (`cmd/gosso/web_engine.go`, `config/config.go`).
@@ -27,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `MFADisable` now requires step-up authentication (current password) — prevents an attacker with a stolen session from stripping MFA protection without proving knowledge of the password (`internal/auth/controller/auth_mfa.go`, `internal/auth/service/auth_service.go`).
 
 ### Fixed
+- Login request `username` binding max length aligned with service layer (255 → 254) — previously the controller accepted 255 characters while the service silently rejected anything over 254, causing confusing 401 errors instead of 400 validation errors (`internal/auth/controller/auth_controller.go`).
 - `CompletePasskeyMFALogin` now verifies the account exists before blacklisting the MFA token — prevents user lockout when a transient DB failure occurs after the token is consumed but before the account is found (`internal/auth/service/auth_login.go`).
 - OAuth2 `AuthenticateClient` now performs a dummy bcrypt comparison for public clients that provide a `client_secret` — eliminates a timing side-channel that could reveal whether a `client_id` is confidential or public (~100ms vs ~0ms) (`internal/oauth2/service/client_auth_service.go`).
 - `handleMFARequirement` now maps `GetMFATypes` failures to `ErrServiceUnavailable` instead of leaking raw database/Redis error details to the caller (`internal/auth/service/auth_login_helpers.go`).

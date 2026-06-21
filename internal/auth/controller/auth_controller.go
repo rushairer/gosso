@@ -136,8 +136,8 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, cfg AuthRouteConfig
 
 // LoginRequest login request body
 type LoginRequest struct {
-	Username string `json:"username" binding:"required,max=255"`
-	Password string `json:"password" binding:"required,max=128"`
+	Username string `json:"username" binding:"required,max=254"`
+	Password string `json:"password" binding:"required,max=72"`
 }
 
 // Login POST /api/auth/login
