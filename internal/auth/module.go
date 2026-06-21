@@ -130,7 +130,7 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 		CodeTTL:     cfg.AuthConfig.VerifyCodeTTL,
 		CooldownTTL: cfg.AuthConfig.VerifyCooldownTTL,
 		MaxAttempts: cfg.AuthConfig.VerifyCodeMaxAttempts,
-		HashPepper:  cfg.AuthConfig.TOTPEncryptionKey,
+		HashPepper:  cfg.AuthConfig.VerifyHashPepper,
 	})
 
 	passwordResetSvc := service.NewPasswordResetServiceWithConfig(cfg.Redis, cfg.CredentialRepo, emailSvc, sessionSvc, cfg.TokenSvc, cfg.AccountSvc, cfg.DB, cfg.BaseURL, cfg.Logger, service.PasswordResetServiceConfig{

@@ -98,6 +98,10 @@ auth:
     # REQUIRED: 64-char hex string (32 bytes) for encrypting TOTP secrets at rest.
     # Generate with: openssl rand -hex 32
     totp_encryption_key: ""
+    # REQUIRED in production: secret pepper for hashing verification codes in Redis.
+    # Prevents rainbow-table attacks on the 6-digit numeric keyspace if Redis is compromised.
+    # Generate with: openssl rand -hex 32
+    verify_hash_pepper: ""
 cors:
     allowed_origins: []
     allowed_methods:

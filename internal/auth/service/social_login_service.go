@@ -356,7 +356,7 @@ func (s *SocialLoginService) loginExistingUser(ctx context.Context, accountID, i
 		return nil, fmt.Errorf("find account for social login: %w", err)
 	}
 
-	if account.Status != accountDomain.AccountStatusActive {
+	if !account.IsActive() {
 		return nil, accountService.ErrAccountNotActive
 	}
 

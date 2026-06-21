@@ -115,7 +115,7 @@ func (s *BlacklistService) removeFromBlacklist(ctx context.Context, jti string) 
 
 // buildBlacklistKey constructs the Redis key
 func (s *BlacklistService) buildBlacklistKey(jti string) string {
-	return fmt.Sprintf("%s%s", BlacklistKeyPrefix, jti)
+	return BlacklistKeyPrefix + jti
 }
 
 // setAccountRevokedAfterScript atomically updates the revoked-after timestamp only if the
@@ -250,7 +250,7 @@ func (s *BlacklistService) CheckTokenAndAccountRevocation(ctx context.Context, j
 
 // buildAccountRevokedAfterKey constructs the Redis key for account-level revocation.
 func (s *BlacklistService) buildAccountRevokedAfterKey(accountID string) string {
-	return fmt.Sprintf("%s%s", AccountRevokedAfterPrefix, accountID)
+	return AccountRevokedAfterPrefix + accountID
 }
 
 // Error definitions

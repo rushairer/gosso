@@ -54,10 +54,12 @@ type SessionConfig struct {
 	IndexFailClosed bool
 }
 
-// cachedSession holds a parsed session and the raw JSON bytes for staleness detection.
+// cachedSession holds a parsed session, the raw JSON bytes for staleness
+// detection, and the wall-clock time it was inserted into the local cache.
 type cachedSession struct {
 	session *domain.Session
 	json    []byte
+	cachedAt time.Time
 }
 
 // SessionService manages user sessions backed by Redis.
@@ -72,6 +74,9 @@ type SessionService struct {
 	// sessionCache caches parsed sessions keyed by sessionID to avoid
 	// repeated JSON unmarshal on the validation hot path.
 	sessionCache sync.Map // map[string]cachedSession
+
+	// cacheCleanupStop signals the background cleanup goroutine to exit.
+	cacheCleanupStop chan struct{}
 }
 
 // NewSessionService creates a new session service instance with default configuration.
@@ -96,6 +101,7 @@ func NewSessionServiceWithConfig(redis *cache.RedisClient, logger *zap.Logger, c
 		maxSessionAge:   DefaultMaxSessionAge,
 		maxSessions:     DefaultMaxSessions,
 		indexFailClosed: cfg.IndexFailClosed,
+		cacheCleanupStop: make(chan struct{}),
 	}
 	if cfg.SessionTTL > 0 {
 		svc.sessionTTL = cfg.SessionTTL
@@ -109,6 +115,9 @@ func NewSessionServiceWithConfig(redis *cache.RedisClient, logger *zap.Logger, c
 	if cfg.TokenRevoker != nil {
 		svc.tokenRevoker = cfg.TokenRevoker
 	}
+
+	go svc.startCacheCleanup()
+
 	return svc, nil
 }
 
@@ -163,7 +172,7 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 		zap.Duration("ttl", s.sessionTTL))
 
 	// Pre-populate local cache to avoid re-fetching on the next validation.
-	s.sessionCache.Store(session.ID, cachedSession{session: session, json: data})
+	s.sessionCache.Store(session.ID, cachedSession{session: session, json: data, cachedAt: time.Now()})
 
 	return nil
 }
@@ -205,7 +214,7 @@ func (s *SessionService) GetSession(ctx context.Context, sessionID string) (*dom
 		return nil, fmt.Errorf("unmarshal session: %w", err)
 	}
 
-	s.sessionCache.Store(sessionID, cachedSession{session: &session, json: raw})
+	s.sessionCache.Store(sessionID, cachedSession{session: &session, json: raw, cachedAt: time.Now()})
 
 	return &session, nil
 }
@@ -357,7 +366,7 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 			return nil, fmt.Errorf("unmarshal session: %w", err)
 		}
 		session = &parsed
-		s.sessionCache.Store(sessionID, cachedSession{session: session, json: raw})
+		s.sessionCache.Store(sessionID, cachedSession{session: session, json: raw, cachedAt: time.Now()})
 	}
 
 	// Check absolute max session lifetime (prevents indefinite session extension)
@@ -434,12 +443,66 @@ func (s *SessionService) expireSession(ctx context.Context, sessionID string, ac
 
 // buildSessionKey builds the Redis key for a session.
 func (s *SessionService) buildSessionKey(sessionID string) string {
-	return fmt.Sprintf("%s%s", sessionKeyPrefix, sessionID)
+	return sessionKeyPrefix + sessionID
 }
 
 // buildAccountSessionsKey builds the Redis key for the account session index.
 func (s *SessionService) buildAccountSessionsKey(accountID string) string {
-	return fmt.Sprintf("%s%s", accountSessionsPrefix, accountID)
+	return accountSessionsPrefix + accountID
+}
+
+// startCacheCleanup runs a background goroutine that periodically evicts stale
+// entries from the local sessionCache.  An entry is considered stale if it was
+// inserted more than 2 × sessionTTL ago — the generous multiplier accounts for
+// the worst-case scenario where the entry was cached just before the Redis TTL
+// was refreshed, so 2 × TTL guarantees the Redis key has long since expired.
+//
+// The sweep interval is set to sessionTTL so that stale entries accumulate for
+// at most ~3 × TTL before being cleaned up (worst case: entry cached just after
+// a sweep, then swept on the next cycle).
+func (s *SessionService) startCacheCleanup() {
+	ticker := time.NewTicker(s.sessionTTL)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.evictStaleCacheEntries()
+		case <-s.cacheCleanupStop:
+			return
+		}
+	}
+}
+
+// evictStaleCacheEntries removes entries from the local sessionCache whose
+// cachedAt timestamp is older than 2 × sessionTTL.
+func (s *SessionService) evictStaleCacheEntries() {
+	threshold := time.Now().Add(-2 * s.sessionTTL)
+	var evicted int
+	s.sessionCache.Range(func(key, value any) bool {
+		cs := value.(cachedSession)
+		if cs.cachedAt.Before(threshold) {
+			s.sessionCache.Delete(key)
+			evicted++
+		}
+		return true
+	})
+	if evicted > 0 {
+		s.logger.Debug("Evicted stale session cache entries",
+			zap.Int("count", evicted),
+			zap.Duration("threshold", 2*s.sessionTTL))
+	}
+}
+
+// StopCacheCleanup stops the background cache-cleanup goroutine.
+// Call this during graceful shutdown to avoid goroutine leaks.
+func (s *SessionService) StopCacheCleanup() {
+	select {
+	case <-s.cacheCleanupStop:
+		// already closed
+	default:
+		close(s.cacheCleanupStop)
+	}
 }
 
 // Error definitions

@@ -422,6 +422,20 @@ func (m *mockSessionTokenCreator) CreateSessionAndTokens(ctx context.Context, ac
 // Test helpers
 // ──────────────────────────────────────────────
 
+// noopRateLimiter is a no-op rate limit middleware for tests.
+var noopRateLimiter gin.HandlerFunc = func(ctx *gin.Context) { ctx.Next() }
+
+// testRouteConfig returns an AuthRouteConfig with no-op rate limiters for testing.
+func testRouteConfig() AuthRouteConfig {
+	return AuthRouteConfig{
+		LoginLimit:    noopRateLimiter,
+		MFALimit:      noopRateLimiter,
+		PasswordLimit: noopRateLimiter,
+		RefreshLimit:  noopRateLimiter,
+		SocialLimit:   noopRateLimiter,
+	}
+}
+
 func setupAuthController(authSvc *mockAuthOrchestrator, tokenMgr *mockTokenManager) (*gin.Engine, *AuthController) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -429,7 +443,7 @@ func setupAuthController(authSvc *mockAuthOrchestrator, tokenMgr *mockTokenManag
 	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, false, zap.NewNop())
 
 	api := engine.Group("/api")
-	ctrl.RegisterRoutes(api, AuthRouteConfig{})
+	ctrl.RegisterRoutes(api, testRouteConfig())
 
 	return engine, ctrl
 }
@@ -444,7 +458,7 @@ func setupAuthControllerWithClaims(authSvc *mockAuthOrchestrator, tokenMgr *mock
 
 	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, false, zap.NewNop())
 	api := engine.Group("/api")
-	ctrl.RegisterRoutes(api, AuthRouteConfig{})
+	ctrl.RegisterRoutes(api, testRouteConfig())
 
 	return engine
 }
@@ -474,7 +488,7 @@ func setupAuthControllerWithMFA(claims *tokenDomain.AccessTokenClaims, mfaSvc *s
 
 	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, false, zap.NewNop())
 	api := engine.Group("/api")
-	ctrl.RegisterRoutes(api, AuthRouteConfig{})
+	ctrl.RegisterRoutes(api, testRouteConfig())
 
 	return engine
 }
@@ -500,7 +514,7 @@ func setupAuthControllerWithVerificationSvc(t *testing.T, claims *tokenDomain.Ac
 
 	ctrl := NewAuthController(authSvc, tokenMgr, nil, verificationSvc, nil, false, zap.NewNop())
 	api := engine.Group("/api")
-	ctrl.RegisterRoutes(api, AuthRouteConfig{})
+	ctrl.RegisterRoutes(api, testRouteConfig())
 
 	return engine
 }
@@ -520,7 +534,7 @@ func setupAuthControllerWithPasswordResetSvc(t *testing.T, credRepo accountRepo.
 
 	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, passwordResetSvc, false, zap.NewNop())
 	api := engine.Group("/api")
-	ctrl.RegisterRoutes(api, AuthRouteConfig{})
+	ctrl.RegisterRoutes(api, testRouteConfig())
 
 	return engine
 }
@@ -533,7 +547,7 @@ func setupAuthControllerWithSocial(socialSvc *service.SocialLoginService) *gin.E
 	tokenMgr := &mockTokenManager{accessExpiry: 15 * time.Minute}
 	ctrl := NewAuthController(authSvc, tokenMgr, socialSvc, nil, nil, false, zap.NewNop())
 	api := engine.Group("/api")
-	ctrl.RegisterRoutes(api, AuthRouteConfig{})
+	ctrl.RegisterRoutes(api, testRouteConfig())
 	return engine
 }
 

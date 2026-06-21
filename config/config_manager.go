@@ -14,10 +14,6 @@ import (
 // Validate() rejects this value to prevent production from accidentally using dev credentials.
 const defaultPostgresDSN = "postgres://postgres:postgres@localhost:5432/gosso?sslmode=disable"
 
-// defaultTOTPEncryptionKey is the default development TOTP encryption key.
-// Validate() rejects this value to prevent production from using a publicly known key.
-const defaultTOTPEncryptionKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-
 // ConfigManager loads, validates, and exposes the application configuration.
 // Immutable after construction — safe for concurrent reads.
 type ConfigManager struct {
@@ -77,9 +73,6 @@ func NewConfigManager(
 	if err := newConfig.Validate(); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
-	if !newConfig.WebServerConfig.Production && newConfig.AuthConfig.TOTPEncryptionKey == defaultTOTPEncryptionKey {
-		fmt.Fprintln(os.Stderr, "[GOSSO] Warning: using the default TOTP encryption key. This is acceptable for local development only — never deploy to production with this key.")
-	}
 	configManager.config = newConfig
 	return &configManager, nil
 }
@@ -136,8 +129,6 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("auth.device_code_interval", "5s")
 	v.SetDefault("auth.id_token_expiry", "15m")
 	v.SetDefault("auth.max_sessions", 5)
-	v.SetDefault("auth.totp_encryption_key", defaultTOTPEncryptionKey)
-
 	// Redis configuration
 	v.SetDefault("redis.max_active_conns", 10)
 	v.SetDefault("redis.pool_timeout_seconds", 5)

@@ -21,13 +21,21 @@ import (
 	"github.com/rushairer/gosso/internal/utility"
 )
 
-// rotateAndDeleteScript atomically retrieves and deletes a refresh token in a single Redis operation.
-// Returns the token data if it existed (and was deleted), or nil if it was already consumed.
+// rotateAndDeleteAndCleanSessionScript atomically retrieves and deletes a refresh token,
+// then removes the token hash from the session index — all in a single Redis round-trip.
 // This prevents TOCTOU race conditions during refresh token rotation.
+// KEYS[1] = refresh token key
+// ARGV[1] = session tokens key prefix (session_tokens:)
+// ARGV[2] = token hash
+// Returns the token data if it existed (and was deleted), or nil if it was already consumed.
 var rotateAndDeleteScript = redis.NewScript(`
 local data = redis.call('GET', KEYS[1])
 if data then
     redis.call('DEL', KEYS[1])
+    local sessionID = data:match('"session_id":"([^"]*)"')
+    if sessionID and sessionID ~= '' then
+        redis.call('SREM', ARGV[1] .. sessionID, ARGV[2])
+    end
 end
 return data
 `)
@@ -155,36 +163,32 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 // RevokeRefreshToken revokes a refresh token and removes it from the session index.
 func (s *TokenService) RevokeRefreshToken(ctx context.Context, token string) error {
 	key := s.buildRefreshTokenKey(token)
+	tokenHash := domain.HashToken(token)
 
-	data, err := s.redis.RunScript(ctx, rotateAndDeleteScript, []string{key}).Result()
+	data, err := s.redis.RunScript(ctx, rotateAndDeleteScript, []string{key},
+		sessionTokensKeyPrefix, tokenHash,
+	).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return fmt.Errorf("revoke refresh token: %w", err)
 	}
 
-	// Clean up session index
 	if dataStr, ok := data.(string); ok && dataStr != "" {
 		var rt domain.RefreshToken
-		if jsonErr := json.Unmarshal([]byte(dataStr), &rt); jsonErr == nil && rt.SessionID != "" {
-			sessionKey := s.buildSessionTokensKey(rt.SessionID)
-			tokenHash := domain.HashToken(token)
-			if err := s.redis.SRem(ctx, sessionKey, tokenHash); err != nil {
-				s.logger.Warn("Failed to remove token hash from session index during revocation", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(rt.SessionID)))
-			}
+		if jsonErr := json.Unmarshal([]byte(dataStr), &rt); jsonErr == nil {
+			auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+				auditDomain.ActionTokenRevoke,
+				audit.IPFromContext(ctx),
+				nil,
+				utility.MarshalJSONOrEmpty(map[string]any{
+					"token_hash": tokenHash,
+					"session_id": rt.SessionID,
+				}),
+				utility.MarshalJSONOrEmpty(map[string]any{
+					"ip":         audit.IPFromContext(ctx),
+					"user_agent": audit.UserAgentFromContext(ctx),
+				}),
+			))
 		}
-
-		auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
-			auditDomain.ActionTokenRevoke,
-			audit.IPFromContext(ctx),
-			nil,
-			utility.MarshalJSONOrEmpty(map[string]any{
-				"token_hash": domain.HashToken(token),
-				"session_id": rt.SessionID,
-			}),
-			utility.MarshalJSONOrEmpty(map[string]any{
-				"ip":         audit.IPFromContext(ctx),
-				"user_agent": audit.UserAgentFromContext(ctx),
-			}),
-		))
 	}
 
 	return nil

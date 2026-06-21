@@ -79,11 +79,11 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginCom
 			// The semaphore prevents an attacker from exhausting server resources by
 			// sending many requests for non-existent usernames.
 			if acquireErr := s.dummyHashSem.Acquire(ctx, 1); acquireErr == nil {
+				defer s.dummyHashSem.Release(1)
 				if _, hashErr := accountDomain.HashPassword(req.Password); hashErr != nil {
 					s.logger.Debug("Dummy hash failed, falling back to sleep-based dummy work", zap.Error(hashErr))
 					utility.DummyWorkWithContext(ctx)
 				}
-				s.dummyHashSem.Release(1)
 			}
 			return nil, ErrInvalidCredentials
 		}
@@ -96,11 +96,11 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginCom
 		// Mitigate timing side-channel: inactive accounts must perform the same
 		// dummy work as the not-found path to prevent account existence enumeration.
 		if acquireErr := s.dummyHashSem.Acquire(ctx, 1); acquireErr == nil {
+			defer s.dummyHashSem.Release(1)
 			if _, hashErr := accountDomain.HashPassword(req.Password); hashErr != nil {
 				s.logger.Debug("Dummy hash failed, falling back to sleep-based dummy work", zap.Error(hashErr))
 				utility.DummyWorkWithContext(ctx)
 			}
-			s.dummyHashSem.Release(1)
 		}
 		return nil, ErrInvalidCredentials
 	}

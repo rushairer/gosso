@@ -19,22 +19,25 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 		ClientSecret string `json:"client_secret" form:"client_secret" binding:"max=256"`
 	}
 
-	// RFC 7009: accept both JSON and application/x-www-form-urlencoded
-	if contentType := ctx.GetHeader("Content-Type"); contentType != "" {
-		mediaType, _, _ := mime.ParseMediaType(contentType)
-		if mediaType == "application/json" {
-			if err := ctx.ShouldBindJSON(&req); err != nil {
-				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
-				return
-			}
-		} else {
-			if err := ctx.ShouldBind(&req); err != nil {
-				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
-				return
-			}
+	// RFC 7009 §2: the revocation endpoint accepts application/x-www-form-urlencoded
+	// (and optionally application/json). Require Content-Type to prevent WAF bypass
+	// attacks where an attacker omits the header to avoid payload inspection.
+	// This is consistent with the Token endpoint's Content-Type requirement.
+	contentType := ctx.GetHeader("Content-Type")
+	if contentType == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error":             "invalid_request",
+			"error_description": "Content-Type header is required",
+		})
+		return
+	}
+	mediaType, _, _ := mime.ParseMediaType(contentType)
+	if mediaType == "application/json" {
+		if err := ctx.ShouldBindJSON(&req); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+			return
 		}
 	} else {
-		// Default to form binding when Content-Type is not specified
 		if err := ctx.ShouldBind(&req); err != nil {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
 			return

@@ -152,7 +152,7 @@ func NewVerificationServiceWithConfig(
 		svc.hashPepper = cfg.HashPepper
 	} else {
 		svc.logger.Warn("Verification code hash pepper not configured; codes are stored with plain SHA-256. " +
-			"Set auth.totp_encryption_key (env GOUNO_AUTH_TOTP_ENCRYPTION_KEY) to enable HMAC-based hashing.")
+			"Set auth.verify_hash_pepper (env GOUNO_AUTH_VERIFY_HASH_PEPPER) to enable HMAC-based hashing.")
 	}
 	return svc
 }
@@ -328,7 +328,7 @@ func maskIdentifier(credType, identifier string) string {
 func (s *VerificationService) RequireHashPepper() error {
 	if s.hashPepper == "" {
 		return fmt.Errorf("hash pepper is required for production deployments. " +
-			"Set auth.totp_encryption_key (env GOUNO_AUTH_TOTP_ENCRYPTION_KEY).")
+			"Set auth.verify_hash_pepper (env GOUNO_AUTH_VERIFY_HASH_PEPPER).")
 	}
 	return nil
 }
@@ -336,7 +336,15 @@ func (s *VerificationService) RequireHashPepper() error {
 // pepperHash returns the hex-encoded HMAC-SHA-256 hash of the input string,
 // keyed with the application pepper if configured. The pepper prevents
 // precomputation attacks (rainbow tables) against the stored hashes.
+// Panics if the pepper is empty — the pepper MUST be set at construction time
+// via HashPepper; without it, HMAC with an empty key reduces to plain SHA-256,
+// which is trivially precomputable for the small 6-digit numeric keyspace.
 func (s *VerificationService) pepperHash(code string) string {
+	if s.hashPepper == "" {
+		panic("verification_service: hashPepper is empty; " +
+			"set auth.totp_encryption_key (env GOUNO_AUTH_TOTP_ENCRYPTION_KEY) " +
+			"to a 64-char hex string (32 bytes)")
+	}
 	mac := hmac.New(sha256.New, []byte(s.hashPepper))
 	mac.Write([]byte(code))
 	return hex.EncodeToString(mac.Sum(nil))

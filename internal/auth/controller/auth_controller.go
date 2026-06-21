@@ -92,23 +92,31 @@ type AuthRouteConfig struct {
 	SessionLimit  gin.HandlerFunc // Rate limiter for session management
 }
 
-// RegisterRoutes registers authentication routes
+// RegisterRoutes registers authentication routes.
+// All fields in cfg must be non-nil; the method panics on misconfiguration
+// so that a missing rate-limit middleware is caught at startup rather than
+// silently leaving a security-sensitive endpoint unprotected.
 func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, cfg AuthRouteConfig) {
+	if cfg.LoginLimit == nil || cfg.MFALimit == nil || cfg.PasswordLimit == nil ||
+		cfg.RefreshLimit == nil || cfg.SocialLimit == nil {
+		panic("auth: all rate-limit middleware in AuthRouteConfig must be non-nil")
+	}
+
 	auth := rg.Group("/auth")
 	{
-		auth.POST("/login", withOptionalLimit(cfg.LoginLimit, c.Login)...)
-		auth.POST("/refresh", withOptionalLimit(cfg.RefreshLimit, c.Refresh)...)
+		auth.POST("/login", cfg.LoginLimit, c.Login)
+		auth.POST("/refresh", cfg.RefreshLimit, c.Refresh)
 
 		// MFA verify uses mfa_token, not JWT
-		auth.POST("/mfa/verify", withOptionalLimit(cfg.MFALimit, c.MFAVerify)...)
+		auth.POST("/mfa/verify", cfg.MFALimit, c.MFAVerify)
 
 		// Social login endpoints (unauthenticated)
-		auth.GET("/social/:provider", withOptionalLimit(cfg.SocialLimit, c.SocialAuthURL)...)
-		auth.GET("/social/:provider/callback", withOptionalLimit(cfg.SocialLimit, c.SocialCallback)...)
+		auth.GET("/social/:provider", cfg.SocialLimit, c.SocialAuthURL)
+		auth.GET("/social/:provider/callback", cfg.SocialLimit, c.SocialCallback)
 
 		// Password reset endpoints (unauthenticated)
-		auth.POST("/password/forgot", withOptionalLimit(cfg.PasswordLimit, c.ForgotPassword)...)
-		auth.POST("/password/reset", withOptionalLimit(cfg.PasswordLimit, c.ResetPassword)...)
+		auth.POST("/password/forgot", cfg.PasswordLimit, c.ForgotPassword)
+		auth.POST("/password/reset", cfg.PasswordLimit, c.ResetPassword)
 
 		// JWT-protected endpoints
 		protected := auth.Group("")

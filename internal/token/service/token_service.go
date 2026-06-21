@@ -240,11 +240,11 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 }
 
 func (s *TokenService) buildRefreshTokenKey(token string) string {
-	return fmt.Sprintf("%s%s", refreshTokenKeyPrefix, domain.HashToken(token))
+	return refreshTokenKeyPrefix + domain.HashToken(token)
 }
 
 func (s *TokenService) buildSessionTokensKey(sessionID string) string {
-	return fmt.Sprintf("%s%s", sessionTokensKeyPrefix, sessionID)
+	return sessionTokensKeyPrefix + sessionID
 }
 
 // KeyService returns the underlying key service.

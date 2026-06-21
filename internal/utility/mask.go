@@ -49,12 +49,13 @@ func MaskIdentifier(credType, identifier string) string {
 
 // MaskOpaqueID masks an internal opaque identifier while keeping enough
 // characters for log correlation.
+// Uses byte slicing directly since opaque IDs (UUIDs) are ASCII-only,
+// avoiding the []rune allocation on every log statement.
 func MaskOpaqueID(id string) string {
-	runes := []rune(id)
-	if len(runes) <= 8 {
+	if len(id) <= 8 {
 		return "***"
 	}
-	return string(runes[:4]) + "***" + string(runes[len(runes)-4:])
+	return id[:4] + "***" + id[len(id)-4:]
 }
 
 // MaskRateLimitKey masks PII (IP addresses, usernames) from rate limit keys for safe logging.

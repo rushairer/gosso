@@ -38,7 +38,7 @@ func SetDummyWorkDuration(d time.Duration) error {
 // duration elapses, the function returns immediately.
 func DummyWorkWithContext(ctx context.Context) {
 	base := time.Duration(dummyWorkDuration.Load())
-	jitter := time.Duration(rand.Int64N(int64(base) / 2))
+	jitter := time.Duration(rand.Int64N(int64(base)))
 	duration := base + jitter
 	timer := time.NewTimer(duration)
 	defer timer.Stop()

@@ -70,6 +70,7 @@ func validConfig() GoUnoConfig {
 			DeviceCodeExpiry:        10 * time.Minute,
 			DeviceCodeInterval:      5 * time.Second,
 			TOTPEncryptionKey:       "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899", // 32 bytes, fake, differs from dev default
+			VerifyHashPepper:        "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
 			LoginRateLimitWindow:        15 * time.Minute,
 			LoginMaxAttempts:            5,
 			LoginMaxAttemptsPerIP:       30,
@@ -104,6 +105,7 @@ func TestConfigManager_ProductionConfigLoadsFromEnv(t *testing.T) {
 	t.Setenv("GOUNO_AUTH_KEY_ID", "test-key-id")
 	t.Setenv("GOUNO_AUTH_PASSWORD_RESET_BASE_URL", "https://sso.example.com/reset-password")
 	t.Setenv("GOUNO_AUTH_TOTP_ENCRYPTION_KEY", "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899")
+	t.Setenv("GOUNO_AUTH_VERIFY_HASH_PEPPER", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
 	t.Setenv("GOUNO_CORS_ALLOWED_ORIGINS", "https://sso.example.com")
 
 	cm, err := NewConfigManager(nil, "../config", "production")
@@ -275,14 +277,6 @@ func TestValidate_Errors(t *testing.T) {
 				c.AuthConfig.TOTPEncryptionKey = "abcd" // 2 bytes, need 32
 			},
 			wantErr: "auth: totp_encryption_key must decode to exactly 32 bytes",
-		},
-		{
-			name: "default totp key rejected",
-			mutate: func(c *GoUnoConfig) {
-				c.WebServerConfig.Production = true
-				c.AuthConfig.TOTPEncryptionKey = defaultTOTPEncryptionKey
-			},
-			wantErr: "totp_encryption_key must be explicitly configured",
 		},
 
 		// ── Auth — token expiries ───────────────

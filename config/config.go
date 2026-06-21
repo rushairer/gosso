@@ -138,6 +138,7 @@ type AuthConfig struct {
 	WebAuthnRPName                 string        `mapstructure:"webauthn_rp_name"`
 	WebAuthnRPOrigin               string        `mapstructure:"webauthn_rp_origin"`
 	TOTPEncryptionKey              string        `mapstructure:"totp_encryption_key" json:"-"`
+	VerifyHashPepper               string        `mapstructure:"verify_hash_pepper" json:"-"`
 	LoginRateLimitWindow           time.Duration `mapstructure:"login_rate_limit_window"`
 	LoginMaxAttempts               int           `mapstructure:"login_max_attempts"`
 	LoginMaxAttemptsPerIP          int           `mapstructure:"login_max_attempts_per_ip"`
@@ -400,6 +401,9 @@ func (c *GoUnoConfig) validateAuth() error {
 	if c.AuthConfig.MFAAccountMaxAttempts < 0 {
 		return fmt.Errorf("auth: mfa_account_max_attempts must not be negative (got %d)", c.AuthConfig.MFAAccountMaxAttempts)
 	}
+	if c.WebServerConfig.Production && c.AuthConfig.VerifyHashPepper == "" {
+		return fmt.Errorf("auth: verify_hash_pepper is required in production (env GOUNO_AUTH_VERIFY_HASH_PEPPER)")
+	}
 	return c.validateWebAuthn()
 }
 
@@ -413,9 +417,6 @@ func (c *GoUnoConfig) validateTOTPKey() error {
 	}
 	if len(key) != 32 {
 		return fmt.Errorf("auth: totp_encryption_key must decode to exactly 32 bytes (got %d)", len(key))
-	}
-	if c.WebServerConfig.Production && c.AuthConfig.TOTPEncryptionKey == defaultTOTPEncryptionKey {
-		return fmt.Errorf("auth: totp_encryption_key must be explicitly configured in production (the development default is not allowed)")
 	}
 	return nil
 }

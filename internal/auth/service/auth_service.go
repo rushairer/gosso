@@ -228,11 +228,11 @@ func (s *AuthService) VerifyCurrentPassword(ctx context.Context, accountID, pass
 		// Perform dummy work to prevent timing leak — use the semaphore to cap
 		// concurrent Argon2id hashes and prevent CPU exhaustion from mass requests.
 		if acquireErr := s.dummyHashSem.Acquire(ctx, 1); acquireErr == nil {
+			defer s.dummyHashSem.Release(1)
 			if _, hashErr := accountDomain.HashPassword(password); hashErr != nil {
 				s.logger.Error("dummy hash failed, falling back to sleep-based padding", zap.Error(hashErr))
 				utility.DummyWorkWithContext(ctx)
 			}
-			s.dummyHashSem.Release(1)
 		} else {
 			// Semaphore exhausted (under attack); fall back to sleep-based padding.
 			utility.DummyWorkWithContext(ctx)
