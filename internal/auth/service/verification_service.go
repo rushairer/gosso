@@ -177,7 +177,7 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 		return ErrServiceUnavailable
 	}
 	if exists {
-		s.dummyWork(ctx)
+		utility.DummyWorkWithContext(ctx)
 		return fmt.Errorf("%w: please wait before requesting another code", ErrCooldownActive)
 	}
 
@@ -240,7 +240,7 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 
 	s.logger.Info("Verification code sent",
 		zap.String("type", credType),
-		zap.String("identifier", maskIdentifier(credType, identifier)))
+		zap.String("identifier", utility.MaskIdentifier(credType, identifier)))
 	return nil
 }
 
@@ -291,13 +291,6 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 	}
 }
 
-// dummyWork performs a sleep-based timing padding to equalise the response time
-// of early-return paths (e.g., cooldown active). This mitigates timing side-channel attacks
-// that could distinguish active cooldown from fresh requests based on latency.
-func (s *VerificationService) dummyWork(ctx context.Context) {
-	utility.DummyWorkWithContext(ctx)
-}
-
 func (s *VerificationService) buildCodeKey(credType, identifier string) string {
 	return fmt.Sprintf("%s%s:%s", verifyCodeKeyPrefix, credType, identifier)
 }
@@ -314,11 +307,6 @@ func generateNumericCode(length int) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("%0*d", length, n), nil
-}
-
-// maskIdentifier masks PII for logging (e.g., "user@example.com" -> "u***@e***.com")
-func maskIdentifier(credType, identifier string) string {
-	return utility.MaskIdentifier(credType, identifier)
 }
 
 // RequireHashPepper returns an error if no hash pepper is configured.

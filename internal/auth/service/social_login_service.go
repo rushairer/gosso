@@ -31,6 +31,12 @@ import (
 // ErrProviderURLNotSecure is returned when an OAuth provider URL does not use HTTPS.
 var ErrProviderURLNotSecure = errors.New("social login: provider URL must use HTTPS")
 
+const (
+	// maxSocialLoginResponseBodySize is the maximum size of HTTP response bodies
+	// read from OAuth providers (token responses, userinfo, etc.).
+	maxSocialLoginResponseBodySize = 1 << 20 // 1 MB
+)
+
 // OAuthProviderConfig single OAuth provider configuration
 type OAuthProviderConfig struct {
 	ClientID     string
@@ -214,7 +220,7 @@ func (s *SocialLoginService) exchangeCode(ctx context.Context, p *OAuthProviderC
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSocialLoginResponseBodySize))
 	if err != nil {
 		return "", fmt.Errorf("read token response: %w", err)
 	}
@@ -292,7 +298,7 @@ func (s *SocialLoginService) fetchUserInfo(ctx context.Context, provider string,
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSocialLoginResponseBodySize))
 	if err != nil {
 		return "", "", "", false, fmt.Errorf("read userinfo: %w", err)
 	}

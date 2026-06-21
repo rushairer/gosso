@@ -224,7 +224,7 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 		// Perform dummy work to mitigate timing side-channel that could reveal
 		// whether an email is registered (the real path does token generation +
 		// Redis write + SMTP send, which is significantly slower).
-		s.dummyWork(ctx)
+		utility.DummyWorkWithContext(ctx)
 		s.logger.Debug("Password reset requested for non-existent email", zap.String("email", utility.MaskEmail(email)))
 		return nil
 	}
@@ -232,7 +232,7 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 	// Check account status
 	account, err := s.accountSvc.FindAccountByID(ctx, cred.AccountID)
 	if err != nil || account == nil || !account.IsActive() {
-		s.dummyWork(ctx)
+		utility.DummyWorkWithContext(ctx)
 		s.logger.Debug("Password reset requested for inactive account", zap.String("email", utility.MaskEmail(email)))
 		return nil
 	}
@@ -439,13 +439,6 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	))
 
 	return nil
-}
-
-// dummyWork performs a sleep-based timing padding to equalise the response time
-// of early-return paths in RequestReset. This mitigates timing side-channel attacks that could
-// distinguish "email not found" from "email found" based on response latency.
-func (s *PasswordResetService) dummyWork(ctx context.Context) {
-	utility.DummyWorkWithContext(ctx)
 }
 
 func (s *PasswordResetService) buildTokenKey(tokenHash string) string {

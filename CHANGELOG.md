@@ -16,10 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `social_login_service.go` error wrapping uses `%w` instead of `%s` for the inner error in `ErrFailedToCreateAccount`, preserving error chain inspection (`internal/auth/service/social_login_service.go`).
 - `GenerateBackupCodes` errgroup now propagates context cancellation — checks `gctx.Err()` after each bcrypt hash to abort early on client disconnect (`internal/auth/service/mfa_service.go`).
 - `DeleteConsentsByAccount` SCAN loop now checks `ctx.Err()` between iterations to avoid unnecessary Redis work during graceful shutdown (`internal/oauth2/service/consent_service.go`).
+- `SessionService.StopCacheCleanup` is now called during graceful shutdown — the background cache cleanup goroutine was previously leaked on exit (`cmd/gosso/web.go`).
+- `AuthServiceConfig` comments now reference correct constant names (`defaultMFAAccountMaxAttempts`, `defaultMFAAccountRateLimitWindow`) instead of field names (`internal/auth/service/auth_service.go`).
 
 ### Added
 - `FindPasswordCredentialTx` repository method — transactional variant of `FindPasswordCredential` for use inside `RunInTransaction` to avoid TOCTOU race conditions (`internal/account/repository/credential_repository.go`).
 - `SoftDeleteCredentialsByType` repository method — bulk soft-delete by account ID and credential type in a single UPDATE, replacing N individual `SoftDeleteCredential` calls in `MFAService.softDeleteCredentialsByType` (`internal/account/repository/credential_repository.go`).
+- `dummyArgon2Hash` helper on `AuthService` — consolidates 3 identical dummy-hash timing mitigation blocks into a single method (`internal/auth/service/auth_service.go`).
+- `maxSocialLoginResponseBodySize` constant — replaces magic `1<<20` body size limit in social login HTTP reads (`internal/auth/service/social_login_service.go`).
 
 ### Changed
 - `RoleCacheInvalidator` type assertion in `initModules` now checks the `ok` return value and logs a warning on failure, replacing the previous silent discard (`cmd/gosso/web_modules.go`).

@@ -133,6 +133,11 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		modules.passwordResetSvc.Wait()
 	}
 
+	// Stop the session service background cache cleanup goroutine
+	if modules.sessionSvc != nil {
+		modules.sessionSvc.StopCacheCleanup()
+	}
+
 	// Drain in-flight audit batches before exiting
 	auditAuditor.Wait()
 

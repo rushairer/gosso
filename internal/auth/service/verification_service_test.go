@@ -14,6 +14,7 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/testutil"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // stubEmailService captures the code instead of sending email
@@ -385,6 +386,6 @@ func TestBuildCooldownKey(t *testing.T) {
 }
 
 func TestMaskIdentifier_DelegatesToUtility(t *testing.T) {
-	result := maskIdentifier("email", "test@example.com")
+	result := utility.MaskIdentifier("email", "test@example.com")
 	assert.NotEmpty(t, result)
 }

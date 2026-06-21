@@ -110,8 +110,8 @@ type AuthServiceConfig struct {
 	LoginMaxAttempts        int           // default: defaultLoginMaxAttempts
 	LoginMaxAttemptsPerIP   int           // default: defaultLoginMaxAttemptsPerIP
 	MFAVerificationTTL      time.Duration // default: defaultMFAVerificationTTL
-	MFAAccountMaxAttempts   int           // default: mfaAccountMaxAttempts (10)
-	MFAAccountRateLimitWindow time.Duration // default: mfaAccountRateLimitWindow (5min)
+	MFAAccountMaxAttempts   int           // default: defaultMFAAccountMaxAttempts (10)
+	MFAAccountRateLimitWindow time.Duration // default: defaultMFAAccountRateLimitWindow (5min)
 	DummyHashConcurrency      int           // max concurrent dummy Argon2id hashes; 0 = runtime.NumCPU()
 
 	// LoginIPAllowlist contains IP addresses or CIDR ranges that are exempt from
@@ -215,6 +215,22 @@ func (s *AuthService) MFAService() *MFAService {
 	return s.mfaSvc
 }
 
+// dummyArgon2Hash performs a dummy Argon2id hash to mitigate timing side-channel attacks.
+// Uses the semaphore to cap concurrent hashes and prevent CPU exhaustion.
+// Falls back to sleep-based padding if the semaphore is exhausted or hashing fails.
+func (s *AuthService) dummyArgon2Hash(ctx context.Context, password string) {
+	if acquireErr := s.dummyHashSem.Acquire(ctx, 1); acquireErr == nil {
+		defer s.dummyHashSem.Release(1)
+		if _, hashErr := accountDomain.HashPassword(password); hashErr != nil {
+			s.logger.Debug("Dummy hash failed, falling back to sleep-based dummy work", zap.Error(hashErr))
+			utility.DummyWorkWithContext(ctx)
+		}
+	} else {
+		// Semaphore exhausted (under attack); fall back to sleep-based padding.
+		utility.DummyWorkWithContext(ctx)
+	}
+}
+
 // VerifyCurrentPassword verifies the current password for the given account.
 // Used for step-up authentication before sensitive operations (e.g., disabling MFA).
 // Returns nil on success, ErrInvalidCredentials on mismatch.
@@ -225,18 +241,7 @@ func (s *AuthService) VerifyCurrentPassword(ctx context.Context, accountID, pass
 	cred, err := s.credentialRepo.FindPasswordCredential(ctx, accountID)
 	if err != nil {
 		// Account has no password credential (passkey-only) or not found.
-		// Perform dummy work to prevent timing leak — use the semaphore to cap
-		// concurrent Argon2id hashes and prevent CPU exhaustion from mass requests.
-		if acquireErr := s.dummyHashSem.Acquire(ctx, 1); acquireErr == nil {
-			defer s.dummyHashSem.Release(1)
-			if _, hashErr := accountDomain.HashPassword(password); hashErr != nil {
-				s.logger.Error("dummy hash failed, falling back to sleep-based padding", zap.Error(hashErr))
-				utility.DummyWorkWithContext(ctx)
-			}
-		} else {
-			// Semaphore exhausted (under attack); fall back to sleep-based padding.
-			utility.DummyWorkWithContext(ctx)
-		}
+		s.dummyArgon2Hash(ctx, password)
 		return ErrInvalidCredentials
 	}
 	if !cred.VerifyPassword(password) {

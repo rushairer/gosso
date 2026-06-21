@@ -14,14 +14,8 @@ import (
 	"github.com/rushairer/gosso/middleware"
 )
 
-// clientDeleteErrorMap maps client deletion errors to HTTP responses.
-var clientDeleteErrorMap = []controllerutil.ErrorRule{
-	{Sentinel: oauth2Domain.ErrClientNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "client not found"}},
-	{Sentinel: oauth2Service.ErrClientAccessDenied, Mapping: controllerutil.ErrorMapping{Status: http.StatusForbidden, Message: "access denied"}},
-}
-
-// updateClientErrorMap maps client update errors to HTTP responses.
-var updateClientErrorMap = []controllerutil.ErrorRule{
+// clientErrorMap maps client operation errors to HTTP responses.
+var clientErrorMap = []controllerutil.ErrorRule{
 	{Sentinel: oauth2Domain.ErrClientNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "client not found"}},
 	{Sentinel: oauth2Service.ErrClientAccessDenied, Mapping: controllerutil.ErrorMapping{Status: http.StatusForbidden, Message: "access denied"}},
 }
@@ -189,7 +183,7 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
 			return
 		}
-		controllerutil.AbortWithServiceError(ctx, c.logger, err, updateClientErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, clientErrorMap,
 			http.StatusBadRequest, "failed to update client")
 		return
 	}
@@ -220,7 +214,7 @@ func (c *ClientController) DeleteClient(ctx *gin.Context) {
 	}
 
 	if err := c.clientSvc.DeleteClient(ctx, accountID, clientID); err != nil {
-		controllerutil.AbortWithServiceError(ctx, c.logger, err, clientDeleteErrorMap,
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, clientErrorMap,
 			http.StatusInternalServerError, "Failed to delete client")
 		return
 	}
