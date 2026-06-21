@@ -60,11 +60,7 @@ func (c *AuthController) SendVerification(ctx *gin.Context) {
 	}
 
 	// Verify the identifier belongs to this account
-	credType := accountDomain.CredentialTypeEmail
-	if req.Type == "phone" {
-		credType = accountDomain.CredentialTypePhone
-	}
-	if err := c.verificationSvc.ValidateCredentialOwnership(ctx, tc.AccountID, string(credType), req.Identifier); err != nil {
+	if err := c.verificationSvc.ValidateCredentialOwnership(ctx, tc.AccountID, string(accountDomain.CredentialTypeEmail), req.Identifier); err != nil {
 		c.logger.Warn("Credential ownership validation failed", zap.Error(err))
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request"))
 		return

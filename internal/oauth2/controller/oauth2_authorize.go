@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -28,6 +29,7 @@ type consentState struct {
 	CodeChallengeMethod string `json:"code_challenge_method"`
 	Nonce               string `json:"nonce"`
 	State               string `json:"state"`
+	Scope               string `json:"scope"`
 }
 
 // Authorize GET /oauth2/authorize
@@ -35,7 +37,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 	clientID := ctx.Query("client_id")
 	redirectURI := ctx.Query("redirect_uri")
 	responseType := ctx.Query("response_type")
-	scope := ctx.Query("scope")
+	scope := strings.ReplaceAll(ctx.Query("scope"), "+", " ")
 	state := ctx.Query("state")
 	codeChallenge := ctx.Query("code_challenge")
 	codeChallengeMethod := ctx.Query("code_challenge_method")
@@ -113,6 +115,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		CodeChallengeMethod: codeChallengeMethod,
 		Nonce:               nonce,
 		State:               state,
+		Scope:               scope,
 	})
 	if err != nil {
 		c.logger.Error("Failed to marshal consent state", zap.Error(err))
@@ -198,7 +201,9 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		return
 	}
 
-	// approved is submitted via form button value
+	// The "approved" value is submitted via the HTML form submit button's value attribute
+	// (<button name="approved" value="true">). Gin's ShouldBind may not parse button
+	// values correctly, so we read it explicitly from the form data.
 	approved := ctx.PostForm("approved")
 	req.Approved = approved == "true"
 
@@ -257,7 +262,8 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	if req.CodeChallenge != stored.CodeChallenge ||
 		req.CodeChallengeMethod != stored.CodeChallengeMethod ||
 		req.Nonce != stored.Nonce ||
-		req.State != stored.State {
+		req.State != stored.State ||
+		req.Scope != stored.Scope {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "authorization parameters mismatch"})
 		return
 	}

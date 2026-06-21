@@ -41,6 +41,7 @@ type mockAuthOrchestrator struct {
 	validateSessionFn func() (*sessionDomain.Session, error)
 	listSessionsFn    func() ([]*sessionDomain.Session, error)
 	revokeSessionFn   func() error
+	verifyPasswordFn  func() error
 	mfaSvc            *service.MFAService
 }
 
@@ -95,6 +96,13 @@ func (m *mockAuthOrchestrator) RevokeSession(_ context.Context, _, _ string) err
 
 func (m *mockAuthOrchestrator) ConfirmVerificationCredential(_ context.Context, _, _, _ string) error {
 	return fmt.Errorf("not implemented")
+}
+
+func (m *mockAuthOrchestrator) VerifyCurrentPassword(_ context.Context, _, _ string) error {
+	if m.verifyPasswordFn != nil {
+		return m.verifyPasswordFn()
+	}
+	return nil
 }
 
 func (m *mockAuthOrchestrator) MFAService() *service.MFAService         { return m.mfaSvc }

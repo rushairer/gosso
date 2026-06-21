@@ -187,6 +187,26 @@ func (s *AuthService) MFAService() *MFAService {
 	return s.mfaSvc
 }
 
+// VerifyCurrentPassword verifies the current password for the given account.
+// Used for step-up authentication before sensitive operations (e.g., disabling MFA).
+// Returns nil on success, ErrInvalidCredentials on mismatch.
+func (s *AuthService) VerifyCurrentPassword(ctx context.Context, accountID, password string) error {
+	if accountID == "" || password == "" {
+		return ErrInvalidCredentials
+	}
+	cred, err := s.credentialRepo.FindPasswordCredential(ctx, accountID)
+	if err != nil {
+		// Account has no password credential (passkey-only) or not found.
+		// Perform dummy hash to prevent timing leak.
+		_, _ = accountDomain.HashPassword(password)
+		return ErrInvalidCredentials
+	}
+	if !cred.VerifyPassword(password) {
+		return ErrInvalidCredentials
+	}
+	return nil
+}
+
 // ConfirmVerificationCredential confirms a verification code and marks the credential as verified.
 // It verifies that the credential belongs to the specified account before updating.
 func (s *AuthService) ConfirmVerificationCredential(ctx context.Context, credType, identifier, accountID string) error {

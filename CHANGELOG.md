@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ValidateIDTokenHint` JWKS fallback now tries all available keys when the token has no `kid` header — previously tokens signed with the previous key during rotation (without `kid`) could not be verified (`internal/oidc/service/logout_service.go`).
 - `sameSubnet24` now fails closed on unparseable IPs — previously an attacker with the `oauth_state` cookie could craft a state with an unparseable IP to bypass the OAuth IP binding check (`internal/auth/controller/auth_social.go`).
 - `ConfirmVerification` now rejects `type=phone` with 501 Not Implemented, consistent with `SendVerification` — previously phone verification could silently appear to succeed (`internal/auth/controller/auth_verification.go`).
+- `sameSubnet24` now fails closed on `To16()` failure — previously `nil` returns from `To16()` were treated as a match, allowing OAuth state bypass with IPv6 edge cases (`internal/auth/controller/auth_social.go`).
+- Consent state now stores the `scope` parameter — previously a user could tamper with the hidden form field to grant themselves additional scopes beyond what was shown on the consent page (`internal/oauth2/controller/oauth2_authorize.go`).
+- `MFADisable` now requires step-up authentication (current password) — prevents an attacker with a stolen session from stripping MFA protection without proving knowledge of the password (`internal/auth/controller/auth_mfa.go`, `internal/auth/service/auth_service.go`).
 
 ### Fixed
 - `CompletePasskeyMFALogin` now verifies the account exists before blacklisting the MFA token — prevents user lockout when a transient DB failure occurs after the token is consumed but before the account is found (`internal/auth/service/auth_login.go`).
@@ -53,6 +56,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Device code `verification_uri` now handles `url.JoinPath` errors — previously silently ignored (`internal/oauth2/controller/oauth2_device.go`).
 - Removed stale comment block for `authorizeDeviceCodeScript` — duplicated documentation with incorrect ARGV parameter count (`internal/oauth2/service/device_code_service.go`).
 - `Auditor.Wait()` now marked as deprecated in favor of `Close()` — the two methods were functionally identical (`internal/audit/service/audit.go`).
+- `SetSendRateLimit` now checks `closed` flag before calling `Reset()` — previously calling after `Close()` would panic on a stopped `Ticker` (`internal/notification/service/email_service.go`).
+- OAuth2 authorize handler now normalizes `+` in scope query parameter to space — prevents mismatch between stored consent state and submitted form data (`internal/oauth2/controller/oauth2_authorize.go`).
+- Removed dead code for phone type in `SendVerification` — phone format validation and credential type assignment were unreachable since the phone branch returns 501 earlier (`internal/auth/controller/auth_verification.go`).
+- Added documentation for IPv4-mapped IPv6 behavior in `sameSubnet24` and `copyMap` slice-only deep-copy limitation (`internal/auth/controller/auth_social.go`, `internal/oidc/service/discovery_service.go`).
+- Documented `req.Approved` form button value handling in `SubmitConsent` (`internal/oauth2/controller/oauth2_authorize.go`).
 
 ### Added
 - `IsValidGrantType` function and grant type validation in `NewOAuth2Client` constructor — rejects unknown grant types with `ErrClientInvalidGrantType` (`internal/oauth2/domain/client.go`).

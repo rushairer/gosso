@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -298,7 +299,8 @@ func TestMFADisable_NoClaims(t *testing.T) {
 	tokenMgr := &mockTokenManager{}
 	engine, _ := setupAuthController(authSvc, tokenMgr)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/auth/mfa", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/mfa", strings.NewReader(`{"current_password":"test"}`))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -322,7 +324,8 @@ func TestMFADisable_Success(t *testing.T) {
 	claims := &tokenDomain.AccessTokenClaims{AccountID: "account-001", SessionID: "session-001"}
 	engine := setupAuthControllerWithMFA(claims, mfaSvc)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/auth/mfa", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/mfa", strings.NewReader(`{"current_password":"test"}`))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -348,7 +351,8 @@ func TestMFADisable_ServiceError(t *testing.T) {
 	claims := &tokenDomain.AccessTokenClaims{AccountID: "account-001", SessionID: "session-001"}
 	engine := setupAuthControllerWithMFA(claims, mfaSvc)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/auth/mfa", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/auth/mfa", strings.NewReader(`{"current_password":"test"}`))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 

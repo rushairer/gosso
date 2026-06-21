@@ -325,7 +325,7 @@ func TestUpdateCredential_Success(t *testing.T) {
 	c := newTestCredential("account-001", domain.CredentialTypePassword, "testuser")
 	mock.ExpectExec("UPDATE account_credentials").
 		WithArgs(c.Identifier, c.Value, c.Verified, c.PrimaryCredential,
-			sqlmock.AnyArg(), c.VerifiedAt, c.LastUsedAt, c.ID).
+			sqlmock.AnyArg(), c.VerifiedAt, c.LastUsedAt, sqlmock.AnyArg(), c.ID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewCredentialRepository(db)
@@ -346,7 +346,7 @@ func TestUpdateCredential_NotFound(t *testing.T) {
 	c := newTestCredential("account-001", domain.CredentialTypePassword, "testuser")
 	mock.ExpectExec("UPDATE account_credentials").
 		WithArgs(c.Identifier, c.Value, c.Verified, c.PrimaryCredential,
-			sqlmock.AnyArg(), c.VerifiedAt, c.LastUsedAt, c.ID).
+			sqlmock.AnyArg(), c.VerifiedAt, c.LastUsedAt, sqlmock.AnyArg(), c.ID).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	repo := NewCredentialRepository(db)

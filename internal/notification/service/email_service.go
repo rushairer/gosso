@@ -102,8 +102,9 @@ func (s *EmailService) Close() {
 
 // SetSendRateLimit overrides the minimum interval between email sends.
 // A value of 100ms equals 10 emails/sec (the built-in default).
+// No-op after Close() has been called.
 func (s *EmailService) SetSendRateLimit(d time.Duration) {
-	if d > 0 {
+	if d > 0 && !s.closed.Load() {
 		s.sendLimiter.Reset(d)
 	}
 }

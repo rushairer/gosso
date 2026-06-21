@@ -2606,6 +2606,7 @@ func TestSubmitConsent_Success(t *testing.T) {
 		"code_challenge_method": "",
 		"nonce":                 "",
 		"state":                 "abc",
+		"scope":                 "openid profile",
 	})
 	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
 
@@ -2653,6 +2654,7 @@ func TestSubmitConsent_ClientNotFound(t *testing.T) {
 		"code_challenge_method": "",
 		"nonce":                 "",
 		"state":                 "abc",
+		"scope":                 "openid",
 	})
 	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
 
@@ -2699,6 +2701,7 @@ func TestSubmitConsent_InvalidRedirectURI(t *testing.T) {
 		"code_challenge_method": "",
 		"nonce":                 "",
 		"state":                 "abc",
+		"scope":                 "openid",
 	})
 	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
 
@@ -2746,6 +2749,7 @@ func TestSubmitConsent_InvalidScope(t *testing.T) {
 		"code_challenge_method": "",
 		"nonce":                 "",
 		"state":                 "abc",
+		"scope":                 "invalid_scope",
 	})
 	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
 
@@ -2794,6 +2798,7 @@ func TestSubmitConsent_SaveConsentError(t *testing.T) {
 		"code_challenge_method": "",
 		"nonce":                 "",
 		"state":                 "abc",
+		"scope":                 "openid",
 	})
 	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
 
@@ -2844,6 +2849,7 @@ func TestSubmitConsent_GenerateCodeError(t *testing.T) {
 		"code_challenge_method": "",
 		"nonce":                 "",
 		"state":                 "abc",
+		"scope":                 "openid",
 	})
 	require.NoError(t, redisClient.Set(context.Background(), "consent_state:"+consentID, string(stateData), 5*time.Minute))
 

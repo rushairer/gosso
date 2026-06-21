@@ -43,6 +43,7 @@ type authServiceDeps interface {
 	ListSessions(ctx context.Context, accountID string) ([]*sessionDomain.Session, error)
 	RevokeSession(ctx context.Context, accountID, sessionID string) error
 	ConfirmVerificationCredential(ctx context.Context, credType, identifier, accountID string) error
+	VerifyCurrentPassword(ctx context.Context, accountID, password string) error
 	MFAService() *authService.MFAService
 	PasskeyService() *authService.PasskeyService
 }

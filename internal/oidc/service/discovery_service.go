@@ -69,6 +69,8 @@ func (s *DiscoveryService) GetDiscoveryDocument() map[string]any {
 
 // copyMap performs a deep copy of a map[string]any, cloning slice values
 // to prevent concurrent handlers from mutating the shared state.
+// Note: only []string values are deep-copied. If the discovery document ever
+// contains other mutable types (maps, slices of structs), they must be added here.
 func copyMap(m map[string]any) map[string]any {
 	cp := make(map[string]any, len(m))
 	for k, v := range m {

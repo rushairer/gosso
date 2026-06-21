@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/controllerutil"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // MFAEnroll POST /api/auth/mfa/enroll
@@ -67,8 +68,19 @@ func (c *AuthController) MFAActivate(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("TOTP activated"))
 }
 
+// MFADisableRequest MFA disable request body
+type MFADisableRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+}
+
 // MFADisable DELETE /api/auth/mfa
 func (c *AuthController) MFADisable(ctx *gin.Context) {
+	var req MFADisableRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+
 	tc, ok := getClaimsFromContext(ctx)
 	if !ok {
 		return
@@ -77,6 +89,15 @@ func (c *AuthController) MFADisable(ctx *gin.Context) {
 	mfaSvc := c.authSvc.MFAService()
 	if mfaSvc == nil {
 		ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "MFA service not available"))
+		return
+	}
+
+	// Step-up authentication: require current password to disable MFA.
+	// This prevents an attacker with a stolen session from stripping MFA protection.
+	if err := c.authSvc.VerifyCurrentPassword(ctx, tc.AccountID, req.CurrentPassword); err != nil {
+		c.logger.Warn("MFA disable rejected — password verification failed",
+			zap.String("account_id", utility.MaskOpaqueID(tc.AccountID)), zap.Error(err))
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "invalid password"))
 		return
 	}
 

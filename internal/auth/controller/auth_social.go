@@ -181,11 +181,14 @@ func sameSubnet24(ip1, ip2 string) bool {
 		// Compare first 3 octets (/24)
 		return v4_1[0] == v4_2[0] && v4_1[1] == v4_2[1] && v4_1[2] == v4_2[2]
 	}
-	// For IPv6, use /48 prefix comparison (equivalent rough granularity)
+	// For IPv6, use /48 prefix comparison (equivalent rough granularity).
+	// Note: IPv4-mapped IPv6 addresses (e.g. ::ffff:192.168.1.1) that weren't
+	// normalized to IPv4 by To4() above will be compared as pure IPv6,
+	// resulting in a false mismatch (fail-closed, safe).
 	v1 := parsed1.To16()
 	v2 := parsed2.To16()
 	if v1 == nil || v2 == nil {
-		return true
+		return false
 	}
 	// Compare first 6 bytes (/48)
 	for i := 0; i < 6; i++ {
