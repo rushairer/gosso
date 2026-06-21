@@ -294,6 +294,7 @@ func validateRateLimits(rl RateLimitsConfig) error {
 		{"device_code", rl.DeviceCode},
 		{"password", rl.Password},
 		{"verify", rl.Verify},
+		{"health", rl.Health},
 	}
 	for _, check := range checks {
 		if check.value <= 0 {

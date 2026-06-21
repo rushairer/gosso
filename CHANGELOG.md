@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `checkAndIncrementAttemptsScript` in `password_reset_service.go` now uses `pcall(require, 'cjson')` with a string pattern fallback, consistent with the pattern in `token_service_revoke.go`. This prevents failures in test environments using miniredis which lacks the cjson module (`internal/auth/service/password_reset_service.go`).
 - `SubmitConsent` handler now enforces `Content-Type: application/x-www-form-urlencoded` and rejects oversized bodies, matching the defense-in-depth pattern already used by the `Token` endpoint (`internal/oauth2/controller/oauth2_authorize.go`).
 - `/health` and `/readiness` endpoints now have IP-based rate limiting (fail-open, default 60 req/min) to prevent abuse as amplification vectors (`router/web.go`).
+- `evictOldestSessionsScript` in `session_service_scripts.go` now uses `pcall(require, 'cjson')` with a string pattern fallback, consistent with the pattern in `token_service_revoke.go`. This prevents failures in test environments using miniredis which lacks the cjson module (`internal/session/service/session_service_scripts.go`).
+- `validateRateLimits` now validates the `Health` rate limit field, preventing silent disabling of health endpoint rate limiting when set to 0 or negative (`config/config.go`).
+- `isSelfAccount` documentation now explicitly explains that the fail-safe `true` return applies to ALL guarded operations (delete, disable, enable, add/remove role), not just self-deletion (`internal/admin/controller/admin_controller.go`).
 
 ### Changed
 - `sessionCache` cleanup sweep interval is now capped at 1 hour when `sessionTTL` is very high (e.g., 24h), ensuring stale entries are evicted promptly instead of accumulating for up to 72 hours (`internal/session/service/session_service.go`).

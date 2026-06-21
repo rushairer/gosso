@@ -102,8 +102,12 @@ func (c *AdminController) ListAccounts(ctx *gin.Context) {
 
 // isSelfAccount checks if the current admin is operating on their own account.
 // Uses UUID parsing to handle format differences (e.g., with/without braces).
-// Returns true (fail-safe deny) if the admin ID cannot be determined, to prevent
-// self-account operations when the middleware is misconfigured.
+//
+// Fail-safe: returns true (deny) if the admin ID cannot be determined, to prevent
+// self-account operations when the middleware is misconfigured. This applies to ALL
+// operations that use this guard (Delete, Disable, Enable, AddRole, RemoveRole),
+// not just self-deletion — so a missing admin ID will block every mutation on every
+// account, which is the intended fail-closed behavior.
 func isSelfAccount(ctx *gin.Context, accountID string) bool {
 	currentAdminID := ctx.GetString(middleware.ContextKeyAccountID)
 	if currentAdminID == "" {

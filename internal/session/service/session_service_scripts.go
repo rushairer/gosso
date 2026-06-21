@@ -29,7 +29,7 @@ return members
 var evictOldestSessionsScript = redis.NewScript(`
 local indexKey = KEYS[1]
 local maxSessions = tonumber(ARGV[1])
-local cjson = require('cjson')
+local cjson_ok, cjson = pcall(require, 'cjson')
 
 local sessionIDs = redis.call('SMEMBERS', indexKey)
 if #sessionIDs <= maxSessions then
@@ -42,9 +42,21 @@ local corrupted = {}
 for i = 1, #sessionIDs do
     local data = redis.call('GET', 'session:' .. sessionIDs[i])
     if data then
-        local ok, obj = pcall(cjson.decode, data)
-        if ok and obj.last_active_at then
-            table.insert(sessions, {id = sessionIDs[i], ts = obj.last_active_at})
+        local lastActive
+        if cjson_ok then
+            local ok, obj = pcall(cjson.decode, data)
+            if ok and obj then
+                lastActive = obj.last_active_at
+            end
+        else
+            -- Fallback: extract last_active_at via string pattern (miniredis compatibility)
+            lastActive = data:match('"last_active_at":"([^"]*)"')
+            if not lastActive then
+                lastActive = data:match('"last_active_at":(%d+)')
+            end
+        end
+        if lastActive then
+            table.insert(sessions, {id = sessionIDs[i], ts = lastActive})
         else
             -- Corrupted or missing last_active_at: clean up immediately
             table.insert(corrupted, sessionIDs[i])
