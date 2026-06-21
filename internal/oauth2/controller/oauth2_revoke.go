@@ -91,6 +91,8 @@ func (c *OAuth2Controller) Revoke(ctx *gin.Context) {
 		if err == nil && (clientIDMatch == "" || claims.ClientID == clientIDMatch) {
 			if revokeErr := c.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); revokeErr != nil {
 				c.logger.Error("Failed to revoke access token", zap.Error(revokeErr))
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+				return
 			}
 		}
 	}

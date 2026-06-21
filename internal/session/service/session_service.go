@@ -17,10 +17,10 @@ import (
 )
 
 const (
-	// SessionKeyPrefix is the Redis key prefix for sessions.
-	SessionKeyPrefix = "session:"
-	// AccountSessionsPrefix is the Redis key prefix for account-session index.
-	AccountSessionsPrefix = "account_sessions:"
+	// sessionKeyPrefix is the Redis key prefix for sessions.
+	sessionKeyPrefix = "session:"
+	// accountSessionsPrefix is the Redis key prefix for account-session index.
+	accountSessionsPrefix = "account_sessions:"
 	// DefaultSessionTTL is the default session expiry duration (24 hours).
 	DefaultSessionTTL = 24 * time.Hour
 	// DefaultMaxSessions is the default maximum concurrent sessions per account.
@@ -356,12 +356,12 @@ func (s *SessionService) expireSession(ctx context.Context, sessionID string, ac
 
 // buildSessionKey builds the Redis key for a session.
 func (s *SessionService) buildSessionKey(sessionID string) string {
-	return fmt.Sprintf("%s%s", SessionKeyPrefix, sessionID)
+	return fmt.Sprintf("%s%s", sessionKeyPrefix, sessionID)
 }
 
 // buildAccountSessionsKey builds the Redis key for the account session index.
 func (s *SessionService) buildAccountSessionsKey(accountID string) string {
-	return fmt.Sprintf("%s%s", AccountSessionsPrefix, accountID)
+	return fmt.Sprintf("%s%s", accountSessionsPrefix, accountID)
 }
 
 // Error definitions

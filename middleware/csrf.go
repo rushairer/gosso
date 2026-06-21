@@ -63,8 +63,11 @@ func CSRFMiddleware(secure bool, logger *zap.Logger, maxAge time.Duration, skipP
 		// Skip Bearer auth (JWT is not affected by CSRF).
 		// Validate that the token has plausible JWT format (3 dot-separated segments)
 		// to prevent attackers from bypassing CSRF with a garbage "Bearer " prefix.
+		// However, if a session cookie is also present, an attacker could use the session
+		// cookie for CSRF while the JWT bypasses the check — so only skip when no session
+		// cookie coexists with the Bearer token.
 		if auth := ctx.GetHeader("Authorization"); strings.HasPrefix(auth, "Bearer ") {
-			if IsPlausibleJWT(strings.TrimPrefix(auth, "Bearer ")) {
+			if IsPlausibleJWT(strings.TrimPrefix(auth, "Bearer ")) && !hasSessionCookie(ctx) {
 				ctx.Next()
 				return
 			}
@@ -192,4 +195,18 @@ func IsPlausibleJWT(token string) bool {
 		return false
 	}
 	return true
+}
+
+// hasSessionCookie checks whether the request contains a cookie that looks like
+// a session cookie. This prevents the Bearer-token CSRF bypass from being
+// exploited when a session cookie is also present (the attacker could use the
+// session cookie for CSRF while the JWT satisfies the bypass check).
+func hasSessionCookie(ctx *gin.Context) bool {
+	for _, c := range ctx.Request.Cookies() {
+		name := strings.ToLower(c.Name)
+		if strings.Contains(name, "session") || strings.Contains(name, "sid") {
+			return true
+		}
+	}
+	return false
 }

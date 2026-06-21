@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/subtle"
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/url"
 	"strings"
@@ -20,26 +21,13 @@ import (
 	"github.com/rushairer/gosso/middleware"
 )
 
-// renderDeviceTemplate executes the device template with the given data and writes the result to ctx.
+// renderTemplate executes the given HTML template with data and writes the result to ctx.
 // Returns true if the template was rendered successfully, false if an error occurred (in which case
 // an HTTP 500 response is sent and the caller should return).
-func (c *OAuth2Controller) renderDeviceTemplate(ctx *gin.Context, data gin.H) bool {
+func (c *OAuth2Controller) renderTemplate(ctx *gin.Context, tmpl *template.Template, data gin.H) bool {
 	var buf bytes.Buffer
-	if err := c.deviceTmpl.Execute(&buf, data); err != nil {
-		c.logger.Error("Failed to render device template", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-		return false
-	}
-	ctx.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
-	return true
-}
-
-// renderResultTemplate executes the result template with the given data and writes the result to ctx.
-// Returns true if the template was rendered successfully, false if an error occurred.
-func (c *OAuth2Controller) renderResultTemplate(ctx *gin.Context, data gin.H) bool {
-	var buf bytes.Buffer
-	if err := c.resultTmpl.Execute(&buf, data); err != nil {
-		c.logger.Error("Failed to render result template", zap.Error(err))
+	if err := tmpl.Execute(&buf, data); err != nil {
+		c.logger.Error("Failed to render template", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return false
 	}
@@ -102,7 +90,7 @@ func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
 		return
 	}
 
-	verificationURI := c.issuer + "/oauth2/device"
+	verificationURI, _ := url.JoinPath(c.issuer, "/oauth2/device")
 	ctx.JSON(http.StatusOK, gin.H{
 		"device_code":               dc.DeviceCode,
 		"user_code":                 dc.UserCode,
@@ -118,7 +106,7 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 	userCode := ctx.Query("user_code")
 
 	if userCode == "" {
-		c.renderDeviceTemplate(ctx, gin.H{
+		c.renderTemplate(ctx, c.deviceTmpl, gin.H{
 			"UserCode": "",
 			"CSPNonce": middleware.GetCSPNonce(ctx),
 		})
@@ -127,7 +115,7 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 
 	dc, err := c.deviceCodeSvc.GetDeviceCodeByUserCode(ctx, userCode)
 	if err != nil {
-		c.renderDeviceTemplate(ctx, gin.H{
+		c.renderTemplate(ctx, c.deviceTmpl, gin.H{
 			"UserCode": "",
 			"Error":    "Invalid or expired code. Please try again.",
 			"CSPNonce": middleware.GetCSPNonce(ctx),
@@ -136,7 +124,7 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 	}
 
 	if dc.IsExpired() || dc.Status != oauth2Domain.DeviceCodeStatusPending {
-		c.renderDeviceTemplate(ctx, gin.H{
+		c.renderTemplate(ctx, c.deviceTmpl, gin.H{
 			"UserCode": "",
 			"Error":    "This code has expired or is no longer valid.",
 			"CSPNonce": middleware.GetCSPNonce(ctx),
@@ -151,7 +139,7 @@ func (c *OAuth2Controller) DeviceUserPage(ctx *gin.Context) {
 		return
 	}
 
-	c.renderDeviceTemplate(ctx, gin.H{
+	c.renderTemplate(ctx, c.deviceTmpl, gin.H{
 		"UserCode":   dc.UserCode,
 		"ClientName": client.Name,
 		"Scopes":     dc.Scopes,
@@ -241,7 +229,7 @@ func (c *OAuth2Controller) DeviceUserSubmit(ctx *gin.Context) {
 		title = "Authorization Granted"
 		message = "The device has been authorized. You may close this page."
 	}
-	c.renderResultTemplate(ctx, gin.H{
+	c.renderTemplate(ctx, c.resultTmpl, gin.H{
 		"CSPNonce": middleware.GetCSPNonce(ctx),
 		"Title":    title,
 		"Message":  message,

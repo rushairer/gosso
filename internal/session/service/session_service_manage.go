@@ -94,7 +94,7 @@ func (s *SessionService) RevokeAllForAccount(ctx context.Context, accountID stri
 	if len(sessionIDs) > 0 {
 		keys := make([]string, len(sessionIDs))
 		for i, sid := range sessionIDs {
-			keys[i] = SessionKeyPrefix + sid
+			keys[i] = sessionKeyPrefix + sid
 		}
 		if err := s.redis.Del(ctx, keys...); err != nil {
 			s.logger.Error("Failed to delete account sessions", zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))

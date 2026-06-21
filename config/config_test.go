@@ -71,6 +71,10 @@ func validConfig() GoUnoConfig {
 			DeviceCodeInterval:      5 * time.Second,
 			TOTPEncryptionKey:       "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899", // 32 bytes, fake, differs from dev default
 			LoginRateLimitWindow:        15 * time.Minute,
+			LoginMaxAttempts:            5,
+			LoginMaxAttemptsPerIP:       30,
+			PasswordResetMaxAttempts:    3,
+			VerifyCodeMaxAttempts:       5,
 			MFAAccountRateLimitWindow:   15 * time.Minute,
 			PasswordResetRevokeConcurrency: 5,
 		},

@@ -245,8 +245,20 @@ func (c *GoUnoConfig) validateWebServer() error {
 	if c.WebServerConfig.Production && len(c.WebServerConfig.TrustedProxies) == 0 {
 		return fmt.Errorf("web_server: trusted_proxies must not be empty in production (set to proxy CIDRs, e.g. [\"172.22.0.0/16\"])")
 	}
+	for _, proxy := range c.WebServerConfig.TrustedProxies {
+		if net.ParseIP(proxy) == nil && !isValidCIDR(proxy) {
+			return fmt.Errorf("web_server: trusted_proxies entry %q is not a valid IP address or CIDR notation", proxy)
+		}
+	}
 	if c.WebServerConfig.Address != "" && net.ParseIP(c.WebServerConfig.Address) == nil {
 		return fmt.Errorf("web_server: address must be a valid IP address (got %q)", c.WebServerConfig.Address)
+	}
+	// Timeout relationship checks (Go's net/http warns if IdleTimeout < ReadTimeout)
+	if c.WebServerConfig.IdleTimeout < c.WebServerConfig.ReadTimeout {
+		return fmt.Errorf("web_server: idle_timeout (%v) must be >= read_timeout (%v)", c.WebServerConfig.IdleTimeout, c.WebServerConfig.ReadTimeout)
+	}
+	if c.WebServerConfig.ReadHeaderTimeout >= c.WebServerConfig.ReadTimeout {
+		return fmt.Errorf("web_server: read_header_timeout (%v) must be < read_timeout (%v) for effective protection", c.WebServerConfig.ReadHeaderTimeout, c.WebServerConfig.ReadTimeout)
 	}
 	return validateRateLimits(c.WebServerConfig.RateLimits)
 }
@@ -439,17 +451,17 @@ func (c *GoUnoConfig) validateAuthDurations() error {
 			return fmt.Errorf("auth: %s must not be negative (got %s)", check.name, check.value)
 		}
 	}
+	// Non-negative checks: 0 means "use service-level default", negative is invalid.
 	intChecks := []struct {
 		name  string
 		value int
 	}{
 		{"login_max_attempts", c.AuthConfig.LoginMaxAttempts},
 		{"login_max_attempts_per_ip", c.AuthConfig.LoginMaxAttemptsPerIP},
+		{"password_reset_max_attempts", c.AuthConfig.PasswordResetMaxAttempts},
+		{"verify_code_max_attempts", c.AuthConfig.VerifyCodeMaxAttempts},
 		{"backup_code_count", c.AuthConfig.BackupCodeCount},
 		{"backup_code_length", c.AuthConfig.BackupCodeLength},
-		{"password_reset_max_attempts", c.AuthConfig.PasswordResetMaxAttempts},
-		{"password_reset_revoke_concurrency", c.AuthConfig.PasswordResetRevokeConcurrency},
-		{"verify_code_max_attempts", c.AuthConfig.VerifyCodeMaxAttempts},
 	}
 	for _, check := range intChecks {
 		if check.value < 0 {
@@ -606,4 +618,10 @@ func (c *GoUnoConfig) validateOAuthProviders() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// isValidCIDR checks whether s is a valid CIDR notation (e.g. "10.0.0.0/8").
+func isValidCIDR(s string) bool {
+	_, _, err := net.ParseCIDR(s)
+	return err == nil
 }

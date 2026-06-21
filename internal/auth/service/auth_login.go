@@ -66,7 +66,12 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginCom
 	if err != nil {
 		// Mitigate timing side-channel: perform a dummy Argon2id hash so the response
 		// time is indistinguishable from "account found, wrong password."
-		_, _ = accountDomain.HashPassword(req.Password)
+		// The semaphore prevents an attacker from exhausting server resources by
+		// sending many requests for non-existent usernames.
+		if acquireErr := s.dummyHashSem.Acquire(ctx, 1); acquireErr == nil {
+			_, _ = accountDomain.HashPassword(req.Password)
+			s.dummyHashSem.Release(1)
+		}
 		return nil, ErrInvalidCredentials
 	}
 
@@ -74,7 +79,10 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginCom
 	if !account.IsActive() {
 		// Mitigate timing side-channel: inactive accounts must perform the same
 		// dummy work as the not-found path to prevent account existence enumeration.
-		_, _ = accountDomain.HashPassword(req.Password)
+		if acquireErr := s.dummyHashSem.Acquire(ctx, 1); acquireErr == nil {
+			_, _ = accountDomain.HashPassword(req.Password)
+			s.dummyHashSem.Release(1)
+		}
 		return nil, ErrInvalidCredentials
 	}
 

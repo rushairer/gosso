@@ -49,7 +49,7 @@ func initDatabase(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logge
 				select {
 				case <-ticker.C:
 					stats := db.Stats()
-					logger.Info("db pool stats",
+					logger.Debug("db pool stats",
 						zap.Int("open", stats.OpenConnections),
 						zap.Int("in_use", stats.InUse),
 						zap.Int("idle", stats.Idle),

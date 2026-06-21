@@ -172,7 +172,7 @@ func registerSwaggerRouter(server *gin.Engine) {
 	swagger := server.Group("/swagger")
 	{
 		swagger.GET("", func(ctx *gin.Context) {
-			ctx.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
+			ctx.Redirect(http.StatusTemporaryRedirect, "/swagger/index.html")
 		})
 		swagger.GET("/index.html", func(ctx *gin.Context) {
 			ctx.Data(http.StatusOK, "text/html; charset=utf-8", docs.SwaggerUI)

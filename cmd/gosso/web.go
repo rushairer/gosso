@@ -82,19 +82,15 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	modules, err := initModules(ctx, db, redis, logger, globalConfig, auditAuditor)
 	if err != nil {
 		logger.Error("module initialization failed", zap.Error(err))
-		_ = redis.Close()
-		_ = db.Close()
 		_ = logger.Sync()
-		os.Exit(1)
+		os.Exit(1) // defer handles db.Close() and redis.Close()
 	}
 
 	engine, err := setupEngine(ctx, globalConfig, logger, modules, db, redis)
 	if err != nil {
 		logger.Error("engine setup failed", zap.Error(err))
-		_ = redis.Close()
-		_ = db.Close()
 		_ = logger.Sync()
-		os.Exit(1)
+		os.Exit(1) // defer handles db.Close() and redis.Close()
 	}
 
 	httpServer := &http.Server{

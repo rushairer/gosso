@@ -11,6 +11,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Social login OAuth state parameter now includes IP subnet binding — the client IP is encoded into the state (`nonce:ip` format) and validated on callback with /24 subnet matching, preventing CSRF attacks via stolen `oauth_state` cookies from different network locations (`internal/auth/controller/auth_social.go`).
 - Password reset now emits an audit log with request IP after successful password change — previously this security-sensitive event was not logged (`internal/auth/service/password_reset_service.go`).
 - CORS configuration now exposes `X-Request-ID` header by default — allows SPA clients to read the request ID for correlation and debugging (`cmd/gosso/web_engine.go`, `config/config.go`).
+- Dummy Argon2id hash on failed login is now concurrency-limited via semaphore (default: `runtime.NumCPU()`) — prevents resource exhaustion attacks where an attacker forces expensive Argon2id computations for non-existent accounts (`internal/auth/service/auth_login.go`, `internal/auth/service/auth_service.go`).
+- Refresh token validation now rejects tokens with zero `ExpiresAt` — previously such tokens relied solely on Redis TTL, which could be misconfigured (`internal/token/service/token_service_validate.go`).
+- CSRF middleware now enforces the double-submit cookie check when a session cookie coexists with a Bearer JWT — prevents an attacker from using the session cookie for CSRF while the JWT bypasses the check (`middleware/csrf.go`).
+- Token revocation endpoint now returns HTTP 500 when access token revocation fails, instead of silently returning 200 (`internal/oauth2/controller/oauth2_revoke.go`).
+
+### Fixed
+- `CompletePasskeyMFALogin` now verifies the account exists before blacklisting the MFA token — prevents user lockout when a transient DB failure occurs after the token is consumed but before the account is found (`internal/auth/service/auth_login.go`).
+- OAuth2 `AuthenticateClient` now performs a dummy bcrypt comparison for public clients that provide a `client_secret` — eliminates a timing side-channel that could reveal whether a `client_id` is confidential or public (~100ms vs ~0ms) (`internal/oauth2/service/client_auth_service.go`).
+- `handleMFARequirement` now maps `GetMFATypes` failures to `ErrServiceUnavailable` instead of leaking raw database/Redis error details to the caller (`internal/auth/service/auth_login_helpers.go`).
+- OIDC controller error messages sanitized — replaced internal terms like `"no claims"`, `"invalid claims type"`, and `"unable to identify user for logout"` with generic `"authentication required"` / `"invalid token"` to prevent architecture fingerprinting (`internal/oidc/controller/oidc_controller.go`).
+- `ValidateIDTokenHint` no longer includes the server's issuer URL in the issuer mismatch error message — prevents information leakage if the error propagates to an HTTP response (`internal/oidc/service/logout_service.go`).
+- CSRF token validation no longer uses a `len()` short-circuit before `subtle.ConstantTimeCompare` — removes a minor length oracle that could leak whether the header and cookie lengths match (`middleware/csrf.go`).
+- Config validation now requires `login_rate_limit_window`, `mfa_account_rate_limit_window`, and `password_reset_revoke_concurrency` to be strictly positive — a zero value previously silently disabled rate limiting or created a zero-capacity semaphore (`config/config.go`).
+- Social login email from OAuth providers is now validated with `net/mail.ParseAddress` before account creation — malformed emails (control characters, etc.) are logged and discarded rather than passed to the database (`internal/auth/service/social_login_service.go`).
+- Discovery and JWKS endpoints now set `Cache-Control: public, max-age=3600` — reduces unnecessary load from relying parties that validate JWTs on every request (`internal/oidc/controller/oidc_controller.go`).
+- Logout `state` parameter is now validated for length (max 256 characters) before being reflected into the post-logout redirect URI (`internal/oidc/controller/oidc_controller.go`).
+- `ClearLoginRateLimitsByUsername` SCAN loop now checks `ctx.Err()` on each iteration — supports graceful shutdown by aborting the scan when the context is cancelled (`internal/auth/service/auth_login.go`).
+- Device authorization submit now prefers `user_code` lookup when both `device_code` and `user_code` are provided — ensures the device code corresponds to the same authorization session (`internal/oauth2/controller/oauth2_device.go`).
+- Eliminated double `db.Close()`/`redis.Close()` on init failure in `startWebServer` — defer handles cleanup (`cmd/gosso/web.go`).
+- Swagger redirect now uses 307 (Temporary Redirect) instead of 301 (Moved Permanently) — prevents browser caching of a redirect that may change (`router/web.go`).
+- Config validation now checks `idle_timeout >= read_timeout` and `read_header_timeout < read_timeout` — Go's net/http requires the former; the latter ensures header timeouts are effective (`config/config.go`).
+- Config validation now validates `trusted_proxies` entries as valid IP addresses or CIDR notation — previously invalid strings passed validation and only failed at runtime (`config/config.go`).
+- Database pool stats logging now uses Debug level instead of Info — reduces log noise in production (`cmd/gosso/web_infra.go`).
+- Device code `verification_uri` now uses `url.JoinPath` instead of string concatenation — prevents malformed URLs when the issuer contains unexpected characters (`internal/oauth2/controller/oauth2_device.go`).
+- CORS default allowed methods now include `PATCH` — standard RESTful method was previously missing (`cmd/gosso/web_engine.go`).
+- Session key prefix constants (`SessionKeyPrefix`, `AccountSessionsPrefix`) are now unexported — they were only used internally and had no reason to be part of the public API (`internal/session/service/session_service.go`).
+
+### Added
+- `IsValidGrantType` function and grant type validation in `NewOAuth2Client` constructor — rejects unknown grant types with `ErrClientInvalidGrantType` (`internal/oauth2/domain/client.go`).
+
+### Changed
+- `golangci-lint` config: re-enabled `shadow` checker under `govet`, split broad gosec exclusions into individually-documented rules (`G115`, `G118`, `G304`, `G706`), fixed misattributed gosec comment (`.golangci.yml`).
 
 ### Fixed
 - `CompletePasskeyMFALogin` now verifies the account exists before blacklisting the MFA token — prevents user lockout when a transient DB failure occurs after the token is consumed but before the account is found (`internal/auth/service/auth_login.go`).

@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"runtime"
 	"time"
 
 	"go.uber.org/zap"
+	"golang.org/x/sync/semaphore"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
@@ -84,6 +86,9 @@ type AuthService struct {
 	mfaVerificationTTL      time.Duration
 	mfaAccountMaxAttempts   int
 	mfaAccountRateLimitWindow time.Duration
+
+	// Concurrency limiter for dummy Argon2id hashes to prevent resource exhaustion.
+	dummyHashSem *semaphore.Weighted
 }
 
 // AuthServiceConfig holds optional configuration for AuthService.
@@ -95,6 +100,7 @@ type AuthServiceConfig struct {
 	MFAVerificationTTL      time.Duration // default: defaultMFAVerificationTTL
 	MFAAccountMaxAttempts   int           // default: mfaAccountMaxAttempts (10)
 	MFAAccountRateLimitWindow time.Duration // default: mfaAccountRateLimitWindow (5min)
+	DummyHashConcurrency      int           // max concurrent dummy Argon2id hashes; 0 = runtime.NumCPU()
 }
 
 // NewAuthService creates a new auth service instance
@@ -168,6 +174,11 @@ func NewAuthServiceWithConfig(
 	if cfg.MFAAccountRateLimitWindow > 0 {
 		svc.mfaAccountRateLimitWindow = cfg.MFAAccountRateLimitWindow
 	}
+	dummyConcurrency := cfg.DummyHashConcurrency
+	if dummyConcurrency <= 0 {
+		dummyConcurrency = runtime.NumCPU()
+	}
+	svc.dummyHashSem = semaphore.NewWeighted(int64(dummyConcurrency))
 	return svc
 }
 

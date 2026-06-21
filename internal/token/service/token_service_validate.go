@@ -99,7 +99,9 @@ func (s *TokenService) ValidateRefreshToken(ctx context.Context, token string) (
 	}
 
 	// Defense-in-depth: explicit expiry check in addition to Redis TTL.
-	if !rt.ExpiresAt.IsZero() && time.Now().After(rt.ExpiresAt) {
+	// A zero ExpiresAt means the token is malformed — reject it rather than
+	// relying solely on Redis TTL which could be misconfigured.
+	if rt.ExpiresAt.IsZero() || time.Now().After(rt.ExpiresAt) {
 		return nil, ErrRefreshTokenExpired
 	}
 

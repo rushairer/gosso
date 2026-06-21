@@ -111,13 +111,13 @@ func TestSessionService_BuildSessionKey(t *testing.T) {
 	svc := &SessionService{}
 	id := uuid.New().String()
 	key := svc.buildSessionKey(id)
-	assert.Equal(t, SessionKeyPrefix+id, key)
+	assert.Equal(t, sessionKeyPrefix+id, key)
 }
 
 func TestSessionService_BuildAccountSessionsKey(t *testing.T) {
 	svc := &SessionService{}
 	key := svc.buildAccountSessionsKey("account-001")
-	assert.Equal(t, AccountSessionsPrefix+"account-001", key)
+	assert.Equal(t, accountSessionsPrefix+"account-001", key)
 }
 
 // ──────────────────────────────────────────────

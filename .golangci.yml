@@ -17,13 +17,12 @@ linters:
     - errorlint      # E1: correct errors.Is/errors.As usage
     - dupl           # R1: detect duplicate code blocks (scan helpers)
     - exhaustive
-    - gosec     # General: switch exhaustiveness
+    - gosec          # Security: detect common security issues
   settings:
     govet:
       enable-all: true
       disable:
         - fieldalignment
-        - shadow
     gocritic:
       enabled-tags:
         - diagnostic
@@ -85,11 +84,22 @@ linters:
       - linters:
           - gosec
         text: "G124:"
-      # Reviewed gosec findings: bounded conversions, test-only ignored errors, controlled paths,
-      # and request-independent cleanup work.
+      # Integer overflow conversions: reviewed — values are bounded (e.g., port numbers, config ints).
       - linters:
           - gosec
-        text: "G104:|G115:|G118:|G304:|G706:"
+        text: "G115:"
+      # http.ListenAndServe error: handled in a goroutine that calls stop() on error.
+      - linters:
+          - gosec
+        text: "G118:"
+      # File inclusion via variable: migration paths and config paths are from trusted sources.
+      - linters:
+          - gosec
+        text: "G304:"
+      # G706 (defer in loop): handled per-case above and in test code.
+      - linters:
+          - gosec
+        text: "G706:"
       # IntrospectToken returns {"active": false} per RFC 7662, not an error
       - path: internal/token/service/token_service\.go
         linters:

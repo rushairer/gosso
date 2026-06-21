@@ -88,7 +88,7 @@ func buildCORSConfig(cfg config.GoUnoConfig, logger *zap.Logger) (cors.Config, e
 	if len(cfg.CORSConfig.AllowedMethods) > 0 {
 		corsConfig.AllowMethods = cfg.CORSConfig.AllowedMethods
 	} else {
-		corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
+		corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
 	}
 	if len(cfg.CORSConfig.AllowedHeaders) > 0 {
 		corsConfig.AllowHeaders = cfg.CORSConfig.AllowedHeaders
