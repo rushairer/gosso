@@ -25,6 +25,27 @@ func NewAccountRepository(db *sql.DB) AccountRepository {
 // MaxPageSize is the upper bound for pagination page size.
 const MaxPageSize = 100
 
+// maxPage prevents integer overflow in offset calculation.
+// With MaxPageSize=100, this limits offset to ~2.1 billion which is
+// well within int range even on 32-bit platforms.
+const maxPage = 21_000_000
+
+// clampPagination normalizes page and pageSize to valid ranges.
+// Returns the clamped values and the computed offset.
+func clampPagination(page, pageSize int) (int, int, int) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > MaxPageSize {
+		pageSize = 20
+	}
+	if page > maxPage {
+		page = maxPage
+	}
+	offset := (page - 1) * pageSize
+	return page, pageSize, offset
+}
+
 // validStatuses is a whitelist of allowed status values for FindAll filtering.
 var validStatuses = map[string]bool{
 	string(domain.AccountStatusActive):    true,
@@ -191,20 +212,7 @@ func (r *accountRepositoryImpl) SoftDeleteAccount(ctx context.Context, tx *sql.T
 
 // FindAll queries accounts with pagination
 func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error) {
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > MaxPageSize {
-		pageSize = 20
-	}
-	// Cap page to prevent integer overflow in offset calculation.
-	// With MaxPageSize=100, this limits offset to ~2.1 billion which is
-	// well within int range even on 32-bit platforms.
-	const maxPage = 21_000_000
-	if page > maxPage {
-		page = maxPage
-	}
-	offset := (page - 1) * pageSize
+	page, pageSize, offset := clampPagination(page, pageSize)
 
 	if status != "" && !validStatuses[status] {
 		return nil, 0, fmt.Errorf("%w: %q", ErrInvalidStatusFilter, status)

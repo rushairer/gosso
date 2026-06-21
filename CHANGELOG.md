@@ -61,6 +61,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Removed dead code for phone type in `SendVerification` — phone format validation and credential type assignment were unreachable since the phone branch returns 501 earlier (`internal/auth/controller/auth_verification.go`).
 - Added documentation for IPv4-mapped IPv6 behavior in `sameSubnet24` and `copyMap` slice-only deep-copy limitation (`internal/auth/controller/auth_social.go`, `internal/oidc/service/discovery_service.go`).
 - Documented `req.Approved` form button value handling in `SubmitConsent` (`internal/oauth2/controller/oauth2_authorize.go`).
+- `MFAActivateRequest.Code` now has `max=8` binding tag — previously allowed arbitrarily long strings (`internal/auth/controller/auth_mfa.go`).
+- `ScanKeys` error message now uses masked key pattern — previously leaked the raw pattern to callers/log aggregation, inconsistent with the masked log message (`internal/cache/redis_client.go`).
+- `pg_advisory_unlock` now uses a timeout context matching the lock timeout — previously used bare `context.Background()` which could block indefinitely on degraded PostgreSQL connections (`cmd/gosso/migrate.go`).
+- `startWebServer` now uses `return` instead of `os.Exit(1)` after resource allocation — previously `os.Exit` bypassed deferred `db.Close()` and `redis.Close()` calls (`cmd/gosso/web.go`).
+- `TruncateAll` now returns FlushDB errors — previously all errors were silently swallowed, making genuine failures (permission, connection drops) indistinguishable from expected "table doesn't exist" errors (`internal/testutil/testutil.go`).
+- Extracted shared `clampPagination` helper from duplicated pagination logic in `AccountRepository.FindAll` and `RoleRepository.FindAll` (`internal/account/repository/account_repository_impl.go`, `internal/account/repository/role_repository_impl.go`).
 
 ### Added
 - `IsValidGrantType` function and grant type validation in `NewOAuth2Client` constructor — rejects unknown grant types with `ErrClientInvalidGrantType` (`internal/oauth2/domain/client.go`).

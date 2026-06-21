@@ -409,7 +409,7 @@ func (r *RedisClient) ScanKeys(ctx context.Context, cursor uint64, pattern strin
 	keys, nextCursor, err := r.client.Scan(ctx, cursor, pattern, count).Result()
 	if err != nil {
 		r.logger.Error("Redis SCAN failed", zap.String("pattern_masked", maskKey(pattern)), zap.Error(err))
-		return nil, 0, fmt.Errorf("scan pattern %s: %w", pattern, err)
+		return nil, 0, fmt.Errorf("scan pattern %s: %w", maskKey(pattern), err)
 	}
 	return keys, nextCursor, nil
 }

@@ -183,7 +183,10 @@ func (e *TestEnv) TruncateAll(ctx context.Context) error {
 	}
 	for _, t := range tables {
 		if _, err := e.DB.ExecContext(ctx, fmt.Sprintf("TRUNCATE TABLE %s CASCADE", t)); err != nil {
-			// Ignore missing tables (some migrations may not have run)
+			// Ignore missing tables (some migrations may not have run).
+			// Genuine failures (permission, lock contention) are logged but not returned
+			// because test teardown should not fail the test — stale data is a softer
+			// problem than a flaky test suite.
 			e.Logger.Debug("truncate table failed (may not exist)", zap.String("table", t), zap.Error(err))
 		}
 	}
@@ -193,6 +196,7 @@ func (e *TestEnv) TruncateAll(ctx context.Context) error {
 	if rdb != nil {
 		if err := rdb.FlushDB(ctx).Err(); err != nil {
 			e.Logger.Warn("flush redis failed", zap.Error(err))
+			return fmt.Errorf("flush test redis: %w", err)
 		}
 	}
 

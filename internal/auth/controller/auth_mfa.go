@@ -37,7 +37,7 @@ func (c *AuthController) MFAEnroll(ctx *gin.Context) {
 
 // MFAActivateRequest MFA activation request body
 type MFAActivateRequest struct {
-	Code string `json:"code" binding:"required"`
+	Code string `json:"code" binding:"required,max=8"`
 }
 
 // MFAActivate POST /api/auth/mfa/activate

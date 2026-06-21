@@ -190,7 +190,9 @@ func acquireMigrationLock(db *sql.DB, timeout time.Duration) (func(), error) {
 	}
 
 	return func() {
-		if _, err := conn.ExecContext(context.Background(), "SELECT pg_advisory_unlock($1)", migrationAdvisoryLockKey); err != nil {
+		unlockCtx, unlockCancel := context.WithTimeout(context.Background(), timeout)
+		defer unlockCancel()
+		if _, err := conn.ExecContext(unlockCtx, "SELECT pg_advisory_unlock($1)", migrationAdvisoryLockKey); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: Failed to release migration advisory lock: %v\n", err)
 		}
 		if err := conn.Close(); err != nil {

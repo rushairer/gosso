@@ -154,20 +154,7 @@ func (r *roleRepositoryImpl) FindByName(ctx context.Context, name string) (*doma
 
 // FindAll finds all roles with pagination.
 func (r *roleRepositoryImpl) FindAll(ctx context.Context, page, pageSize int) ([]*domain.Role, int, error) {
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > MaxPageSize {
-		pageSize = 20
-	}
-	// Cap page to prevent integer overflow in offset calculation.
-	// With MaxPageSize=100, this limits offset to ~2.1 billion which is
-	// well within int range even on 32-bit platforms.
-	const maxPage = 21_000_000
-	if page > maxPage {
-		page = maxPage
-	}
-	offset := (page - 1) * pageSize
+	page, pageSize, offset := clampPagination(page, pageSize)
 
 	var total int
 	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM roles WHERE deleted_at IS NULL`).Scan(&total); err != nil {
