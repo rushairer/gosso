@@ -16,6 +16,7 @@ import (
 
 // sendVerificationErrorMap maps verification code send errors to HTTP responses.
 var sendVerificationErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: authService.ErrServiceUnavailable, Mapping: controllerutil.ErrorMapping{Status: http.StatusServiceUnavailable, Message: "service temporarily unavailable"}},
 	{Sentinel: authService.ErrCooldownActive, Mapping: controllerutil.ErrorMapping{Status: http.StatusTooManyRequests, Message: "too many requests, please try again later"}},
 	{Sentinel: authService.ErrUnsupportedType, Mapping: controllerutil.ErrorMapping{Status: http.StatusBadRequest, Message: "unsupported credential type"}},
 }

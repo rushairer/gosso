@@ -83,8 +83,11 @@ type passwordResetData struct {
 	// Email is stored to avoid an extra DB round-trip during VerifyAndReset.
 	// The token key is a SHA-256 hash, so the Redis value is not guessable.
 	// The TTL ensures automatic cleanup.
-	Email     string `json:"email"`
-	Attempts  int    `json:"attempts"`
+	Email    string `json:"email"`
+	// Username is stored so that ClearLoginRateLimitsByUsername can match
+	// the login rate-limit keys (which are keyed on username, not email).
+	Username string `json:"username,omitempty"`
+	Attempts int    `json:"attempts"`
 }
 
 // PasswordResetService password reset service
@@ -248,6 +251,9 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 		Email:     email,
 		Attempts:  0,
 	}
+	if account.Username != nil {
+		data.Username = *account.Username
+	}
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("marshal reset data: %w", err)
@@ -361,8 +367,15 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	// Clear login rate-limit counters so the account is not locked out
 	// after a legitimate password reset (e.g., after a brute-force attack
 	// triggered rate limiting on the victim's account).
+	// Use username (not email) because login rate-limit keys are keyed on username.
 	if s.loginRateLimitClearer != nil {
-		if err := s.loginRateLimitClearer.ClearLoginRateLimitsByUsername(ctx, data.Email); err != nil {
+		username := data.Username
+		if username == "" {
+			// Backward compat: tokens issued before the Username field was added.
+			// Fall back to email — may not match if username != email.
+			username = data.Email
+		}
+		if err := s.loginRateLimitClearer.ClearLoginRateLimitsByUsername(ctx, username); err != nil {
 			s.logger.Warn("Failed to clear login rate limits after password reset", zap.Error(err))
 		}
 	}

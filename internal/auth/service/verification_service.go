@@ -164,11 +164,13 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 	// Normalize identifier to prevent different casings from creating separate cooldown/code keys
 	identifier = strings.ToLower(strings.TrimSpace(identifier))
 
-	// Check cooldown (fail-open: if Redis is down, we still allow the request)
+	// Check cooldown (fail-closed: if Redis is down, deny the request to prevent
+	// SMS/email flooding during a Redis outage — consistent with PasswordResetService).
 	cooldownKey := s.buildCooldownKey(credType, identifier)
 	exists, err := s.redis.Exists(ctx, cooldownKey)
 	if err != nil {
-		s.logger.Warn("Failed to check cooldown, proceeding anyway", zap.Error(err))
+		s.logger.Error("Failed to check cooldown, denying request", zap.Error(err))
+		return ErrServiceUnavailable
 	}
 	if exists {
 		s.dummyWork(ctx)
