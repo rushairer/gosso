@@ -38,6 +38,9 @@ USER gosso
 
 EXPOSE 8080
 
+# Explicitly request SIGTERM for graceful shutdown (Go handles SIGTERM to drain connections).
+STOPSIGNAL SIGTERM
+
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
     CMD wget -qO- http://localhost:8080/readiness || exit 1
 

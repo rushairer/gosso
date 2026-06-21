@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"net/mail"
 
@@ -109,6 +110,11 @@ func (c *AuthController) ConfirmVerification(ctx *gin.Context) {
 
 	// Validate verification code and check ownership
 	if err := c.verificationSvc.VerifyCodeForAccount(ctx, req.Type, req.Identifier, req.Code, tc.AccountID); err != nil {
+		if errors.Is(err, authService.ErrServiceUnavailable) {
+			controllerutil.AbortWithServiceError(ctx, c.logger, err, sendVerificationErrorMap,
+				http.StatusServiceUnavailable, "service temporarily unavailable")
+			return
+		}
 		c.logger.Warn("Verification code failed", zap.Error(err))
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid verification code"))
 		return

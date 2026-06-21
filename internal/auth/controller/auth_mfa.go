@@ -1,12 +1,14 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
+	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/controllerutil"
 	"github.com/rushairer/gosso/internal/utility"
 )
@@ -26,6 +28,12 @@ func (c *AuthController) MFAEnroll(ctx *gin.Context) {
 
 	enrollment, err := mfaSvc.EnrollTOTP(ctx, tc.AccountID)
 	if err != nil {
+		// Distinguish configuration errors (503) from runtime failures (500).
+		if errors.Is(err, authService.ErrInvalidConfig) {
+			c.logger.Error("MFA enrollment failed due to misconfiguration", zap.Error(err))
+			ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "MFA service not configured"))
+			return
+		}
 		c.logger.Error("MFA enrollment failed", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to enroll MFA"))
 		return

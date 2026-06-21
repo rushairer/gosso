@@ -258,10 +258,11 @@ func (s *AuthService) TokenService() *tokenService.TokenService {
 func (s *AuthService) ValidateMFAToken(ctx context.Context, mfaToken string) (*tokenDomain.AccessTokenClaims, error) {
 	claims, err := s.tokenSvc.ValidateAccessTokenWithContext(ctx, mfaToken)
 	if err != nil {
-		// Preserve system errors (e.g., ErrBlacklistUnavailable) so callers can distinguish
-		// transient failures from genuine invalid tokens and retry accordingly.
+		// Convert infrastructure errors (e.g., ErrBlacklistUnavailable) to a generic
+		// service error so that callers and controller error maps only need to handle
+		// auth-layer sentinel errors, not token-layer internals.
 		if errors.Is(err, tokenService.ErrBlacklistUnavailable) {
-			return nil, fmt.Errorf("validate MFA token: %w", err)
+			return nil, ErrServiceUnavailable
 		}
 		return nil, ErrInvalidMFAToken
 	}

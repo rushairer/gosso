@@ -247,6 +247,13 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 	resultJSON, err := s.redis.RunScript(ctx, verifyAndIncrementScript, []string{codeKey},
 		codeHash, s.maxAttempts, int(s.codeTTL.Seconds())).Result()
 	if err != nil {
+		// Distinguish Redis infrastructure errors from "code not found" (redis.Nil).
+		// Redis connection failures should return ErrServiceUnavailable so callers
+		// can return 503 instead of 400 "invalid code".
+		if !errors.Is(err, redis.Nil) {
+			s.logger.Error("Redis error during verification code check", zap.Error(err))
+			return "", ErrServiceUnavailable
+		}
 		return "", fmt.Errorf("verify code: %w", err)
 	}
 
