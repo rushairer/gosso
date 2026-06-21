@@ -57,6 +57,22 @@ func (s *JWKSService) GetPublicKeyByKID(kid string) (*rsa.PublicKey, error) {
 	return nil, fmt.Errorf("no key found for kid %q", kid)
 }
 
+// GetAllPublicKeys returns all RSA public keys currently available for signature
+// verification (current key + previous key during rotation overlap).
+// Used as a fallback when a token has no "kid" header and cannot be matched by ID.
+func (s *JWKSService) GetAllPublicKeys() []*rsa.PublicKey {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	keys := []*rsa.PublicKey{s.keySvc.PublicKey()}
+	if s.previousKey != nil {
+		if pubKey, err := s.reconstructPublicKey(*s.previousKey); err == nil {
+			keys = append(keys, pubKey)
+		}
+	}
+	return keys
+}
+
 // reconstructPublicKey rebuilds an RSA public key from JWK parameters (n, e).
 func (s *JWKSService) reconstructPublicKey(jwk map[string]string) (*rsa.PublicKey, error) {
 	nStr, ok := jwk["n"]

@@ -166,13 +166,13 @@ func splitOAuthState(state string) (nonce, ip string, ok bool) {
 
 // sameSubnet24 checks whether two IP addresses belong to the same /24 subnet.
 // This provides a balance between strict IP matching (too restrictive for mobile users)
-// and no IP matching (too permissive). Returns true if either IP cannot be parsed.
+// and no IP matching (too permissive). Returns false if either IP cannot be parsed
+// (fail-closed to prevent bypassing the check with crafted IPs).
 func sameSubnet24(ip1, ip2 string) bool {
 	parsed1 := net.ParseIP(ip1)
 	parsed2 := net.ParseIP(ip2)
 	if parsed1 == nil || parsed2 == nil {
-		// If we can't parse either IP, fail open to avoid blocking legitimate users.
-		return true
+		return false
 	}
 	// Normalize to IPv4 if possible for consistent /24 comparison
 	v4_1 := parsed1.To4()

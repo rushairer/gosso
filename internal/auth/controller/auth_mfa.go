@@ -109,15 +109,9 @@ func (c *AuthController) MFAGenerateBackupCodes(ctx *gin.Context) {
 		return
 	}
 
+	// Backup codes are sensitive — prevent caching by proxies or browsers.
+	controllerutil.SetNoCacheHeaders(ctx)
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
 		"backup_codes": codes,
 	}))
-}
-
-// mfaMgmtHandlers returns rate limit middleware for MFA management endpoints, or nil if no limit.
-func mfaMgmtHandlers(mfaLimit gin.HandlerFunc) []gin.HandlerFunc {
-	if mfaLimit == nil {
-		return nil
-	}
-	return []gin.HandlerFunc{mfaLimit}
 }

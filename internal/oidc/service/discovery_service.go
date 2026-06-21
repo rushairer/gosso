@@ -67,11 +67,19 @@ func (s *DiscoveryService) GetDiscoveryDocument() map[string]any {
 	return copyMap(s.doc)
 }
 
-// copyMap performs a shallow copy of a map[string]any.
+// copyMap performs a deep copy of a map[string]any, cloning slice values
+// to prevent concurrent handlers from mutating the shared state.
 func copyMap(m map[string]any) map[string]any {
 	cp := make(map[string]any, len(m))
 	for k, v := range m {
-		cp[k] = v
+		switch val := v.(type) {
+		case []string:
+			clone := make([]string, len(val))
+			copy(clone, val)
+			cp[k] = clone
+		default:
+			cp[k] = v
+		}
 	}
 	return cp
 }

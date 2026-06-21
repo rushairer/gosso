@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Refresh token validation now rejects tokens with zero `ExpiresAt` — previously such tokens relied solely on Redis TTL, which could be misconfigured (`internal/token/service/token_service_validate.go`).
 - CSRF middleware now enforces the double-submit cookie check when a session cookie coexists with a Bearer JWT — prevents an attacker from using the session cookie for CSRF while the JWT bypasses the check (`middleware/csrf.go`).
 - Token revocation endpoint now returns HTTP 500 when access token revocation fails, instead of silently returning 200 (`internal/oauth2/controller/oauth2_revoke.go`).
+- Removed redundant CSRF check in `SubmitConsent` handler — relied on a format-only `IsPlausibleJWT` check that could be bypassed by forging a plausible JWT in the `Authorization` header. CSRF is now enforced exclusively by the global `CSRFMiddleware` which correctly guards against session-cookie + Bearer-header combinations (`internal/oauth2/controller/oauth2_authorize.go`).
+- Passkey-only account login (FindPasswordCredential failure) now acquires `dummyHashSem` before computing the dummy Argon2id hash — previously unbounded concurrent hashes could exhaust CPU and the timing difference leaked whether an account is passkey-only (`internal/auth/service/auth_login.go`).
+- Session `expireSession` now performs token revocation AFTER the atomic expiry check — previously revocation ran first, allowing a concurrent `RefreshSession` to have its refresh tokens revoked for a still-alive session (`internal/session/service/session_service.go`).
+- OIDC Discovery document `copyMap` now deep-copies slice values — previously shallow copy shared `[]string` references, risking data races if concurrent handlers mutated slice elements (`internal/oidc/service/discovery_service.go`).
+- `ValidateIDTokenHint` JWKS fallback now tries all available keys when the token has no `kid` header — previously tokens signed with the previous key during rotation (without `kid`) could not be verified (`internal/oidc/service/logout_service.go`).
+- `sameSubnet24` now fails closed on unparseable IPs — previously an attacker with the `oauth_state` cookie could craft a state with an unparseable IP to bypass the OAuth IP binding check (`internal/auth/controller/auth_social.go`).
+- `ConfirmVerification` now rejects `type=phone` with 501 Not Implemented, consistent with `SendVerification` — previously phone verification could silently appear to succeed (`internal/auth/controller/auth_verification.go`).
 
 ### Fixed
 - `CompletePasskeyMFALogin` now verifies the account exists before blacklisting the MFA token — prevents user lockout when a transient DB failure occurs after the token is consumed but before the account is found (`internal/auth/service/auth_login.go`).
@@ -37,6 +44,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Device code `verification_uri` now uses `url.JoinPath` instead of string concatenation — prevents malformed URLs when the issuer contains unexpected characters (`internal/oauth2/controller/oauth2_device.go`).
 - CORS default allowed methods now include `PATCH` — standard RESTful method was previously missing (`cmd/gosso/web_engine.go`).
 - Session key prefix constants (`SessionKeyPrefix`, `AccountSessionsPrefix`) are now unexported — they were only used internally and had no reason to be part of the public API (`internal/session/service/session_service.go`).
+- Session cleanup defer now uses `context.Background()` with a 5-second timeout — previously used the request context which would cancel if the client disconnected, leaving orphaned sessions in Redis (`internal/auth/service/auth_session_token.go`).
+- `ColorWriteSyncer.Write` now returns `len(p)` instead of the colorized output byte count — previously violated the `io.Writer` contract, causing callers that check `n == len(p)` to get incorrect results (`internal/utility/logger.go`).
+- `isTransientError` no longer retries all `*net.OpError` — previously permanent errors like "connection refused" and DNS failures were retried unnecessarily (`internal/notification/service/email_service.go`).
+- `UpdateCredential` now uses a Go-side timestamp for `updated_at` instead of DB `NOW()` — aligns with the codebase pattern where all other `updated_at` writes use Go-side timestamps (`internal/account/repository/credential_repository_impl.go`).
+- Backup codes response now includes `SetNoCacheHeaders` — prevents caching of sensitive backup codes by proxies or browsers (`internal/auth/controller/auth_mfa.go`).
+- Removed dead code `mfaMgmtHandlers` function — was unused in production (`internal/auth/controller/auth_mfa.go`).
+- Device code `verification_uri` now handles `url.JoinPath` errors — previously silently ignored (`internal/oauth2/controller/oauth2_device.go`).
+- Removed stale comment block for `authorizeDeviceCodeScript` — duplicated documentation with incorrect ARGV parameter count (`internal/oauth2/service/device_code_service.go`).
+- `Auditor.Wait()` now marked as deprecated in favor of `Close()` — the two methods were functionally identical (`internal/audit/service/audit.go`).
 
 ### Added
 - `IsValidGrantType` function and grant type validation in `NewOAuth2Client` constructor — rejects unknown grant types with `ErrClientInvalidGrantType` (`internal/oauth2/domain/client.go`).

@@ -99,6 +99,12 @@ func (c *AuthController) ConfirmVerification(ctx *gin.Context) {
 		return
 	}
 
+	// Phone verification is not yet supported — reject consistently with SendVerification.
+	if req.Type == "phone" {
+		ctx.JSON(http.StatusNotImplemented, gouno.NewErrorResponse(http.StatusNotImplemented, "phone verification is not yet supported"))
+		return
+	}
+
 	tc, ok := getClaimsFromContext(ctx)
 	if !ok {
 		return

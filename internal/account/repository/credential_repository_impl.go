@@ -165,8 +165,8 @@ func (r *credentialRepositoryImpl) UpdateCredential(ctx context.Context, tx *sql
 	query := `
 		UPDATE account_credentials
 		SET identifier = $1, credential_value = $2, verified = $3, primary_credential = $4,
-		    metadata = $5, verified_at = $6, last_used_at = $7, updated_at = NOW()
-		WHERE id = $8 AND deleted_at IS NULL
+		    metadata = $5, verified_at = $6, last_used_at = $7, updated_at = $8
+		WHERE id = $9 AND deleted_at IS NULL
 	`
 
 	metadataJSON, err := json.Marshal(credential.Metadata)
@@ -174,6 +174,7 @@ func (r *credentialRepositoryImpl) UpdateCredential(ctx context.Context, tx *sql
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
+	now := time.Now()
 	result, err := tx.ExecContext(ctx, query,
 		credential.Identifier,
 		credential.Value,
@@ -182,6 +183,7 @@ func (r *credentialRepositoryImpl) UpdateCredential(ctx context.Context, tx *sql
 		metadataJSON,
 		credential.VerifiedAt,
 		credential.LastUsedAt,
+		now,
 		credential.ID,
 	)
 	if err != nil {

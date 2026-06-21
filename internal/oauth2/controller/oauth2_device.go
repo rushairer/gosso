@@ -90,7 +90,12 @@ func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
 		return
 	}
 
-	verificationURI, _ := url.JoinPath(c.issuer, "/oauth2/device")
+	verificationURI, err := url.JoinPath(c.issuer, "/oauth2/device")
+	if err != nil {
+		c.logger.Error("Failed to build verification URI", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
 	ctx.JSON(http.StatusOK, gin.H{
 		"device_code":               dc.DeviceCode,
 		"user_code":                 dc.UserCode,

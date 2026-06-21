@@ -125,8 +125,7 @@ func (a *Auditor) Close() {
 }
 
 // Wait waits for all in-flight audit batches to be flushed to the database.
-// Call this during graceful shutdown. It is equivalent to Close() — it flushes
-// pending batches, cancels the auditor context, and is safe to call multiple times.
+// Deprecated: Use Close() instead. Both methods are functionally identical.
 func (a *Auditor) Wait() {
 	a.Close()
 }

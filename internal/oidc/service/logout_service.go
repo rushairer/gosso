@@ -74,11 +74,25 @@ func (s *LogoutService) ValidateIDTokenHint(tokenString string, clientID string)
 			}
 		}
 		if kid != "" && kid != s.tokenSvc.KeyService().KeyID() {
+			// kid present and differs from current key — look up by ID.
 			if pubKey, jwksErr := s.jwksSvc.GetPublicKeyByKID(kid); jwksErr == nil {
 				claims = &IDTokenClaims{}
 				token, err = parser.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
 					return pubKey, nil
 				})
+			}
+		} else {
+			// kid is absent or matches current key — try all available keys.
+			// This handles the case where a token was signed with the previous key
+			// but has no "kid" header (valid per JWT spec), e.g. during key rotation.
+			for _, pubKey := range s.jwksSvc.GetAllPublicKeys() {
+				claims = &IDTokenClaims{}
+				token, err = parser.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
+					return pubKey, nil
+				})
+				if err == nil && token.Valid {
+					break
+				}
 			}
 		}
 	}

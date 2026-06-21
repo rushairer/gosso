@@ -91,7 +91,11 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginCom
 	if err != nil {
 		// Mitigate timing side-channel: passkey-only accounts (no password credential)
 		// must perform dummy work to prevent leaking account type via response timing.
-		_, _ = accountDomain.HashPassword(req.Password)
+		// Use the same semaphore as the not-found/inactive paths to prevent CPU exhaustion.
+		if acquireErr := s.dummyHashSem.Acquire(ctx, 1); acquireErr == nil {
+			_, _ = accountDomain.HashPassword(req.Password)
+			s.dummyHashSem.Release(1)
+		}
 		return nil, ErrInvalidCredentials
 	}
 

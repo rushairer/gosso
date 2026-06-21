@@ -299,9 +299,3 @@ func TestRegisterRoutes_WithRateLimits(t *testing.T) {
 	assert.Equal(t, "true", w.Header().Get("X-Login-Rate-Limited"))
 }
 
-func TestMfaMgmtHandlers_NonNil(t *testing.T) {
-	handler := func(ctx *gin.Context) {}
-	result := mfaMgmtHandlers(handler)
-	assert.NotNil(t, result)
-	assert.Len(t, result, 1)
-}

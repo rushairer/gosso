@@ -227,8 +227,8 @@ func smtpTLSPolicy(policy string) mail.TLSPolicy {
 }
 
 // isTransientError reports whether the error is likely transient and worth retrying.
-// Checks for network timeouts and connection-level errors (reset, broken pipe).
-// Permanent errors like DNS resolution failures are not considered transient.
+// Checks for network timeouts and transient connection-level errors (reset, broken pipe).
+// Permanent errors like DNS resolution failures and "connection refused" are not retried.
 func isTransientError(err error) bool {
 	var netErr net.Error
 	if errors.As(err, &netErr) {
@@ -236,7 +236,10 @@ func isTransientError(err error) bool {
 	}
 	var opErr *net.OpError
 	if errors.As(err, &opErr) {
-		return true
+		// Only retry OpErrors caused by timeouts.
+		// Do not blanket-retry all OpErrors — "connection refused" and DNS failures
+		// are permanent errors that will not resolve by retrying.
+		return opErr.Timeout()
 	}
 	return false
 }

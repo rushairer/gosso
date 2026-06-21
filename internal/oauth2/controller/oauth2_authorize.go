@@ -2,12 +2,10 @@ package controller
 
 import (
 	"bytes"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -191,28 +189,18 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		return
 	}
 
-	// Validate CSRF token (double-submit cookie pattern).
-	// Skip for Bearer-authenticated requests — JWT tokens are not affected by CSRF.
-	// Use IsPlausibleJWT to prevent bypass with garbage "Bearer " prefix (defense-in-depth).
-	authHeader := ctx.GetHeader("Authorization")
-	isBearerAuth := strings.HasPrefix(authHeader, "Bearer ") && middleware.IsPlausibleJWT(strings.TrimPrefix(authHeader, "Bearer "))
-	if !isBearerAuth {
-		cookieToken := csrfTokenFromCookie(ctx)
-		formToken := ctx.PostForm("csrf_token")
-		if cookieToken == "" || formToken == "" || subtle.ConstantTimeCompare([]byte(cookieToken), []byte(formToken)) != 1 {
-			ctx.JSON(http.StatusForbidden, gin.H{"error": "invalid_csrf", "error_description": "CSRF token mismatch"})
-			return
-		}
+	// CSRF is enforced by CSRFMiddleware globally (see cmd/gosso/web_engine.go).
+	// The middleware correctly handles Bearer auth with session-cookie guards,
+	// so no additional CSRF check is needed in the handler.
+	// Authenticate the request (Bearer token or session cookie).
+	accountIDStr, ok := c.authenticateRequest(ctx)
+	if !ok {
+		return
 	}
 
 	// approved is submitted via form button value
 	approved := ctx.PostForm("approved")
 	req.Approved = approved == "true"
-
-	accountIDStr, ok := c.authenticateRequest(ctx)
-	if !ok {
-		return
-	}
 
 	if !req.Approved {
 		// Validate redirect_uri against client registration before redirecting

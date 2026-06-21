@@ -293,10 +293,6 @@ func (s *DeviceCodeService) CheckAndUpdatePollRate(ctx context.Context, deviceCo
 	return nil
 }
 
-// authorizeDeviceCodeScript atomically checks pending status and sets authorized.
-// KEYS[1] = device code key
-// ARGV[1] = accountID, ARGV[2] = authorizedAt (RFC3339), ARGV[3] = TTL seconds
-// Returns updated JSON on success, nil if not pending.
 // authorizeDeviceCodeScript atomically marks a device code as authorized.
 // KEYS[1] = device code key
 // ARGV[1] = account ID

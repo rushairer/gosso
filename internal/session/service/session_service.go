@@ -323,13 +323,6 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 // The accountSessionsKey parameter (may be empty) enables cleanup of stale
 // entries from the account_sessions index set.
 func (s *SessionService) expireSession(ctx context.Context, sessionID string, accountSessionsKey string) {
-	if s.tokenRevoker != nil {
-		if err := s.tokenRevoker.RevokeAllForSession(ctx, sessionID); err != nil {
-			s.logger.Warn("Failed to revoke tokens for expired session",
-				zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(err))
-		}
-	}
-
 	sessionKey := s.buildSessionKey(sessionID)
 	result, err := s.redis.RunScript(ctx, deleteIfExpiredScript,
 		[]string{sessionKey, accountSessionsKey}, sessionID).Int()
@@ -347,10 +340,28 @@ func (s *SessionService) expireSession(ctx context.Context, sessionID string, ac
 					zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(remErr))
 			}
 		}
+		// Revoke tokens in fallback path — session was deleted (best-effort).
+		if s.tokenRevoker != nil {
+			if revokeErr := s.tokenRevoker.RevokeAllForSession(ctx, sessionID); revokeErr != nil {
+				s.logger.Warn("Failed to revoke tokens for expired session (fallback)",
+					zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(revokeErr))
+			}
+		}
+		return
 	} else if result == 0 {
 		s.logger.Info("Session was refreshed concurrently, skipping expiry",
 			zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 		return
+	}
+
+	// Session was atomically confirmed expired and deleted — safe to revoke tokens.
+	// Token revocation is done AFTER the atomic check to prevent revoking tokens
+	// for a session that was concurrently refreshed by RefreshSession.
+	if s.tokenRevoker != nil {
+		if err := s.tokenRevoker.RevokeAllForSession(ctx, sessionID); err != nil {
+			s.logger.Warn("Failed to revoke tokens for expired session",
+				zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(err))
+		}
 	}
 }
 

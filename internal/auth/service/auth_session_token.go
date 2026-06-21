@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -29,10 +30,14 @@ func (s *AuthService) createSessionAndTokens(ctx context.Context, account *accou
 		return nil, "", nil, fmt.Errorf("create session: %w", err)
 	}
 
-	// Cleanup orphaned session if any subsequent step fails
+	// Cleanup orphaned session if any subsequent step fails.
+	// Use context.Background() with a timeout so cleanup succeeds even if the
+	// client disconnects (which would cancel the request context).
 	defer func() {
 		if retErr != nil {
-			if delErr := s.sessionSvc.DeleteSession(ctx, session.ID); delErr != nil {
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if delErr := s.sessionSvc.DeleteSession(cleanupCtx, session.ID); delErr != nil {
 				s.logger.Warn("Failed to cleanup orphaned session",
 					zap.String("session_id", utility.MaskOpaqueID(session.ID)), zap.Error(delErr))
 			}
