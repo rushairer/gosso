@@ -488,7 +488,7 @@ func (c *GoUnoConfig) validatePrivateKeyPath() error {
 			if c.WebServerConfig.Production {
 				return fmt.Errorf("auth: private_key_path file does not exist: %s", c.AuthConfig.PrivateKeyPath)
 			}
-			fmt.Fprintf(os.Stderr, "Warning: auth: private_key_path file does not exist: %s (an ephemeral key will be generated on each restart)\n", c.AuthConfig.PrivateKeyPath)
+			fmt.Fprintf(os.Stderr, "[GOSSO] Warning: auth: private_key_path file does not exist: %s (an ephemeral key will be generated on each restart)\n", c.AuthConfig.PrivateKeyPath)
 		} else {
 			return fmt.Errorf("auth: cannot access private_key_path: %w", err)
 		}

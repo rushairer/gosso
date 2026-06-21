@@ -165,7 +165,7 @@ func initMigrate(cmd *cobra.Command) (*migrate.Migrate, *sql.DB, error) {
 // closeMigrate safely closes the migrate instance and logs any errors.
 func closeMigrate(m *migrate.Migrate) {
 	if _, err := m.Close(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to close migrate instance: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[GOSSO] Warning: Failed to close migrate instance: %v\n", err)
 	}
 }
 
@@ -177,7 +177,9 @@ func acquireMigrationLock(db *sql.DB, timeout time.Duration) (func(), error) {
 		timeout = defaultMigrationLockTimeout
 	}
 
-	conn, err := db.Conn(context.Background())
+	connCtx, connCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer connCancel()
+	conn, err := db.Conn(connCtx)
 	if err != nil {
 		return nil, fmt.Errorf("acquire migration lock connection: %w", err)
 	}
@@ -193,10 +195,10 @@ func acquireMigrationLock(db *sql.DB, timeout time.Duration) (func(), error) {
 		unlockCtx, unlockCancel := context.WithTimeout(context.Background(), timeout)
 		defer unlockCancel()
 		if _, err := conn.ExecContext(unlockCtx, "SELECT pg_advisory_unlock($1)", migrationAdvisoryLockKey); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Failed to release migration advisory lock: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[GOSSO] Warning: Failed to release migration advisory lock: %v\n", err)
 		}
 		if err := conn.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Failed to close migration lock connection: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[GOSSO] Warning: Failed to close migration lock connection: %v\n", err)
 		}
 	}, nil
 }
@@ -206,7 +208,7 @@ func acquireMigrationLock(db *sql.DB, timeout time.Duration) (func(), error) {
 func withMigrateResources(cmd *cobra.Command, fn func(*migrate.Migrate) error) {
 	m, db, err := initMigrate(cmd)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Migration init failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[GOSSO] Migration init failed: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -218,7 +220,7 @@ func withMigrateResources(cmd *cobra.Command, fn func(*migrate.Migrate) error) {
 	if lockErr != nil {
 		closeMigrate(m)
 		_ = db.Close()
-		fmt.Fprintf(os.Stderr, "Migration lock failed: %v\n", lockErr)
+		fmt.Fprintf(os.Stderr, "[GOSSO] Migration lock failed: %v\n", lockErr)
 		os.Exit(1)
 	}
 

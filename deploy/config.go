@@ -123,7 +123,7 @@ func GetEnvironment(env string) (*Environment, bool) {
 // InitDeployConfig initializes the deployment configuration
 func InitDeployConfig(deployPath string) error {
 	if err := LoadEnvironmentConfig(deployPath); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to load environment config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[GOSSO] Warning: failed to load environment config: %v\n", err)
 		return err
 	}
 	return nil

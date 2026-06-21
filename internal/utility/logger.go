@@ -97,8 +97,9 @@ type ColorWriteSyncer struct {
 }
 
 // Write writes data and adds color.
-// Returns len(p) to satisfy the io.Writer contract, even though the actual
-// output may be longer due to ANSI color codes.
+// Returns len(p) to indicate all input bytes were consumed, per the io.Writer
+// contract (the output may be longer due to ANSI escape codes, but the writer
+// reports how many bytes of *p* were processed, not the total output size).
 func (w *ColorWriteSyncer) Write(p []byte) (n int, err error) {
 	// If it is a log output and color is supported, add color to the entire line
 	if w.color && len(p) > 0 {

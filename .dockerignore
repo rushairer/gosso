@@ -19,3 +19,9 @@ tmp/
 docker-compose*.yml
 Dockerfile
 .dockerignore
+.github/
+.golangci.yml
+coverage*.out
+doc/
+docs/
+examples/

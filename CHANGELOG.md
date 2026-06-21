@@ -38,54 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Discovery and JWKS endpoints now set `Cache-Control: public, max-age=3600` — reduces unnecessary load from relying parties that validate JWTs on every request (`internal/oidc/controller/oidc_controller.go`).
 - Logout `state` parameter is now validated for length (max 256 characters) before being reflected into the post-logout redirect URI (`internal/oidc/controller/oidc_controller.go`).
 - `ClearLoginRateLimitsByUsername` SCAN loop now checks `ctx.Err()` on each iteration — supports graceful shutdown by aborting the scan when the context is cancelled (`internal/auth/service/auth_login.go`).
-- Device authorization submit now prefers `user_code` lookup when both `device_code` and `user_code` are provided — ensures the device code corresponds to the same authorization session (`internal/oauth2/controller/oauth2_device.go`).
-- Eliminated double `db.Close()`/`redis.Close()` on init failure in `startWebServer` — defer handles cleanup (`cmd/gosso/web.go`).
-- Swagger redirect now uses 307 (Temporary Redirect) instead of 301 (Moved Permanently) — prevents browser caching of a redirect that may change (`router/web.go`).
-- Config validation now checks `idle_timeout >= read_timeout` and `read_header_timeout < read_timeout` — Go's net/http requires the former; the latter ensures header timeouts are effective (`config/config.go`).
-- Config validation now validates `trusted_proxies` entries as valid IP addresses or CIDR notation — previously invalid strings passed validation and only failed at runtime (`config/config.go`).
-- Database pool stats logging now uses Debug level instead of Info — reduces log noise in production (`cmd/gosso/web_infra.go`).
-- Device code `verification_uri` now uses `url.JoinPath` instead of string concatenation — prevents malformed URLs when the issuer contains unexpected characters (`internal/oauth2/controller/oauth2_device.go`).
-- CORS default allowed methods now include `PATCH` — standard RESTful method was previously missing (`cmd/gosso/web_engine.go`).
-- Session key prefix constants (`SessionKeyPrefix`, `AccountSessionsPrefix`) are now unexported — they were only used internally and had no reason to be part of the public API (`internal/session/service/session_service.go`).
-- Session cleanup defer now uses `context.Background()` with a 5-second timeout — previously used the request context which would cancel if the client disconnected, leaving orphaned sessions in Redis (`internal/auth/service/auth_session_token.go`).
-- `ColorWriteSyncer.Write` now returns `len(p)` instead of the colorized output byte count — previously violated the `io.Writer` contract, causing callers that check `n == len(p)` to get incorrect results (`internal/utility/logger.go`).
-- `isTransientError` no longer retries all `*net.OpError` — previously permanent errors like "connection refused" and DNS failures were retried unnecessarily (`internal/notification/service/email_service.go`).
-- `UpdateCredential` now uses a Go-side timestamp for `updated_at` instead of DB `NOW()` — aligns with the codebase pattern where all other `updated_at` writes use Go-side timestamps (`internal/account/repository/credential_repository_impl.go`).
-- Backup codes response now includes `SetNoCacheHeaders` — prevents caching of sensitive backup codes by proxies or browsers (`internal/auth/controller/auth_mfa.go`).
-- Removed dead code `mfaMgmtHandlers` function — was unused in production (`internal/auth/controller/auth_mfa.go`).
-- Device code `verification_uri` now handles `url.JoinPath` errors — previously silently ignored (`internal/oauth2/controller/oauth2_device.go`).
-- Removed stale comment block for `authorizeDeviceCodeScript` — duplicated documentation with incorrect ARGV parameter count (`internal/oauth2/service/device_code_service.go`).
-- `Auditor.Wait()` now marked as deprecated in favor of `Close()` — the two methods were functionally identical (`internal/audit/service/audit.go`).
-- `SetSendRateLimit` now checks `closed` flag before calling `Reset()` — previously calling after `Close()` would panic on a stopped `Ticker` (`internal/notification/service/email_service.go`).
-- OAuth2 authorize handler now normalizes `+` in scope query parameter to space — prevents mismatch between stored consent state and submitted form data (`internal/oauth2/controller/oauth2_authorize.go`).
-- Removed dead code for phone type in `SendVerification` — phone format validation and credential type assignment were unreachable since the phone branch returns 501 earlier (`internal/auth/controller/auth_verification.go`).
-- Added documentation for IPv4-mapped IPv6 behavior in `sameSubnet24` and `copyMap` slice-only deep-copy limitation (`internal/auth/controller/auth_social.go`, `internal/oidc/service/discovery_service.go`).
-- Documented `req.Approved` form button value handling in `SubmitConsent` (`internal/oauth2/controller/oauth2_authorize.go`).
-- `MFAActivateRequest.Code` now has `max=8` binding tag — previously allowed arbitrarily long strings (`internal/auth/controller/auth_mfa.go`).
-- `ScanKeys` error message now uses masked key pattern — previously leaked the raw pattern to callers/log aggregation, inconsistent with the masked log message (`internal/cache/redis_client.go`).
-- `pg_advisory_unlock` now uses a timeout context matching the lock timeout — previously used bare `context.Background()` which could block indefinitely on degraded PostgreSQL connections (`cmd/gosso/migrate.go`).
-- `startWebServer` now uses `return` instead of `os.Exit(1)` after resource allocation — previously `os.Exit` bypassed deferred `db.Close()` and `redis.Close()` calls (`cmd/gosso/web.go`).
-- `TruncateAll` now returns FlushDB errors — previously all errors were silently swallowed, making genuine failures (permission, connection drops) indistinguishable from expected "table doesn't exist" errors (`internal/testutil/testutil.go`).
-- Extracted shared `clampPagination` helper from duplicated pagination logic in `AccountRepository.FindAll` and `RoleRepository.FindAll` (`internal/account/repository/account_repository_impl.go`, `internal/account/repository/role_repository_impl.go`).
-
-### Added
-- `IsValidGrantType` function and grant type validation in `NewOAuth2Client` constructor — rejects unknown grant types with `ErrClientInvalidGrantType` (`internal/oauth2/domain/client.go`).
-
-### Changed
-- `golangci-lint` config: re-enabled `shadow` checker under `govet`, split broad gosec exclusions into individually-documented rules (`G115`, `G118`, `G304`, `G706`), fixed misattributed gosec comment (`.golangci.yml`).
-
-### Fixed
-- `CompletePasskeyMFALogin` now verifies the account exists before blacklisting the MFA token — prevents user lockout when a transient DB failure occurs after the token is consumed but before the account is found (`internal/auth/service/auth_login.go`).
-- OAuth2 `AuthenticateClient` now performs a dummy bcrypt comparison for public clients that provide a `client_secret` — eliminates a timing side-channel that could reveal whether a `client_id` is confidential or public (~100ms vs ~0ms) (`internal/oauth2/service/client_auth_service.go`).
-- `handleMFARequirement` now maps `GetMFATypes` failures to `ErrServiceUnavailable` instead of leaking raw database/Redis error details to the caller (`internal/auth/service/auth_login_helpers.go`).
-- OIDC controller error messages sanitized — replaced internal terms like `"no claims"`, `"invalid claims type"`, and `"unable to identify user for logout"` with generic `"authentication required"` / `"invalid token"` to prevent architecture fingerprinting (`internal/oidc/controller/oidc_controller.go`).
-- `ValidateIDTokenHint` no longer includes the server's issuer URL in the issuer mismatch error message — prevents information leakage if the error propagates to an HTTP response (`internal/oidc/service/logout_service.go`).
-- CSRF token validation no longer uses a `len()` short-circuit before `subtle.ConstantTimeCompare` — removes a minor length oracle that could leak whether the header and cookie lengths match (`middleware/csrf.go`).
-- Config validation now requires `login_rate_limit_window`, `mfa_account_rate_limit_window`, and `password_reset_revoke_concurrency` to be strictly positive — a zero value previously silently disabled rate limiting or created a zero-capacity semaphore (`config/config.go`).
-- Social login email from OAuth providers is now validated with `net/mail.ParseAddress` before account creation — malformed emails (control characters, etc.) are logged and discarded rather than passed to the database (`internal/auth/service/social_login_service.go`).
-- Discovery and JWKS endpoints now set `Cache-Control: public, max-age=3600` — reduces unnecessary load from relying parties that validate JWTs on every request (`internal/oidc/controller/oidc_controller.go`).
-- Logout `state` parameter is now validated for length (max 256 characters) before being reflected into the post-logout redirect URI (`internal/oidc/controller/oidc_controller.go`).
-- `ClearLoginRateLimitsByUsername` SCAN loop now checks `ctx.Err()` on each iteration — supports graceful shutdown by aborting the scan when the context is cancelled (`internal/auth/service/auth_login.go`).
+- `ValidatePasswordStrength` now uses `unicode.IsUpper`/`unicode.IsLower`/`unicode.IsDigit` instead of ASCII range checks — non-ASCII letters (e.g. `Ü`, `É`) are now correctly recognized as uppercase/lowercase (`internal/utility/password.go`).
 - Device authorization submit now prefers `user_code` lookup when both `device_code` and `user_code` are provided — ensures the device code corresponds to the same authorization session (`internal/oauth2/controller/oauth2_device.go`).
 
 ### Added
@@ -110,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `claimAuthorizedScript` Lua assertion for non-empty `client_id` — adds defense-in-depth to the Go-side validation (`internal/oauth2/service/device_code_service.go`).
 - Pagination `page` upper bound (`maxPage = 21_000_000`) — prevents integer overflow in offset calculation (`internal/account/repository/account_repository_impl.go`).
 - `PasswordResetService` now logs a warning at startup when `LoginRateLimitClearer` is not configured — alerts operators that login rate limits will not be cleared after password reset (`internal/auth/service/password_reset_service.go`).
+- Generic `Ptr[T any](v T) *T` helper function — replaces `StringPtr` and `Int64Ptr` with a single generic alternative (`internal/utility/ptr.go`).
 
 ### Changed
 - Nil receiver protection expanded to `Account` (IsDeleted, IsActive, IsSuspended, SoftDelete, Suspend, Activate), `Credential.IsVerified`, `WebAuthnCredential` (MarkUsed, IncrementSignCount, IsDeleted, SoftDelete), `AuthorizationCode` (IsExpired, VerifyPKCE), and `TokenBlacklist.IsExpired` — follows the existing nil-safety pattern established by `Credential` and `Session` (`internal/*/domain/*.go`).
@@ -146,6 +100,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `RoleRepository.UpdateRole` now uses optimistic locking on `updated_at` — prevents concurrent updates from silently overwriting each other, consistent with `AccountRepository.UpdateAccount` and `OAuth2ClientRepository.Update` (`internal/account/repository/role_repository_impl.go`).
 - CI coverage threshold raised from 60% to 70% to align with Makefile default (`.github/workflows/ci.yml`).
 - `.dockerignore` cleaned up conflicting `doc/`/`docs/` exclusion/un-exclusion patterns (`.dockerignore`).
+- `RedisClient` error logging now uses Debug level instead of Error — eliminates duplicate error logs when service layer also logs the same error with richer context (`internal/cache/redis_client.go`).
+- Stderr log messages now use `[GOSSO]` prefix for consistent filtering in log aggregation tools (`config/config.go`, `config/config_manager.go`, `deploy/config.go`, `cmd/gosso/migrate.go`).
+- `.dockerignore` now also excludes `.github/`, `.golangci.yml`, `coverage*.out`, `doc/`, `docs/`, and `examples/` — reduces Docker build context size (`.dockerignore`).
+- Migration lock connection now uses a 30-second timeout context — previously `context.Background()` could block indefinitely when the database is unreachable (`cmd/gosso/migrate.go`).
 - `.env.test.example` unified to `KEY=VALUE` format (removed `export` prefix) for Docker Compose `env_file:` compatibility (`.env.test.example`).
 - `AccountService.SetOptions` now logs a warning when called multiple times — aids debugging in tests and unexpected wiring scenarios (`internal/account/service/account_service.go`).
 - `accountValidatorAdapter` cache now enforces a hard size limit of 1024 entries — prevents unbounded memory growth in high-cardinality token exchange scenarios between cleanup cycles (`cmd/gosso/web_modules.go`).
