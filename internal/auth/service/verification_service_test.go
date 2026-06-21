@@ -319,6 +319,10 @@ func (m *mockCredRepoForVerification) SoftDeleteCredentialsByAccount(_ context.C
 	return fmt.Errorf("not implemented")
 }
 
+func (m *mockCredRepoForVerification) SoftDeleteCredentialsByType(_ context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType, _ time.Time) error {
+	return fmt.Errorf("not implemented")
+}
+
 func (m *mockCredRepoForVerification) SoftDeleteCredential(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	return fmt.Errorf("not implemented")
 }

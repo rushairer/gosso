@@ -240,7 +240,7 @@ func (c *OIDCController) tryLogoutByIDTokenHint(ctx *gin.Context, req logoutRequ
 	if bearerClaims != nil && bearerClaims.ExpiresAt != nil {
 		if err := c.tokenSvc.RevokeAccessToken(ctx, bearerClaims.ID, bearerClaims.ExpiresAt.Time); err != nil {
 			c.logger.Warn("Failed to blacklist access token during id_token_hint logout",
-				zap.String("jti", bearerClaims.ID), zap.Error(err))
+				zap.String("jti", utility.MaskOpaqueID(bearerClaims.ID)), zap.Error(err))
 		}
 	}
 
@@ -267,7 +267,7 @@ func (c *OIDCController) tryLogoutByBearerToken(ctx *gin.Context, claims *tokenD
 	// Blacklist the current access token so it cannot be reused
 	if claims.ExpiresAt != nil {
 		if err := c.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); err != nil {
-			c.logger.Warn("Failed to blacklist access token during logout", zap.String("jti", claims.ID), zap.Error(err))
+			c.logger.Warn("Failed to blacklist access token during logout", zap.String("jti", utility.MaskOpaqueID(claims.ID)), zap.Error(err))
 		}
 	}
 

@@ -127,6 +127,9 @@ func (m *mockCredentialRepo) UpdateLastUsedAt(_ context.Context, _ *sql.Tx, _ st
 func (m *mockCredentialRepo) SoftDeleteCredentialsByAccount(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	return nil
 }
+func (m *mockCredentialRepo) SoftDeleteCredentialsByType(_ context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType, _ time.Time) error {
+	return nil
+}
 func (m *mockCredentialRepo) SoftDeleteCredential(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	return nil
 }

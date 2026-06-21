@@ -410,7 +410,7 @@ func (s *SocialLoginService) createNewUser(ctx context.Context, provider, provid
 			zap.String("provider", provider),
 			zap.String("email", utility.MaskEmail(email)),
 			zap.Error(err))
-		return nil, fmt.Errorf("%w: %s", ErrFailedToCreateAccount, err)
+		return nil, fmt.Errorf("%w: %w", ErrFailedToCreateAccount, err)
 	}
 
 	// Audit log for social login account creation

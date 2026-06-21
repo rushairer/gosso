@@ -55,6 +55,11 @@ type CredentialRepository interface {
 	// SoftDeleteCredentialsByAccount soft deletes all credentials of an account (requires transaction)
 	SoftDeleteCredentialsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
 
+	// SoftDeleteCredentialsByType soft deletes all credentials of a given type for an account (requires transaction).
+	// Returns nil even if zero rows are affected (idempotent for bulk delete).
+	// Use this instead of iterating SoftDeleteCredential in a loop to avoid N round-trips.
+	SoftDeleteCredentialsByType(ctx context.Context, tx *sql.Tx, accountID string, credType domain.CredentialType, deletedAt time.Time) error
+
 	// SoftDeleteCredential soft deletes a single credential (requires transaction)
 	SoftDeleteCredential(ctx context.Context, tx *sql.Tx, credentialID string, deletedAt time.Time) error
 

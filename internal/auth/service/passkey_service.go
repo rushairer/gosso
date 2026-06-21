@@ -192,7 +192,7 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, ac
 
 	s.logger.Info("Passkey registered",
 		zap.String("account_id", utility.MaskOpaqueID(accountID)),
-		zap.String("credential_id", cred.ID))
+		zap.String("credential_id", utility.MaskOpaqueID(cred.ID)))
 
 	return cred, nil
 }
@@ -341,7 +341,7 @@ func (s *PasskeyService) completeLoginInternal(ctx context.Context, requestID, e
 		s.logger.Error("Failed to update credential sign count — clone detection may be compromised (login allowed to proceed)",
 			zap.Error(err),
 			zap.String("account_id", utility.MaskOpaqueID(cred.AccountID)),
-			zap.String("credential_id", cred.ID))
+			zap.String("credential_id", utility.MaskOpaqueID(cred.ID)))
 	}
 
 	return cred, nil
@@ -393,7 +393,7 @@ func (s *PasskeyService) DeleteCredential(ctx context.Context, accountID, creden
 
 	s.logger.Info("Passkey deleted",
 		zap.String("account_id", utility.MaskOpaqueID(accountID)),
-		zap.String("credential_id", cred.ID))
+		zap.String("credential_id", utility.MaskOpaqueID(cred.ID)))
 
 	return nil
 }

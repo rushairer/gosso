@@ -284,6 +284,23 @@ func (r *credentialRepositoryImpl) SoftDeleteCredentialsByAccount(ctx context.Co
 	return nil
 }
 
+// SoftDeleteCredentialsByType soft deletes all credentials of a given type for an account.
+// Returns nil even if zero rows are affected (idempotent for bulk delete).
+func (r *credentialRepositoryImpl) SoftDeleteCredentialsByType(ctx context.Context, tx *sql.Tx, accountID string, credType domain.CredentialType, deletedAt time.Time) error {
+	query := `
+		UPDATE account_credentials
+		SET deleted_at = $1, updated_at = $1, credential_value = NULL, identifier = NULL
+		WHERE account_id = $2 AND credential_type = $3 AND deleted_at IS NULL
+	`
+
+	_, err := tx.ExecContext(ctx, query, deletedAt, accountID, credType)
+	if err != nil {
+		return fmt.Errorf("soft delete %s credentials: %w", credType, err)
+	}
+
+	return nil
+}
+
 // SoftDeleteCredential soft deletes a single credential
 func (r *credentialRepositoryImpl) SoftDeleteCredential(ctx context.Context, tx *sql.Tx, credentialID string, deletedAt time.Time) error {
 	query := `

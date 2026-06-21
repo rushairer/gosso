@@ -220,6 +220,10 @@ func (m *mockCredentialRepoForController) SoftDeleteCredentialsByAccount(_ conte
 	return nil
 }
 
+func (m *mockCredentialRepoForController) SoftDeleteCredentialsByType(_ context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType, _ time.Time) error {
+	return nil
+}
+
 func (m *mockCredentialRepoForController) SoftDeleteCredential(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	return m.softDeleteCredentialErr
 }

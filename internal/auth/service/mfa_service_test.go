@@ -79,6 +79,10 @@ func (m *mockCredentialRepo) SoftDeleteCredentialsByAccount(_ context.Context, _
 	return nil
 }
 
+func (m *mockCredentialRepo) SoftDeleteCredentialsByType(_ context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType, _ time.Time) error {
+	return nil
+}
+
 func (m *mockCredentialRepo) SoftDeleteCredential(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	return nil
 }
@@ -138,6 +142,8 @@ type dbMockCredentialRepo struct {
 	verifyFirstFn func(ctx context.Context, tx *sql.Tx, accountID string) (bool, error)
 	// softDeleted tracks IDs passed to SoftDeleteCredential.
 	softDeleted []string
+	// softDeletedTypes tracks (accountID, credType) pairs passed to SoftDeleteCredentialsByType.
+	softDeletedTypes []string
 	// createdCreds tracks credential slices passed to CreateCredentials.
 	createdCreds  [][]*accountDomain.Credential
 	softDeleteErr error // if set, SoftDeleteCredential returns this error
@@ -156,6 +162,23 @@ func (m *dbMockCredentialRepo) SoftDeleteCredential(_ context.Context, _ *sql.Tx
 		return m.softDeleteErr
 	}
 	m.softDeleted = append(m.softDeleted, id)
+	return nil
+}
+
+func (m *dbMockCredentialRepo) SoftDeleteCredentialsByType(_ context.Context, _ *sql.Tx, accountID string, credType accountDomain.CredentialType, _ time.Time) error {
+	if m.softDeleteErr != nil {
+		return m.softDeleteErr
+	}
+	m.softDeletedTypes = append(m.softDeletedTypes, accountID+":"+string(credType))
+	// Also track individual non-deleted IDs for backward compatibility with test assertions.
+	key := accountID + ":" + string(credType)
+	if creds, ok := m.credMap[key]; ok {
+		for _, c := range creds {
+			if !c.IsDeleted() {
+				m.softDeleted = append(m.softDeleted, c.ID)
+			}
+		}
+	}
 	return nil
 }
 
@@ -844,15 +867,15 @@ func TestDisableTOTP_FindByAccountAndTypeError(t *testing.T) {
 
 	credRepo := &dbMockCredentialRepo{
 		mockCredentialRepo: &mockCredentialRepo{
-			credMap:                 map[string][]*accountDomain.Credential{},
-			findByAccountAndTypeErr: errors.New("connection refused"),
+			credMap: map[string][]*accountDomain.Credential{},
 		},
+		softDeleteErr: errors.New("connection refused"),
 	}
 	svc := newTestMFAServiceWithDB(t, credRepo, sqlDB)
 
 	err = svc.DisableTOTP(context.Background(), "account-001")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "find totp credential")
+	assert.Contains(t, err.Error(), "delete totp credential")
 }
 
 // ──────────────────────────────────────────────

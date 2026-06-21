@@ -373,6 +373,9 @@ func (m *mockSocialCredentialRepo) UpdateLastUsedAt(_ context.Context, _ *sql.Tx
 func (m *mockSocialCredentialRepo) SoftDeleteCredentialsByAccount(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	panic("not implemented")
 }
+func (m *mockSocialCredentialRepo) SoftDeleteCredentialsByType(_ context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType, _ time.Time) error {
+	panic("not implemented")
+}
 func (m *mockSocialCredentialRepo) SoftDeleteCredential(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	panic("not implemented")
 }

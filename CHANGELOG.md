@@ -11,9 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `updateCredentialLastUsed` error message now masks the credential ID using `MaskOpaqueID` instead of leaking it in plaintext (`internal/auth/service/auth_service.go`).
 - Password reset `VerifyAndReset` now finds the password credential inside the same transaction as the update, eliminating a TOCTOU race condition where the credential could be modified between the read and write (`internal/auth/service/password_reset_service.go`).
 - `fetchRolesCached` variable scoping fix — `jsonErr` was declared inside `if` init and used after the block; moved declaration to outer scope (`internal/auth/service/auth_service.go`).
+- Credential IDs in `PasskeyService` log statements now masked with `MaskOpaqueID` — `RegisterCredential`, `CompleteLogin`, and `DeleteCredential` previously logged raw UUIDs (`internal/auth/service/passkey_service.go`).
+- JTI values in `OIDCController` logout log statements now masked with `MaskOpaqueID` (`internal/oidc/controller/oidc_controller.go`).
+- `social_login_service.go` error wrapping uses `%w` instead of `%s` for the inner error in `ErrFailedToCreateAccount`, preserving error chain inspection (`internal/auth/service/social_login_service.go`).
+- `GenerateBackupCodes` errgroup now propagates context cancellation — checks `gctx.Err()` after each bcrypt hash to abort early on client disconnect (`internal/auth/service/mfa_service.go`).
+- `DeleteConsentsByAccount` SCAN loop now checks `ctx.Err()` between iterations to avoid unnecessary Redis work during graceful shutdown (`internal/oauth2/service/consent_service.go`).
 
 ### Added
 - `FindPasswordCredentialTx` repository method — transactional variant of `FindPasswordCredential` for use inside `RunInTransaction` to avoid TOCTOU race conditions (`internal/account/repository/credential_repository.go`).
+- `SoftDeleteCredentialsByType` repository method — bulk soft-delete by account ID and credential type in a single UPDATE, replacing N individual `SoftDeleteCredential` calls in `MFAService.softDeleteCredentialsByType` (`internal/account/repository/credential_repository.go`).
 
 ### Changed
 - `RoleCacheInvalidator` type assertion in `initModules` now checks the `ok` return value and logs a warning on failure, replacing the previous silent discard (`cmd/gosso/web_modules.go`).

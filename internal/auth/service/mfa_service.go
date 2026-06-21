@@ -299,19 +299,11 @@ func (s *MFAService) ActivateTOTP(ctx context.Context, accountID, code string) e
 	return nil
 }
 
-// softDeleteCredentialsByType finds all credentials of the given type for the account
-// and soft-deletes any that are not already deleted. Must be called within a transaction.
+// softDeleteCredentialsByType soft-deletes all credentials of the given type for the account
+// in a single UPDATE statement. Must be called within a transaction.
 func (s *MFAService) softDeleteCredentialsByType(ctx context.Context, tx *sql.Tx, accountID string, credType accountDomain.CredentialType) error {
-	creds, err := s.credentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, credType)
-	if err != nil {
-		return fmt.Errorf("find %s credentials: %w", credType, err)
-	}
-	for _, c := range creds {
-		if !c.IsDeleted() {
-			if err := s.credentialRepo.SoftDeleteCredential(ctx, tx, c.ID, time.Now()); err != nil {
-				return fmt.Errorf("delete %s credential %s: %w", credType, c.ID, err)
-			}
-		}
+	if err := s.credentialRepo.SoftDeleteCredentialsByType(ctx, tx, accountID, credType, time.Now()); err != nil {
+		return fmt.Errorf("delete %s credentials: %w", credType, err)
 	}
 	return nil
 }
@@ -348,13 +340,17 @@ func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) 
 	}
 
 	// Hash codes in parallel (bcrypt is CPU-bound; GOMAXPROCS workers).
-	g, _ := errgroup.WithContext(ctx)
+	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(s.backupCodeCount)
 	for i := 0; i < s.backupCodeCount; i++ {
 		g.Go(func() error {
 			hash, err := bcrypt.GenerateFromPassword([]byte(codes[i]), bcrypt.DefaultCost)
 			if err != nil {
 				return fmt.Errorf("hash backup code: %w", err)
+			}
+			// Abort early if the parent context was cancelled (e.g., client disconnect).
+			if gctx.Err() != nil {
+				return gctx.Err()
 			}
 			hashes[i] = hash
 			return nil

@@ -163,6 +163,11 @@ func (s *ConsentService) DeleteConsentsByAccount(ctx context.Context, accountID 
 
 	const maxIterations = 1000
 	for i := 0; i < maxIterations; i++ {
+		// Check for context cancellation between SCAN iterations to avoid
+		// unnecessary work during graceful shutdown.
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		keys, nextCursor, err := s.redis.GetClient().Scan(ctx, cursor, pattern, 100).Result()
 		if err != nil {
 			return fmt.Errorf("scan consent keys: %w", err)
