@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- `RoleCacheInvalidator` type assertion in `initModules` now checks the `ok` return value and logs a warning on failure, replacing the previous silent discard (`cmd/gosso/web_modules.go`).
+- Dummy Argon2id hash paths now check `HashPassword` errors and fall back to `DummyWorkWithContext` sleep-based padding, instead of silently discarding errors (`internal/auth/service/auth_login.go`, `internal/auth/service/auth_service.go`).
+- `blacklistMFAToken` now validates `ExpiresAt` is non-nil before using it, preventing a nil-pointer panic on malformed MFA tokens (`internal/auth/service/auth_login_helpers.go`).
+- `ClearLoginRateLimitsByUsername` now batches key deletion with a single `redis.Del(ctx, keys...)` call instead of iterating one-by-one, and logs the pattern and count on failure (`internal/auth/service/auth_login.go`).
+- `fetchRolesCached` log message now correctly references `jsonErr` instead of `cacheErr` on deserialization failure (`internal/auth/service/auth_service.go`).
+- `GenerateBackupCodes` now generates plaintext codes first, then hashes them in parallel using `errgroup` with `GOMAXPROCS`-bounded concurrency — reduces blocking time from ~1s sequential to ~1s wall-clock with concurrent workers (`internal/auth/service/mfa_service.go`).
+- `EnforceSessionLimit` now revokes tokens for evicted sessions in parallel using `errgroup` with CPU-bounded concurrency, instead of sequential per-session calls (`internal/session/service/session_service_manage.go`).
+- `RotateRefreshToken` Lua script now parses `session_id` from the old token JSON in-script, eliminating the separate pre-read GET round-trip and simplifying the rotation to a single atomic script + one SET for the new token (`internal/token/service/token_service_revoke.go`).
+
+### Security
+- `PasswordResetService.RequestReset` cooldown setting is now fail-closed — if Redis is unavailable when setting the cooldown key, the request is denied with `ErrServiceUnavailable` instead of logging a warning and proceeding, preventing email flooding during Redis outages (`internal/auth/service/password_reset_service.go`).
+- Login on unexpected DB error now returns `ErrServiceUnavailable` instead of `ErrInvalidCredentials` — prevents masking infrastructure failures as authentication failures (`internal/auth/service/auth_login.go`).
+
+### Removed
+- Removed unused `WebAuthnCredential.IncrementSignCount` method and its test — sign count updates are handled elsewhere (`internal/auth/domain/webauthn.go`).
+- Removed unused `MFAService.IsMFAEnabled` and `MFAService.GetMFATypes` wrapper methods and all associated tests — callers should use `GetMFAStatus` directly (`internal/auth/service/mfa_service.go`).
+
 ### Added
 - `FindByUsernameWithPasswordCredential` repository and service method — single JOIN query that retrieves account and password credential together, eliminating one DB round-trip on the login hot path (`internal/account/repository/`, `internal/account/service/`).
 - `RedisClient.GetEx` method wrapping Redis GETEX — atomically retrieves and refreshes key TTL in a single round-trip, used by session validation (`internal/cache/redis_client.go`).

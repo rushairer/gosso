@@ -228,7 +228,10 @@ func (s *AuthService) VerifyCurrentPassword(ctx context.Context, accountID, pass
 		// Perform dummy work to prevent timing leak — use the semaphore to cap
 		// concurrent Argon2id hashes and prevent CPU exhaustion from mass requests.
 		if acquireErr := s.dummyHashSem.Acquire(ctx, 1); acquireErr == nil {
-			_, _ = accountDomain.HashPassword(password)
+			if _, hashErr := accountDomain.HashPassword(password); hashErr != nil {
+				s.logger.Error("dummy hash failed, falling back to sleep-based padding", zap.Error(hashErr))
+				utility.DummyWorkWithContext(ctx)
+			}
 			s.dummyHashSem.Release(1)
 		} else {
 			// Semaphore exhausted (under attack); fall back to sleep-based padding.
@@ -374,7 +377,7 @@ func (s *AuthService) fetchRolesCached(ctx context.Context, accountID string) (r
 		}
 		// Cache corruption — fall through to DB.
 		s.logger.Debug("Role cache deserialization failed; falling back to DB",
-			zap.String("account_id", accountID), zap.Error(cacheErr))
+			zap.String("account_id", accountID), zap.Error(jsonErr))
 	}
 
 	// Cache miss or error — fetch from DB.

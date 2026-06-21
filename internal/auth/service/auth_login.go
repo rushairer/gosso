@@ -79,13 +79,16 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginCom
 			// The semaphore prevents an attacker from exhausting server resources by
 			// sending many requests for non-existent usernames.
 			if acquireErr := s.dummyHashSem.Acquire(ctx, 1); acquireErr == nil {
-				_, _ = accountDomain.HashPassword(req.Password)
+				if _, hashErr := accountDomain.HashPassword(req.Password); hashErr != nil {
+					s.logger.Debug("Dummy hash failed, falling back to sleep-based dummy work", zap.Error(hashErr))
+					utility.DummyWorkWithContext(ctx)
+				}
 				s.dummyHashSem.Release(1)
 			}
 			return nil, ErrInvalidCredentials
 		}
 		// Unexpected DB error — return service unavailable.
-		return nil, ErrInvalidCredentials
+		return nil, ErrServiceUnavailable
 	}
 
 	// 3. Check account status
@@ -93,7 +96,10 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginCom
 		// Mitigate timing side-channel: inactive accounts must perform the same
 		// dummy work as the not-found path to prevent account existence enumeration.
 		if acquireErr := s.dummyHashSem.Acquire(ctx, 1); acquireErr == nil {
-			_, _ = accountDomain.HashPassword(req.Password)
+			if _, hashErr := accountDomain.HashPassword(req.Password); hashErr != nil {
+				s.logger.Debug("Dummy hash failed, falling back to sleep-based dummy work", zap.Error(hashErr))
+				utility.DummyWorkWithContext(ctx)
+			}
 			s.dummyHashSem.Release(1)
 		}
 		return nil, ErrInvalidCredentials
@@ -367,11 +373,14 @@ func (s *AuthService) ClearLoginRateLimitsByUsername(ctx context.Context, userna
 				zap.String("username", utility.MaskEmail(username)), zap.Error(err))
 			return fmt.Errorf("scan rate limit keys: %w", err)
 		}
-		for _, key := range keys {
-			if delErr := s.redis.Del(ctx, key); delErr != nil {
-				s.logger.Warn("Failed to delete login rate limit key", zap.String("key_masked", utility.MaskRateLimitKey(key)), zap.Error(delErr))
+		if len(keys) > 0 {
+			if delErr := s.redis.Del(ctx, keys...); delErr != nil {
+				s.logger.Warn("Failed to delete login rate limit keys",
+					zap.Int("count", len(keys)),
+					zap.String("pattern_masked", utility.MaskRateLimitKey(pattern)),
+					zap.Error(delErr))
 				if firstErr == nil {
-					firstErr = fmt.Errorf("delete rate limit key %s: %w", utility.MaskRateLimitKey(key), delErr)
+					firstErr = fmt.Errorf("delete rate limit keys: %w", delErr)
 				}
 			}
 		}

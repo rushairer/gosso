@@ -172,26 +172,6 @@ func (s *MFAService) GetMFAStatus(ctx context.Context, accountID string) (*MFASt
 	return status, nil
 }
 
-// IsMFAEnabled checks whether the account has TOTP activated or has Passkeys
-func (s *MFAService) IsMFAEnabled(ctx context.Context, accountID string) (bool, error) {
-	status, err := s.GetMFAStatus(ctx, accountID)
-	if err != nil {
-		return false, err
-	}
-	return status.Enabled, nil
-}
-
-// GetMFATypes gets the list of available MFA types for the account.
-// Returns an error if credential or passkey queries fail, preventing silent degradation
-// that could omit available MFA types from the login response.
-func (s *MFAService) GetMFATypes(ctx context.Context, accountID string) ([]string, error) {
-	status, err := s.GetMFAStatus(ctx, accountID)
-	if err != nil {
-		return nil, err
-	}
-	return status.Types, nil
-}
-
 // EnrollTOTP starts TOTP enrollment (generates secret, saves to credential, verified=false)
 func (s *MFAService) EnrollTOTP(ctx context.Context, accountID string) (*TOTPEnrollment, error) {
 	// Generate TOTP key
@@ -351,32 +331,52 @@ func (s *MFAService) DisableTOTP(ctx context.Context, accountID string) error {
 	return nil
 }
 
-// GenerateBackupCodes generates backup codes
+// GenerateBackupCodes generates backup codes.
+// Hashing is parallelised with a bounded worker pool so that the serial
+// bcrypt calls don't block the request handler for ~1 s.
 func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) ([]string, error) {
-	var codes []string
-	var creds []*accountDomain.Credential
+	codes := make([]string, s.backupCodeCount)
+	hashes := make([][]byte, s.backupCodeCount)
 
+	// First generate all plaintext codes.
 	for i := 0; i < s.backupCodeCount; i++ {
 		code, err := generateRandomCode(s.backupCodeLength)
 		if err != nil {
 			return nil, fmt.Errorf("generate backup code: %w", err)
 		}
-		hash, err := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
-		if err != nil {
-			return nil, fmt.Errorf("hash backup code: %w", err)
-		}
+		codes[i] = code
+	}
 
-		codes = append(codes, code)
-		creds = append(creds, &accountDomain.Credential{
+	// Hash codes in parallel (bcrypt is CPU-bound; GOMAXPROCS workers).
+	g, _ := errgroup.WithContext(ctx)
+	g.SetLimit(s.backupCodeCount)
+	for i := 0; i < s.backupCodeCount; i++ {
+		g.Go(func() error {
+			hash, err := bcrypt.GenerateFromPassword([]byte(codes[i]), bcrypt.DefaultCost)
+			if err != nil {
+				return fmt.Errorf("hash backup code: %w", err)
+			}
+			hashes[i] = hash
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	// Build credential records from the pre-computed hashes.
+	creds := make([]*accountDomain.Credential, s.backupCodeCount)
+	for i := 0; i < s.backupCodeCount; i++ {
+		creds[i] = &accountDomain.Credential{
 			ID:         uuid.New().String(),
 			AccountID:  accountID,
 			Type:       accountDomain.CredentialTypeBackupCode,
 			Identifier: &accountID,
-			Value:      string(hash),
+			Value:      string(hashes[i]),
 			Verified:   true,
 			Metadata:   map[string]any{},
 			CreatedAt:  time.Now(),
-		})
+		}
 	}
 
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {

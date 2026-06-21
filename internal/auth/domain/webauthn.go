@@ -89,14 +89,6 @@ func (c *WebAuthnCredential) MarkUsed() {
 	c.LastUsedAt = &now
 }
 
-// IncrementSignCount increments the sign counter (clone detection).
-func (c *WebAuthnCredential) IncrementSignCount() {
-	if c == nil {
-		return
-	}
-	c.SignCount++
-}
-
 // IsDeleted returns true if the credential has been soft-deleted.
 func (c *WebAuthnCredential) IsDeleted() bool {
 	if c == nil {

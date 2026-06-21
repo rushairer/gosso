@@ -233,6 +233,8 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 	}
 
 	// Revoke tokens for evicted sessions (requires external calls, cannot be done in Lua)
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(min(len(evictedIDs), runtime.NumCPU()))
 	for _, id := range evictedIDs {
 		sid, _ := id.(string)
 		if sid == "" {
@@ -242,11 +244,15 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 			zap.String("session_id", utility.MaskOpaqueID(sid)),
 			zap.String("account_id", utility.MaskOpaqueID(accountID)))
 
-		if err := s.tokenRevoker.RevokeAllForSession(ctx, sid); err != nil {
-			s.logger.Warn("Failed to revoke tokens for evicted session",
-				zap.String("session_id", utility.MaskOpaqueID(sid)), zap.Error(err))
-		}
+		g.Go(func() error {
+			if err := s.tokenRevoker.RevokeAllForSession(gctx, sid); err != nil {
+				s.logger.Warn("Failed to revoke tokens for evicted session",
+					zap.String("session_id", utility.MaskOpaqueID(sid)), zap.Error(err))
+			}
+			return nil // non-fatal: warning already logged
+		})
 	}
+	_ = g.Wait() // all goroutines return nil; wait for completion
 
 	return nil
 }

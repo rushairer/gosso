@@ -265,9 +265,11 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 	}
 
 	// Set cooldown BEFORE sending email to prevent rapid-fire email sending.
-	// Fail-open: if Redis is down, we lose cooldown but can still reset.
+	// Fail-closed: consistent with the cooldown check above (line 212-214);
+	// if Redis is down, deny sending to prevent email flooding.
 	if err := s.redis.Set(ctx, cooldownKey, []byte("1"), s.cooldownTTL); err != nil {
-		s.logger.Warn("Failed to set reset cooldown", zap.Error(err))
+		s.logger.Error("Failed to set reset cooldown, denying request", zap.Error(err))
+		return ErrServiceUnavailable
 	}
 
 	// Send email

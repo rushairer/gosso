@@ -37,17 +37,6 @@ func TestWebAuthnCredential_MarkUsed(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────
-// IncrementSignCount
-// ──────────────────────────────────────────────
-
-func TestWebAuthnCredential_IncrementSignCount(t *testing.T) {
-	c := newTestWebAuthnCred()
-	assert.Equal(t, uint32(5), c.SignCount)
-	c.IncrementSignCount()
-	assert.Equal(t, uint32(6), c.SignCount)
-}
-
-// ──────────────────────────────────────────────
 // IsDeleted
 // ──────────────────────────────────────────────
 

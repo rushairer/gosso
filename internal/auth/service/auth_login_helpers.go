@@ -105,6 +105,9 @@ func (s *AuthService) blacklistMFAToken(ctx context.Context, claims *tokenDomain
 	if claims.ID == "" {
 		return nil
 	}
+	if claims.ExpiresAt == nil {
+		return errors.New("mfa token missing expires_at")
+	}
 	if err := s.tokenSvc.RevokeAccessToken(ctx, claims.ID, claims.ExpiresAt.Time); err != nil {
 		return fmt.Errorf("blacklist mfa token: %w", err)
 	}

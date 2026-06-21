@@ -32,11 +32,13 @@ end
 return data
 `)
 
-// rotateTokenScript atomically rotates a refresh token: reads the old token data,
-// validates it exists, deletes it, stores the new token, and updates the session index.
-// All in a single Lua script to prevent TOCTOU race conditions.
-// KEYS[1] = old token key, KEYS[2] = new token key, KEYS[3] = session index key (or "" if no session)
-// ARGV[1] = new token JSON, ARGV[2] = expiry seconds, ARGV[3] = old token hash, ARGV[4] = new token hash
+// rotateTokenScript atomically reads and deletes the old refresh token, then
+// updates the session index (SREM old hash, SADD new hash) in a single Lua script.
+// The session ID is parsed from the old token JSON inside the script, eliminating
+// the need for a separate pre-read round-trip in Go.
+// KEYS[1] = old token key
+// ARGV[1] = old token hash, ARGV[2] = new token hash, ARGV[3] = session key prefix,
+// ARGV[4] = expiry seconds (for session key TTL)
 // Returns old token data on success, nil if old token not found.
 var rotateTokenScript = redis.NewScript(`
 local oldData = redis.call('GET', KEYS[1])
@@ -44,11 +46,12 @@ if not oldData then
     return nil
 end
 redis.call('DEL', KEYS[1])
-redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[2])
-if KEYS[3] ~= '' then
-    redis.call('SREM', KEYS[3], ARGV[3])
-    redis.call('SADD', KEYS[3], ARGV[4])
-    redis.call('EXPIRE', KEYS[3], ARGV[2])
+local sessionID = oldData:match('"session_id":"([^"]*)"')
+if sessionID and sessionID ~= '' then
+    local sessionKey = ARGV[3] .. sessionID
+    redis.call('SREM', sessionKey, ARGV[1])
+    redis.call('SADD', sessionKey, ARGV[2])
+    redis.call('EXPIRE', sessionKey, ARGV[4])
 end
 return oldData
 `)
@@ -70,15 +73,9 @@ return #members
 `)
 
 // RotateRefreshToken rotates refresh tokens atomically.
-// The old token is read, deleted, and replaced with a new token in a single Lua script,
-// eliminating TOCTOU race conditions between concurrent rotation requests.
-//
-// NOTE: The pre-read at step 3 retrieves the old token's SessionID before the Lua script
-// runs. If a concurrent rotation completes between the pre-read and the script, the
-// SessionID used in the script will be stale. This is acceptable because refresh tokens
-// are single-use — the Lua script's GET+DEL atomically prevents double-rotation, so the
-// concurrent request will fail. The worst case is that the session index update targets
-// the wrong session, which is cleaned up by the session expiry mechanism.
+// The old token is read and deleted in a single Lua script that also updates the
+// session index, eliminating the separate pre-read round-trip. The new token is
+// then stored based on the old token data returned by the script.
 func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) (*domain.RefreshToken, error) {
 	// 1. Generate new token
 	newBytes := make([]byte, refreshTokenLength)
@@ -94,27 +91,30 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	newKey := s.buildRefreshTokenKey(newTokenString)
 	expirySeconds := int(math.Ceil(s.refreshExpiry.Seconds()))
 
-	// 3. Pre-read old token to get SessionID before running the Lua script.
-	//    This enables the session index update to happen atomically inside the script.
-	oldData, err := s.redis.Get(ctx, oldKey)
+	// 3. Atomically read+delete old token and update session index in one Lua script.
+	//    The script parses session_id from the old token JSON in-script, avoiding
+	//    a separate pre-read GET round-trip.
+	result, err := s.redis.RunScript(ctx, rotateTokenScript,
+		[]string{oldKey},
+		oldHash, newHash, sessionTokensKeyPrefix, expirySeconds,
+	).Result()
+	if errors.Is(err, redis.Nil) || result == nil {
+		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
+	}
 	if err != nil {
-		if errors.Is(err, cache.ErrKeyNotFound) {
-			return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
-		}
-		return nil, fmt.Errorf("refresh token lookup failed: %w", err)
+		return nil, fmt.Errorf("rotate refresh token: %w", err)
+	}
+
+	// 4. Parse old token data returned by the script to build the new token.
+	oldDataStr, ok := result.(string)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type from rotate script: %T", result)
 	}
 	var oldRT domain.RefreshToken
-	if err := json.Unmarshal([]byte(oldData), &oldRT); err != nil {
+	if err := json.Unmarshal([]byte(oldDataStr), &oldRT); err != nil {
 		return nil, fmt.Errorf("unmarshal old refresh token: %w", err)
 	}
 
-	// 4. Build session key from the old token's SessionID (empty string if no session)
-	sessionKey := ""
-	if oldRT.SessionID != "" {
-		sessionKey = s.buildSessionTokensKey(oldRT.SessionID)
-	}
-
-	// 5. Build new token data with the correct SessionID from the old token
 	newRT, err := domain.NewRefreshToken(newTokenString, oldRT.AccountID, time.Now().Add(s.refreshExpiry))
 	if err != nil {
 		return nil, fmt.Errorf("create new refresh token: %w", err)
@@ -125,22 +125,13 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	newRT.IP = oldRT.IP
 	newRT.UserAgent = oldRT.UserAgent
 
+	// 5. Store the new token in Redis.
 	newData, err := json.Marshal(newRT)
 	if err != nil {
 		return nil, fmt.Errorf("marshal new refresh token: %w", err)
 	}
-
-	// 6. Atomically rotate: read old, delete old, store new, update session index.
-	//    The Lua script handles session index (SREM/SADD) atomically with the rotation.
-	result, err := s.redis.RunScript(ctx, rotateTokenScript,
-		[]string{oldKey, newKey, sessionKey},
-		newData, expirySeconds, oldHash, newHash,
-	).Result()
-	if errors.Is(err, redis.Nil) || result == nil {
-		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("rotate refresh token: %w", err)
+	if err := s.redis.Set(ctx, newKey, newData, s.refreshExpiry); err != nil {
+		return nil, fmt.Errorf("store new refresh token: %w", err)
 	}
 
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
