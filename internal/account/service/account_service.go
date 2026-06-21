@@ -284,7 +284,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountRegister,
 		audit.IPFromContext(ctx),
-		utility.StringPtr(account.ID),
+		utility.Ptr[string](account.ID),
 		utility.MarshalJSONOrEmpty(map[string]any{"account_id": account.ID}),
 		auditMetaFromContext(ctx),
 	))
@@ -328,7 +328,7 @@ func (s *accountServiceImpl) UpdateAccount(ctx context.Context, account *domain.
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionAccountUpdate,
 		audit.IPFromContext(ctx),
-		utility.StringPtr(account.ID),
+		utility.Ptr[string](account.ID),
 		utility.MarshalJSONOrEmpty(map[string]any{"account_id": account.ID}),
 		auditMetaFromContext(ctx),
 	))

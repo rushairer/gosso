@@ -146,7 +146,7 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionTokenRotate,
 		audit.IPFromContext(ctx),
-		utility.StringPtr(newRT.AccountID),
+		utility.Ptr[string](newRT.AccountID),
 		utility.MarshalJSONOrEmpty(map[string]any{
 			"session_id": newRT.SessionID,
 			"old_token":  oldHash,
@@ -268,7 +268,7 @@ func (s *TokenService) RevokeAccountTokens(ctx context.Context, accountID string
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionTokenRevoke,
 		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
+		utility.Ptr[string](accountID),
 		utility.MarshalJSONOrEmpty(map[string]any{
 			"reason": "revoke_all_for_account",
 		}),

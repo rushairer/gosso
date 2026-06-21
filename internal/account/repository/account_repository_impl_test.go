@@ -253,7 +253,7 @@ func TestFindAll_Success(t *testing.T) {
 
 	a1 := newTestAccount()
 	a2 := &domain.Account{
-		ID: "account-002", Username: utility.StringPtr("user2"), DisplayName: "User Two",
+		ID: "account-002", Username: utility.Ptr[string]("user2"), DisplayName: "User Two",
 		Status: domain.AccountStatusActive, Locale: "en", Timezone: "UTC",
 		Metadata: map[string]any{}, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}

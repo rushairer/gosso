@@ -9,6 +9,8 @@ import (
 
 // dummyWorkDuration stores the sleep duration for DummyWorkWithContext.
 // Defaults to 100ms to match typical Argon2id computation time.
+// Uses atomic.Int64 rather than atomic.Pointer[time.Duration] because
+// time.Duration is an int64 (nanoseconds), so the cast is lossless.
 var dummyWorkDuration atomic.Int64
 
 func init() {

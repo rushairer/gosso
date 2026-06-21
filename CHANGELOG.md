@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ClearLoginRateLimitsByUsername` SCAN loop now checks `ctx.Err()` on each iteration — supports graceful shutdown by aborting the scan when the context is cancelled (`internal/auth/service/auth_login.go`).
 - `ValidatePasswordStrength` now uses `unicode.IsUpper`/`unicode.IsLower`/`unicode.IsDigit` instead of ASCII range checks — non-ASCII letters (e.g. `Ü`, `É`) are now correctly recognized as uppercase/lowercase (`internal/utility/password.go`).
 - Device authorization submit now prefers `user_code` lookup when both `device_code` and `user_code` are provided — ensures the device code corresponds to the same authorization session (`internal/oauth2/controller/oauth2_device.go`).
+- Config validation now rejects `backup_code_count > 20` and `backup_code_length > 12` — previously values exceeding the service-layer defaults were silently clamped, causing confusing configuration behavior (`config/config.go`).
 
 ### Added
 - `IsValidGrantType` function and grant type validation in `NewOAuth2Client` constructor — rejects unknown grant types with `ErrClientInvalidGrantType` (`internal/oauth2/domain/client.go`).
@@ -104,6 +105,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Stderr log messages now use `[GOSSO]` prefix for consistent filtering in log aggregation tools (`config/config.go`, `config/config_manager.go`, `deploy/config.go`, `cmd/gosso/migrate.go`).
 - `.dockerignore` now also excludes `.github/`, `.golangci.yml`, `coverage*.out`, `doc/`, `docs/`, and `examples/` — reduces Docker build context size (`.dockerignore`).
 - Migration lock connection now uses a 30-second timeout context — previously `context.Background()` could block indefinitely when the database is unreachable (`cmd/gosso/migrate.go`).
+- `accountValidatorAdapter` cleanup mutex now uses `defer` via an anonymous function — previously a panic inside the cleanup block would leave the mutex permanently locked (`cmd/gosso/web_modules.go`).
+- All `utility.StringPtr`/`utility.Int64Ptr` call sites migrated to `utility.Ptr[T]` — completes the generic pointer helper introduced in the previous round (`internal/*/service/*.go`, `internal/account/repository/*.go`).
+- `maskKey` renamed to `maskRedisKeySuffix` and `maskKeys` to `maskRedisKeySuffixes` — clarifies that only the final colon-separated segment is masked, distinct from `utility.MaskRateLimitKey` (`internal/cache/redis_client.go`).
+- `accountValidatorAdapter.cacheSize` now guards against negative values — prevents incorrect cache-size accounting under concurrent entry deletion (`cmd/gosso/web_modules.go`).
+- `GenerateAccessToken` godoc now documents that `ExpiresAt` is always overridden by the configured `accessExpiry` — callers needing custom expiry should use `GenerateShortLivedToken` (`internal/token/service/token_service.go`).
+- `DummyWorkDuration` comment now documents the safety of the `time.Duration` → `int64` cast used with `atomic.Int64` (`internal/utility/security.go`).
 - `.env.test.example` unified to `KEY=VALUE` format (removed `export` prefix) for Docker Compose `env_file:` compatibility (`.env.test.example`).
 - `AccountService.SetOptions` now logs a warning when called multiple times — aids debugging in tests and unexpected wiring scenarios (`internal/account/service/account_service.go`).
 - `accountValidatorAdapter` cache now enforces a hard size limit of 1024 entries — prevents unbounded memory growth in high-cardinality token exchange scenarios between cleanup cycles (`cmd/gosso/web_modules.go`).

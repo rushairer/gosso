@@ -244,19 +244,23 @@ func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID
 	// Time-based cleanup of expired entries to prevent unbounded memory growth.
 	// lastCleanup is read atomically for the fast-path check; the mutex serializes actual cleanup.
 	if time.Since(time.Unix(0, a.lastCleanup.Load())) > cacheCleanupInterval {
-		a.cleanupMutex.Lock()
-		if time.Since(time.Unix(0, a.lastCleanup.Load())) > cacheCleanupInterval {
-			now := time.Now()
-			a.cache.Range(func(key, value any) bool {
-				if entry, ok := value.(*accountValidatorCacheEntry); ok && now.After(entry.expiresAt) {
-					a.cache.Delete(key)
-					a.cacheSize.Add(-1)
-				}
-				return true
-			})
-			a.lastCleanup.Store(time.Now().UnixNano())
-		}
-		a.cleanupMutex.Unlock()
+		func() {
+			a.cleanupMutex.Lock()
+			defer a.cleanupMutex.Unlock()
+			if time.Since(time.Unix(0, a.lastCleanup.Load())) > cacheCleanupInterval {
+				now := time.Now()
+				a.cache.Range(func(key, value any) bool {
+					if entry, ok := value.(*accountValidatorCacheEntry); ok && now.After(entry.expiresAt) {
+						a.cache.Delete(key)
+						if v := a.cacheSize.Add(-1); v < 0 {
+							a.cacheSize.Store(0)
+						}
+					}
+					return true
+				})
+				a.lastCleanup.Store(time.Now().UnixNano())
+			}
+		}()
 	}
 
 	// Check cache first.

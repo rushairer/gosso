@@ -94,7 +94,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountDelete,
 		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
+		utility.Ptr[string](accountID),
 		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID}),
 		auditMetaFromContext(ctx),
 	))
@@ -146,7 +146,7 @@ func (s *accountServiceImpl) VerifyContactCredential(ctx context.Context, accoun
 	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionCredentialVerify,
 		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
+		utility.Ptr[string](accountID),
 		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID, "credential_type": credential.Type}),
 		auditMetaFromContext(ctx),
 	))
@@ -227,7 +227,7 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionPasswordChange,
 		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
+		utility.Ptr[string](accountID),
 		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID}),
 		auditMetaFromContext(ctx),
 	))
@@ -259,7 +259,7 @@ func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID strin
 	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountSuspend,
 		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
+		utility.Ptr[string](accountID),
 		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID}),
 		auditMetaFromContext(ctx),
 	))
@@ -278,7 +278,7 @@ func (s *accountServiceImpl) ActivateAccount(ctx context.Context, accountID stri
 	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionAccountActivate,
 		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
+		utility.Ptr[string](accountID),
 		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID}),
 		auditMetaFromContext(ctx),
 	))

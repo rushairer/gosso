@@ -64,7 +64,7 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionFederatedIdentityBind,
 		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
+		utility.Ptr[string](accountID),
 		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID, "provider": string(provider), "provider_user_id": providerUserID}),
 		auditMetaFromContext(ctx),
 	))
@@ -130,7 +130,7 @@ func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accoun
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionFederatedIdentityUnbind,
 		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
+		utility.Ptr[string](accountID),
 		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID, "identity_id": identityID}),
 		auditMetaFromContext(ctx),
 	))
@@ -170,7 +170,7 @@ func (s *accountServiceImpl) AssignRole(ctx context.Context, accountID, roleID s
 	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionRoleAssign,
 		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
+		utility.Ptr[string](accountID),
 		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID, "role_id": roleID}),
 		auditMetaFromContext(ctx),
 	))
@@ -202,7 +202,7 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 	s.auditLogSync(ctx, auditDomain.NewRecord(
 		auditDomain.ActionRoleRemove,
 		audit.IPFromContext(ctx),
-		utility.StringPtr(accountID),
+		utility.Ptr[string](accountID),
 		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID, "role_id": roleID}),
 		auditMetaFromContext(ctx),
 	))

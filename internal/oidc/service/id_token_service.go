@@ -93,7 +93,7 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 		},
 		AZP:      clientID, // Authorized Party per OIDC Core §2 — single aud value
 		Nonce:    nonce,
-		AuthTime: utility.Int64Ptr(authTime.Unix()),
+		AuthTime: utility.Ptr[int64](authTime.Unix()),
 		AMR:      authMethods,
 	}
 

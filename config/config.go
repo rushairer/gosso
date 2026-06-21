@@ -468,6 +468,14 @@ func (c *GoUnoConfig) validateAuthDurations() error {
 			return fmt.Errorf("auth: %s must not be negative (got %d)", check.name, check.value)
 		}
 	}
+	// Upper-bound checks for backup code parameters — service-layer defaults cap at these values;
+	// explicitly reject higher values to avoid silent clamping confusion.
+	if c.AuthConfig.BackupCodeCount > 0 && c.AuthConfig.BackupCodeCount > 20 {
+		return fmt.Errorf("auth: backup_code_count must not exceed 20 (got %d)", c.AuthConfig.BackupCodeCount)
+	}
+	if c.AuthConfig.BackupCodeLength > 0 && c.AuthConfig.BackupCodeLength > 12 {
+		return fmt.Errorf("auth: backup_code_length must not exceed 12 (got %d)", c.AuthConfig.BackupCodeLength)
+	}
 	// password_reset_revoke_concurrency must be strictly positive (used as semaphore capacity).
 	if c.AuthConfig.PasswordResetRevokeConcurrency <= 0 {
 		return fmt.Errorf("auth: password_reset_revoke_concurrency must be positive (got %d)", c.AuthConfig.PasswordResetRevokeConcurrency)

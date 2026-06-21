@@ -100,7 +100,10 @@ func NewTokenService(
 	}, nil
 }
 
-// GenerateAccessToken generates a JWT access token (RS256)
+// GenerateAccessToken generates a JWT access token (RS256).
+// Note: this always overrides ExpiresAt with the configured accessExpiry,
+// regardless of any value the caller may have set on claims.
+// Use GenerateShortLivedToken if a custom expiry is needed.
 func (s *TokenService) GenerateAccessToken(claims *domain.AccessTokenClaims) (string, error) {
 	now := time.Now()
 	clonedClaims := *claims
