@@ -184,7 +184,7 @@ func (s *EmailService) send(ctx context.Context, to, subject, htmlBody string) e
 	err := s.client.DialAndSendWithContext(ctx, msg)
 	if err != nil && isTransientError(err) {
 		s.logger.Warn("Retrying email send after transient error",
-			zap.String("to", maskEmail(to)), zap.Error(err))
+			zap.String("to", utility.MaskEmail(to)), zap.Error(err))
 		timer := time.NewTimer(time.Second)
 		select {
 		case <-timer.C:
@@ -196,18 +196,13 @@ func (s *EmailService) send(ctx context.Context, to, subject, htmlBody string) e
 	}
 	if err != nil {
 		s.logger.Error("Failed to send email",
-			zap.String("to", maskEmail(to)),
+			zap.String("to", utility.MaskEmail(to)),
 			zap.Error(err))
 		return fmt.Errorf("send email: %w", err)
 	}
 
-	s.logger.Info("Email sent", zap.String("to", maskEmail(to)))
+	s.logger.Info("Email sent", zap.String("to", utility.MaskEmail(to)))
 	return nil
-}
-
-// maskEmail masks PII in email addresses
-func maskEmail(email string) string {
-	return utility.MaskEmail(email)
 }
 
 // smtpTLSPolicy returns the TLS policy for SMTP connections.

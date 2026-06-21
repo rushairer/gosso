@@ -253,6 +253,12 @@ func (c *GoUnoConfig) validateWebServer() error {
 	if c.WebServerConfig.Address != "" && net.ParseIP(c.WebServerConfig.Address) == nil {
 		return fmt.Errorf("web_server: address must be a valid IP address (got %q)", c.WebServerConfig.Address)
 	}
+	if c.WebServerConfig.Production {
+		switch c.WebServerConfig.Address {
+		case "127.0.0.1", "::1":
+			return fmt.Errorf("web_server: address %q is loopback-only and unreachable from other hosts in production (use 0.0.0.0 or a specific external IP)", c.WebServerConfig.Address)
+		}
+	}
 	// Timeout relationship checks (Go's net/http warns if IdleTimeout < ReadTimeout)
 	if c.WebServerConfig.IdleTimeout < c.WebServerConfig.ReadTimeout {
 		return fmt.Errorf("web_server: idle_timeout (%v) must be >= read_timeout (%v)", c.WebServerConfig.IdleTimeout, c.WebServerConfig.ReadTimeout)

@@ -197,8 +197,15 @@ func (s *AuthService) VerifyCurrentPassword(ctx context.Context, accountID, pass
 	cred, err := s.credentialRepo.FindPasswordCredential(ctx, accountID)
 	if err != nil {
 		// Account has no password credential (passkey-only) or not found.
-		// Perform dummy hash to prevent timing leak.
-		_, _ = accountDomain.HashPassword(password)
+		// Perform dummy work to prevent timing leak — use the semaphore to cap
+		// concurrent Argon2id hashes and prevent CPU exhaustion from mass requests.
+		if acquireErr := s.dummyHashSem.Acquire(ctx, 1); acquireErr == nil {
+			_, _ = accountDomain.HashPassword(password)
+			s.dummyHashSem.Release(1)
+		} else {
+			// Semaphore exhausted (under attack); fall back to sleep-based padding.
+			utility.DummyWorkWithContext(ctx)
+		}
 		return ErrInvalidCredentials
 	}
 	if !cred.VerifyPassword(password) {

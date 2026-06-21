@@ -67,10 +67,9 @@ func (s *DiscoveryService) GetDiscoveryDocument() map[string]any {
 	return copyMap(s.doc)
 }
 
-// copyMap performs a deep copy of a map[string]any, cloning slice values
+// copyMap performs a deep copy of a map[string]any, cloning slice and map values
 // to prevent concurrent handlers from mutating the shared state.
-// Note: only []string values are deep-copied. If the discovery document ever
-// contains other mutable types (maps, slices of structs), they must be added here.
+// Handles []string and []map[string]string (used by JWKS keys array).
 func copyMap(m map[string]any) map[string]any {
 	cp := make(map[string]any, len(m))
 	for k, v := range m {
@@ -78,6 +77,16 @@ func copyMap(m map[string]any) map[string]any {
 		case []string:
 			clone := make([]string, len(val))
 			copy(clone, val)
+			cp[k] = clone
+		case []map[string]string:
+			clone := make([]map[string]string, len(val))
+			for i, inner := range val {
+				innerCopy := make(map[string]string, len(inner))
+				for ik, iv := range inner {
+					innerCopy[ik] = iv
+				}
+				clone[i] = innerCopy
+			}
 			cp[k] = clone
 		default:
 			cp[k] = v

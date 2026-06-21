@@ -41,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ValidatePasswordStrength` now uses `unicode.IsUpper`/`unicode.IsLower`/`unicode.IsDigit` instead of ASCII range checks — non-ASCII letters (e.g. `Ü`, `É`) are now correctly recognized as uppercase/lowercase (`internal/utility/password.go`).
 - Device authorization submit now prefers `user_code` lookup when both `device_code` and `user_code` are provided — ensures the device code corresponds to the same authorization session (`internal/oauth2/controller/oauth2_device.go`).
 - Config validation now rejects `backup_code_count > 20` and `backup_code_length > 12` — previously values exceeding the service-layer defaults were silently clamped, causing confusing configuration behavior (`config/config.go`).
+- `VerifyCurrentPassword` now uses the `dummyHashSem` semaphore when computing dummy Argon2id hashes for passkey-only accounts — previously an attacker could trigger unbounded concurrent Argon2id hashes to exhaust CPU, bypassing the rate-limiting semaphore used in `LoginByUsernamePassword` (`internal/auth/service/auth_service.go`).
+- `copyMap` now deep-copies `[]map[string]string` values (used by JWKS keys array) — previously inner maps were shared by reference, creating a latent data-race if concurrent handlers mutated JWKS key entries (`internal/oidc/service/discovery_service.go`).
+- Config validation now rejects loopback-only addresses (`127.0.0.1`, `::1`) in production mode — prevents the server from being unreachable from other hosts due to misconfiguration (`config/config.go`).
 
 ### Added
 - `IsValidGrantType` function and grant type validation in `NewOAuth2Client` constructor — rejects unknown grant types with `ErrClientInvalidGrantType` (`internal/oauth2/domain/client.go`).
@@ -111,6 +114,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `accountValidatorAdapter.cacheSize` now guards against negative values — prevents incorrect cache-size accounting under concurrent entry deletion (`cmd/gosso/web_modules.go`).
 - `GenerateAccessToken` godoc now documents that `ExpiresAt` is always overridden by the configured `accessExpiry` — callers needing custom expiry should use `GenerateShortLivedToken` (`internal/token/service/token_service.go`).
 - `DummyWorkDuration` comment now documents the safety of the `time.Duration` → `int64` cast used with `atomic.Int64` (`internal/utility/security.go`).
+- Removed deprecated `StringPtr` and `Int64Ptr` functions and their tests — all internal callers were migrated to generic `Ptr[T]` in round 2 (`internal/utility/ptr.go`, `internal/utility/ptr_test.go`).
+- Removed `maskEmail` wrapper in `email_service.go` — callers now use `utility.MaskEmail` directly, eliminating unnecessary indirection (`internal/notification/service/email_service.go`).
 - `.env.test.example` unified to `KEY=VALUE` format (removed `export` prefix) for Docker Compose `env_file:` compatibility (`.env.test.example`).
 - `AccountService.SetOptions` now logs a warning when called multiple times — aids debugging in tests and unexpected wiring scenarios (`internal/account/service/account_service.go`).
 - `accountValidatorAdapter` cache now enforces a hard size limit of 1024 entries — prevents unbounded memory growth in high-cardinality token exchange scenarios between cleanup cycles (`cmd/gosso/web_modules.go`).
