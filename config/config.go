@@ -52,6 +52,7 @@ type RateLimitsConfig struct {
 	DeviceCode int `mapstructure:"device_code"`
 	Password   int `mapstructure:"password"`
 	Verify     int `mapstructure:"verify"`
+	Health     int `mapstructure:"health"`
 }
 
 type DatabaseConfigDriverName string

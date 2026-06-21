@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -186,6 +187,28 @@ type ConsentRequest struct {
 
 // SubmitConsent POST /oauth2/authorize
 func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
+	// Defense-in-depth: reject oversized form bodies early.
+	if ctx.Request.ContentLength > oauth2MaxFormBodySize {
+		ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{
+			"error":             "invalid_request",
+			"error_description": "request body too large",
+		})
+		return
+	}
+
+	// This is an HTML form submission — enforce form-encoded Content-Type to
+	// prevent JSON payloads that could bypass WAF or CSRF protections.
+	contentType := ctx.GetHeader("Content-Type")
+	if contentType == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "Content-Type header is required"})
+		return
+	}
+	mediaType, _, _ := mime.ParseMediaType(contentType)
+	if mediaType != "application/x-www-form-urlencoded" {
+		ctx.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "invalid_request", "error_description": "Content-Type must be application/x-www-form-urlencoded"})
+		return
+	}
+
 	var req ConsentRequest
 	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})

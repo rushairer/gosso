@@ -29,6 +29,11 @@ const (
 	DefaultMaxSessions = 10
 	// DefaultMaxSessionAge is the default absolute maximum session lifetime (7 days).
 	DefaultMaxSessionAge = 7 * 24 * time.Hour
+	// maxCacheCleanupInterval caps the cache cleanup sweep interval so that
+	// stale entries don't accumulate for too long when sessionTTL is very high
+	// (e.g., 24h). Without this cap, a system processing many unique sessions
+	// with a 24h TTL would only sweep stale entries every ~72h (3 * TTL).
+	maxCacheCleanupInterval = 1 * time.Hour
 )
 
 // TokenRevoker revokes all tokens for a given session.
@@ -453,15 +458,19 @@ func (s *SessionService) buildAccountSessionsKey(accountID string) string {
 
 // startCacheCleanup runs a background goroutine that periodically evicts stale
 // entries from the local sessionCache.  An entry is considered stale if it was
-// inserted more than 2 × sessionTTL ago — the generous multiplier accounts for
+// inserted more than 2 * sessionTTL ago — the generous multiplier accounts for
 // the worst-case scenario where the entry was cached just before the Redis TTL
-// was refreshed, so 2 × TTL guarantees the Redis key has long since expired.
+// was refreshed, so 2 * TTL guarantees the Redis key has long since expired.
 //
-// The sweep interval is set to sessionTTL so that stale entries accumulate for
-// at most ~3 × TTL before being cleaned up (worst case: entry cached just after
-// a sweep, then swept on the next cycle).
+// The sweep interval is the lesser of sessionTTL and maxCacheCleanupInterval
+// (1h), ensuring stale entries are cleaned up promptly even when sessionTTL is
+// very high (e.g., 24h).
 func (s *SessionService) startCacheCleanup() {
-	ticker := time.NewTicker(s.sessionTTL)
+	cleanupInterval := s.sessionTTL
+	if cleanupInterval > maxCacheCleanupInterval {
+		cleanupInterval = maxCacheCleanupInterval
+	}
+	ticker := time.NewTicker(cleanupInterval)
 	defer ticker.Stop()
 
 	for {

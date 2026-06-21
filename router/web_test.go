@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/testutil"
 )
@@ -20,7 +21,7 @@ func TestHealthRoutes(t *testing.T) {
 
 	t.Run("health endpoint returns status ok", func(t *testing.T) {
 		server := gin.New()
-		registerHealthRoutes(server, nil, nil)
+		registerHealthRoutes(server, nil, nil, 60, zap.NewNop())
 
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest(http.MethodGet, "/health", nil)
@@ -45,7 +46,7 @@ func TestHealthRoutes(t *testing.T) {
 
 		sqlMock.ExpectPing()
 
-		registerHealthRoutes(server, db, redisClient)
+		registerHealthRoutes(server, db, redisClient, 60, zap.NewNop())
 
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest(http.MethodGet, "/readiness", nil)
@@ -76,7 +77,7 @@ func TestHealthRoutes(t *testing.T) {
 
 		sqlMock.ExpectPing().WillReturnError(sql.ErrConnDone)
 
-		registerHealthRoutes(server, db, redisClient)
+		registerHealthRoutes(server, db, redisClient, 60, zap.NewNop())
 
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest(http.MethodGet, "/readiness", nil)

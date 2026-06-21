@@ -16,6 +16,12 @@ import (
 	"github.com/rushairer/gosso/internal/utility"
 )
 
+// oauth2MaxFormBodySize is the maximum allowed Content-Length for OAuth2 form endpoints.
+// Standard form-encoded OAuth2 requests are well under 4KB; 8KB allows generous headroom
+// for clients that include optional fields (e.g., long redirect_uri values) while still
+// preventing abuse via excessively large form bodies.
+const oauth2MaxFormBodySize = 8 * 1024
+
 // TokenRequest is the token exchange request body.
 type TokenRequest struct {
 	GrantType    string `json:"grant_type" form:"grant_type" binding:"required"`
@@ -31,6 +37,15 @@ type TokenRequest struct {
 
 // Token POST /oauth2/token
 func (c *OAuth2Controller) Token(ctx *gin.Context) {
+	// Defense-in-depth: reject oversized form bodies early, before parsing.
+	if ctx.Request.ContentLength > oauth2MaxFormBodySize {
+		ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{
+			"error":             "invalid_request",
+			"error_description": "request body too large",
+		})
+		return
+	}
+
 	// RFC 6749 §4.1.3 / §4.3.2: token endpoint MUST accept application/x-www-form-urlencoded.
 	// Reject JSON content type to prevent WAF bypass attacks.
 	// RFC 6749 Section 4.1.3: the token endpoint MUST use application/x-www-form-urlencoded.

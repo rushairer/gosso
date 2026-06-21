@@ -44,8 +44,8 @@ type RouterDeps struct {
 
 // RegisterWebRouter registers all routes
 func RegisterWebRouter(deps RouterDeps) error {
-	// Health check (no auth, no rate limiting)
-	registerHealthRoutes(deps.Server, deps.DB, deps.Redis)
+	// Health check (rate-limited to prevent abuse)
+	registerHealthRoutes(deps.Server, deps.DB, deps.Redis, deps.RateLimits.Health, deps.Logger)
 
 	// Test routes (debug only)
 	if deps.Debug {
@@ -188,14 +188,19 @@ func registerSwaggerRouter(server *gin.Engine) {
 	}
 }
 
-func registerHealthRoutes(server *gin.Engine, db *sql.DB, redis *cache.RedisClient) {
-	server.GET("/health", func(ctx *gin.Context) {
+func registerHealthRoutes(server *gin.Engine, db *sql.DB, redis *cache.RedisClient, healthRateLimit int, logger *zap.Logger) {
+	// Health endpoints are rate-limited (fail-open) to prevent abuse as
+	// amplification vectors — /readiness does DB and Redis pings, so it
+	// could be expensive under sustained traffic.
+	healthLimit := middleware.RedisRateLimitMiddleware(redis, "health", middleware.IPKeyFunc, healthRateLimit, time.Minute, true, logger)
+
+	server.GET("/health", healthLimit, func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{
 			"status": "ok",
 		})
 	})
 
-	server.GET("/readiness", func(ctx *gin.Context) {
+	server.GET("/readiness", healthLimit, func(ctx *gin.Context) {
 		checks := make(map[string]string)
 		ready := true
 

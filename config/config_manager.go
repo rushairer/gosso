@@ -106,6 +106,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("web_server.rate_limits.password", 3)
 	v.SetDefault("web_server.rate_limits.verify", 3)
 	v.SetDefault("web_server.rate_limits.admin", 30)
+	v.SetDefault("web_server.rate_limits.health", 60)
 
 	// Database configuration
 	v.SetDefault("database.default", "postgres")

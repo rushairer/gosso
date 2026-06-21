@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- `checkAndIncrementAttemptsScript` in `password_reset_service.go` now uses `pcall(require, 'cjson')` with a string pattern fallback, consistent with the pattern in `token_service_revoke.go`. This prevents failures in test environments using miniredis which lacks the cjson module (`internal/auth/service/password_reset_service.go`).
+- `SubmitConsent` handler now enforces `Content-Type: application/x-www-form-urlencoded` and rejects oversized bodies, matching the defense-in-depth pattern already used by the `Token` endpoint (`internal/oauth2/controller/oauth2_authorize.go`).
+- `/health` and `/readiness` endpoints now have IP-based rate limiting (fail-open, default 60 req/min) to prevent abuse as amplification vectors (`router/web.go`).
+
+### Changed
+- `sessionCache` cleanup sweep interval is now capped at 1 hour when `sessionTTL` is very high (e.g., 24h), ensuring stale entries are evicted promptly instead of accumulating for up to 72 hours (`internal/session/service/session_service.go`).
+- Token endpoint now rejects requests with `Content-Length` exceeding 8KB before parsing, as defense-in-depth alongside the existing global `MaxBodySizeMiddleware` (`internal/oauth2/controller/oauth2_token.go`).
+
+### Fixed
 - `VerificationService.pepperHash` panic message now correctly references `auth.verify_hash_pepper` / `GOUNO_AUTH_VERIFY_HASH_PEPPER` instead of the wrong env var `GOUNO_AUTH_TOTP_ENCRYPTION_KEY` (`internal/auth/service/verification_service.go`).
 - `Revoke` handler now checks `claims.ExpiresAt != nil` before accessing `.Time`, preventing a nil-pointer panic on malformed JWTs (`internal/oauth2/controller/oauth2_revoke.go`).
 - `DeviceUserSubmit` removed redundant manual CSRF validation — the global `CSRFMiddleware` already validates CSRF tokens for this path (`internal/oauth2/controller/oauth2_device.go`).
