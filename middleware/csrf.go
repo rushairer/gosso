@@ -159,7 +159,7 @@ func rotateCSRFCookie(ctx *gin.Context, cookieName string, secure bool, logger *
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode, // See setCSRFCookie for rationale
 	})
-		// Do NOT return the rotated token in a response header — SPAs read from cookie.
+	// Do NOT return the rotated token in a response header — SPAs read from cookie.
 }
 
 // generateCSRFToken generates a cryptographically secure random CSRF token.

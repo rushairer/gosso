@@ -24,6 +24,7 @@ type GoUnoConfig struct {
 	AuthConfig         AuthConfig           `mapstructure:"auth"`
 	CORSConfig         CORSConfig           `mapstructure:"cors"`
 	OAuthProviders     OAuthProvidersConfig `mapstructure:"oauth_providers"`
+	Observability      ObservabilityConfig  `mapstructure:"observability"`
 }
 
 type WebServerConfig struct {
@@ -122,27 +123,27 @@ type LogConfig struct {
 }
 
 type AuthConfig struct {
-	Issuer                         string        `mapstructure:"issuer"`
-	AccessTokenExpiry              time.Duration `mapstructure:"access_token_expiry"`
-	RefreshTokenExpiry             time.Duration `mapstructure:"refresh_token_expiry"`
-	SessionTTL                     time.Duration `mapstructure:"session_ttl"`
-	MaxSessions                    int           `mapstructure:"max_sessions"`
-	MaxSessionAge                  time.Duration `mapstructure:"max_session_age"`
-	AuthorizationCodeExpiry        time.Duration `mapstructure:"authorization_code_expiry"`
-	DeviceCodeExpiry               time.Duration `mapstructure:"device_code_expiry"`
-	DeviceCodeInterval             time.Duration `mapstructure:"device_code_interval"`
-	DefaultScopes                  []string      `mapstructure:"default_scopes"`
-	PrivateKeyPath                 string        `mapstructure:"private_key_path"`
-	KeyID                          string        `mapstructure:"key_id"`
-	PasswordResetBaseURL           string        `mapstructure:"password_reset_base_url"`
-	WebAuthnRPID                   string        `mapstructure:"webauthn_rp_id"`
-	WebAuthnRPName                 string        `mapstructure:"webauthn_rp_name"`
-	WebAuthnRPOrigin               string        `mapstructure:"webauthn_rp_origin"`
-	TOTPEncryptionKey              string        `mapstructure:"totp_encryption_key" json:"-"`
-	VerifyHashPepper               string        `mapstructure:"verify_hash_pepper" json:"-"`
-	LoginRateLimitWindow           time.Duration `mapstructure:"login_rate_limit_window"`
-	LoginMaxAttempts               int           `mapstructure:"login_max_attempts"`
-	LoginMaxAttemptsPerIP          int           `mapstructure:"login_max_attempts_per_ip"`
+	Issuer                  string        `mapstructure:"issuer"`
+	AccessTokenExpiry       time.Duration `mapstructure:"access_token_expiry"`
+	RefreshTokenExpiry      time.Duration `mapstructure:"refresh_token_expiry"`
+	SessionTTL              time.Duration `mapstructure:"session_ttl"`
+	MaxSessions             int           `mapstructure:"max_sessions"`
+	MaxSessionAge           time.Duration `mapstructure:"max_session_age"`
+	AuthorizationCodeExpiry time.Duration `mapstructure:"authorization_code_expiry"`
+	DeviceCodeExpiry        time.Duration `mapstructure:"device_code_expiry"`
+	DeviceCodeInterval      time.Duration `mapstructure:"device_code_interval"`
+	DefaultScopes           []string      `mapstructure:"default_scopes"`
+	PrivateKeyPath          string        `mapstructure:"private_key_path"`
+	KeyID                   string        `mapstructure:"key_id"`
+	PasswordResetBaseURL    string        `mapstructure:"password_reset_base_url"`
+	WebAuthnRPID            string        `mapstructure:"webauthn_rp_id"`
+	WebAuthnRPName          string        `mapstructure:"webauthn_rp_name"`
+	WebAuthnRPOrigin        string        `mapstructure:"webauthn_rp_origin"`
+	TOTPEncryptionKey       string        `mapstructure:"totp_encryption_key" json:"-"`
+	VerifyHashPepper        string        `mapstructure:"verify_hash_pepper" json:"-"`
+	LoginRateLimitWindow    time.Duration `mapstructure:"login_rate_limit_window"`
+	LoginMaxAttempts        int           `mapstructure:"login_max_attempts"`
+	LoginMaxAttemptsPerIP   int           `mapstructure:"login_max_attempts_per_ip"`
 	// LoginIPAllowlist contains IP addresses or CIDR ranges that are exempt from
 	// per-IP login rate limiting. Use this for known proxy/NAT exit IPs where
 	// multiple legitimate users share the same public IP.
@@ -196,6 +197,13 @@ type OAuthProvidersConfig struct {
 	WeChat OAuthProviderConfig `mapstructure:"wechat"`
 }
 
+// ObservabilityConfig holds configuration for metrics and distributed tracing.
+type ObservabilityConfig struct {
+	MetricsEnabled bool   `mapstructure:"metrics_enabled"`
+	TracingEnabled bool   `mapstructure:"tracing_enabled"`
+	OTLPEndpoint   string `mapstructure:"otlp_endpoint"`
+}
+
 func (c *GoUnoConfig) Validate() error {
 	var errs []error
 	if err := c.validateWebServer(); err != nil {
@@ -217,6 +225,9 @@ func (c *GoUnoConfig) Validate() error {
 		errs = append(errs, err)
 	}
 	if err := c.validateCORS(); err != nil {
+		errs = append(errs, err)
+	}
+	if err := c.validateObservability(); err != nil {
 		errs = append(errs, err)
 	}
 	if err := c.validateOAuthProviders(); err != nil {
@@ -656,4 +667,18 @@ func (c *GoUnoConfig) validateOAuthProviders() error {
 func isValidCIDR(s string) bool {
 	_, _, err := net.ParseCIDR(s)
 	return err == nil
+}
+
+func (c *GoUnoConfig) validateObservability() error {
+	var errs []error
+	if c.Observability.TracingEnabled && c.Observability.OTLPEndpoint == "" {
+		errs = append(errs, fmt.Errorf("observability: otlp_endpoint is required when tracing_enabled is true"))
+	}
+	if c.Observability.OTLPEndpoint != "" {
+		u, err := url.Parse(c.Observability.OTLPEndpoint)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+			errs = append(errs, fmt.Errorf("observability: otlp_endpoint must be a valid URL with http or https scheme"))
+		}
+	}
+	return errors.Join(errs...)
 }

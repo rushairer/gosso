@@ -24,6 +24,7 @@ web_server:
         device_code: 10
         password: 5
         verify: 5
+        health: 60
 database:
     # Dev uses Viper defaults for pool sizing (max_open_conns=25, max_idle_conns=15).
     # Override via GOUNO_DATABASE_MAX_OPEN_CONNS env var or uncomment below.
@@ -140,3 +141,7 @@ oauth_providers:
         auth_url: "https://open.weixin.qq.com/connect/qrconnect"
         token_url: "https://api.weixin.qq.com/sns/oauth2/access_token"
         userinfo_url: "https://api.weixin.qq.com/sns/userinfo"
+observability:
+    metrics_enabled: true
+    tracing_enabled: false
+    # otlp_endpoint: "http://localhost:4318"

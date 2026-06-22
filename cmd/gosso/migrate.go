@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	migrationAdvisoryLockKey int64 = 6742767655786865513 // stable key for "gosso:migrate"
-	defaultMigrationLockTimeout   = 5 * time.Minute
+	migrationAdvisoryLockKey    int64 = 6742767655786865513 // stable key for "gosso:migrate"
+	defaultMigrationLockTimeout       = 5 * time.Minute
 )
 
 var migrateCmd = &cobra.Command{
@@ -241,7 +241,7 @@ func withMigrateResources(cmd *cobra.Command, fn func(*migrate.Migrate) error) {
 	cleanup()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
+		return
 	}
 }
 

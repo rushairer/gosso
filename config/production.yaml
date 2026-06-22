@@ -138,3 +138,10 @@ oauth_providers:
         client_secret: ""
         redirect_uri: ""
         scopes: []
+
+# Observability: Prometheus metrics and OpenTelemetry tracing.
+# Both are disabled by default; enable per environment as needed.
+observability:
+    metrics_enabled: false
+    tracing_enabled: false
+    # otlp_endpoint: "http://jaeger:4318"  # OTLP HTTP endpoint for trace export

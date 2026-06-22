@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
@@ -40,6 +41,7 @@ type RouterDeps struct {
 	Debug            bool
 	SessionValidator sessionDomain.SessionValidator
 	Logger           *zap.Logger
+	MetricsEnabled   bool
 }
 
 // RegisterWebRouter registers all routes
@@ -56,6 +58,11 @@ func RegisterWebRouter(deps RouterDeps) error {
 	// Swagger UI (debug only)
 	if deps.Debug {
 		registerSwaggerRouter(deps.Server)
+	}
+
+	// Prometheus metrics endpoint
+	if deps.MetricsEnabled {
+		deps.Server.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	}
 
 	// JWT auth middleware
@@ -84,8 +91,22 @@ func RegisterWebRouter(deps RouterDeps) error {
 	// Non-security endpoints fail-open (allow if Redis is unavailable)
 	sessionLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "session", middleware.IPKeyFunc, deps.RateLimits.API, time.Minute, true, deps.Logger)
 
-	// /api/* routes
-	api := deps.Server.Group("/api")
+	// /api/* routes — versioned under /api/v1/
+	// Backward-compatible redirect from /api/* to /api/v1/* (308 Permanent Redirect)
+	deps.Server.Group("/api").Use(func(ctx *gin.Context) {
+		if !strings.HasPrefix(ctx.Request.URL.Path, "/api/v1") {
+			newPath := "/api/v1" + strings.TrimPrefix(ctx.Request.URL.Path, "/api")
+			if ctx.Request.URL.RawQuery != "" {
+				newPath += "?" + ctx.Request.URL.RawQuery
+			}
+			ctx.Redirect(http.StatusPermanentRedirect, newPath)
+			ctx.Abort()
+			return
+		}
+		ctx.Next()
+	})
+
+	api := deps.Server.Group("/api/v1")
 	{
 		// Auth routes (audit middleware injects IP/UserAgent)
 		api.Use(authMiddleware.AuditMetadataMiddleware())

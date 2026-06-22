@@ -101,6 +101,30 @@ services:
       - gosso-dev-network
     restart: unless-stopped
 
+  # Prometheus (可观测性指标采集)
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - gosso-dev-network
+    restart: unless-stopped
+
+  # Jaeger (分布式追踪 UI + OTLP 接收器)
+  jaeger:
+    image: jaegertracing/all-in-one:1.58
+    ports:
+      - "127.0.0.1:16686:16686"  # Jaeger UI
+      - "127.0.0.1:4318:4318"    # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - gosso-dev-network
+    restart: unless-stopped
+
 # 网络配置
 networks:
   gosso-dev-network:
@@ -116,4 +140,6 @@ volumes:
   redis_dev_data:
     driver: local
   go-mod-cache:
+    driver: local
+  prometheus_data:
     driver: local

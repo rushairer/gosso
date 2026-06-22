@@ -254,6 +254,29 @@ check_R3() {
 }
 
 # ============================================================================
+# AV1: Management API routes must use /api/v1/ prefix
+# ============================================================================
+check_AV1() {
+    echo ""
+    echo "=== AV1: API Versioning (/api/v1/) ==="
+
+    local found=0
+    while IFS=: read -r file lineno content; do
+        # Skip test files and the backward-compatible redirect handler
+        [[ "$file" == *_test.go ]] && continue
+        echo "$content" | grep -q 'strings.HasPrefix' && continue
+        echo "$content" | grep -q 'TrimPrefix' && continue
+        echo "$content" | grep -q '/api/v1' && continue
+        violation "AV1" "$file" "$lineno" "Route registered under bare /api/ instead of /api/v1/: $(echo "$content" | sed 's/^[[:space:]]*//')"
+        found=1
+    done < <(grep -rn --include='*.go' -E '(Group|GET|POST|PUT|DELETE|PATCH)\("\/api\/[^v]' router/ cmd/ 2>/dev/null | grep -v '_test\.go' || true)
+
+    if [ "$found" -eq 0 ]; then
+        pass "AV1" "All management API routes use /api/v1/ prefix"
+    fi
+}
+
+# ============================================================================
 # Main
 # ============================================================================
 echo "=========================================="
@@ -267,6 +290,7 @@ if should_run "C1"; then check_C1; fi
 if should_run "L1"; then check_L1; fi
 if should_run "L2"; then check_L2; fi
 if should_run "R3"; then check_R3; fi
+if should_run "AV1"; then check_AV1; fi
 
 echo ""
 echo "=========================================="

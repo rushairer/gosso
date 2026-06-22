@@ -26,6 +26,7 @@ web_server:
         device_code: 10
         password: 3
         verify: 3
+        health: 60
 database:
     default: postgres
     drivers:
@@ -79,3 +80,6 @@ auth:
     #     - "198.51.100.5"
     mfa_account_rate_limit_window: 15m
     password_reset_revoke_concurrency: 5
+observability:
+    metrics_enabled: false
+    tracing_enabled: false

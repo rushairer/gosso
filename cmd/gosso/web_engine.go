@@ -12,12 +12,13 @@ import (
 
 	"github.com/rushairer/gosso/config"
 	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/observability"
 	"github.com/rushairer/gosso/middleware"
 	"github.com/rushairer/gosso/router"
 )
 
 // setupEngine configures the Gin engine: middleware + routes
-func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger, m *appModules, db *sql.DB, redis *cache.RedisClient) (*gin.Engine, error) {
+func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger, m *appModules, db *sql.DB, redis *cache.RedisClient, metrics *observability.Metrics) (*gin.Engine, error) {
 	engine := gin.New()
 	if err := engine.SetTrustedProxies(cfg.WebServerConfig.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("invalid trusted proxies configuration: %w", err)
@@ -49,6 +50,11 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		),
 	)
 
+	// Prometheus metrics middleware (after CSRF, before routes)
+	if cfg.Observability.MetricsEnabled && metrics != nil {
+		engine.Use(middleware.PrometheusMiddleware(metrics))
+	}
+
 	if err := router.RegisterWebRouter(router.RouterDeps{
 		Server:           engine,
 		DB:               db,
@@ -64,6 +70,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		Debug:            cfg.WebServerConfig.Debug,
 		SessionValidator: m.sessionSvc,
 		Logger:           logger,
+		MetricsEnabled:   cfg.Observability.MetricsEnabled,
 	}); err != nil {
 		return nil, err
 	}

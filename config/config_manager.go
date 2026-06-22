@@ -143,4 +143,9 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	// Log configuration
 	v.SetDefault("log.level", 0)
 	v.SetDefault("log.format", "console")
+
+	// Observability configuration
+	v.SetDefault("observability.metrics_enabled", false)
+	v.SetDefault("observability.tracing_enabled", false)
+	v.SetDefault("observability.otlp_endpoint", "")
 }

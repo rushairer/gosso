@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
@@ -16,7 +17,10 @@ import (
 	"github.com/rushairer/gosso/config"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
 	dbutil "github.com/rushairer/gosso/internal/db"
+	"github.com/rushairer/gosso/internal/observability"
 	"github.com/rushairer/gosso/internal/utility"
+
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 var webCmd = &cobra.Command{
@@ -76,6 +80,30 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	}
 	defer func() { _ = redis.Close() }()
 
+	// Initialize observability
+	var metrics *observability.Metrics
+	if globalConfig.Observability.MetricsEnabled {
+		metrics = observability.NewMetrics(nil)
+		logger.Info("prometheus metrics enabled")
+	}
+
+	var tracerProvider *sdktrace.TracerProvider
+	if globalConfig.Observability.TracingEnabled {
+		tracerProvider, err = observability.InitTracerProvider(ctx, "gosso", "dev", globalConfig.Observability.OTLPEndpoint)
+		if err != nil {
+			logger.Error("tracer init failed", zap.Error(err))
+			os.Exit(1)
+		}
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if shutdownErr := tracerProvider.Shutdown(shutdownCtx); shutdownErr != nil {
+				logger.Error("tracer shutdown error", zap.Error(shutdownErr))
+			}
+		}()
+		logger.Info("opentelemetry tracing enabled", zap.String("endpoint", globalConfig.Observability.OTLPEndpoint))
+	}
+
 	auditAuditor := auditService.NewAuditor(ctx, db, &globalConfig.TaskPipelineConfig, logger)
 	go listenAuditErrors(ctx, auditAuditor, logger)
 
@@ -86,7 +114,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	engine, err := setupEngine(ctx, globalConfig, logger, modules, db, redis)
+	engine, err := setupEngine(ctx, globalConfig, logger, modules, db, redis, metrics)
 	if err != nil {
 		logger.Error("engine setup failed", zap.Error(err))
 		_ = logger.Sync()
@@ -139,7 +167,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 	}
 
 	// Drain in-flight audit batches before exiting
-	auditAuditor.Wait()
+	auditAuditor.Close()
 
 	logger.Info("server exiting")
 	_ = logger.Sync()
