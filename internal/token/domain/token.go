@@ -37,7 +37,7 @@ type RefreshToken struct {
 
 // Sentinel errors for RefreshToken.
 var (
-	ErrRefreshTokenRequired      = errors.New("refresh token: token is required")
+	ErrRefreshTokenRequired        = errors.New("refresh token: token is required")
 	ErrRefreshTokenAccountRequired = errors.New("refresh token: account_id is required")
 	ErrRefreshTokenExpiresRequired = errors.New("refresh token: expires_at is required")
 )
