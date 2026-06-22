@@ -18,9 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Helm chart**: full Kubernetes deployment chart with Deployment, Service, Ingress, ConfigMap, Secret, ServiceAccount, HPA, PDB, and ServiceMonitor templates (`deploy/helm/gosso/`).
 - **OpenAPI improvements**: `PaginatedResponse` generic pagination schema, `RateLimitHeaders` reusable component (`docs/openapi.yaml`).
 - `.gitattributes` for GitHub linguist stats and line ending normalization.
+- `gosso version` CLI subcommand — prints build version, commit, date, Go version, and OS/arch.
+- Helm chart test template (`templates/tests/test-connection.yaml`) and `.helmignore`.
+- `gosec` SAST scanning as a dedicated CI job with SARIF upload to GitHub Security.
+- Conventional commit format enforcement on pull requests via CI check.
+- Release workflow: multi-arch Docker builds via `docker/build-push-action` with QEMU + GHA cache.
 
 ### Fixed
 - `VerificationService.pepperHash` no longer panics on empty pepper — now returns an error to the caller (`internal/auth/service/verification_service.go`).
+- `.github/CODEOWNERS` paths no longer use incorrect `gosso/` prefix — security-sensitive paths now correctly match (`internal/auth/`, `internal/token/`, `middleware/`, `config/`).
+- Coverage thresholds unified to 75% across `ci.yml`, `Makefile`, `CONTRIBUTING.md`, and `README.md` (was inconsistent 60/70/75%).
+- CI step label corrected from "Upload gosec SARIF" to "Upload SARIF" (uploads golangci-lint output, not gosec).
 - `checkAndIncrementAttemptsScript` in `password_reset_service.go` now uses `pcall(require, 'cjson')` with a string pattern fallback, consistent with the pattern in `token_service_revoke.go`. This prevents failures in test environments using miniredis which lacks the cjson module (`internal/auth/service/password_reset_service.go`).
 - `SubmitConsent` handler now enforces `Content-Type: application/x-www-form-urlencoded` and rejects oversized bodies, matching the defense-in-depth pattern already used by the `Token` endpoint (`internal/oauth2/controller/oauth2_authorize.go`).
 - `/health` and `/readiness` endpoints now have IP-based rate limiting (fail-open, default 60 req/min) to prevent abuse as amplification vectors (`router/web.go`).
@@ -29,8 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `isSelfAccount` documentation now explicitly explains that the fail-safe `true` return applies to ALL guarded operations (delete, disable, enable, add/remove role), not just self-deletion (`internal/admin/controller/admin_controller.go`).
 
 ### Changed
-- Dockerfile now supports multi-platform builds (`linux/amd64`, `linux/arm64`) via `TARGETARCH` ARG (`.github/workflows/release.yml`, `Dockerfile`).
-- Release workflow uses `docker/build-push-action` with GHA cache for faster multi-arch builds.
+- Dockerfile now supports multi-platform builds (`linux/amd64`, `linux/arm64`) via `TARGETARCH` ARG and injects version/commit/date via ldflags.
+- Release workflow uses `docker/build-push-action` with QEMU for faster multi-arch builds and GHA layer cache.
 - Removed dead `wrapcheck` exclusion from `.golangci.yml` — linter was never enabled.
 - `sessionCache` cleanup sweep interval is now capped at 1 hour when `sessionTTL` is very high (e.g., 24h), ensuring stale entries are evicted promptly instead of accumulating for up to 72 hours (`internal/session/service/session_service.go`).
 - Token endpoint now rejects requests with `Content-Length` exceeding 8KB before parsing, as defense-in-depth alongside the existing global `MaxBodySizeMiddleware` (`internal/oauth2/controller/oauth2_token.go`).

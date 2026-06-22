@@ -2,6 +2,7 @@
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 ARG VERSION=dev
+ARG COMMIT=none
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -16,7 +17,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -buildvcs=false \
-    -ldflags="-s -w -X main.version=${VERSION}" \
+    -ldflags="-s -w -X github.com/rushairer/gosso/cmd/gosso.version=${VERSION} -X github.com/rushairer/gosso/cmd/gosso.commit=${COMMIT} -X 'github.com/rushairer/gosso/cmd/gosso.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" \
     -o /build/bin/gosso \
     ./cmd
 

@@ -1,0 +1,21 @@
+# Patterns to ignore when building packages.
+.git
+.gitignore
+.github
+.DS_Store
+*.md
+!README.md
+LICENSE
+.golangci.yml
+.air.toml
+.env*
+Makefile
+bin/
+tmp/
+data/
+ssl/
+script/
+examples/
+docs/
+doc/
+db/migrations/README.md

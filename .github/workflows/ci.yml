@@ -17,7 +17,7 @@ concurrency:
 
 env:
   GO_VERSION: "1.26"
-  COVERAGE_MIN: "70"
+  COVERAGE_MIN: "75"
   TEST_POSTGRES_PASSWORD: "gosso_test_password"
   MIGRATE_VERSION: "v4.19.0"
 
@@ -42,12 +42,67 @@ jobs:
           version: v2.12.2
           args: --out-format sarif:./golangci-lint.sarif
 
-      - name: Upload gosec SARIF
+      - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
         if: always()
         with:
           sarif_file: ./golangci-lint.sarif
           category: golangci-lint
+
+  commitlint:
+    name: Conventional Commits
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Check conventional commits
+        run: |
+          COMMITS=$(git log origin/${{ github.base_ref }}..HEAD --pretty=format:"%s")
+          PATTERN="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .+"
+          FAILED=0
+          while IFS= read -r msg; do
+            [ -z "$msg" ] && continue
+            if ! echo "$msg" | grep -qE "$PATTERN"; then
+              echo "❌ Non-conventional commit: $msg"
+              FAILED=1
+            fi
+          done <<< "$COMMITS"
+          if [ "$FAILED" -eq 1 ]; then
+            echo ""
+            echo "Commits must follow Conventional Commits format: type(scope): description"
+            echo "Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+            exit 1
+          fi
+          echo "✅ All commits follow conventional format"
+
+  gosec:
+    name: Security (gosec)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go.sum
+
+      - name: Install and run gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
+          gosec -no-fail -fmt sarif -out gosec.sarif ./...
+
+      - name: Upload gosec SARIF
+        uses: github/codeql-action/upload-sarif@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
+        if: always()
+        with:
+          sarif_file: gosec.sarif
+          category: gosec
 
   architecture-check:
     name: Architecture Invariants

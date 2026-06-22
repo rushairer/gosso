@@ -134,7 +134,7 @@ All pull requests run through GitHub Actions (`.github/workflows/ci.yml`):
 
 1. **Lint** -- `golangci-lint` v2.12.2
 2. **Architecture Invariants** -- automated checks from [doc/ARCHITECTURE_INVARIANTS.md](doc/ARCHITECTURE_INVARIANTS.md)
-3. **Unit Tests** -- `go test -race -coverprofile=coverage.out ./...` with a **60% coverage threshold** and per-module coverage report
+3. **Unit Tests** -- `go test -race -coverprofile=coverage.out ./...` with a **75% coverage threshold** and per-module coverage report
 4. **Vulnerability Check** -- `govulncheck ./...`
 5. **Integration Tests** -- run against PostgreSQL 15 and Redis 7 service containers
 6. **Build** -- binary compilation with stripped symbols
@@ -280,7 +280,7 @@ make lint-fix   # 自动修复可修复的问题
 
 1. **Lint** -- `golangci-lint` v2.12.2
 2. **架构不变量检查** -- 自动化检查 [doc/ARCHITECTURE_INVARIANTS.md](doc/ARCHITECTURE_INVARIANTS.md) 中的规则
-3. **单元测试** -- 60% 覆盖率阈值 + 模块级覆盖率报告
+3. **单元测试** -- 75% 覆盖率阈值 + 模块级覆盖率报告
 4. **漏洞扫描** -- `govulncheck`
 5. **集成测试** -- PostgreSQL 15 + Redis 7
 6. **构建** -- 二进制编译

@@ -13,14 +13,14 @@ deploy/ @rushairer
 db/migrations/ @rushairer
 
 # Security-sensitive code
-gosso/internal/auth/ @rushairer
-gosso/internal/token/ @rushairer
-gosso/internal/oauth2/ @rushairer
-gosso/internal/oidc/ @rushairer
-gosso/middleware/ @rushairer
+internal/auth/ @rushairer
+internal/token/ @rushairer
+internal/oauth2/ @rushairer
+internal/oidc/ @rushairer
+middleware/ @rushairer
 
 # Configuration
-gosso/config/ @rushairer
+config/ @rushairer
 
 # Architecture documentation
 doc/ARCHITECTURE_INVARIANTS.md @rushairer

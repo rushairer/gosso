@@ -49,7 +49,7 @@ gosso provides a complete SSO server with OAuth 2.0 authorization, OIDC discover
 - Docker and docker-compose for dev, test, and production
 - [Helm chart](deploy/helm/gosso/) for Kubernetes deployment
 - [Operator Guide](doc/OPERATOR_GUIDE.md) with deployment, monitoring, and troubleshooting docs
-- GitHub Actions CI (lint, unit tests with 60% coverage threshold, govulncheck, integration tests, Trivy security scan, cosign image signing, SBOM generation)
+- GitHub Actions CI (lint, unit tests with 75% coverage threshold, govulncheck, integration tests, Trivy security scan, cosign image signing, SBOM generation)
 
 ## Prerequisites
 
@@ -335,7 +335,7 @@ make docker-test-up
 make test-integration
 ```
 
-Unit tests use `testify/assert`, `go-sqlmock`, and `miniredis`. The CI pipeline requires a minimum of 60% test coverage across the coverage-gate package set and package-level coverage floors for critical auth, OAuth2, OIDC, token, and session services.
+Unit tests use `testify/assert`, `go-sqlmock`, and `miniredis`. The CI pipeline requires a minimum of 75% test coverage across the coverage-gate package set and package-level coverage floors for critical auth, OAuth2, OIDC, token, and session services.
 
 ## Configuration Reference
 
@@ -560,7 +560,7 @@ make docker-test-up
 make test-integration
 ```
 
-单元测试使用 `testify/assert`、`go-sqlmock` 和 `miniredis`。CI 管线对覆盖率门禁包集合要求最低 60% 测试覆盖率，并对 auth、OAuth2、OIDC、token、session 等关键服务包设置单包覆盖率门禁。
+单元测试使用 `testify/assert`、`go-sqlmock` 和 `miniredis`。CI 管线对覆盖率门禁包集合要求最低 75% 测试覆盖率，并对 auth、OAuth2、OIDC、token、session 等关键服务包设置单包覆盖率门禁。
 
 ## 贡献
 
