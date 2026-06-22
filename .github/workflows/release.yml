@@ -107,3 +107,19 @@ jobs:
           files: |
             CHANGELOG.md
             gosso-sbom.cdx.json
+
+      # --- Helm Chart OCI Publish ---
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+
+      - name: Update Helm chart version
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          sed -i "s/^version:.*/version: ${VERSION}/" deploy/helm/gosso/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" deploy/helm/gosso/Chart.yaml
+
+      - name: Package and push Helm chart to GHCR
+        run: |
+          helm package deploy/helm/gosso
+          helm push gosso-*.tgz oci://ghcr.io/${{ github.repository }}/charts

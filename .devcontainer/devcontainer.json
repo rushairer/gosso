@@ -1,0 +1,26 @@
+{
+  "name": "gosso",
+  "image": "mcr.microsoft.com/devcontainers/go:1.26",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "forwardPorts": [8080, 5432, 6379],
+  "postCreateCommand": "go mod download && cp .env.development.example .env.development",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "redhat.vscode-yaml",
+        "42Crunch.vscode-openapi"
+      ],
+      "settings": {
+        "go.lintTool": "golangci-lint",
+        "go.lintFlags": ["--config=.golangci.yml"]
+      }
+    }
+  },
+  "dockerComposeFile": "docker-compose.development.yml",
+  "service": "gosso",
+  "workspaceFolder": "/go/src/gosso"
+}

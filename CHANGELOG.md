@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Integrator guide with OIDC client integration examples in Go, JavaScript, and Python (`doc/INTEGRATOR_GUIDE.md`).
+- `.devcontainer/devcontainer.json` for instant contributor onboarding with VS Code.
+- PR auto-labeling via `actions/labeler` (`.github/labeler.yml`, `.github/workflows/labeler.yml`).
+- Helm chart OCI publishing to GHCR in release workflow.
+
+### Changed
+
+### Fixed
+
+### Removed
+
+
+## [1.0.0] - 2026-06-22
+
+### Added
 - **Enterprise governance**: `CODE_OF_CONDUCT.md` based on Contributor Covenant v2.1, bilingual English/Chinese (`CODE_OF_CONDUCT.md`).
 - **CODEOWNERS**: automatic PR reviewer assignment for security-sensitive paths (`.github/CODEOWNERS`).
 - **GitHub Actions security hardening**: all actions pinned to commit SHA with version comments, workflow-level `permissions: read-all` default, concurrency groups to prevent redundant runs (`.github/workflows/ci.yml`, `.github/workflows/release.yml`).

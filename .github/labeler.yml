@@ -1,0 +1,53 @@
+area/auth:
+  - changed-files:
+      - any-glob-to-any-file: "internal/auth/**"
+
+area/oauth2:
+  - changed-files:
+      - any-glob-to-any-file: "internal/oauth2/**"
+
+area/oidc:
+  - changed-files:
+      - any-glob-to-any-file: "internal/oidc/**"
+
+area/token:
+  - changed-files:
+      - any-glob-to-any-file: "internal/token/**"
+
+area/session:
+  - changed-files:
+      - any-glob-to-any-file: "internal/session/**"
+
+area/account:
+  - changed-files:
+      - any-glob-to-any-file: "internal/account/**"
+
+area/middleware:
+  - changed-files:
+      - any-glob-to-any-file: "middleware/**"
+
+area/config:
+  - changed-files:
+      - any-glob-to-any-file: "config/**"
+
+area/deploy:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "deploy/**"
+          - "Dockerfile"
+          - "docker-compose*.yml"
+
+area/ci:
+  - changed-files:
+      - any-glob-to-any-file: ".github/**"
+
+area/docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "doc/**"
+          - "docs/**"
+          - "*.md"
+
+area/db:
+  - changed-files:
+      - any-glob-to-any-file: "db/**"
