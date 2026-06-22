@@ -32,7 +32,7 @@ func TestDummyWorkWithContext_CancelsOnContextDone(t *testing.T) {
 	DummyWorkWithContext(ctx)
 	elapsed := time.Since(start)
 
-	assert.Less(t, elapsed, 500*time.Millisecond, "should return quickly when context is cancelled")
+	assert.Less(t, elapsed, 500*time.Millisecond, "should return quickly when context is canceled")
 }
 
 func TestSetDummyWorkDuration_ReturnsErrorOnZero(t *testing.T) {

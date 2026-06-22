@@ -278,9 +278,6 @@ func TestRefreshTokens_Success(t *testing.T) {
 	fixture.seedTestAccount("account-001", "testuser", "password123")
 
 	// Login to get session + refresh token
-	fixture.sqlMock.ExpectBegin()
-	fixture.sqlMock.ExpectCommit()
-
 	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username:  "testuser",
 		Password:  "password123",
@@ -288,7 +285,6 @@ func TestRefreshTokens_Success(t *testing.T) {
 		UserAgent: "test-agent",
 	})
 	require.NoError(t, err)
-	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
 
 	refreshResult, err := fixture.svc.RefreshTokens(context.Background(), loginResult.RefreshToken)
 	require.NoError(t, err)
@@ -318,9 +314,6 @@ func TestLogout_Success(t *testing.T) {
 
 	fixture.seedTestAccount("account-001", "testuser", "password123")
 
-	fixture.sqlMock.ExpectBegin()
-	fixture.sqlMock.ExpectCommit()
-
 	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username:  "testuser",
 		Password:  "password123",
@@ -328,7 +321,6 @@ func TestLogout_Success(t *testing.T) {
 		UserAgent: "test-agent",
 	})
 	require.NoError(t, err)
-	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
 
 	err = fixture.svc.Logout(context.Background(), "account-001", loginResult.Session.ID, "", time.Time{})
 	assert.NoError(t, err)
@@ -341,9 +333,6 @@ func TestLogout_WithAccessToken(t *testing.T) {
 
 	fixture.seedTestAccount("account-001", "testuser", "password123")
 
-	fixture.sqlMock.ExpectBegin()
-	fixture.sqlMock.ExpectCommit()
-
 	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username:  "testuser",
 		Password:  "password123",
@@ -351,7 +340,6 @@ func TestLogout_WithAccessToken(t *testing.T) {
 		UserAgent: "test-agent",
 	})
 	require.NoError(t, err)
-	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
 
 	err = fixture.svc.Logout(context.Background(), "account-001", loginResult.Session.ID, "fake-jti", time.Now().Add(15*time.Minute))
 	assert.NoError(t, err)

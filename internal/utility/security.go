@@ -28,17 +28,17 @@ func SetDummyWorkDuration(d time.Duration) error {
 	return nil
 }
 
-// DummyWorkWithContext performs sleep-based timing padding to equalise the response
+// DummyWorkWithContext performs sleep-based timing padding to equalize the response
 // time of early-return paths with the real authentication path. This mitigates timing
 // side-channel attacks that could distinguish "email not found" from "wrong password"
 // based on latency differences.
 //
 // The context allows cancellation during server shutdown, preventing goroutine
-// accumulation when the server is stopping. If the context is cancelled before the
+// accumulation when the server is stopping. If the context is canceled before the
 // duration elapses, the function returns immediately.
 func DummyWorkWithContext(ctx context.Context) {
 	base := time.Duration(dummyWorkDuration.Load())
-	jitter := time.Duration(rand.Int64N(int64(base)))
+	jitter := time.Duration(rand.Int64N(int64(base))) //nolint:gosec // G404: jitter only, not security-critical
 	duration := base + jitter
 	timer := time.NewTimer(duration)
 	defer timer.Stop()

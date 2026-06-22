@@ -70,21 +70,21 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 	}
 
 	// Validate client metadata before persisting
-	if err := validateClientName(req.Name, true); err != nil {
-		return nil, "", err
+	if validationErr := validateClientName(req.Name, true); validationErr != nil {
+		return nil, "", validationErr
 	}
-	if err := validateClientDescription(req.Description); err != nil {
-		return nil, "", err
+	if validationErr := validateClientDescription(req.Description); validationErr != nil {
+		return nil, "", validationErr
 	}
-	if err := validateRedirectURIs(req.RedirectURIs); err != nil {
-		return nil, "", err
+	if validationErr := validateRedirectURIs(req.RedirectURIs); validationErr != nil {
+		return nil, "", validationErr
 	}
-	if err := validateRedirectURIs(req.PostLogoutRedirectURIs); err != nil {
-		return nil, "", fmt.Errorf("post_logout_redirect_uris: %w", err)
+	if validationErr := validateRedirectURIs(req.PostLogoutRedirectURIs); validationErr != nil {
+		return nil, "", fmt.Errorf("post_logout_redirect_uris: %w", validationErr)
 	}
 	if len(req.GrantTypes) > 0 {
-		if err := validateGrantTypes(req.GrantTypes); err != nil {
-			return nil, "", err
+		if validationErr := validateGrantTypes(req.GrantTypes); validationErr != nil {
+			return nil, "", validationErr
 		}
 	}
 
@@ -96,9 +96,9 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 		if err != nil {
 			return nil, "", fmt.Errorf("generate client secret: %w", err)
 		}
-		hash, err := bcrypt.GenerateFromPassword([]byte(secretPlaintext), bcrypt.DefaultCost)
-		if err != nil {
-			return nil, "", fmt.Errorf("hash client secret: %w", err)
+		hash, hashErr := bcrypt.GenerateFromPassword([]byte(secretPlaintext), bcrypt.DefaultCost)
+		if hashErr != nil {
+			return nil, "", fmt.Errorf("hash client secret: %w", hashErr)
 		}
 		secretHash = string(hash)
 	}
@@ -111,8 +111,8 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 	if len(scopes) == 0 {
 		scopes = []string{"openid"}
 	}
-	if err := validateScopes(scopes); err != nil {
-		return nil, "", err
+	if validationErr := validateScopes(scopes); validationErr != nil {
+		return nil, "", validationErr
 	}
 
 	client, err := domain.NewOAuth2Client(req.AccountID, req.Name, clientID, grantTypes)
@@ -316,8 +316,8 @@ func validateGrantTypes(types []string) error {
 }
 
 const (
-	maxScopes       = 30
-	maxScopeLength  = 256
+	maxScopes      = 30
+	maxScopeLength = 256
 )
 
 // validateScopes validates that scope values are well-formed.

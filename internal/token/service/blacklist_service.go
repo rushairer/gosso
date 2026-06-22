@@ -195,7 +195,7 @@ func (s *BlacklistService) GetAccountRevokedAfter(ctx context.Context, accountID
 // TokenRevocationResult holds the pipelined results of a combined
 // blacklist + account-revocation check, avoiding two sequential round-trips.
 type TokenRevocationResult struct {
-	TokenRevoked    bool
+	TokenRevoked        bool
 	AccountRevokedAfter time.Time
 }
 

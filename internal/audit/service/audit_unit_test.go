@@ -80,12 +80,12 @@ func TestAuditor_ErrorChan(t *testing.T) {
 func TestAuditor_Log_NilReceiver(t *testing.T) {
 	var auditor *Auditor
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		CreatedAt:     time.Now(),
 	}
 	err := auditor.Log(context.Background(), record)
 	assert.NoError(t, err)
@@ -94,12 +94,12 @@ func TestAuditor_Log_NilReceiver(t *testing.T) {
 func TestAuditor_LogSync_NilReceiver(t *testing.T) {
 	var auditor *Auditor
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		CreatedAt:     time.Now(),
 	}
 	err := auditor.LogSync(context.Background(), record)
 	assert.NoError(t, err)
@@ -110,12 +110,12 @@ func TestAuditor_LogSync_NilReceiver(t *testing.T) {
 // ──────────────────────────────────────────────
 func TestAuditLog_NilAuditor(t *testing.T) {
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		CreatedAt:     time.Now(),
 	}
 	// Should not panic when auditor is nil
 	assert.NotPanics(t, func() {
@@ -125,12 +125,12 @@ func TestAuditLog_NilAuditor(t *testing.T) {
 
 func TestAuditLogSync_NilAuditor(t *testing.T) {
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		CreatedAt:     time.Now(),
 	}
 	assert.NotPanics(t, func() {
 		_ = AuditLogSync(context.Background(), nil, zap.NewNop(), record)
@@ -145,12 +145,12 @@ func TestAuditLog_WithAuditor_SubmitError(t *testing.T) {
 	auditor.Close() // Close immediately so Submit will fail
 
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		CreatedAt:     time.Now(),
 	}
 
 	// Should log warning, not panic
@@ -169,13 +169,13 @@ func TestAuditor_Log_WithRequestID(t *testing.T) {
 	ctx := audit.SetMetadata(context.Background(), "127.0.0.1", "test-agent", "req-123")
 
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		Meta:      json.RawMessage(`{"existing": "value"}`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		Meta:          json.RawMessage(`{"existing": "value"}`),
+		CreatedAt:     time.Now(),
 	}
 
 	// Submit will fail (nil DB), but the request_id injection logic runs
@@ -203,13 +203,13 @@ func TestAuditor_LogSync_WithRequestID(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		Meta:      json.RawMessage(`{}`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		Meta:          json.RawMessage(`{}`),
+		CreatedAt:     time.Now(),
 	}
 
 	err = auditor.LogSync(ctx, record)
@@ -232,13 +232,13 @@ func TestAuditor_Log_MalformedMeta(t *testing.T) {
 	ctx := audit.SetMetadata(context.Background(), "127.0.0.1", "test-agent", "req-789")
 
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		Meta:      json.RawMessage(`not valid json`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		Meta:          json.RawMessage(`not valid json`),
+		CreatedAt:     time.Now(),
 	}
 
 	_ = auditor.Log(ctx, record)
@@ -265,13 +265,13 @@ func TestAuditor_LogSync_MalformedMeta(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		Meta:      json.RawMessage(`bad json`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		Meta:          json.RawMessage(`bad json`),
+		CreatedAt:     time.Now(),
 	}
 
 	err = auditor.LogSync(ctx, record)
@@ -294,13 +294,13 @@ func TestAuditor_Log_WithoutRequestID(t *testing.T) {
 
 	originalMeta := json.RawMessage(`{"foo": "bar"}`)
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		Meta:      originalMeta,
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		Meta:          originalMeta,
+		CreatedAt:     time.Now(),
 	}
 
 	_ = auditor.Log(context.Background(), record)
@@ -343,12 +343,12 @@ func TestDo_WithRecord(t *testing.T) {
 	defer auditor.Close()
 
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		CreatedAt:     time.Now(),
 	}
 
 	err := auditor.Do(context.Background(), func(_ context.Context, _ *sql.DB) (*domain.AuditRecord, error) {
@@ -363,13 +363,13 @@ func TestDo_WithRecordAndAccountID(t *testing.T) {
 
 	accountID := "acc-123"
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		AccountID: &accountID,
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		AccountID:     &accountID,
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		CreatedAt:     time.Now(),
 	}
 
 	err := auditor.Do(context.Background(), func(_ context.Context, _ *sql.DB) (*domain.AuditRecord, error) {
@@ -383,12 +383,12 @@ func TestDo_SubmitAfterClose(t *testing.T) {
 	auditor.Close()
 
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		CreatedAt:     time.Now(),
 	}
 
 	err := auditor.Do(context.Background(), func(_ context.Context, _ *sql.DB) (*domain.AuditRecord, error) {
@@ -414,12 +414,12 @@ func TestAuditLogSync_WithAuditor_Success(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		CreatedAt:     time.Now(),
 	}
 
 	assert.NotPanics(t, func() {
@@ -440,12 +440,12 @@ func TestAuditLogSync_WithAuditor_DBError(t *testing.T) {
 		WillReturnError(errors.New("connection refused"))
 
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		CreatedAt:     time.Now(),
 	}
 
 	assert.NotPanics(t, func() {
@@ -464,13 +464,13 @@ func TestAuditor_Log_WithAccountID(t *testing.T) {
 
 	accountID := "acc-456"
 	record := &domain.AuditRecord{
-		ID:        uuid.New().String(),
-		CorrelationID:      uuid.New().String(),
-		AccountID: &accountID,
-		Action:    "test.action",
-		Actor:     "test",
-		Resource:  json.RawMessage(`{}`),
-		CreatedAt: time.Now(),
+		ID:            uuid.New().String(),
+		CorrelationID: uuid.New().String(),
+		AccountID:     &accountID,
+		Action:        "test.action",
+		Actor:         "test",
+		Resource:      json.RawMessage(`{}`),
+		CreatedAt:     time.Now(),
 	}
 
 	err := auditor.Log(context.Background(), record)

@@ -807,7 +807,10 @@ func TestVerifyContactCredential_Email(t *testing.T) {
 	accountID := "account-001"
 	now := time.Now()
 
-	// Mock FindByID for requireActiveAccount
+	// All operations run inside a single transaction (RunInTransaction)
+	mock.ExpectBegin()
+
+	// Mock FindByIDTx for requireActiveAccount (inside transaction)
 	accountRows := sqlmock.NewRows([]string{
 		"id", "username", "display_name", "avatar_url", "status",
 		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
@@ -818,9 +821,6 @@ func TestVerifyContactCredential_Email(t *testing.T) {
 	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
-
-	// All credential operations happen inside a single transaction to prevent TOCTOU
-	mock.ExpectBegin()
 
 	// FindByAccountAndTypeForUpdate for email — returns one unverified credential
 	emailRows := sqlmock.NewRows([]string{
@@ -863,7 +863,10 @@ func TestVerifyContactCredential_PhoneFallback(t *testing.T) {
 	accountID := "account-001"
 	now := time.Now()
 
-	// Mock FindByID for requireActiveAccount
+	// All operations run inside a single transaction (RunInTransaction)
+	mock.ExpectBegin()
+
+	// Mock FindByIDTx for requireActiveAccount (inside transaction)
 	accountRows := sqlmock.NewRows([]string{
 		"id", "username", "display_name", "avatar_url", "status",
 		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
@@ -874,9 +877,6 @@ func TestVerifyContactCredential_PhoneFallback(t *testing.T) {
 	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
-
-	// All credential operations happen inside a single transaction to prevent TOCTOU
-	mock.ExpectBegin()
 
 	// FindByAccountAndTypeForUpdate for email — not found
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
@@ -924,7 +924,10 @@ func TestVerifyContactCredential_NoCredentialFound(t *testing.T) {
 	accountID := "account-no-creds"
 	now := time.Now()
 
-	// Mock FindByID for requireActiveAccount
+	// All operations run inside a single transaction (RunInTransaction)
+	mock.ExpectBegin()
+
+	// Mock FindByIDTx for requireActiveAccount (inside transaction)
 	accountRows := sqlmock.NewRows([]string{
 		"id", "username", "display_name", "avatar_url", "status",
 		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
@@ -935,9 +938,6 @@ func TestVerifyContactCredential_NoCredentialFound(t *testing.T) {
 	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
 		WithArgs(accountID).
 		WillReturnRows(accountRows)
-
-	// All credential operations happen inside a single transaction to prevent TOCTOU
-	mock.ExpectBegin()
 
 	// FindByAccountAndTypeForUpdate for email — not found
 	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
@@ -1265,3 +1265,391 @@ func (f *fakeAccountService) GetAccountRoles(_ context.Context, _ string) ([]*do
 	return nil, nil
 }
 func (f *fakeAccountService) SetOptions(_ *AccountServiceOptions) {}
+
+// ──────────────────────────────────────────────
+// validateUsername
+// ──────────────────────────────────────────────
+
+func TestValidateUsername(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr error
+	}{
+		{"valid simple", "alice", nil},
+		{"valid with digits", "user123", nil},
+		{"valid with hyphen", "my-user", nil},
+		{"valid with dot", "my.user", nil},
+		{"valid with underscore", "my_user", nil},
+		{"valid minimum length", "ab", nil},
+		{"empty username", "", ErrUsernameEmpty},
+		{"too short", "a", ErrUsernameTooShort},
+		{"too long", string(make([]byte, 65)), ErrUsernameTooLong},
+		{"uppercase letter", "Alice", ErrUsernameInvalidChars},
+		{"space in name", "my user", ErrUsernameInvalidChars},
+		{"special char", "user@host", ErrUsernameInvalidChars},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateUsername(tt.input)
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// ──────────────────────────────────────────────
+// nonNilMap
+// ──────────────────────────────────────────────
+
+func TestNonNilMap(t *testing.T) {
+	t.Run("nil returns empty map", func(t *testing.T) {
+		result := nonNilMap(nil)
+		assert.NotNil(t, result)
+		assert.Empty(t, result)
+	})
+
+	t.Run("non-nil returns same map", func(t *testing.T) {
+		input := map[string]any{"key": "value"}
+		result := nonNilMap(input)
+		assert.Equal(t, input, result)
+	})
+}
+
+// ──────────────────────────────────────────────
+// FindByUsernameWithPasswordCredential
+// ──────────────────────────────────────────────
+
+func TestFindByUsernameWithPasswordCredential(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+
+	now := time.Now()
+	rows := sqlmock.NewRows([]string{
+		// account columns
+		"a.id", "a.username", "a.display_name", "a.avatar_url", "a.status",
+		"a.locale", "a.timezone", "a.metadata", "a.created_at", "a.updated_at", "a.deleted_at",
+		// credential columns (nullable due to LEFT JOIN)
+		"c.id", "c.account_id", "c.credential_type", "c.identifier", "c.credential_value",
+		"c.verified", "c.primary_credential", "c.metadata", "c.created_at", "c.updated_at",
+		"c.verified_at", "c.last_used_at",
+	}).AddRow(
+		"account-001", "testuser", "Test User", nil, domain.AccountStatusActive,
+		"en", "UTC", []byte("{}"), now, now, nil,
+		"cred-001", "account-001", domain.CredentialTypePassword, "test@example.com",
+		"hashed-pw", true, true, []byte("{}"), now, now, nil, nil,
+	)
+
+	mock.ExpectQuery("SELECT (.+) FROM accounts (.+) JOIN account_credentials").
+		WithArgs("testuser", domain.CredentialTypePassword).
+		WillReturnRows(rows)
+
+	account, cred, err := accountService.FindByUsernameWithPasswordCredential(context.Background(), "testuser")
+
+	require.NoError(t, err)
+	require.NotNil(t, account)
+	require.NotNil(t, cred)
+	assert.Equal(t, "account-001", account.ID)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestFindByUsernameWithPasswordCredential_NotFound(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+
+	mock.ExpectQuery("SELECT (.+) FROM accounts (.+) JOIN account_credentials").
+		WithArgs("nonexistent", domain.CredentialTypePassword).
+		WillReturnError(sql.ErrNoRows)
+
+	account, cred, err := accountService.FindByUsernameWithPasswordCredential(context.Background(), "nonexistent")
+
+	assert.Error(t, err)
+	assert.Nil(t, account)
+	assert.Nil(t, cred)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// ──────────────────────────────────────────────
+// AssignRole error paths
+// ──────────────────────────────────────────────
+
+func TestAssignRole_AccountNotFound(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs("nonexistent").
+		WillReturnError(sql.ErrNoRows)
+	mock.ExpectRollback()
+
+	err = accountService.AssignRole(context.Background(), "nonexistent", "role-001")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrAccountNotActive)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestAssignRole_RoleNotFound(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+
+	now := time.Now()
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		"account-001", "testuser", "Test User", nil, domain.AccountStatusActive,
+		"en", "UTC", []byte("{}"), now, now, nil,
+	)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs("account-001").
+		WillReturnRows(accountRows)
+
+	mock.ExpectQuery("SELECT (.+) FROM roles WHERE id").
+		WithArgs("nonexistent-role").
+		WillReturnError(sql.ErrNoRows)
+
+	mock.ExpectRollback()
+
+	err = accountService.AssignRole(context.Background(), "account-001", "nonexistent-role")
+	assert.Error(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// ──────────────────────────────────────────────
+// ChangePassword error paths
+// ──────────────────────────────────────────────
+
+func TestChangePassword_SamePassword(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+	accountService.SetOptions(&AccountServiceOptions{SessionRevoker: &stubSessionRevoker{}, OAuth2ClientDeleter: &stubOAuth2ClientDeleter{}})
+
+	err = accountService.ChangePassword(context.Background(), "account-001", "SamePassword123!", "SamePassword123!")
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrSamePassword)
+}
+
+func TestChangePassword_IncorrectOldPassword(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+	accountService.SetOptions(&AccountServiceOptions{SessionRevoker: &stubSessionRevoker{}, OAuth2ClientDeleter: &stubOAuth2ClientDeleter{}})
+
+	accountID := "test-account-id"
+	correctPassword := "CorrectPass123!"
+	wrongPassword := "WrongPassword456!"
+	newPassword := "NewPassword789!"
+
+	// Generate hash for the correct password (not the wrong one)
+	correctHash, err := domain.HashPassword(correctPassword)
+	require.NoError(t, err)
+
+	mock.ExpectBegin()
+
+	// Mock FindByIDTx for account active check
+	now := time.Now()
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		accountID, "testuser", "Test User", nil, domain.AccountStatusActive,
+		"en", "UTC", []byte("{}"), now, now, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs(accountID).
+		WillReturnRows(accountRows)
+
+	// Mock password credential lookup with the correct hash
+	rows := sqlmock.NewRows([]string{
+		"id", "account_id", "credential_type", "identifier", "credential_value",
+		"verified", "primary_credential", "metadata", "created_at", "updated_at",
+		"verified_at", "last_used_at",
+	}).AddRow(
+		"cred-id", accountID, domain.CredentialTypePassword, "test@example.com", correctHash,
+		true, true, []byte("{}"), time.Now(), time.Now(), nil, nil,
+	)
+
+	mock.ExpectQuery("SELECT (.+) FROM account_credentials").
+		WithArgs(accountID, domain.CredentialTypePassword).
+		WillReturnRows(rows)
+
+	mock.ExpectRollback()
+
+	// Try to change password with wrong old password
+	err = accountService.ChangePassword(context.Background(), accountID, wrongPassword, newPassword)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrIncorrectOldPassword)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestChangePassword_NilSessionRevoker(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+
+	err = accountService.ChangePassword(context.Background(), "account-001", "OldPassword1234!", "NewPassword5678!")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "SessionRevoker not configured")
+}
+
+// ──────────────────────────────────────────────
+// BindFederatedIdentity error paths
+// ──────────────────────────────────────────────
+
+func TestBindFederatedIdentity_InactiveAccount(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+
+	now := time.Now()
+	// Return a suspended account
+	accountRows := sqlmock.NewRows([]string{
+		"id", "username", "display_name", "avatar_url", "status",
+		"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		"account-001", "testuser", "Test User", nil, domain.AccountStatusSuspended,
+		"en", "UTC", []byte("{}"), now, now, nil,
+	)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT (.+) FROM accounts WHERE id").
+		WithArgs("account-001").
+		WillReturnRows(accountRows)
+	mock.ExpectRollback()
+
+	profile := map[string]interface{}{"name": "Test User"}
+	err = accountService.BindFederatedIdentity(context.Background(), "account-001", domain.ProviderGoogle, "google-user-123", profile)
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrAccountNotActive)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// ──────────────────────────────────────────────
+// SoftDeleteAccount error paths
+// ──────────────────────────────────────────────
+
+func TestSoftDeleteAccount_NilSessionRevoker(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+
+	err = accountService.SoftDeleteAccount(context.Background(), "account-001")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "SessionRevoker not configured")
+}
+
+func TestSoftDeleteAccount_NilOAuth2ClientDeleter(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+	// Set session revoker but NOT the OAuth2 deleter
+	accountService.SetOptions(&AccountServiceOptions{SessionRevoker: &stubSessionRevoker{}})
+
+	err = accountService.SoftDeleteAccount(context.Background(), "account-001")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "OAuth2ClientDeleter not configured")
+}
+
+func TestSoftDeleteAccount_EmptyID(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+
+	err = accountService.SoftDeleteAccount(context.Background(), "")
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrAccountIDRequired)
+}

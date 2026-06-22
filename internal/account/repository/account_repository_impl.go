@@ -287,8 +287,8 @@ func (r *accountRepositoryImpl) UpdateAccount(ctx context.Context, tx *sql.Tx, a
 	return nil
 }
 
-// SoftDeleteAccount soft deletes an account
-func (r *accountRepositoryImpl) SoftDeleteAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
+// SoftDeleteAccountByID soft deletes an account
+func (r *accountRepositoryImpl) SoftDeleteAccountByID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	query := `
 		UPDATE accounts
 		SET deleted_at = $1, updated_at = $1, status = $2
@@ -313,7 +313,7 @@ func (r *accountRepositoryImpl) SoftDeleteAccount(ctx context.Context, tx *sql.T
 
 // FindAll queries accounts with pagination
 func (r *accountRepositoryImpl) FindAll(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error) {
-	page, pageSize, offset := clampPagination(page, pageSize)
+	_, pageSize, offset := clampPagination(page, pageSize)
 
 	if status != "" && !validStatuses[status] {
 		return nil, 0, fmt.Errorf("%w: %q", ErrInvalidStatusFilter, status)

@@ -58,25 +58,25 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	g, gctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		var err error
-		account, err = s.accountSvc.FindAccountByID(gctx, oldRT.AccountID)
-		if err != nil || account == nil || !account.IsActive() {
+		var findErr error
+		account, findErr = s.accountSvc.FindAccountByID(gctx, oldRT.AccountID)
+		if findErr != nil || account == nil || !account.IsActive() {
 			return accountService.ErrAccountNotActive
 		}
 		return nil
 	})
 
 	g.Go(func() error {
-		var err error
-		claims, err = s.buildTokenClaims(gctx, oldRT.AccountID, session.ID)
-		if err != nil {
-			return fmt.Errorf("build token claims: %w", err)
+		var buildErr error
+		claims, buildErr = s.buildTokenClaims(gctx, oldRT.AccountID, session.ID)
+		if buildErr != nil {
+			return fmt.Errorf("build token claims: %w", buildErr)
 		}
 		return nil
 	})
 
-	if err := g.Wait(); err != nil {
-		return nil, err
+	if waitErr := g.Wait(); waitErr != nil {
+		return nil, waitErr
 	}
 
 	accessToken, err := s.tokenSvc.GenerateAccessToken(claims)

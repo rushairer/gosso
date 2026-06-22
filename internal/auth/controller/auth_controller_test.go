@@ -298,4 +298,3 @@ func TestRegisterRoutes_WithRateLimits(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "true", w.Header().Get("X-Login-Rate-Limited"))
 }
-

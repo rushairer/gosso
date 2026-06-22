@@ -38,15 +38,12 @@ func TestRevokeSession_Success(t *testing.T) {
 	fixture.svc.sessionSvc = newSvc
 
 	fixture.seedTestAccount("account-001", "testuser", "password123")
-	fixture.sqlMock.ExpectBegin()
-	fixture.sqlMock.ExpectCommit()
 
 	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username: "testuser", Password: "password123",
 		IP: "127.0.0.1", UserAgent: "test-agent",
 	})
 	require.NoError(t, err)
-	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
 
 	err = fixture.svc.RevokeSession(context.Background(), "account-001", loginResult.Session.ID)
 	assert.NoError(t, err)
@@ -105,8 +102,6 @@ func TestRefreshTokens_IPMismatch(t *testing.T) {
 	defer fixture.sqlDB.Close()
 
 	fixture.seedTestAccount("account-001", "testuser", "password123")
-	fixture.sqlMock.ExpectBegin()
-	fixture.sqlMock.ExpectCommit()
 
 	// Login with IP "10.0.0.1" in context (captured by GenerateRefreshToken).
 	loginCtx := audit.SetMetadata(context.Background(), "10.0.0.1", "test-agent", "")
@@ -115,7 +110,6 @@ func TestRefreshTokens_IPMismatch(t *testing.T) {
 		IP: "10.0.0.1", UserAgent: "test-agent",
 	})
 	require.NoError(t, err)
-	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
 
 	// Refresh from a different IP — should be rejected.
 	refreshCtx := audit.SetMetadata(context.Background(), "10.0.0.2", "test-agent", "")
@@ -129,15 +123,12 @@ func TestRefreshTokens_SessionInvalid(t *testing.T) {
 	defer fixture.sqlDB.Close()
 
 	fixture.seedTestAccount("account-001", "testuser", "password123")
-	fixture.sqlMock.ExpectBegin()
-	fixture.sqlMock.ExpectCommit()
 
 	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username: "testuser", Password: "password123",
 		IP: "127.0.0.1", UserAgent: "test-agent",
 	})
 	require.NoError(t, err)
-	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
 
 	// Delete the session from Redis to simulate session invalidation.
 	err = fixture.sessionSvc.DeleteSession(context.Background(), loginResult.Session.ID)
@@ -153,15 +144,12 @@ func TestRefreshTokens_AccountInactive(t *testing.T) {
 	defer fixture.sqlDB.Close()
 
 	fixture.seedTestAccount("account-001", "testuser", "password123")
-	fixture.sqlMock.ExpectBegin()
-	fixture.sqlMock.ExpectCommit()
 
 	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
 		Username: "testuser", Password: "password123",
 		IP: "127.0.0.1", UserAgent: "test-agent",
 	})
 	require.NoError(t, err)
-	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
 
 	// Suspend the account after login.
 	fixture.accountSvc.byID["account-001"].Status = accountDomain.AccountStatusSuspended

@@ -11,8 +11,8 @@ import (
 
 // Sentinel errors for repository operations
 var (
-	ErrRoleNotFound             = errors.New("role not found")
-	ErrRoleAssignmentNotFound   = errors.New("role assignment not found")
+	ErrRoleNotFound           = errors.New("role not found")
+	ErrRoleAssignmentNotFound = errors.New("role assignment not found")
 )
 
 // RoleRepository defines the interface for role repository
@@ -35,8 +35,8 @@ type RoleRepository interface {
 	// FindAll finds all roles with pagination. Returns roles and total count.
 	FindAll(ctx context.Context, page, pageSize int) ([]*domain.Role, int, error)
 
-	// SoftDeleteByID soft deletes a role by ID (requires transaction)
-	SoftDeleteByID(ctx context.Context, tx *sql.Tx, roleID string, deletedAt time.Time) error
+	// SoftDeleteRoleByID soft deletes a role by ID (requires transaction)
+	SoftDeleteRoleByID(ctx context.Context, tx *sql.Tx, roleID string, deletedAt time.Time) error
 
 	// AssignRoleToAccount assigns a role to an account (requires transaction)
 	AssignRoleToAccount(ctx context.Context, tx *sql.Tx, accountID, roleID string, createdAt time.Time) error

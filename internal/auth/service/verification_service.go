@@ -2,8 +2,8 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -315,8 +315,8 @@ func generateNumericCode(length int) (string, error) {
 // on the 6-digit numeric keyspace if Redis is compromised).
 func (s *VerificationService) RequireHashPepper() error {
 	if s.hashPepper == "" {
-		return fmt.Errorf("hash pepper is required for production deployments. " +
-			"Set auth.verify_hash_pepper (env GOUNO_AUTH_VERIFY_HASH_PEPPER).")
+		return fmt.Errorf("hash pepper is required for production deployments: " +
+			"set auth.verify_hash_pepper (env GOUNO_AUTH_VERIFY_HASH_PEPPER)")
 	}
 	return nil
 }

@@ -47,7 +47,7 @@ func initAuthService(t *testing.T, e *testutil.TestEnv) *service.AuthService {
 	t.Helper()
 	ctx := context.Background()
 	auditor := auditService.NewAuditor(ctx, e.DB, nil, e.Logger)
-	accountMod := accountModule.InitializeAccountModule(e.DB, auditor, e.Logger)
+	accountMod := accountModule.InitializeAccountModule(e.DB, auditor, e.Logger, nil)
 	keySvc, err := tokenService.NewKeyService("", "test-key", false, 0, e.Logger)
 	require.NoError(t, err)
 	blacklistSvc, err := tokenService.NewBlacklistService(e.Redis, e.Logger)
@@ -72,7 +72,7 @@ func initAuthService(t *testing.T, e *testutil.TestEnv) *service.AuthService {
 		FederatedIdentityRepo: accountMod.FederatedIdentityRepo,
 	})
 	require.NoError(t, err)
-	return authMod.AuthService
+	return authMod.AuthService.(*service.AuthService)
 }
 
 func TestLoginByUsernamePassword_Success(t *testing.T) {

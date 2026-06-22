@@ -215,7 +215,7 @@ func TestSoftDeleteAccount_Success(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewAccountRepository(db)
-	err = repo.SoftDeleteAccount(context.Background(), tx, "account-001", deletedAt)
+	err = repo.SoftDeleteAccountByID(context.Background(), tx, "account-001", deletedAt)
 
 	require.NoError(t, err)
 }
@@ -232,7 +232,7 @@ func TestSoftDeleteAccount_NotFound(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	repo := NewAccountRepository(db)
-	err = repo.SoftDeleteAccount(context.Background(), tx, "nonexistent", time.Now())
+	err = repo.SoftDeleteAccountByID(context.Background(), tx, "nonexistent", time.Now())
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "account not found")

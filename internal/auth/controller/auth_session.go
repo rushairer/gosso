@@ -8,8 +8,8 @@ import (
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
-	sessionService "github.com/rushairer/gosso/internal/session/service"
 	"github.com/rushairer/gosso/internal/controllerutil"
+	sessionService "github.com/rushairer/gosso/internal/session/service"
 	utility "github.com/rushairer/gosso/internal/utility"
 )
 

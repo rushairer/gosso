@@ -116,16 +116,16 @@ func SetupTestEnv(ctx context.Context) (*TestEnv, error) {
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	if err := db.PingContext(ctx); err != nil {
+	if pingErr := db.PingContext(ctx); pingErr != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("ping database: %w (is docker-compose.test.yml running?)", err)
+		return nil, fmt.Errorf("ping database: %w (is docker-compose.test.yml running?)", pingErr)
 	}
 
 	// Run migrations
 	migrationsPath := filepath.Join(projectRoot, "db", "migrations")
-	if err := runMigrations(db, migrationsPath); err != nil {
+	if migrateErr := runMigrations(db, migrationsPath); migrateErr != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("run migrations: %w", err)
+		return nil, fmt.Errorf("run migrations: %w", migrateErr)
 	}
 
 	// Connect to Redis

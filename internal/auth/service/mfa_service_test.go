@@ -111,7 +111,6 @@ func newTestMFAService(credRepo *mockCredentialRepo) *MFAService {
 	return svc
 }
 
-
 // ──────────────────────────────────────────────
 // NewMFAService
 // ──────────────────────────────────────────────
@@ -723,7 +722,6 @@ func TestGetMFAStatus_PasskeyError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, status)
 }
-
 
 // ──────────────────────────────────────────────
 // EnrollTOTP — encryption key and CreateCredentials error

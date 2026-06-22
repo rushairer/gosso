@@ -352,10 +352,10 @@ func TestRoleRepo_UpdateRole_NotFound(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────
-// SoftDeleteByID
+// SoftDeleteRoleByID
 // ──────────────────────────────────────────────
 
-func TestRoleRepo_SoftDeleteByID_Success(t *testing.T) {
+func TestRoleRepo_SoftDeleteRoleByID_Success(t *testing.T) {
 	sqlDB, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer sqlDB.Close()
@@ -368,13 +368,13 @@ func TestRoleRepo_SoftDeleteByID_Success(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewRoleRepository(sqlDB)
-	err = repo.SoftDeleteByID(context.Background(), tx, "role-001", time.Now())
+	err = repo.SoftDeleteRoleByID(context.Background(), tx, "role-001", time.Now())
 
 	require.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestRoleRepo_SoftDeleteByID_NotFound(t *testing.T) {
+func TestRoleRepo_SoftDeleteRoleByID_NotFound(t *testing.T) {
 	sqlDB, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer sqlDB.Close()
@@ -387,7 +387,7 @@ func TestRoleRepo_SoftDeleteByID_NotFound(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	repo := NewRoleRepository(sqlDB)
-	err = repo.SoftDeleteByID(context.Background(), tx, "nonexistent", time.Now())
+	err = repo.SoftDeleteRoleByID(context.Background(), tx, "nonexistent", time.Now())
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "role not found")

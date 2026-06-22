@@ -26,8 +26,8 @@ func (s *AuthService) createSessionAndTokens(ctx context.Context, account *accou
 		return nil, "", nil, fmt.Errorf("create session: %w", err)
 	}
 
-	if err := s.sessionSvc.CreateSession(ctx, session); err != nil {
-		return nil, "", nil, fmt.Errorf("create session: %w", err)
+	if sessionErr := s.sessionSvc.CreateSession(ctx, session); sessionErr != nil {
+		return nil, "", nil, fmt.Errorf("create session: %w", sessionErr)
 	}
 
 	// Cleanup orphaned session if any subsequent step fails.

@@ -154,7 +154,7 @@ func (r *roleRepositoryImpl) FindByName(ctx context.Context, name string) (*doma
 
 // FindAll finds all roles with pagination.
 func (r *roleRepositoryImpl) FindAll(ctx context.Context, page, pageSize int) ([]*domain.Role, int, error) {
-	page, pageSize, offset := clampPagination(page, pageSize)
+	_, pageSize, offset := clampPagination(page, pageSize)
 
 	var total int
 	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM roles WHERE deleted_at IS NULL`).Scan(&total); err != nil {
@@ -186,8 +186,8 @@ func (r *roleRepositoryImpl) FindAll(ctx context.Context, page, pageSize int) ([
 	return roles, total, nil
 }
 
-// SoftDeleteByID soft deletes a role
-func (r *roleRepositoryImpl) SoftDeleteByID(ctx context.Context, tx *sql.Tx, roleID string, deletedAt time.Time) error {
+// SoftDeleteRoleByID soft deletes a role
+func (r *roleRepositoryImpl) SoftDeleteRoleByID(ctx context.Context, tx *sql.Tx, roleID string, deletedAt time.Time) error {
 	query := `
 		UPDATE roles
 		SET deleted_at = $1, updated_at = $1

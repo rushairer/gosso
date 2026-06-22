@@ -125,6 +125,7 @@ func (a *Auditor) Close() {
 }
 
 // Wait waits for all in-flight audit batches to be flushed to the database.
+//
 // Deprecated: Use Close() instead. Both methods are functionally identical.
 func (a *Auditor) Wait() {
 	a.Close()
@@ -163,7 +164,7 @@ func (a *Auditor) Do(
 
 	if auditRecord != nil {
 		// Use a background context for the audit submission so the record is not
-		// dropped when the request context is cancelled (e.g. client disconnect).
+		// dropped when the request context is canceled (e.g. client disconnect).
 		if err := a.batchflow.Submit(context.Background(), a.buildBatchRequest(auditRecord)); err != nil {
 			return err
 		}
@@ -219,7 +220,7 @@ func (a *Auditor) Log(ctx context.Context, record *domain.AuditRecord) error {
 
 // submit builds a batchflow request from an audit record and submits it.
 // Uses context.Background() to ensure the audit record is not dropped when the
-// request context is cancelled (e.g. client disconnect or request timeout).
+// request context is canceled (e.g. client disconnect or request timeout).
 func (a *Auditor) submit(ctx context.Context, record *domain.AuditRecord) error {
 	_ = ctx // context unused for submission; request-scoped enrichMeta already ran
 	return a.batchflow.Submit(context.Background(), a.buildBatchRequest(record))

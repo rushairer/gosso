@@ -140,10 +140,10 @@ func TestFindByAccountID_Empty(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────
-// SoftDeleteByAccountID
+// SoftDeleteFederatedIdentitiesByAccountID
 // ──────────────────────────────────────────────
 
-func TestSoftDeleteByAccountID_Success(t *testing.T) {
+func TestSoftDeleteFederatedIdentitiesByAccountID_Success(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -157,16 +157,16 @@ func TestSoftDeleteByAccountID_Success(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 2))
 
 	repo := NewFederatedIdentityRepository(db)
-	err = repo.SoftDeleteByAccountID(context.Background(), tx, "account-001", deletedAt)
+	err = repo.SoftDeleteFederatedIdentitiesByAccountID(context.Background(), tx, "account-001", deletedAt)
 
 	require.NoError(t, err)
 }
 
 // ──────────────────────────────────────────────
-// SoftDeleteByID
+// SoftDeleteFederatedIdentityByID
 // ──────────────────────────────────────────────
 
-func TestSoftDeleteByID_Success(t *testing.T) {
+func TestSoftDeleteFederatedIdentityByID_Success(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -180,12 +180,12 @@ func TestSoftDeleteByID_Success(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewFederatedIdentityRepository(db)
-	err = repo.SoftDeleteByID(context.Background(), tx, "account-001", "fid-001", deletedAt)
+	err = repo.SoftDeleteFederatedIdentityByID(context.Background(), tx, "account-001", "fid-001", deletedAt)
 
 	require.NoError(t, err)
 }
 
-func TestSoftDeleteByID_NotFound(t *testing.T) {
+func TestSoftDeleteFederatedIdentityByID_NotFound(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -199,7 +199,7 @@ func TestSoftDeleteByID_NotFound(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	repo := NewFederatedIdentityRepository(db)
-	err = repo.SoftDeleteByID(context.Background(), tx, "account-001", "nonexistent", deletedAt)
+	err = repo.SoftDeleteFederatedIdentityByID(context.Background(), tx, "account-001", "nonexistent", deletedAt)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "federated identity not found")

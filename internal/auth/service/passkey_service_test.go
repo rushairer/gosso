@@ -256,7 +256,6 @@ func TestTransportsToStrings_Data(t *testing.T) {
 	assert.Equal(t, "internal", result[1])
 }
 
-
 // ──────────────────────────────────────────────
 // ResolveAccountForRegistration
 // ──────────────────────────────────────────────

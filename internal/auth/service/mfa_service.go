@@ -109,8 +109,8 @@ func NewMFAServiceWithConfig(
 // from being stored in plaintext in the database.
 func (s *MFAService) RequireTOTPEncryption() error {
 	if s.totpEncryptionKey == nil {
-		return fmt.Errorf("TOTP encryption key is required for production deployments. " +
-			"Set auth.totp_encryption_key (env GOUNO_AUTH_TOTP_ENCRYPTION_KEY) to a 64-char hex string (32 bytes).")
+		return fmt.Errorf("TOTP encryption key is required for production deployments: " +
+			"set auth.totp_encryption_key (env GOUNO_AUTH_TOTP_ENCRYPTION_KEY) to a 64-char hex string (32 bytes)")
 	}
 	return nil
 }
@@ -186,9 +186,9 @@ func (s *MFAService) EnrollTOTP(ctx context.Context, accountID string) (*TOTPEnr
 	// Encrypt secret for storage (if encryption key is configured)
 	storedSecret := key.Secret()
 	if s.totpEncryptionKey != nil {
-		enc, err := encryptSecret(storedSecret, s.totpEncryptionKey)
-		if err != nil {
-			return nil, fmt.Errorf("encrypt totp secret: %w", err)
+		enc, encErr := encryptSecret(storedSecret, s.totpEncryptionKey)
+		if encErr != nil {
+			return nil, fmt.Errorf("encrypt totp secret: %w", encErr)
 		}
 		storedSecret = enc
 	} else {
@@ -348,7 +348,7 @@ func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) 
 			if err != nil {
 				return fmt.Errorf("hash backup code: %w", err)
 			}
-			// Abort early if the parent context was cancelled (e.g., client disconnect).
+			// Abort early if the parent context was canceled (e.g., client disconnect).
 			if gctx.Err() != nil {
 				return gctx.Err()
 			}

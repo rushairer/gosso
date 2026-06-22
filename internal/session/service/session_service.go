@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,6 +35,9 @@ const (
 	// (e.g., 24h). Without this cap, a system processing many unique sessions
 	// with a 24h TTL would only sweep stale entries every ~72h (3 * TTL).
 	maxCacheCleanupInterval = 1 * time.Hour
+	// sessionCacheMaxSize bounds the in-memory session cache to prevent
+	// unbounded memory growth under extreme session diversity.
+	sessionCacheMaxSize = 8192
 )
 
 // TokenRevoker revokes all tokens for a given session.
@@ -62,8 +66,8 @@ type SessionConfig struct {
 // cachedSession holds a parsed session, the raw JSON bytes for staleness
 // detection, and the wall-clock time it was inserted into the local cache.
 type cachedSession struct {
-	session *domain.Session
-	json    []byte
+	session  *domain.Session
+	json     []byte
 	cachedAt time.Time
 }
 
@@ -79,12 +83,16 @@ type SessionService struct {
 	// sessionCache caches parsed sessions keyed by sessionID to avoid
 	// repeated JSON unmarshal on the validation hot path.
 	sessionCache sync.Map // map[string]cachedSession
+	// cacheSize tracks the approximate number of entries in sessionCache.
+	// Used to enforce sessionCacheMaxSize and logged during cleanup sweeps.
+	cacheSize atomic.Int32
 
 	// cacheCleanupStop signals the background cleanup goroutine to exit.
 	cacheCleanupStop chan struct{}
 }
 
 // NewSessionService creates a new session service instance with default configuration.
+//
 // Deprecated: Use NewSessionServiceWithConfig directly.
 func NewSessionService(redis *cache.RedisClient, logger *zap.Logger) (*SessionService, error) {
 	return NewSessionServiceWithConfig(redis, logger, SessionConfig{})
@@ -100,12 +108,12 @@ func NewSessionServiceWithConfig(redis *cache.RedisClient, logger *zap.Logger, c
 	logger = utility.EnsureLogger(logger)
 
 	svc := &SessionService{
-		redis:           redis,
-		logger:          logger,
-		sessionTTL:      DefaultSessionTTL,
-		maxSessionAge:   DefaultMaxSessionAge,
-		maxSessions:     DefaultMaxSessions,
-		indexFailClosed: cfg.IndexFailClosed,
+		redis:            redis,
+		logger:           logger,
+		sessionTTL:       DefaultSessionTTL,
+		maxSessionAge:    DefaultMaxSessionAge,
+		maxSessions:      DefaultMaxSessions,
+		indexFailClosed:  cfg.IndexFailClosed,
 		cacheCleanupStop: make(chan struct{}),
 	}
 	if cfg.SessionTTL > 0 {
@@ -177,7 +185,7 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 		zap.Duration("ttl", s.sessionTTL))
 
 	// Pre-populate local cache to avoid re-fetching on the next validation.
-	s.sessionCache.Store(session.ID, cachedSession{session: session, json: data, cachedAt: time.Now()})
+	s.cacheStore(session.ID, cachedSession{session: session, json: data, cachedAt: time.Now()})
 
 	return nil
 }
@@ -219,7 +227,7 @@ func (s *SessionService) GetSession(ctx context.Context, sessionID string) (*dom
 		return nil, fmt.Errorf("unmarshal session: %w", err)
 	}
 
-	s.sessionCache.Store(sessionID, cachedSession{session: &session, json: raw, cachedAt: time.Now()})
+	s.cacheStore(sessionID, cachedSession{session: &session, json: raw, cachedAt: time.Now()})
 
 	return &session, nil
 }
@@ -256,7 +264,9 @@ func (s *SessionService) UpdateSession(ctx context.Context, session *domain.Sess
 	}
 
 	// Invalidate cached entry so the next GetSession re-parses.
-	s.sessionCache.Delete(session.ID)
+	if _, loaded := s.sessionCache.LoadAndDelete(session.ID); loaded {
+		s.cacheSize.Add(-1)
+	}
 
 	s.logger.Debug("Session updated", zap.String("session_id", utility.MaskOpaqueID(session.ID)))
 	return nil
@@ -276,7 +286,9 @@ func (s *SessionService) DeleteSession(ctx context.Context, sessionID string) er
 	}
 
 	// Evict from local cache.
-	s.sessionCache.Delete(sessionID)
+	if _, loaded := s.sessionCache.LoadAndDelete(sessionID); loaded {
+		s.cacheSize.Add(-1)
+	}
 
 	// Always attempt to clean up the account session index.
 	// If the session was loaded, use its accountID. Otherwise, the stale
@@ -371,7 +383,7 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 			return nil, fmt.Errorf("unmarshal session: %w", err)
 		}
 		session = &parsed
-		s.sessionCache.Store(sessionID, cachedSession{session: session, json: raw, cachedAt: time.Now()})
+		s.cacheStore(sessionID, cachedSession{session: session, json: raw, cachedAt: time.Now()})
 	}
 
 	// Check absolute max session lifetime (prevents indefinite session extension)
@@ -492,6 +504,7 @@ func (s *SessionService) evictStaleCacheEntries() {
 		cs := value.(cachedSession)
 		if cs.cachedAt.Before(threshold) {
 			s.sessionCache.Delete(key)
+			s.cacheSize.Add(-1)
 			evicted++
 		}
 		return true
@@ -499,6 +512,7 @@ func (s *SessionService) evictStaleCacheEntries() {
 	if evicted > 0 {
 		s.logger.Debug("Evicted stale session cache entries",
 			zap.Int("count", evicted),
+			zap.Int32("cache_size", s.cacheSize.Load()),
 			zap.Duration("threshold", 2*s.sessionTTL))
 	}
 }
@@ -511,6 +525,18 @@ func (s *SessionService) StopCacheCleanup() {
 		// already closed
 	default:
 		close(s.cacheCleanupStop)
+	}
+}
+
+// cacheStore inserts a session into the local cache, enforcing the maximum
+// size limit. If the cache is at capacity, the entry is silently dropped
+// (the session still exists in Redis; it just won't be cached locally).
+func (s *SessionService) cacheStore(sessionID string, cs cachedSession) {
+	if s.cacheSize.Load() >= sessionCacheMaxSize {
+		return // cache full — skip local caching, Redis is the source of truth
+	}
+	if _, loaded := s.sessionCache.LoadOrStore(sessionID, cs); !loaded {
+		s.cacheSize.Add(1)
 	}
 }
 

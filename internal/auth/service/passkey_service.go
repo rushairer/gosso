@@ -149,7 +149,7 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, ac
 	}
 
 	var sessionData wa.SessionData
-	if err := json.Unmarshal([]byte(data), &sessionData); err != nil {
+	if err = json.Unmarshal([]byte(data), &sessionData); err != nil {
 		return nil, fmt.Errorf("unmarshal session data: %w", err)
 	}
 
@@ -285,7 +285,7 @@ func (s *PasskeyService) completeLoginInternal(ctx context.Context, requestID, e
 	}
 
 	var sessionData wa.SessionData
-	if err := json.Unmarshal([]byte(data), &sessionData); err != nil {
+	if err = json.Unmarshal([]byte(data), &sessionData); err != nil {
 		return nil, fmt.Errorf("unmarshal session data: %w", err)
 	}
 
@@ -444,7 +444,7 @@ func (s *PasskeyService) ResolveAccountForRegistration(ctx context.Context, acco
 // readLimitedBody reads the request body with a size limit and replaces it
 // with a new reader so it can be read again.
 func readLimitedBody(body io.ReadCloser, maxSize int64) ([]byte, error) {
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(body, maxSize+1))
 	if err != nil {
 		return nil, fmt.Errorf("read request body: %w", err)

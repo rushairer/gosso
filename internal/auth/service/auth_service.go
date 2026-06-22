@@ -58,17 +58,17 @@ type LoginResult struct {
 	Session      *sessionDomain.Session
 	AccessToken  string
 	RefreshToken string
-	MFAToken     string   `json:"-"` // Only set when RequiresMFA is true
+	MFAToken     string `json:"-"` // Only set when RequiresMFA is true
 	RequiresMFA  bool
 	MFATypes     []string `json:"mfa_types,omitempty"`
 }
 
 // RefreshResult refresh token result
 type RefreshResult struct {
-	AccessToken           string
-	RefreshToken          string
-	SessionID             string
-	SessionRefreshFailed  bool // true if session TTL extension failed (best-effort); tokens are still valid
+	AccessToken          string
+	RefreshToken         string
+	SessionID            string
+	SessionRefreshFailed bool // true if session TTL extension failed (best-effort); tokens are still valid
 }
 
 // AuthService authentication orchestration service
@@ -86,18 +86,18 @@ type AuthService struct {
 	logger         *zap.Logger
 
 	// Configurable security parameters (with built-in defaults)
-	loginRateLimitWindow    time.Duration
-	loginMaxAttempts        int
-	loginMaxAttemptsPerIP   int
-	mfaVerificationTTL      time.Duration
-	mfaAccountMaxAttempts   int
+	loginRateLimitWindow      time.Duration
+	loginMaxAttempts          int
+	loginMaxAttemptsPerIP     int
+	mfaVerificationTTL        time.Duration
+	mfaAccountMaxAttempts     int
 	mfaAccountRateLimitWindow time.Duration
 
 	// IP allowlist: addresses/ranges exempt from per-IP login rate limiting.
 	// Intended for known NAT/proxy exit IPs shared by many legitimate users.
 	// Only per-IP limits (login_attempts_ip:{ip}) are skipped; per-IP+username
 	// limits (login_attempts:{ip}:{user}) still apply to every address.
-	loginIPAllowlist        []*net.IPNet
+	loginIPAllowlist []*net.IPNet
 
 	// Concurrency limiter for dummy Argon2id hashes to prevent resource exhaustion.
 	dummyHashSem *semaphore.Weighted
@@ -106,11 +106,11 @@ type AuthService struct {
 // AuthServiceConfig holds optional configuration for AuthService.
 // Zero-valued fields use package defaults.
 type AuthServiceConfig struct {
-	LoginRateLimitWindow    time.Duration // default: defaultLoginRateLimitWindow
-	LoginMaxAttempts        int           // default: defaultLoginMaxAttempts
-	LoginMaxAttemptsPerIP   int           // default: defaultLoginMaxAttemptsPerIP
-	MFAVerificationTTL      time.Duration // default: defaultMFAVerificationTTL
-	MFAAccountMaxAttempts   int           // default: defaultMFAAccountMaxAttempts (10)
+	LoginRateLimitWindow      time.Duration // default: defaultLoginRateLimitWindow
+	LoginMaxAttempts          int           // default: defaultLoginMaxAttempts
+	LoginMaxAttemptsPerIP     int           // default: defaultLoginMaxAttemptsPerIP
+	MFAVerificationTTL        time.Duration // default: defaultMFAVerificationTTL
+	MFAAccountMaxAttempts     int           // default: defaultMFAAccountMaxAttempts (10)
 	MFAAccountRateLimitWindow time.Duration // default: defaultMFAAccountRateLimitWindow (5min)
 	DummyHashConcurrency      int           // max concurrent dummy Argon2id hashes; 0 = runtime.NumCPU()
 
@@ -118,7 +118,7 @@ type AuthServiceConfig struct {
 	// per-IP login rate limiting (login_attempts_ip:{ip}). Use this for known
 	// NAT/proxy exit IPs shared by many legitimate users.
 	// Per-IP+username counters (login_attempts:{ip}:{user}) still apply to all addresses.
-	LoginIPAllowlist        []string      // e.g. ["203.0.113.0/24", "198.51.100.5"]
+	LoginIPAllowlist []string // e.g. ["203.0.113.0/24", "198.51.100.5"]
 }
 
 // NewAuthService creates a new auth service instance
@@ -156,22 +156,22 @@ func NewAuthServiceWithConfig(
 ) *AuthService {
 	logger = utility.EnsureLogger(logger)
 	svc := &AuthService{
-		db:                    db,
-		accountSvc:            accountSvc,
-		sessionSvc:            sessionSvc,
-		tokenSvc:              tokenSvc,
-		credentialRepo:        credentialRepo,
-		roleRepo:              roleRepo,
-		redis:                 redis,
-		mfaSvc:                mfaSvc,
-		auditor:               auditor,
-		logger:                logger,
-		passkeySvc:            passkeySvc,
-		loginRateLimitWindow:    defaultLoginRateLimitWindow,
-		loginMaxAttempts:        defaultLoginMaxAttempts,
-		loginMaxAttemptsPerIP:   defaultLoginMaxAttemptsPerIP,
-		mfaVerificationTTL:      defaultMFAVerificationTTL,
-		mfaAccountMaxAttempts:   defaultMFAAccountMaxAttempts,
+		db:                        db,
+		accountSvc:                accountSvc,
+		sessionSvc:                sessionSvc,
+		tokenSvc:                  tokenSvc,
+		credentialRepo:            credentialRepo,
+		roleRepo:                  roleRepo,
+		redis:                     redis,
+		mfaSvc:                    mfaSvc,
+		auditor:                   auditor,
+		logger:                    logger,
+		passkeySvc:                passkeySvc,
+		loginRateLimitWindow:      defaultLoginRateLimitWindow,
+		loginMaxAttempts:          defaultLoginMaxAttempts,
+		loginMaxAttemptsPerIP:     defaultLoginMaxAttemptsPerIP,
+		mfaVerificationTTL:        defaultMFAVerificationTTL,
+		mfaAccountMaxAttempts:     defaultMFAAccountMaxAttempts,
 		mfaAccountRateLimitWindow: defaultMFAAccountRateLimitWindow,
 	}
 	if cfg.LoginRateLimitWindow > 0 {
@@ -314,7 +314,6 @@ func (s *AuthService) MarkPasskeyMFAVerified(ctx context.Context, mfaTokenJTI st
 	key := fmt.Sprintf("webauthn:mfa_verified:%s", mfaTokenJTI)
 	return s.redis.Set(ctx, key, "1", s.mfaVerificationTTL)
 }
-
 
 // updateCredentialLastUsed updates only the last_used_at timestamp of a credential.
 // Executes directly on the connection pool without a transaction since this is a

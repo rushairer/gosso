@@ -50,7 +50,7 @@ func TestAudit(t *testing.T) {
 		resource := json.RawMessage(dataJson)
 		return &domain.AuditRecord{
 			ID:        id.String(),
-			TxID:      id.String(),
+			CorrelationID: id.String(),
 			AccountID: &testAccountID,
 			Action:    "test.action",
 			Actor:     "test",

@@ -50,7 +50,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		if err := s.credentialRepo.SoftDeleteCredentialsByAccount(ctx, tx, accountID, now); err != nil {
 			return err
 		}
-		if err := s.federatedIdentityRepo.SoftDeleteByAccountID(ctx, tx, accountID, now); err != nil {
+		if err := s.federatedIdentityRepo.SoftDeleteFederatedIdentitiesByAccountID(ctx, tx, accountID, now); err != nil {
 			return err
 		}
 		if err := s.roleRepo.SoftDeleteRolesByAccountID(ctx, tx, accountID, now); err != nil {
@@ -59,7 +59,7 @@ func (s *accountServiceImpl) SoftDeleteAccount(ctx context.Context, accountID st
 		if err := s.oauth2ClientDeleter.SoftDeleteOAuth2ClientsByAccount(ctx, tx, accountID, now); err != nil {
 			return err
 		}
-		return s.accountRepo.SoftDeleteAccount(ctx, tx, accountID, now)
+		return s.accountRepo.SoftDeleteAccountByID(ctx, tx, accountID, now)
 	})
 	txDuration := time.Since(txStart)
 	if txDuration > 2*time.Second {
@@ -190,18 +190,18 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	// 3. Find + verify + update inside a single transaction with row-level locking
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		// Verify account is active inside the transaction
-		account, err := s.accountRepo.FindByIDTx(ctx, tx, accountID)
-		if err != nil {
-			return err
+		account, findErr := s.accountRepo.FindByIDTx(ctx, tx, accountID)
+		if findErr != nil {
+			return findErr
 		}
 		if !account.IsActive() {
 			return ErrAccountNotActive
 		}
 
 		// Find password credential with row-level locking
-		creds, err := s.credentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, domain.CredentialTypePassword)
-		if err != nil {
-			return fmt.Errorf("find password credential: %w", err)
+		creds, credErr := s.credentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, domain.CredentialTypePassword)
+		if credErr != nil {
+			return fmt.Errorf("find password credential: %w", credErr)
 		}
 		if len(creds) == 0 {
 			return repository.ErrCredentialNotFound

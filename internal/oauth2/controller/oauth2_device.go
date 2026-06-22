@@ -62,8 +62,8 @@ func (c *OAuth2Controller) DeviceCodeRequest(ctx *gin.Context) {
 	}
 
 	// Client authentication for confidential clients (RFC 8628 §3.1)
-	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-		controllerutil.HandleClientAuthError(ctx, c.logger, err)
+	if authErr := c.clientAuth.AuthenticateClient(client, req.ClientSecret); authErr != nil {
+		controllerutil.HandleClientAuthError(ctx, c.logger, authErr)
 		return
 	}
 
@@ -250,8 +250,8 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 	}
 
 	// Client authentication for confidential clients
-	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-		controllerutil.HandleClientAuthError(ctx, c.logger, err)
+	if authErr := c.clientAuth.AuthenticateClient(client, req.ClientSecret); authErr != nil {
+		controllerutil.HandleClientAuthError(ctx, c.logger, authErr)
 		return
 	}
 
@@ -272,7 +272,7 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		return
 	}
 
-	if err := c.deviceCodeSvc.CheckAndUpdatePollRate(ctx, req.DeviceCode); err != nil {
+	if pollErr := c.deviceCodeSvc.CheckAndUpdatePollRate(ctx, req.DeviceCode); pollErr != nil {
 		ctx.Header("Retry-After", fmt.Sprintf("%d", dc.Interval))
 		ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "slow_down", "error_description": "too many requests"})
 		return
@@ -346,10 +346,10 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 	}
 
 	response := gin.H{
-		"access_token":  accessToken,
-		"token_type":    "Bearer",
-		"expires_in":    int(c.tokenSvc.AccessExpiry().Seconds()),
-		"scope":         strings.Join(dc.Scopes, " "),
+		"access_token": accessToken,
+		"token_type":   "Bearer",
+		"expires_in":   int(c.tokenSvc.AccessExpiry().Seconds()),
+		"scope":        strings.Join(dc.Scopes, " "),
 	}
 	if idToken != "" {
 		response["id_token"] = idToken

@@ -9,6 +9,7 @@ import (
 	"net/mail"
 	"time"
 
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/rushairer/gosso/internal/account/domain"
@@ -18,7 +19,6 @@ import (
 	auditService "github.com/rushairer/gosso/internal/audit/service"
 	dbutil "github.com/rushairer/gosso/internal/db"
 	"github.com/rushairer/gosso/internal/utility"
-	"go.uber.org/zap"
 )
 
 // BindFederatedIdentity binds a third-party identity.
@@ -31,9 +31,9 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		// Verify account is active inside the transaction to prevent TOCTOU:
 		// the account could be soft-deleted or suspended between the check and the insert.
-		account, err := s.accountRepo.FindByIDTx(ctx, tx, accountID)
-		if err != nil {
-			return err
+		account, findErr := s.accountRepo.FindByIDTx(ctx, tx, accountID)
+		if findErr != nil {
+			return findErr
 		}
 		if !account.IsActive() {
 			return ErrAccountNotActive
@@ -41,8 +41,8 @@ func (s *accountServiceImpl) BindFederatedIdentity(ctx context.Context, accountI
 
 		// Check inside the transaction to avoid TOCTOU: a concurrent request
 		// could bind the same identity between our check and the insert.
-		existing, err := s.federatedIdentityRepo.FindByProviderTx(ctx, tx, provider, providerUserID)
-		if err == nil && existing != nil {
+		existing, providerErr := s.federatedIdentityRepo.FindByProviderTx(ctx, tx, provider, providerUserID)
+		if providerErr == nil && existing != nil {
 			return ErrFederatedIdentityAlreadyBound
 		}
 		return s.federatedIdentityRepo.CreateFederatedIdentity(ctx, tx, identity)
@@ -124,7 +124,7 @@ func (s *accountServiceImpl) UnbindFederatedIdentity(ctx context.Context, accoun
 			}
 		}
 
-		return s.federatedIdentityRepo.SoftDeleteByID(ctx, tx, accountID, identityID, now)
+		return s.federatedIdentityRepo.SoftDeleteFederatedIdentityByID(ctx, tx, accountID, identityID, now)
 	})
 	if err != nil {
 		return err

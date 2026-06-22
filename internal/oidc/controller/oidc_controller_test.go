@@ -976,6 +976,7 @@ func signValidAccessTokenWithClientID(t *testing.T, keySvc *tokenService.KeyServ
 	claims.Issuer = issuer
 	claims.IssuedAt = jwt.NewNumericDate(time.Now())
 	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(15 * time.Minute))
+	claims.Audience = jwt.ClaimStrings{clientID}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = keySvc.KeyID()

@@ -111,10 +111,10 @@ func (m *mockSocialFederatedIdentityRepo) FindByAccountID(_ context.Context, _ s
 func (m *mockSocialFederatedIdentityRepo) FindByAccountIDTx(_ context.Context, _ *sql.Tx, _ string) ([]*accountDomain.FederatedIdentity, error) {
 	panic("not implemented")
 }
-func (m *mockSocialFederatedIdentityRepo) SoftDeleteByAccountID(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+func (m *mockSocialFederatedIdentityRepo) SoftDeleteFederatedIdentitiesByAccountID(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	panic("not implemented")
 }
-func (m *mockSocialFederatedIdentityRepo) SoftDeleteByID(_ context.Context, _ *sql.Tx, _, _ string, _ time.Time) error {
+func (m *mockSocialFederatedIdentityRepo) SoftDeleteFederatedIdentityByID(_ context.Context, _ *sql.Tx, _, _ string, _ time.Time) error {
 	panic("not implemented")
 }
 func (m *mockSocialFederatedIdentityRepo) FindByProviderTx(ctx context.Context, _ *sql.Tx, provider accountDomain.Provider, providerUserID string) (*accountDomain.FederatedIdentity, error) {
@@ -327,7 +327,7 @@ func (m *mockSocialAccountRepo) FindByUsernameWithPasswordCredential(_ context.C
 func (m *mockSocialAccountRepo) UpdateAccount(_ context.Context, _ *sql.Tx, _ *accountDomain.Account, _ time.Time) error {
 	panic("not implemented")
 }
-func (m *mockSocialAccountRepo) SoftDeleteAccount(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+func (m *mockSocialAccountRepo) SoftDeleteAccountByID(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	panic("not implemented")
 }
 func (m *mockSocialAccountRepo) FindAll(_ context.Context, _, _ int, _ string) ([]*accountDomain.Account, int, error) {

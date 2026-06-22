@@ -221,7 +221,7 @@ func (m *mockCredentialRepoForController) SoftDeleteCredentialsByAccount(_ conte
 }
 
 func (m *mockCredentialRepoForController) SoftDeleteCredentialsByType(_ context.Context, _ *sql.Tx, _ string, _ accountDomain.CredentialType, _ time.Time) error {
-	return nil
+	return m.softDeleteCredentialErr
 }
 
 func (m *mockCredentialRepoForController) SoftDeleteCredential(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
@@ -403,11 +403,11 @@ func (m *mockFederatedIdentityRepoForSocial) FindByAccountIDTx(_ context.Context
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (m *mockFederatedIdentityRepoForSocial) SoftDeleteByAccountID(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+func (m *mockFederatedIdentityRepoForSocial) SoftDeleteFederatedIdentitiesByAccountID(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (m *mockFederatedIdentityRepoForSocial) SoftDeleteByID(_ context.Context, _ *sql.Tx, _, _ string, _ time.Time) error {
+func (m *mockFederatedIdentityRepoForSocial) SoftDeleteFederatedIdentityByID(_ context.Context, _ *sql.Tx, _, _ string, _ time.Time) error {
 	return fmt.Errorf("not implemented")
 }
 
@@ -506,7 +506,9 @@ func setupAuthControllerWithVerificationSvc(t *testing.T, claims *tokenDomain.Ac
 	t.Helper()
 	redisClient, _ := testutil.SetupTestRedis(t)
 
-	verificationSvc := service.NewVerificationService(redisClient, emailSender, nil, credRepo, zap.NewNop())
+	verificationSvc := service.NewVerificationServiceWithConfig(redisClient, emailSender, nil, credRepo, zap.NewNop(), service.VerificationServiceConfig{
+		HashPepper: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	})
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()

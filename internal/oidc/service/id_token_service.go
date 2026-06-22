@@ -113,8 +113,8 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 		}
 	}
 	if needEmail || needPhone {
-		if err := s.addContactClaims(ctx, accountID, claims, needEmail, needPhone); err != nil {
-			return "", err
+		if contactErr := s.addContactClaims(ctx, accountID, claims, needEmail, needPhone); contactErr != nil {
+			return "", contactErr
 		}
 	}
 
@@ -164,6 +164,11 @@ func (s *IDTokenService) addContactClaims(ctx context.Context, accountID string,
 			claims.PhoneNumber = *c.Identifier
 			verified := c.IsVerified()
 			claims.PhoneVerified = &verified
+		case accountDomain.CredentialTypePassword,
+			accountDomain.CredentialTypeTOTP,
+			accountDomain.CredentialTypeWebAuthn,
+			accountDomain.CredentialTypeBackupCode:
+			// These credential types are not contact-related; skip.
 		}
 	}
 	return nil

@@ -55,8 +55,8 @@ type AccountRepository interface {
 	// or ErrAccountNotFound if the row no longer exists.
 	UpdateAccount(ctx context.Context, tx *sql.Tx, account *domain.Account, expectedUpdatedAt time.Time) error
 
-	// SoftDeleteAccount soft deletes an account (requires transaction)
-	SoftDeleteAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+	// SoftDeleteAccountByID soft deletes an account (requires transaction)
+	SoftDeleteAccountByID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
 
 	// FindAll queries accounts with pagination (for admin search)
 	FindAll(ctx context.Context, page, pageSize int, status string) ([]*domain.Account, int, error)

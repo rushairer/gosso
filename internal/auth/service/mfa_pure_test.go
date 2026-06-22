@@ -113,4 +113,3 @@ func TestGenerateRandomCode_DifferentLengths(t *testing.T) {
 		})
 	}
 }
-

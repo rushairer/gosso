@@ -16,7 +16,7 @@ import (
 type JWKSService struct {
 	keySvc      *tokenService.KeyService
 	mu          sync.RWMutex
-	jwksJSON    []byte           // pre-marshaled JWKS bytes, rebuilt on Reload/ClearPreviousKey
+	jwksJSON    []byte             // pre-marshaled JWKS bytes, rebuilt on Reload/ClearPreviousKey
 	previousKey *map[string]string // previous key for rotation overlap, nil if none
 }
 

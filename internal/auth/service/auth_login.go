@@ -52,8 +52,8 @@ func (s *AuthService) LoginByUsernamePassword(ctx context.Context, req *LoginCom
 	}
 
 	// Check overall IP-level rate limit to prevent username enumeration
-	if err := s.checkIPRateLimit(ctx, req.IP); err != nil {
-		return nil, err
+	if ipErr := s.checkIPRateLimit(ctx, req.IP); ipErr != nil {
+		return nil, ipErr
 	}
 
 	// Validate input lengths AFTER rate limit check to prevent unlimited empty-credential probing.
@@ -146,8 +146,8 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	}()
 
 	// Prevent brute-force against MFA codes (TOTP/backup code).
-	if err := s.checkIPRateLimit(ctx, ip); err != nil {
-		return nil, err
+	if ipErr := s.checkIPRateLimit(ctx, ip); ipErr != nil {
+		return nil, ipErr
 	}
 
 	// 1. Verify MFA token
@@ -159,18 +159,18 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	mfaAccountID = &accountID
 
 	// Prevent brute-force against MFA codes per account (not just per IP).
-	if err := s.checkMFAAccountRateLimit(ctx, accountID); err != nil {
-		return nil, err
+	if acctErr := s.checkMFAAccountRateLimit(ctx, accountID); acctErr != nil {
+		return nil, acctErr
 	}
 
 	// 2. Verify based on MFA type
-	if err := s.verifyMFACode(ctx, mfaType, accountID, mfaCode, claims.ID); err != nil {
+	if verifyErr := s.verifyMFACode(ctx, mfaType, accountID, mfaCode, claims.ID); verifyErr != nil {
 		// Blacklist MFA token on failure to prevent brute-force replay.
 		if bErr := s.blacklistMFAToken(ctx, claims); bErr != nil {
 			s.logger.Error("Failed to blacklist MFA token after failed verification",
 				zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.String("jti", utility.MaskOpaqueID(claims.ID)), zap.Error(bErr))
 		}
-		return nil, err
+		return nil, verifyErr
 	}
 
 	// 3. Find account BEFORE blacklisting the MFA token.
@@ -222,13 +222,13 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	mfaAccountID = &accountID
 
 	// 2. Per-account rate limiting (prevents brute-force on passkey MFA)
-	if err := s.checkMFAAccountRateLimit(ctx, accountID); err != nil {
-		return nil, err
+	if acctErr := s.checkMFAAccountRateLimit(ctx, accountID); acctErr != nil {
+		return nil, acctErr
 	}
 
 	// 3. Verify passkey MFA flag (set by CompleteMFALogin in the passkey controller)
-	if err := s.verifyPasskeyMFAFlag(ctx, claims.ID, accountID); err != nil {
-		return nil, err
+	if verifyErr := s.verifyPasskeyMFAFlag(ctx, claims.ID, accountID); verifyErr != nil {
+		return nil, verifyErr
 	}
 
 	// 4. Find account before blacklisting MFA token.

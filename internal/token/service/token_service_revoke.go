@@ -149,8 +149,8 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 		return nil, fmt.Errorf("unexpected type from rotate script: %T", result)
 	}
 	var oldRT domain.RefreshToken
-	if err := json.Unmarshal([]byte(oldDataStr), &oldRT); err != nil {
-		return nil, fmt.Errorf("unmarshal old refresh token: %w", err)
+	if unmarshalErr := json.Unmarshal([]byte(oldDataStr), &oldRT); unmarshalErr != nil {
+		return nil, fmt.Errorf("unmarshal old refresh token: %w", unmarshalErr)
 	}
 
 	newRT, err := domain.NewRefreshToken(newTokenString, oldRT.AccountID, time.Now().Add(s.refreshExpiry))

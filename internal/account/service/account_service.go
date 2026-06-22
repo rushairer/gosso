@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -197,21 +196,6 @@ func (s *accountServiceImpl) SetOptions(opts *AccountServiceOptions) {
 	})
 }
 
-// requireActiveAccount looks up an account by ID and returns it only if it exists and is active.
-func (s *accountServiceImpl) requireActiveAccount(ctx context.Context, accountID string) (*domain.Account, error) {
-	account, err := s.accountRepo.FindByID(ctx, accountID)
-	if err != nil {
-		if errors.Is(err, repository.ErrAccountNotFound) {
-			return nil, ErrAccountNotActive
-		}
-		return nil, err
-	}
-	if !account.IsActive() {
-		return nil, ErrAccountNotActive
-	}
-	return account, nil
-}
-
 // RegisterAccount registers a new account.
 func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterAccountRequest) (*domain.Account, error) {
 	// 1. Validate request
@@ -226,8 +210,8 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	}
 	if req.Username != "" {
 		username := strings.TrimSpace(req.Username)
-		if err := validateUsername(username); err != nil {
-			return nil, err
+		if usernameErr := validateUsername(username); usernameErr != nil {
+			return nil, usernameErr
 		}
 		account.Username = &username
 	}
@@ -236,7 +220,7 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	}
 	if req.Timezone != "" {
 		tz := strings.TrimSpace(req.Timezone)
-		if _, err := time.LoadLocation(tz); err != nil {
+		if _, tzErr := time.LoadLocation(tz); tzErr != nil {
 			return nil, fmt.Errorf("invalid timezone: %s", tz)
 		}
 		account.Timezone = tz
@@ -253,36 +237,36 @@ func (s *accountServiceImpl) RegisterAccount(ctx context.Context, req *RegisterA
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		// Check credential uniqueness inside the transaction to eliminate TOCTOU window.
 		if req.Email != "" {
-			if err := s.checkCredentialExistsTx(ctx, tx, domain.CredentialTypeEmail, req.Email); err != nil {
-				return err
+			if existsErr := s.checkCredentialExistsTx(ctx, tx, domain.CredentialTypeEmail, req.Email); existsErr != nil {
+				return existsErr
 			}
 		}
 		if req.Phone != "" {
-			if err := s.checkCredentialExistsTx(ctx, tx, domain.CredentialTypePhone, req.Phone); err != nil {
-				return err
+			if existsErr := s.checkCredentialExistsTx(ctx, tx, domain.CredentialTypePhone, req.Phone); existsErr != nil {
+				return existsErr
 			}
 		}
 
-		if err := s.accountRepo.CreateAccount(ctx, tx, account); err != nil {
-			return err
+		if createErr := s.accountRepo.CreateAccount(ctx, tx, account); createErr != nil {
+			return createErr
 		}
 
 		var credentials []*domain.Credential
 		credentials = append(credentials, passwordCred)
 
 		if req.Email != "" {
-			emailCred, err := domain.NewEmailCredential(account.ID, req.Email)
-			if err != nil {
-				return fmt.Errorf("create email credential: %w", err)
+			emailCred, credErr := domain.NewEmailCredential(account.ID, req.Email)
+			if credErr != nil {
+				return fmt.Errorf("create email credential: %w", credErr)
 			}
 			emailCred.PrimaryCredential = true
 			credentials = append(credentials, emailCred)
 		}
 
 		if req.Phone != "" {
-			phoneCred, err := domain.NewPhoneCredential(account.ID, req.Phone)
-			if err != nil {
-				return fmt.Errorf("create phone credential: %w", err)
+			phoneCred, credErr := domain.NewPhoneCredential(account.ID, req.Phone)
+			if credErr != nil {
+				return fmt.Errorf("create phone credential: %w", credErr)
 			}
 			phoneCred.PrimaryCredential = req.Email == ""
 			credentials = append(credentials, phoneCred)

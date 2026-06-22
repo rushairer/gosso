@@ -23,8 +23,8 @@ import (
 // ──────────────────────────────────────────────
 
 type testAccountService struct {
-	byID        map[string]*accountDomain.Account // key: accountID
-	byUsername  map[string]*accountDomain.Account // key: username
+	byID         map[string]*accountDomain.Account    // key: accountID
+	byUsername   map[string]*accountDomain.Account    // key: username
 	passwordCred map[string]*accountDomain.Credential // key: username (populated by seedTestAccount)
 }
 
@@ -139,7 +139,7 @@ func (m *testRoleRepository) FindAll(_ context.Context, _, _ int) ([]*accountDom
 	return nil, 0, fmt.Errorf("not implemented")
 }
 
-func (m *testRoleRepository) SoftDeleteByID(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
+func (m *testRoleRepository) SoftDeleteRoleByID(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	return fmt.Errorf("not implemented")
 }
 
@@ -253,20 +253,20 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 	// Register automatic cleanup so individual tests don't need manual defers.
 	t.Cleanup(func() {
 		mr.Close()
-		sqlDB.Close()
+		_ = sqlDB.Close()
 	})
 
 	// Real TokenService backed by miniredis + in-memory RSA key
 	keySvc, err := tokenService.NewKeyService("", "test-key", false, 0, logger)
 	if err != nil {
 		mr.Close()
-		sqlDB.Close()
+		_ = sqlDB.Close()
 		t.Fatalf("failed to create key service: %v", err)
 	}
 	blacklistSvc, err := tokenService.NewBlacklistService(redisClient, logger)
 	if err != nil {
 		mr.Close()
-		sqlDB.Close()
+		_ = sqlDB.Close()
 		t.Fatalf("failed to create blacklist service: %v", err)
 	}
 	tokSvc, err := tokenService.NewTokenService(
@@ -282,7 +282,7 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 	)
 	if err != nil {
 		mr.Close()
-		sqlDB.Close()
+		_ = sqlDB.Close()
 		t.Fatalf("failed to create token service: %v", err)
 	}
 
@@ -292,7 +292,7 @@ func setupTestAuthService(t *testing.T) *authServiceFixture {
 	})
 	if err != nil {
 		mr.Close()
-		sqlDB.Close()
+		_ = sqlDB.Close()
 		t.Fatalf("failed to create session service: %v", err)
 	}
 

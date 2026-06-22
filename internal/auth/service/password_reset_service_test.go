@@ -582,7 +582,6 @@ func TestNewPasswordResetService_NilLogger(t *testing.T) {
 	assert.NotNil(t, svc.logger)
 }
 
-
 func TestPasswordResetService_Wait(t *testing.T) {
 	svc := NewPasswordResetServiceWithConfig(nil, nil, nil, nil, nil, nil, nil, "", nil, PasswordResetServiceConfig{
 		WaitTimeout: 100 * time.Millisecond,

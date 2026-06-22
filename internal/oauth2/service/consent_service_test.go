@@ -64,13 +64,13 @@ func setupTestConsentService(t *testing.T) (*ConsentService, sqlmock.Sqlmock, fu
 	svc, err := NewConsentService(db, repo, redisClient, logger)
 	if err != nil {
 		mr.Close()
-		db.Close()
+		_ = db.Close()
 		t.Fatalf("NewConsentService: %v", err)
 	}
 
 	cleanup := func() {
 		mr.Close()
-		db.Close()
+		_ = db.Close()
 	}
 	return svc, mock, cleanup
 }
@@ -226,7 +226,7 @@ func TestGetConsent_CorruptCache(t *testing.T) {
 	ctx := context.Background()
 
 	// Set corrupt data in Redis cache
-	mr.Set("consent:acct-001:client-001", "{corrupt")
+	_ = mr.Set("consent:acct-001:client-001", "{corrupt")
 
 	// DB has valid data
 	repo.store["acct-001:client-001"] = &domain.Consent{

@@ -40,7 +40,7 @@ var (
 	ErrVerificationCodeMismatch = errors.New("verification code does not belong to this account")
 
 	// Registration errors
-	ErrFailedToCreateAccount    = errors.New("failed to create account")
+	ErrFailedToCreateAccount     = errors.New("failed to create account")
 	ErrUnsupportedCredentialType = errors.New("unsupported credential type")
 
 	// TOTP / crypto errors

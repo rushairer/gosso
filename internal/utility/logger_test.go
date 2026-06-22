@@ -170,7 +170,7 @@ func TestColorWriteSyncer_Write(t *testing.T) {
 	assert.Greater(t, n, 0)
 
 	// Read from the pipe to verify something was written
-	w.Close()
+	_ = w.Close()
 	buf := make([]byte, 512)
 	readN, _ := r.Read(buf)
 	assert.Greater(t, readN, 0)

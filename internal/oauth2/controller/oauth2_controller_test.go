@@ -733,7 +733,7 @@ func TestToken_AuthCode_ConfidentialMissingSecret(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.Contains(t, w.Body.String(), "client_secret required")
+	assert.Contains(t, w.Body.String(), "client authentication failed")
 }
 
 // ──────────────────────────────────────────────
@@ -2105,7 +2105,7 @@ func TestToken_AuthCode_InvalidSecret(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.Contains(t, w.Body.String(), "invalid client_secret")
+	assert.Contains(t, w.Body.String(), "client authentication failed")
 }
 
 func TestToken_AuthCode_PublicClientNoPKCE(t *testing.T) {
@@ -2426,7 +2426,7 @@ func TestToken_RefreshToken_ConfidentialMissingSecret(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.Contains(t, w.Body.String(), "client_secret required for confidential clients")
+	assert.Contains(t, w.Body.String(), "client authentication failed")
 }
 
 func TestToken_RefreshToken_ConfidentialWrongSecret(t *testing.T) {
@@ -2446,7 +2446,7 @@ func TestToken_RefreshToken_ConfidentialWrongSecret(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.Contains(t, w.Body.String(), "invalid client_secret")
+	assert.Contains(t, w.Body.String(), "client authentication failed")
 }
 
 func TestToken_RefreshToken_AccountInactive(t *testing.T) {

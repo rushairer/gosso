@@ -287,7 +287,7 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.passkeySvc.CompleteMFALogin(ctx, req.RequestID, claims.AccountID, ctx.Request); err != nil {
+	if err = c.passkeySvc.CompleteMFALogin(ctx, req.RequestID, claims.AccountID, ctx.Request); err != nil {
 		c.logger.Error("Failed to complete passkey MFA", zap.Error(err))
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "passkey verification failed"))
 		return
@@ -295,7 +295,7 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 
 	// Mark passkey MFA as verified (consumed by CompletePasskeyMFALogin below).
 	// Key is namespaced by MFA token JTI to prevent concurrent login interference.
-	if err := c.authSvc.MarkPasskeyMFAVerified(ctx, claims.ID); err != nil {
+	if err = c.authSvc.MarkPasskeyMFAVerified(ctx, claims.ID); err != nil {
 		c.logger.Error("Failed to mark passkey MFA verified",
 			zap.Error(err),
 			zap.String("account_id", utility.MaskOpaqueID(claims.AccountID)))

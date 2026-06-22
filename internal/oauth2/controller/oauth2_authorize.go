@@ -14,8 +14,8 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	"github.com/rushairer/gosso/internal/cache"
+	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	"github.com/rushairer/gosso/internal/utility"
 	"github.com/rushairer/gosso/middleware"
 )
@@ -278,7 +278,7 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	}
 
 	var stored consentState
-	if err := json.Unmarshal([]byte(stateData), &stored); err != nil {
+	if unmarshalErr := json.Unmarshal([]byte(stateData), &stored); unmarshalErr != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid consent session data"})
 		return
 	}
@@ -325,8 +325,8 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
 		return
 	}
-	if err := c.consentSvc.SaveConsent(ctx, consent); err != nil {
-		c.logger.Error("Failed to save consent", zap.Error(err))
+	if saveErr := c.consentSvc.SaveConsent(ctx, consent); saveErr != nil {
+		c.logger.Error("Failed to save consent", zap.Error(saveErr))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
 	}

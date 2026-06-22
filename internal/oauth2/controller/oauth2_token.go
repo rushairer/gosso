@@ -107,8 +107,8 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		return
 	}
 
-	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-		controllerutil.HandleClientAuthError(ctx, c.logger, err)
+	if authErr := c.clientAuth.AuthenticateClient(client, req.ClientSecret); authErr != nil {
+		controllerutil.HandleClientAuthError(ctx, c.logger, authErr)
 		return
 	} else if !client.IsConfidential && req.CodeVerifier == "" {
 		// Public clients MUST use PKCE (RFC 7636)
@@ -197,8 +197,8 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 	// RFC 6749 §6: confidential clients MUST authenticate when using refresh token grant.
 	// Public clients are exempt — they are bound by the refresh token itself and optionally PKCE.
 	if client.IsConfidential {
-		if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
-			controllerutil.HandleClientAuthError(ctx, c.logger, err)
+		if authErr := c.clientAuth.AuthenticateClient(client, req.ClientSecret); authErr != nil {
+			controllerutil.HandleClientAuthError(ctx, c.logger, authErr)
 			return
 		}
 	}
@@ -305,7 +305,7 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 		return
 	}
 
-	if err := c.clientAuth.AuthenticateClient(client, req.ClientSecret); err != nil {
+	if authErr := c.clientAuth.AuthenticateClient(client, req.ClientSecret); authErr != nil {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}

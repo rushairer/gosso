@@ -46,7 +46,9 @@ func setupTestVerificationServiceBase(t *testing.T) (*VerificationService, *cach
 
 	emailSvc := &stubEmailService{}
 	smsSvc := &stubSMSService{}
-	svc := NewVerificationService(redisClient, emailSvc, smsSvc, nil, logger)
+	svc := NewVerificationServiceWithConfig(redisClient, emailSvc, smsSvc, nil, logger, VerificationServiceConfig{
+		HashPepper: "0000000000000000000000000000000000000000000000000000000000000000",
+	})
 
 	return svc, redisClient, cleanup, emailSvc
 }
@@ -173,7 +175,6 @@ func TestVerifyCode_CodeReuse(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "expired or not found")
 }
-
 
 // ──────────────────────────────────────────────
 // Unsupported type test

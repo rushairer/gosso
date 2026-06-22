@@ -147,8 +147,8 @@ func (c *OAuth2Controller) Introspect(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
 		return
 	}
-	if err := c.clientAuth.AuthenticateClient(client, clientSecret); err != nil {
-		controllerutil.HandleClientAuthError(ctx, c.logger, err)
+	if authErr := c.clientAuth.AuthenticateClient(client, clientSecret); authErr != nil {
+		controllerutil.HandleClientAuthError(ctx, c.logger, authErr)
 		return
 	} else if !client.IsConfidential {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client", "error_description": "public clients are not allowed to introspect"})

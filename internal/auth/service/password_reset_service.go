@@ -112,7 +112,7 @@ type passwordResetData struct {
 	// Email is stored to avoid an extra DB round-trip during VerifyAndReset.
 	// The token key is a SHA-256 hash, so the Redis value is not guessable.
 	// The TTL ensures automatic cleanup.
-	Email    string `json:"email"`
+	Email string `json:"email"`
 	// Username is stored so that ClearLoginRateLimitsByUsername can match
 	// the login rate-limit keys (which are keyed on username, not email).
 	Username string `json:"username,omitempty"`
@@ -146,11 +146,11 @@ type PasswordResetService struct {
 // PasswordResetServiceConfig holds optional configuration for PasswordResetService.
 // Zero-valued fields use package defaults.
 type PasswordResetServiceConfig struct {
-	WaitTimeout          time.Duration        // default: 60s
-	TokenTTL             time.Duration        // default: passwordResetTokenTTL
-	CooldownTTL          time.Duration        // default: passwordResetCooldownTTL
-	MaxAttempts          int                  // default: passwordResetMaxAttempts
-	RevokeConcurrency    int                  // default: 10
+	WaitTimeout           time.Duration         // default: 60s
+	TokenTTL              time.Duration         // default: passwordResetTokenTTL
+	CooldownTTL           time.Duration         // default: passwordResetCooldownTTL
+	MaxAttempts           int                   // default: passwordResetMaxAttempts
+	RevokeConcurrency     int                   // default: 10
 	LoginRateLimitClearer LoginRateLimitClearer // optional; clears login rate-limit counters after reset
 	Auditor               *auditService.Auditor // optional; audit logging for password resets
 }
@@ -268,8 +268,8 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 
 	// Generate token
 	tokenBytes := make([]byte, passwordResetTokenLength)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		return fmt.Errorf("generate token: %w", err)
+	if _, readErr := rand.Read(tokenBytes); readErr != nil {
+		return fmt.Errorf("generate token: %w", readErr)
 	}
 	token := hex.EncodeToString(tokenBytes)
 
@@ -289,15 +289,15 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 	}
 
 	tokenKey := s.buildTokenKey(tokenHash)
-	if err := s.redis.Set(ctx, tokenKey, jsonData, s.tokenTTL); err != nil {
-		return fmt.Errorf("store reset token: %w", err)
+	if setErr := s.redis.Set(ctx, tokenKey, jsonData, s.tokenTTL); setErr != nil {
+		return fmt.Errorf("store reset token: %w", setErr)
 	}
 
 	// Set cooldown BEFORE sending email to prevent rapid-fire email sending.
 	// Fail-closed: consistent with the cooldown check above (line 212-214);
 	// if Redis is down, deny sending to prevent email flooding.
-	if err := s.redis.Set(ctx, cooldownKey, []byte("1"), s.cooldownTTL); err != nil {
-		s.logger.Error("Failed to set reset cooldown, denying request", zap.Error(err))
+	if setErr := s.redis.Set(ctx, cooldownKey, []byte("1"), s.cooldownTTL); setErr != nil {
+		s.logger.Error("Failed to set reset cooldown, denying request", zap.Error(setErr))
 		return ErrServiceUnavailable
 	}
 
@@ -347,8 +347,8 @@ func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPas
 	}
 
 	var data passwordResetData
-	if err := json.Unmarshal([]byte(dataStr), &data); err != nil {
-		return fmt.Errorf("unmarshal reset data: %w", err)
+	if unmarshalErr := json.Unmarshal([]byte(dataStr), &data); unmarshalErr != nil {
+		return fmt.Errorf("unmarshal reset data: %w", unmarshalErr)
 	}
 
 	// Verify account is still active before changing password.

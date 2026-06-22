@@ -33,10 +33,10 @@ type FederatedIdentityRepository interface {
 	// Use this variant inside RunInTransaction to avoid TOCTOU race conditions.
 	FindByAccountIDTx(ctx context.Context, tx *sql.Tx, accountID string) ([]*domain.FederatedIdentity, error)
 
-	// SoftDeleteByAccountID soft deletes all federated identities of an account (requires transaction)
-	SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+	// SoftDeleteFederatedIdentitiesByAccountID soft deletes all federated identities of an account (requires transaction)
+	SoftDeleteFederatedIdentitiesByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
 
-	// SoftDeleteByID soft deletes a single federated identity (requires transaction).
+	// SoftDeleteFederatedIdentityByID soft deletes a single federated identity (requires transaction).
 	// accountID enforces ownership: only the identity's owner can delete it.
-	SoftDeleteByID(ctx context.Context, tx *sql.Tx, accountID, identityID string, deletedAt time.Time) error
+	SoftDeleteFederatedIdentityByID(ctx context.Context, tx *sql.Tx, accountID, identityID string, deletedAt time.Time) error
 }

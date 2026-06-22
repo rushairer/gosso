@@ -223,7 +223,7 @@ func TestLogoutByAccountID_SessionServiceError(t *testing.T) {
 
 	// Create session service WITHOUT setting tokenRevoker.
 	// RevokeAllForAccount now gracefully skips token revocation and logs a warning.
-	sessionSvc, err := sessionService.NewSessionService(redisClient, logger)
+	sessionSvc, err := sessionService.NewSessionServiceWithConfig(redisClient, logger, sessionService.SessionConfig{})
 	require.NoError(t, err)
 	logoutSvc := NewLogoutService(tokenSvc, sessionSvc, nil, "https://sso.example.com", logger)
 
