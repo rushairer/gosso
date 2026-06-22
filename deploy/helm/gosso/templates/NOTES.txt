@@ -1,0 +1,32 @@
+NOTES:
+╔══════════════════════════════════════════════════════════════╗
+║                    gosso deployed!                           ║
+╚══════════════════════════════════════════════════════════════╝
+
+1. Get the application URL:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}
+{{- end }}
+{{- else }}
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "gosso.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:{{ .Values.config.webServer.port | default 8080 }}
+  echo "Visit http://127.0.0.1:8080"
+{{- end }}
+
+2. Check health:
+  curl http://localhost:8080/health
+  curl http://localhost:8080/readiness
+
+3. OIDC Discovery:
+  curl http://localhost:8080/.well-known/openid-configuration
+
+4. Verify secrets are configured:
+  kubectl get secret --namespace {{ .Release.Namespace }} {{ .Values.existingSecret | default (printf "%s-secrets" (include "gosso.fullname" .)) }}
+
+⚠️  Make sure you have created the required secrets before deploying:
+  kubectl create secret generic {{ include "gosso.fullname" . }}-secrets \
+    --from-literal=database-dsn='postgres://...' \
+    --from-literal=redis-dsn='redis://...' \
+    --from-literal=auth-verify-hash-pepper='your-pepper' \
+    --from-literal=auth-totp-encryption-key='$(openssl rand -hex 32)'

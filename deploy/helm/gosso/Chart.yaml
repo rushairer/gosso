@@ -1,0 +1,17 @@
+apiVersion: v2
+name: gosso
+description: A Helm chart for gosso — Self-hosted OIDC / OAuth 2.0 Identity Provider
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - oidc
+  - oauth2
+  - identity
+  - sso
+  - authentication
+home: https://github.com/rushairer/gosso
+sources:
+  - https://github.com/rushairer/gosso
+maintainers:
+  - name: rushairer

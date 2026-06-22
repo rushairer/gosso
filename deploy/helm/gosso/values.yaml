@@ -1,0 +1,189 @@
+# -- Number of gosso replicas
+replicaCount: 1
+
+image:
+  # -- Container image repository
+  repository: ghcr.io/rushairer/gosso
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Image tag (defaults to Chart appVersion)
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Create a service account
+  create: true
+  # -- Annotations for the service account
+  annotations: {}
+  # -- Service account name (auto-generated if empty)
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+securityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  # -- Service type
+  type: ClusterIP
+  # -- Service port
+  port: 8080
+
+ingress:
+  # -- Enable ingress
+  enabled: false
+  # -- Ingress class name
+  className: ""
+  # -- Ingress annotations
+  annotations: {}
+  hosts:
+    - host: sso.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: gosso-tls
+      hosts:
+        - sso.example.com
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+# -- Horizontal Pod Autoscaler configuration
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# -- Pod Disruption Budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# -- Liveness probe configuration
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# -- Readiness probe configuration
+readinessProbe:
+  httpGet:
+    path: /readiness
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# -- Termination grace period (must be > shutdownTimeout)
+terminationGracePeriodSeconds: 45
+
+# -- Node selector
+nodeSelector: {}
+
+# -- Tolerations
+tolerations: []
+
+# -- Affinity rules
+affinity: {}
+
+# ============================================================
+# Application Configuration
+# ============================================================
+
+# -- gosso application config
+config:
+  # -- Environment (development, test, production)
+  env: production
+  # -- Gin mode (release, debug)
+  ginMode: release
+
+  webServer:
+    address: "0.0.0.0"
+    port: 8080
+    readTimeout: 10s
+    writeTimeout: 30s
+    idleTimeout: 120s
+    shutdownTimeout: 30s
+    requestTimeout: 30s
+    maxBodySize: 10MB
+    trustedProxies: []
+
+  database:
+    # -- PostgreSQL DSN (REQUIRED)
+    dsn: ""
+    maxOpenConns: 25
+    maxIdleConns: 10
+
+  redis:
+    # -- Redis DSN (REQUIRED)
+    dsn: ""
+
+  auth:
+    # -- OIDC issuer URL (REQUIRED, must be HTTPS)
+    issuer: ""
+    # -- Path to RSA private key for JWT signing
+    privateKeyPath: /etc/gosso/secrets/private.pem
+    # -- JWT key ID
+    keyId: gosso-key
+    # -- Password reset base URL (REQUIRED, must be HTTPS)
+    passwordResetBaseUrl: ""
+    # -- TOTP encryption key (64-char hex, REQUIRED)
+    totpEncryptionKey: ""
+    # -- Verify hash pepper (REQUIRED)
+    verifyHashPepper: ""
+
+  cors:
+    # -- Allowed CORS origins (JSON array, REQUIRED in production)
+    allowedOrigins: []
+
+  smtp:
+    host: ""
+    port: 587
+    username: ""
+    password: ""
+    from: ""
+    tlsPolicy: mandatory
+
+  observability:
+    metrics:
+      enabled: true
+    tracing:
+      enabled: false
+      endpoint: ""
+
+# -- Secrets are mounted from an existing Kubernetes Secret.
+# Create it manually or via `kubectl create secret generic gosso-secrets --from-literal=...`
+existingSecret: ""
+
+# -- Prometheus ServiceMonitor for metrics scraping
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Enterprise governance**: `CODE_OF_CONDUCT.md` based on Contributor Covenant v2.1, bilingual English/Chinese (`CODE_OF_CONDUCT.md`).
+- **CODEOWNERS**: automatic PR reviewer assignment for security-sensitive paths (`.github/CODEOWNERS`).
+- **GitHub Actions security hardening**: all actions pinned to commit SHA with version comments, workflow-level `permissions: read-all` default, concurrency groups to prevent redundant runs (`.github/workflows/ci.yml`, `.github/workflows/release.yml`).
+- **Supply chain security**: Release workflow now signs Docker images with cosign (keyless Sigstore) and generates CycloneDX SBOM, attached as GitHub Release asset (`.github/workflows/release.yml`).
+- **Operator guide**: comprehensive deployment, monitoring, and troubleshooting documentation, bilingual English/Chinese (`doc/OPERATOR_GUIDE.md`, `doc/OPERATOR_GUIDE.zh-CN.md`).
+- **Grafana dashboard**: pre-built JSON dashboard covering HTTP traffic, auth metrics, session/connection pool monitoring, and rate limit events (`deploy/grafana/gosso-dashboard.json`).
+- **Makefile targets**: `clean`, `bench`, `security-scan`, `docker-build`, `sbom` for local development and CI workflows (`Makefile`).
+- **Helm chart**: full Kubernetes deployment chart with Deployment, Service, Ingress, ConfigMap, Secret, ServiceAccount, HPA, PDB, and ServiceMonitor templates (`deploy/helm/gosso/`).
+- **OpenAPI improvements**: `PaginatedResponse` generic pagination schema, `RateLimitHeaders` reusable component (`docs/openapi.yaml`).
+
 ### Fixed
 - `checkAndIncrementAttemptsScript` in `password_reset_service.go` now uses `pcall(require, 'cjson')` with a string pattern fallback, consistent with the pattern in `token_service_revoke.go`. This prevents failures in test environments using miniredis which lacks the cjson module (`internal/auth/service/password_reset_service.go`).
 - `SubmitConsent` handler now enforces `Content-Type: application/x-www-form-urlencoded` and rejects oversized bodies, matching the defense-in-depth pattern already used by the `Token` endpoint (`internal/oauth2/controller/oauth2_authorize.go`).

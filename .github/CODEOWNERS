@@ -1,0 +1,27 @@
+# Default owner for everything in the repo
+* @rushairer
+
+# CI/CD and GitHub configuration
+.github/ @rushairer
+
+# Docker and deployment
+Dockerfile @rushairer
+docker-compose*.yml @rushairer
+deploy/ @rushairer
+
+# Database migrations (high-risk changes)
+db/migrations/ @rushairer
+
+# Security-sensitive code
+gosso/internal/auth/ @rushairer
+gosso/internal/token/ @rushairer
+gosso/internal/oauth2/ @rushairer
+gosso/internal/oidc/ @rushairer
+gosso/middleware/ @rushairer
+
+# Configuration
+gosso/config/ @rushairer
+
+# Architecture documentation
+doc/ARCHITECTURE_INVARIANTS.md @rushairer
+doc/ADR/ @rushairer

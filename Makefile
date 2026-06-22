@@ -194,6 +194,13 @@ help:
 	@echo "  env-prod             - Generate production environment variables"
 	@echo "  env-all              - Generate all environment variables"
 	@echo ""
+	@echo "🔧 Maintenance Commands:"
+	@echo "  clean                - Remove build artifacts"
+	@echo "  bench                - Run benchmarks"
+	@echo "  security-scan        - Run Trivy security scan on Docker image"
+	@echo "  docker-build         - Build Docker image (no push)"
+	@echo "  sbom                 - Generate SBOM (requires syft)"
+	@echo ""
 	@echo "📝 Example Commands:"
 	@echo "  examples             - Run all examples"
 	@echo "  example-account      - Run account module example"
@@ -202,7 +209,7 @@ help:
 	@echo "🆘 Help Commands:"
 	@echo "  help                 - Show this help message"
 
-.PHONY: default build build-debug run dev lint lint-fix test test-ui test-integration test-migrations architecture-check coverage-check critical-coverage-check check coverage docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs docker-prod-up docker-prod-down docker-prod-logs env-dev env-test env-prod env-all help
+.PHONY: default build build-debug run dev lint lint-fix test test-ui test-integration test-migrations architecture-check coverage-check critical-coverage-check check coverage docker-dev-up docker-dev docker-dev-down docker-dev-logs docker-test-up docker-test-down docker-test-logs docker-prod-up docker-prod-down docker-prod-logs env-dev env-test env-prod env-all clean bench security-scan docker-build sbom help
 # Examples - 示例程序
 .PHONY: examples example-account example-redis
 
@@ -216,3 +223,39 @@ example-account:
 example-redis:
 	@echo "========== Running Redis Example =========="
 	@go run ./examples/redis || echo "⚠️  Redis example requires Redis service"
+
+# Maintenance Commands
+clean:
+	@echo "🧹 Cleaning build artifacts..."
+	rm -rf bin/
+	rm -f coverage.out coverage-gate.out
+	@echo "✅ Clean complete"
+
+bench:
+	@echo "🏃 Running benchmarks..."
+	$(GO_TEST_ENV) go test -bench=. -benchmem -run=^$$ ./...
+
+security-scan:
+	@echo "🔒 Running security scan..."
+	@if command -v trivy >/dev/null 2>&1; then \
+		docker build --build-arg VERSION=$$(git describe --tags --always 2>/dev/null || echo "dev") -t gosso-scan:local .; \
+		trivy image --severity CRITICAL,HIGH --ignore-unfixed gosso-scan:local; \
+	else \
+		echo "⚠️  trivy not installed. Install: brew install trivy (macOS) or see https://trivy.dev"; \
+		exit 1; \
+	fi
+
+docker-build:
+	@echo "🐳 Building Docker image (no push)..."
+	docker build --build-arg VERSION=$$(git describe --tags --always 2>/dev/null || echo "dev") -t gosso:local .
+	@echo "✅ Image tagged as gosso:local"
+
+sbom:
+	@echo "📋 Generating SBOM..."
+	@if command -v syft >/dev/null 2>&1; then \
+		syft dir:. -o cyclonedx-json > gosso-sbom.cdx.json; \
+		echo "✅ SBOM written to gosso-sbom.cdx.json"; \
+	else \
+		echo "⚠️  syft not installed. Install: brew install syft (macOS) or see https://github.com/anchore/syft"; \
+		exit 1; \
+	fi

@@ -11,7 +11,7 @@ info:
     - Social login (Google, GitHub, WeChat)
     - Admin account management
     - Email verification and password reset (phone verification reserved until SMS gateway is configured)
-  version: 1.0.0
+  version: 1.1.0
   contact:
     name: rushairer
     url: https://github.com/rushairer/gosso
@@ -22,6 +22,8 @@ info:
 servers:
   - url: http://localhost:8080
     description: Local development server
+  - url: https://sso.example.com
+    description: Production server
 
 tags:
   - name: Auth
@@ -115,7 +117,7 @@ paths:
   # Auth
   # ──────────────────────────────────────────────
 
-  /api/auth/login:
+  /api/v1/auth/login:
     post:
       tags: [Auth]
       summary: Login with username and password
@@ -146,7 +148,7 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
-  /api/auth/refresh:
+  /api/v1/auth/refresh:
     post:
       tags: [Auth]
       summary: Refresh access token
@@ -170,7 +172,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/auth/logout:
+  /api/v1/auth/logout:
     post:
       tags: [Auth]
       summary: Logout
@@ -190,7 +192,7 @@ paths:
                 message: success
                 data: logged out
 
-  /api/auth/session:
+  /api/v1/auth/session:
     get:
       tags: [Auth]
       summary: Get current session
@@ -208,7 +210,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/auth/sessions:
+  /api/v1/auth/sessions:
     get:
       tags: [Auth]
       summary: List all sessions
@@ -237,7 +239,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/auth/sessions/{id}:
+  /api/v1/auth/sessions/{id}:
     delete:
       tags: [Auth]
       summary: Revoke a session
@@ -270,7 +272,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/auth/mfa/verify:
+  /api/v1/auth/mfa/verify:
     post:
       tags: [Auth]
       summary: Verify MFA code
@@ -294,7 +296,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/auth/mfa/enroll:
+  /api/v1/auth/mfa/enroll:
     post:
       tags: [Auth]
       summary: Enroll TOTP MFA
@@ -322,7 +324,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/auth/mfa/activate:
+  /api/v1/auth/mfa/activate:
     post:
       tags: [Auth]
       summary: Activate TOTP MFA
@@ -352,7 +354,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/auth/mfa:
+  /api/v1/auth/mfa:
     delete:
       tags: [Auth]
       summary: Disable TOTP MFA
@@ -374,7 +376,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/auth/mfa/backup-codes:
+  /api/v1/auth/mfa/backup-codes:
     post:
       tags: [Auth]
       summary: Generate backup codes
@@ -407,7 +409,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/auth/social/{provider}:
+  /api/v1/auth/social/{provider}:
     get:
       tags: [Auth]
       summary: Get social login URL
@@ -432,7 +434,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/auth/social/{provider}/callback:
+  /api/v1/auth/social/{provider}/callback:
     get:
       tags: [Auth]
       summary: Social login callback
@@ -467,7 +469,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/auth/verify/send:
+  /api/v1/auth/verify/send:
     post:
       tags: [Auth]
       summary: Send verification code
@@ -501,7 +503,7 @@ paths:
         "501":
           description: Phone verification is not implemented
 
-  /api/auth/verify/confirm:
+  /api/v1/auth/verify/confirm:
     post:
       tags: [Auth]
       summary: Confirm verification code
@@ -535,7 +537,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/auth/password/forgot:
+  /api/v1/auth/password/forgot:
     post:
       tags: [Auth]
       summary: Request password reset
@@ -562,7 +564,7 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
-  /api/auth/password/reset:
+  /api/v1/auth/password/reset:
     post:
       tags: [Auth]
       summary: Reset password with token
@@ -592,7 +594,7 @@ paths:
   # OAuth2 Clients
   # ──────────────────────────────────────────────
 
-  /api/oauth2/clients:
+  /api/v1/oauth2/clients:
     get:
       tags: [OAuth2 Clients]
       summary: List OAuth2 clients
@@ -655,7 +657,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/oauth2/clients/{client_id}:
+  /api/v1/oauth2/clients/{client_id}:
     parameters:
       - $ref: "#/components/parameters/ClientID"
 
@@ -1130,11 +1132,81 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /oidc/logout:
+    post:
+      tags: [OIDC]
+      summary: RP-Initiated Logout
+      description: |
+        Ends the user's session per OpenID Connect RP-Initiated Logout 1.0.
+        The user is identified via `id_token_hint`, a Bearer token, or both.
+        When both are present, their subject must match.
+        GET is intentionally omitted to prevent CSRF via image tags or link prefetching.
+      operationId: oidcLogout
+      parameters:
+        - name: id_token_hint
+          in: query
+          schema:
+            type: string
+          description: Previously issued ID token whose sub identifies the user
+        - name: client_id
+          in: query
+          schema:
+            type: string
+          description: OAuth2 client ID (overrides audience from id_token_hint)
+        - name: post_logout_redirect_uri
+          in: query
+          schema:
+            type: string
+            format: uri
+          description: URI to redirect after logout (must be registered for the client)
+        - name: state
+          in: query
+          schema:
+            type: string
+            maxLength: 256
+          description: Opaque value relayed back to the client on redirect
+      responses:
+        "200":
+          description: Logout successful (JSON)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: success
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: logged_out
+        "302":
+          description: Redirect to post_logout_redirect_uri
+          headers:
+            Location:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: id_token_hint subject does not match authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ──────────────────────────────────────────────
   # Admin
   # ──────────────────────────────────────────────
 
-  /api/admin/accounts:
+  /api/v1/admin/accounts:
     get:
       tags: [Admin]
       summary: List accounts
@@ -1183,7 +1255,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/admin/accounts/{account_id}:
+  /api/v1/admin/accounts/{account_id}:
     parameters:
       - $ref: "#/components/parameters/AccountID"
 
@@ -1241,7 +1313,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/admin/accounts/{account_id}/disable:
+  /api/v1/admin/accounts/{account_id}/disable:
     post:
       tags: [Admin]
       summary: Suspend account
@@ -1269,7 +1341,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/admin/accounts/{account_id}/enable:
+  /api/v1/admin/accounts/{account_id}/enable:
     post:
       tags: [Admin]
       summary: Activate account
@@ -1297,7 +1369,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/admin/accounts/{account_id}/roles:
+  /api/v1/admin/accounts/{account_id}/roles:
     parameters:
       - $ref: "#/components/parameters/AccountID"
 
@@ -1365,7 +1437,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/admin/accounts/{account_id}/roles/{role_id}:
+  /api/v1/admin/accounts/{account_id}/roles/{role_id}:
     delete:
       tags: [Admin]
       summary: Remove role from account
@@ -1397,7 +1469,7 @@ paths:
 # Passkey (WebAuthn) Endpoints
 # ════════════════════════════════════════════════
 
-  /api/auth/passkey/register/begin:
+  /api/v1/passkey/register/begin:
     post:
       tags: [Passkey]
       summary: Begin passkey registration
@@ -1414,7 +1486,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/auth/passkey/register/complete:
+  /api/v1/passkey/register/complete:
     post:
       tags: [Passkey]
       summary: Complete passkey registration
@@ -1439,7 +1511,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/auth/passkey/login/begin:
+  /api/v1/passkey/login/begin:
     post:
       tags: [Passkey]
       summary: Begin passkey login
@@ -1461,7 +1533,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Response"
 
-  /api/auth/passkey/login/complete:
+  /api/v1/passkey/login/complete:
     post:
       tags: [Passkey]
       summary: Complete passkey login
@@ -1486,7 +1558,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/auth/passkeys:
+  /api/v1/passkeys:
     get:
       tags: [Passkey]
       summary: List passkeys
@@ -1503,7 +1575,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/auth/passkeys/{id}:
+  /api/v1/passkeys/{id}:
     delete:
       tags: [Passkey]
       summary: Delete passkey
@@ -1528,7 +1600,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/auth/passkey/mfa/begin:
+  /api/v1/passkey/mfa/begin:
     post:
       tags: [Passkey]
       summary: Begin passkey MFA verification
@@ -1553,11 +1625,11 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/auth/passkey/mfa/complete:
+  /api/v1/passkey/mfa/complete:
     post:
       tags: [Passkey]
       summary: Complete passkey MFA verification
-      description: Complete WebAuthn MFA ceremony. After this, call /api/auth/mfa/verify with type=passkey to get tokens.
+      description: Complete WebAuthn MFA ceremony. After this, call /api/v1/auth/mfa/verify with type=passkey to get tokens.
       requestBody:
         required: true
         content:
@@ -1605,6 +1677,22 @@ components:
         1. GET any endpoint to receive `csrf_token` cookie
         2. Read cookie value and send as `X-CSRF-Token` header on POST/PUT/DELETE
         3. Not required when using `Authorization: Bearer` header (JWT auth)
+
+  # ── Headers ──
+
+  headers:
+    X-RateLimit-Limit:
+      schema: { type: integer }
+      description: Maximum requests per window
+    X-RateLimit-Remaining:
+      schema: { type: integer }
+      description: Remaining requests in current window
+    X-RateLimit-Reset:
+      schema: { type: integer }
+      description: Unix timestamp when the window resets
+    Retry-After:
+      schema: { type: integer }
+      description: Seconds to wait before retrying (only present when rate limited)
 
   # ── Parameters ──
 
@@ -1666,14 +1754,11 @@ components:
       description: Forbidden (insufficient permissions or CSRF token mismatch)
       headers:
         X-RateLimit-Limit:
-          schema: { type: integer }
-          description: Maximum requests per window
+          $ref: "#/components/headers/X-RateLimit-Limit"
         X-RateLimit-Remaining:
-          schema: { type: integer }
-          description: Remaining requests in current window
+          $ref: "#/components/headers/X-RateLimit-Remaining"
         X-RateLimit-Reset:
-          schema: { type: integer }
-          description: Unix timestamp when the window resets
+          $ref: "#/components/headers/X-RateLimit-Reset"
       content:
         application/json:
           schema:
@@ -1685,17 +1770,13 @@ components:
       description: Rate limit exceeded
       headers:
         X-RateLimit-Limit:
-          schema: { type: integer }
-          description: Maximum requests per window
+          $ref: "#/components/headers/X-RateLimit-Limit"
         X-RateLimit-Remaining:
-          schema: { type: integer }
-          description: Remaining requests (always 0 when rate limited)
+          $ref: "#/components/headers/X-RateLimit-Remaining"
         X-RateLimit-Reset:
-          schema: { type: integer }
-          description: Unix timestamp when the window resets
+          $ref: "#/components/headers/X-RateLimit-Reset"
         Retry-After:
-          schema: { type: integer }
-          description: Seconds to wait before retrying
+          $ref: "#/components/headers/Retry-After"
       content:
         application/json:
           schema:
@@ -2126,20 +2207,41 @@ components:
           format: date-time
 
     PaginatedAccounts:
+      allOf:
+        - $ref: "#/components/schemas/PaginatedResponse"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Account"
+          example:
+            items:
+              - id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                username: "johndoe"
+                display_name: "John Doe"
+                status: "active"
+                locale: "en"
+                timezone: "UTC"
+            total: 42
+            page: 1
+            page_size: 20
+
+    PaginatedResponse:
       type: object
+      description: Generic pagination wrapper
       properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Account"
         total:
           type: integer
+          description: Total number of items across all pages
           example: 42
         page:
           type: integer
+          description: Current page number (1-based)
           example: 1
         page_size:
           type: integer
+          description: Number of items per page
           example: 20
 
     # -- OAuth2 Client Management --

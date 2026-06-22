@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gosso.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gosso.labels" . | nindent 4 }}
+data:
+  GOUNO_ENV: {{ .Values.config.env | quote }}
+  GIN_MODE: {{ .Values.config.ginMode | quote }}
+  GOUNO_WEB_SERVER_ADDRESS: {{ .Values.config.webServer.address | quote }}
+  GOUNO_WEB_SERVER_PORT: {{ .Values.config.webServer.port | default 8080 | quote }}
+  GOUNO_WEB_SERVER_READ_TIMEOUT: {{ .Values.config.webServer.readTimeout | quote }}
+  GOUNO_WEB_SERVER_WRITE_TIMEOUT: {{ .Values.config.webServer.writeTimeout | quote }}
+  GOUNO_WEB_SERVER_IDLE_TIMEOUT: {{ .Values.config.webServer.idleTimeout | quote }}
+  GOUNO_WEB_SERVER_SHUTDOWN_TIMEOUT: {{ .Values.config.webServer.shutdownTimeout | quote }}
+  GOUNO_WEB_SERVER_REQUEST_TIMEOUT: {{ .Values.config.webServer.requestTimeout | quote }}
+  GOUNO_WEB_SERVER_MAX_BODY_SIZE: {{ .Values.config.webServer.maxBodySize | quote }}
+  {{- if .Values.config.webServer.trustedProxies }}
+  GOUNO_WEB_SERVER_TRUSTED_PROXIES: {{ .Values.config.webServer.trustedProxies | toJson | quote }}
+  {{- end }}
+  GOUNO_DATABASE_DRIVERS_POSTGRES_MAX_OPEN_CONNS: {{ .Values.config.database.maxOpenConns | quote }}
+  GOUNO_DATABASE_DRIVERS_POSTGRES_MAX_IDLE_CONNS: {{ .Values.config.database.maxIdleConns | quote }}
+  GOUNO_AUTH_ISSUER: {{ .Values.config.auth.issuer | quote }}
+  GOUNO_AUTH_PRIVATE_KEY_PATH: {{ .Values.config.auth.privateKeyPath | quote }}
+  GOUNO_AUTH_KEY_ID: {{ .Values.config.auth.keyId | quote }}
+  {{- if .Values.config.auth.passwordResetBaseUrl }}
+  GOUNO_AUTH_PASSWORD_RESET_BASE_URL: {{ .Values.config.auth.passwordResetBaseUrl | quote }}
+  {{- end }}
+  {{- if .Values.config.cors.allowedOrigins }}
+  GOUNO_CORS_ALLOWED_ORIGINS: {{ .Values.config.cors.allowedOrigins | toJson | quote }}
+  {{- end }}
+  {{- if .Values.config.smtp.host }}
+  GOUNO_SMTP_HOST: {{ .Values.config.smtp.host | quote }}
+  GOUNO_SMTP_PORT: {{ .Values.config.smtp.port | quote }}
+  GOUNO_SMTP_USERNAME: {{ .Values.config.smtp.username | quote }}
+  GOUNO_SMTP_FROM: {{ .Values.config.smtp.from | quote }}
+  GOUNO_SMTP_TLS_POLICY: {{ .Values.config.smtp.tlsPolicy | quote }}
+  {{- end }}
+  GOUNO_OBSERVABILITY_METRICS_ENABLED: {{ .Values.config.observability.metrics.enabled | quote }}
+  {{- if .Values.config.observability.tracing.enabled }}
+  GOUNO_OBSERVABILITY_TRACING_ENABLED: "true"
+  GOUNO_OBSERVABILITY_TRACING_ENDPOINT: {{ .Values.config.observability.tracing.endpoint | quote }}
+  {{- end }}
