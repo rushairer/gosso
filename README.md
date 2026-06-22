@@ -1,5 +1,11 @@
 # gosso
 
+[中文](./README.zh-CN.md) | English
+
+[![CI](https://github.com/rushairer/gosso/actions/workflows/ci.yml/badge.svg)](https://github.com/rushairer/gosso/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/rushairer/gosso)](https://goreportcard.com/report/github.com/rushairer/gosso)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
 A self-hosted OpenID Connect and OAuth 2.0 identity provider built with Go, Gin, PostgreSQL, and Redis.
 
 gosso provides a complete SSO server with OAuth 2.0 authorization, OIDC discovery, JWT-based authentication, WebAuthn/Passkeys, MFA, social login, and an admin API -- all backed by a clean-architecture Go codebase built on the [gouno](https://github.com/rushairer/gouno) scaffold.
