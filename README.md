@@ -43,9 +43,13 @@ gosso provides a complete SSO server with OAuth 2.0 authorization, OIDC discover
 
 **Operations**
 - Health and readiness probes (`/health`, `/readiness`)
+- Prometheus metrics (`/metrics`) with pre-built [Grafana dashboard](deploy/grafana/gosso-dashboard.json)
+- OpenTelemetry distributed tracing (OTLP, configurable endpoint)
 - OpenAPI spec and Swagger UI (debug mode)
 - Docker and docker-compose for dev, test, and production
-- GitHub Actions CI (lint, unit tests with 60% coverage threshold across the coverage-gate package set, critical service package coverage gates, govulncheck, integration tests, build, Docker build)
+- [Helm chart](deploy/helm/gosso/) for Kubernetes deployment
+- [Operator Guide](doc/OPERATOR_GUIDE.md) with deployment, monitoring, and troubleshooting docs
+- GitHub Actions CI (lint, unit tests with 60% coverage threshold, govulncheck, integration tests, Trivy security scan, cosign image signing, SBOM generation)
 
 ## Prerequisites
 
@@ -307,6 +311,19 @@ ssl/                        # TLS certificates
 
 Each internal module follows a three-layer architecture: **domain** (models), **repository** (data access), and **service** (business logic).
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Operator Guide](doc/OPERATOR_GUIDE.md) | Deployment, monitoring, and troubleshooting |
+| [Architecture Invariants](doc/ARCHITECTURE_INVARIANTS.md) | Non-negotiable code rules (CI-enforced) |
+| [Architecture Decision Records](doc/ADR/) | Design decisions (observability, API versioning, etc.) |
+| [API Versioning](doc/API_VERSIONING.md) | API version policy and deprecation rules |
+| [Backup & Restore](doc/BACKUP_RESTORE.md) | PostgreSQL backup and recovery |
+| [OpenAPI Spec](docs/openapi.yaml) | Machine-readable API specification |
+| [SECURITY.md](SECURITY.md) | Vulnerability reporting and deployment checklist |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup and PR workflow |
+
 ## Testing
 
 ```bash
@@ -352,6 +369,12 @@ Environment variables override config file values. The prefix is `GOUNO_` and do
 | `make docker-dev-up` | Start development Docker environment |
 | `make docker-test-up` | Start test Docker environment |
 | `make docker-prod-up` | Start production Docker environment |
+| `make docker-prod-down` | Stop production Docker environment |
+| `make clean` | Remove build artifacts |
+| `make bench` | Run benchmarks |
+| `make security-scan` | Run Trivy security scan on Docker image |
+| `make docker-build` | Build Docker image (no push) |
+| `make sbom` | Generate CycloneDX SBOM (requires syft) |
 | `make examples` | Run all examples |
 | `make help` | Show all available commands |
 
@@ -415,9 +438,13 @@ gosso 提供完整的 SSO 服务器，包含 OAuth 2.0 授权、OIDC 发现、JW
 
 **运维**
 - 健康检查和就绪探针（`/health`、`/readiness`）
+- Prometheus 指标（`/metrics`），附预置 [Grafana Dashboard](deploy/grafana/gosso-dashboard.json)
+- OpenTelemetry 分布式追踪（OTLP，可配置端点）
 - OpenAPI 规范和 Swagger UI（调试模式）
 - Docker + docker-compose 支持开发、测试和生产环境
-- GitHub Actions CI（lint、覆盖率门禁包集合最低 60% 覆盖率、关键服务包覆盖率门禁、govulncheck、集成测试、构建、Docker 构建）
+- [Helm Chart](deploy/helm/gosso/) 支持 Kubernetes 部署
+- [运维指南](doc/OPERATOR_GUIDE.zh-CN.md) 覆盖部署、监控和故障排查
+- GitHub Actions CI（lint、覆盖率门禁、govulncheck、集成测试、Trivy 安全扫描、cosign 镜像签名、SBOM 生成）
 
 ## 前置条件
 
@@ -508,6 +535,19 @@ make docker-prod-up
 ## 项目结构
 
 同上方英文版。每个内部模块遵循三层架构：**domain**（领域模型）、**repository**（数据访问）、**service**（业务逻辑）。
+
+## 文档
+
+| 文档 | 说明 |
+|------|------|
+| [运维指南](doc/OPERATOR_GUIDE.zh-CN.md) | 部署、监控和故障排查 |
+| [架构不变量](doc/ARCHITECTURE_INVARIANTS.md) | 不可违反的代码规则（CI 强制执行） |
+| [架构决策记录](doc/ADR/) | 设计决策（可观测性、API 版本控制等） |
+| [API 版本控制](doc/API_VERSIONING.md) | API 版本策略和弃用规则 |
+| [备份与恢复](doc/BACKUP_RESTORE.md) | PostgreSQL 备份恢复流程 |
+| [OpenAPI 规范](docs/openapi.yaml) | 机器可读的 API 规范 |
+| [安全策略](SECURITY.md) | 漏洞报告和部署检查清单 |
+| [贡献指南](CONTRIBUTING.md) | 开发环境搭建和 PR 流程 |
 
 ## 测试
 

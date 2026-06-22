@@ -45,6 +45,9 @@ jobs:
       - name: Test
         run: go test -race -count=1 ./internal/...
 
+      - name: Set up QEMU (for ARM64 emulation)
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
@@ -59,15 +62,19 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push Docker image
-        run: |
-          docker build \
-            --build-arg VERSION=${{ steps.version.outputs.VERSION }} \
-            -t ghcr.io/${{ github.repository }}/gosso:${{ steps.version.outputs.VERSION }} \
-            -t ghcr.io/${{ github.repository }}/gosso:latest \
-            .
-          docker push ghcr.io/${{ github.repository }}/gosso:${{ steps.version.outputs.VERSION }}
-          docker push ghcr.io/${{ github.repository }}/gosso:latest
+      - name: Build and push Docker image (multi-arch)
+        id: docker-build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: VERSION=${{ steps.version.outputs.VERSION }}
+          tags: |
+            ghcr.io/${{ github.repository }}/gosso:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository }}/gosso:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       # --- Supply Chain Security: SBOM + Cosign ---
 
@@ -75,17 +82,14 @@ jobs:
         uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
 
       - name: Sign Docker image with cosign
-        env:
-          DIGEST: ${{ steps.docker-build.outputs.digest }}
         run: |
-          # Sign both version and latest tags
           cosign sign --yes \
-            ghcr.io/${{ github.repository }}/gosso@$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/${{ github.repository }}/gosso:${{ steps.version.outputs.VERSION }} | cut -d@ -f2)
+            ghcr.io/${{ github.repository }}/gosso@${{ steps.docker-build.outputs.digest }}
 
       - name: Generate SBOM (CycloneDX)
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
-          image: ghcr.io/${{ github.repository }}/gosso:${{ steps.version.outputs.VERSION }}
+          image: ghcr.io/${{ github.repository }}/gosso@${{ steps.docker-build.outputs.digest }}
           format: cyclonedx-json
           output-file: gosso-sbom.cdx.json
 
@@ -94,7 +98,7 @@ jobs:
           cosign attest --yes \
             --predicate gosso-sbom.cdx.json \
             --type cyclonedx \
-            ghcr.io/${{ github.repository }}/gosso:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository }}/gosso@${{ steps.docker-build.outputs.digest }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2

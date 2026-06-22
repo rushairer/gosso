@@ -51,7 +51,6 @@ linters:
           - errcheck
           - unparam
           - ineffassign
-          - wrapcheck
           - errorlint
           - dupl
       # Generated code

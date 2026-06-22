@@ -193,7 +193,10 @@ func (s *VerificationService) SendCode(ctx context.Context, credType, identifier
 	// so that a Redis compromise does not expose active verification codes.
 	// Without the pepper, an attacker cannot precompute a rainbow table even
 	// for the small 6-digit numeric keyspace.
-	codeHash := s.pepperHash(code)
+	codeHash, err := s.pepperHash(code)
+	if err != nil {
+		return err
+	}
 	data := verifyCodeData{
 		CodeHash:  codeHash,
 		Attempts:  0,
@@ -251,7 +254,10 @@ func (s *VerificationService) VerifyCode(ctx context.Context, credType, identifi
 	codeKey := s.buildCodeKey(credType, identifier)
 
 	// Hash the input code with the application pepper before comparison
-	codeHash := s.pepperHash(code)
+	codeHash, err := s.pepperHash(code)
+	if err != nil {
+		return "", err
+	}
 
 	// Atomically verify code hash and increment attempts
 	resultJSON, err := s.redis.RunScript(ctx, verifyAndIncrementScript, []string{codeKey},
@@ -324,18 +330,18 @@ func (s *VerificationService) RequireHashPepper() error {
 // pepperHash returns the hex-encoded HMAC-SHA-256 hash of the input string,
 // keyed with the application pepper if configured. The pepper prevents
 // precomputation attacks (rainbow tables) against the stored hashes.
-// Panics if the pepper is empty — the pepper MUST be set at construction time
-// via HashPepper; without it, HMAC with an empty key reduces to plain SHA-256,
+// Returns an error if the pepper is empty — the pepper MUST be set at construction
+// time via HashPepper; without it, HMAC with an empty key reduces to plain SHA-256,
 // which is trivially precomputable for the small 6-digit numeric keyspace.
-func (s *VerificationService) pepperHash(code string) string {
+func (s *VerificationService) pepperHash(code string) (string, error) {
 	if s.hashPepper == "" {
-		panic("verification_service: hashPepper is empty; " +
+		return "", fmt.Errorf("verification_service: hashPepper is empty; " +
 			"set auth.verify_hash_pepper (env GOUNO_AUTH_VERIFY_HASH_PEPPER) " +
 			"to a 64-char hex string (32 bytes)")
 	}
 	mac := hmac.New(sha256.New, []byte(s.hashPepper))
 	mac.Write([]byte(code))
-	return hex.EncodeToString(mac.Sum(nil))
+	return hex.EncodeToString(mac.Sum(nil)), nil
 }
 
 // ValidateCredentialOwnership checks that the given identifier belongs to the specified account.

@@ -1,0 +1,20 @@
+# ── Line endings ──
+* text=auto
+*.go text eol=lf
+*.sh text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+
+# ── Binary files ──
+*.pem binary
+*.key binary
+*.crt binary
+
+# ── GitHub Linguist ──
+*.go linguist-language=Go
+docs/swagger.go linguist-generated
+*.html linguist-generated
+deploy/ linguist-documentation
+doc/ linguist-documentation
