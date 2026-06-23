@@ -51,6 +51,16 @@ func (m *mockConsentRepository) SoftDelete(_ context.Context, _ *sql.Tx, account
 	return nil
 }
 
+func (m *mockConsentRepository) FindByAccountID(_ context.Context, accountID string) ([]*domain.Consent, error) {
+	var consents []*domain.Consent
+	for _, c := range m.store {
+		if c.AccountID == accountID {
+			consents = append(consents, c)
+		}
+	}
+	return consents, nil
+}
+
 func setupTestConsentService(t *testing.T) (*ConsentService, sqlmock.Sqlmock, func()) {
 	t.Helper()
 	logger := zap.NewNop()

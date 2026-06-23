@@ -1,8 +1,10 @@
 package controller
 
 import (
+	"context"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -11,7 +13,11 @@ import (
 
 	accountRepository "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
+	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
+	auditRepository "github.com/rushairer/gosso/internal/audit/repository"
+	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/controllerutil"
+	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	"github.com/rushairer/gosso/middleware"
 )
 
@@ -33,22 +39,58 @@ var adminRoleErrorMap = []controllerutil.ErrorRule{
 	{Sentinel: accountRepository.ErrRoleAssignmentNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "role assignment not found"}},
 }
 
+// adminConsentErrorMap maps consent operation errors to HTTP responses.
+var adminConsentErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: oauth2Domain.ErrConsentNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "consent not found"}},
+}
+
+// AdminConsentManager defines consent operations needed by the admin controller.
+type AdminConsentManager interface {
+	ListConsentsByAccountID(ctx context.Context, accountID string) ([]*oauth2Domain.Consent, error)
+	DeleteConsent(ctx context.Context, accountID, clientID string) error
+}
+
+// AdminAuditQueryManager defines audit log query operations needed by the admin controller.
+type AdminAuditQueryManager interface {
+	Query(ctx context.Context, filter auditRepository.AuditQueryFilter) ([]*auditDomain.AuditRecord, int, error)
+}
+
+// AdminLockoutManager defines account lockout operations needed by the admin controller.
+type AdminLockoutManager interface {
+	GetLockoutStatus(ctx context.Context, accountID string) (*authService.LockoutStatus, error)
+	ClearLockout(ctx context.Context, accountID string) error
+}
+
 // AdminController handles admin operations
 type AdminController struct {
-	accountSvc accountService.AccountService
-	logger     *zap.Logger
+	accountSvc     accountService.AccountService
+	consentMgr     AdminConsentManager
+	auditQueryMgr  AdminAuditQueryManager
+	lockoutMgr     AdminLockoutManager
+	logger         *zap.Logger
 }
 
 // NewAdminController creates a new admin controller instance
-func NewAdminController(accountSvc accountService.AccountService, logger *zap.Logger) *AdminController {
+func NewAdminController(
+	accountSvc accountService.AccountService,
+	consentMgr AdminConsentManager,
+	auditQueryMgr AdminAuditQueryManager,
+	lockoutMgr AdminLockoutManager,
+	logger *zap.Logger,
+) *AdminController {
 	return &AdminController{
-		accountSvc: accountSvc,
-		logger:     logger,
+		accountSvc:    accountSvc,
+		consentMgr:    consentMgr,
+		auditQueryMgr: auditQueryMgr,
+		lockoutMgr:    lockoutMgr,
+		logger:        logger,
 	}
 }
 
 // RegisterRoutes registers admin routes
 func (c *AdminController) RegisterRoutes(rg *gin.RouterGroup) {
+	rg.GET("/audit-logs", c.ListAuditLogs)
+
 	accounts := rg.Group("/accounts")
 	{
 		accounts.GET("", c.ListAccounts)
@@ -59,6 +101,10 @@ func (c *AdminController) RegisterRoutes(rg *gin.RouterGroup) {
 		accounts.GET("/:account_id/roles", c.GetAccountRoles)
 		accounts.POST("/:account_id/roles", c.AddRole)
 		accounts.DELETE("/:account_id/roles/:role_id", c.RemoveRole)
+		accounts.GET("/:account_id/consents", c.ListConsents)
+		accounts.DELETE("/:account_id/consents/:client_id", c.RevokeConsent)
+		accounts.GET("/:account_id/lockout", c.GetLockoutStatus)
+		accounts.POST("/:account_id/lockout/clear", c.ClearLockout)
 	}
 }
 
@@ -277,4 +323,134 @@ func (c *AdminController) RemoveRole(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("role removed"))
+}
+
+// ListConsents GET /api/admin/accounts/:account_id/consents
+func (c *AdminController) ListConsents(ctx *gin.Context) {
+	accountID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("account_id"), "account_id")
+	if !ok {
+		return
+	}
+
+	consents, err := c.consentMgr.ListConsentsByAccountID(ctx, accountID)
+	if err != nil {
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, adminConsentErrorMap,
+			http.StatusInternalServerError, "Failed to list consents")
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(consents))
+}
+
+// RevokeConsent DELETE /api/admin/accounts/:account_id/consents/:client_id
+func (c *AdminController) RevokeConsent(ctx *gin.Context) {
+	accountID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("account_id"), "account_id")
+	if !ok {
+		return
+	}
+
+	if isSelfAccount(ctx, accountID) {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "cannot perform this operation on your own account"))
+		return
+	}
+
+	clientID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("client_id"), "client_id")
+	if !ok {
+		return
+	}
+
+	if err := c.consentMgr.DeleteConsent(ctx, accountID, clientID); err != nil {
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, adminConsentErrorMap,
+			http.StatusInternalServerError, "Failed to revoke consent")
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("consent revoked"))
+}
+
+// ListAuditLogs GET /api/admin/audit-logs
+func (c *AdminController) ListAuditLogs(ctx *gin.Context) {
+	var filter auditRepository.AuditQueryFilter
+
+	if accountID := ctx.Query("account_id"); accountID != "" {
+		if _, ok := controllerutil.ValidateUUID(ctx, accountID, "account_id"); !ok {
+			return
+		}
+		filter.AccountID = accountID
+	}
+	filter.EventType = ctx.Query("event_type")
+
+	if startStr := ctx.Query("start_time"); startStr != "" {
+		t, err := time.Parse(time.RFC3339, startStr)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid start_time format, use RFC3339"))
+			return
+		}
+		filter.StartTime = &t
+	}
+	if endStr := ctx.Query("end_time"); endStr != "" {
+		t, err := time.Parse(time.RFC3339, endStr)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid end_time format, use RFC3339"))
+			return
+		}
+		filter.EndTime = &t
+	}
+
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
+	filter.Page = page
+	filter.PageSize = pageSize
+
+	records, total, err := c.auditQueryMgr.Query(ctx, filter)
+	if err != nil {
+		c.logger.Error("Failed to query audit logs", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to query audit logs"))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
+		"items":     records,
+		"total":     total,
+		"page":      filter.Page,
+		"page_size": filter.PageSize,
+	}))
+}
+
+// GetLockoutStatus GET /api/admin/accounts/:account_id/lockout
+func (c *AdminController) GetLockoutStatus(ctx *gin.Context) {
+	accountID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("account_id"), "account_id")
+	if !ok {
+		return
+	}
+
+	status, err := c.lockoutMgr.GetLockoutStatus(ctx, accountID)
+	if err != nil {
+		c.logger.Error("Failed to get lockout status", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to get lockout status"))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(status))
+}
+
+// ClearLockout POST /api/admin/accounts/:account_id/lockout/clear
+func (c *AdminController) ClearLockout(ctx *gin.Context) {
+	accountID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("account_id"), "account_id")
+	if !ok {
+		return
+	}
+
+	if isSelfAccount(ctx, accountID) {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "cannot perform this operation on your own account"))
+		return
+	}
+
+	if err := c.lockoutMgr.ClearLockout(ctx, accountID); err != nil {
+		c.logger.Error("Failed to clear lockout", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to clear lockout"))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("lockout cleared"))
 }

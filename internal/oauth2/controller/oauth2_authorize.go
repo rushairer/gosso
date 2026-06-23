@@ -90,6 +90,12 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
+	// PKCE enforcement for confidential clients (configurable via auth.enforce_pkce_for_confidential)
+	if client.IsConfidential && c.enforcePKCEForConfidential && codeChallenge == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "code_challenge is required for all clients"})
+		return
+	}
+
 	accountIDStr, ok := middleware.RequireAccountID(ctx)
 	if !ok {
 		return

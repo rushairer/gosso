@@ -18,12 +18,65 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepository "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
+	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
+	auditRepository "github.com/rushairer/gosso/internal/audit/repository"
+	authService "github.com/rushairer/gosso/internal/auth/service"
+	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	gm "github.com/rushairer/gosso/middleware"
 )
 
 // ──────────────────────────────────────────────
 // Mock AccountService
 // ──────────────────────────────────────────────
+
+// mockConsentManager implements AdminConsentManager for testing.
+type mockConsentManager struct {
+	listFn    func() ([]*oauth2Domain.Consent, error)
+	deleteFn  func() error
+}
+
+func (m *mockConsentManager) ListConsentsByAccountID(_ context.Context, _ string) ([]*oauth2Domain.Consent, error) {
+	if m.listFn != nil {
+		return m.listFn()
+	}
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockConsentManager) DeleteConsent(_ context.Context, _, _ string) error {
+	if m.deleteFn != nil {
+		return m.deleteFn()
+	}
+	return nil
+}
+
+// mockAuditQueryManager implements AdminAuditQueryManager for testing.
+type mockAuditQueryManager struct {
+	queryFn func() ([]any, int, error)
+}
+
+func (m *mockAuditQueryManager) Query(_ context.Context, _ auditRepository.AuditQueryFilter) ([]*auditDomain.AuditRecord, int, error) {
+	return nil, 0, nil
+}
+
+// mockLockoutManager implements AdminLockoutManager for testing.
+type mockLockoutManager struct {
+	getStatusFn func() (*authService.LockoutStatus, error)
+	clearFn     func() error
+}
+
+func (m *mockLockoutManager) GetLockoutStatus(_ context.Context, _ string) (*authService.LockoutStatus, error) {
+	if m.getStatusFn != nil {
+		return m.getStatusFn()
+	}
+	return nil, nil
+}
+
+func (m *mockLockoutManager) ClearLockout(_ context.Context, _ string) error {
+	if m.clearFn != nil {
+		return m.clearFn()
+	}
+	return nil
+}
 
 type mockAccountService struct {
 	findByIDFn     func() (*accountDomain.Account, error)
@@ -120,7 +173,7 @@ func setupAdminController(accountSvc *mockAccountService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 
-	ctrl := NewAdminController(accountSvc, zap.NewNop())
+	ctrl := NewAdminController(accountSvc, &mockConsentManager{}, &mockAuditQueryManager{}, &mockLockoutManager{}, zap.NewNop())
 
 	api := engine.Group("/api")
 	ctrl.RegisterRoutes(api.Group("/admin"))
@@ -138,7 +191,7 @@ func setupAdminControllerWithAdminID(accountSvc *mockAccountService, adminID str
 		ctx.Next()
 	})
 
-	ctrl := NewAdminController(accountSvc, zap.NewNop())
+	ctrl := NewAdminController(accountSvc, &mockConsentManager{}, &mockAuditQueryManager{}, &mockLockoutManager{}, zap.NewNop())
 
 	api := engine.Group("/api")
 	ctrl.RegisterRoutes(api.Group("/admin"))

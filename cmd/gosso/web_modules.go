@@ -17,6 +17,7 @@ import (
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	adminController "github.com/rushairer/gosso/internal/admin/controller"
 	auditService "github.com/rushairer/gosso/internal/audit/service"
+	auditRepository "github.com/rushairer/gosso/internal/audit/repository"
 	"github.com/rushairer/gosso/internal/auth"
 	authController "github.com/rushairer/gosso/internal/auth/controller"
 	authService "github.com/rushairer/gosso/internal/auth/service"
@@ -129,25 +130,31 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		accountValidatorCacheTTL = 5 * time.Second
 	}
 	oauth2Ctrl, err := oauth2Controller.NewOAuth2ControllerFromConfig(oauth2Controller.OAuth2ControllerConfig{
-		ClientSvc:        oauth2Mod.ClientService,
-		AuthCodeSvc:      oauth2Mod.AuthCodeService,
-		ConsentSvc:       oauth2Mod.ConsentService,
-		TokenSvc:         tokenSvc,
-		IDTokenSvc:       oidcMod.IDTokenService,
-		DeviceCodeSvc:    oauth2Mod.DeviceCodeService,
-		ClientAuth:       &oauth2Service.ClientAuthenticator{},
-		AccountValidator: newAccountValidatorAdapter(accountMod.Service, logger, accountValidatorCacheTTL),
-		SessionValidator: authMod.SessionService,
-		Redis:            redis,
-		Issuer:           cfg.AuthConfig.Issuer,
-		Logger:           logger,
+		ClientSvc:                  oauth2Mod.ClientService,
+		AuthCodeSvc:                oauth2Mod.AuthCodeService,
+		ConsentSvc:                 oauth2Mod.ConsentService,
+		TokenSvc:                   tokenSvc,
+		IDTokenSvc:                 oidcMod.IDTokenService,
+		DeviceCodeSvc:              oauth2Mod.DeviceCodeService,
+		ClientAuth:                 &oauth2Service.ClientAuthenticator{},
+		AccountValidator:           newAccountValidatorAdapter(accountMod.Service, logger, accountValidatorCacheTTL),
+		SessionValidator:           authMod.SessionService,
+		Redis:                      redis,
+		Issuer:                     cfg.AuthConfig.Issuer,
+		EnforcePKCEForConfidential: cfg.AuthConfig.EnforcePKCEForConfidential,
+		Logger:                     logger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
 	}
 	clientCtrl := oauth2Controller.NewClientController(oauth2Mod.ClientService, logger)
 	oidcCtrl := oidcController.NewOIDCController(oidcMod.DiscoveryService, oidcMod.JWKSService, oidcMod.UserInfoService, oidcMod.LogoutService, oauth2Mod.ClientRepo, tokenSvc, authMod.SessionService, cfg.AuthConfig.Issuer, logger)
-	adminCtrl := adminController.NewAdminController(accountMod.Service, logger)
+	auditQueryRepo := auditRepository.NewAuditQueryRepository(db)
+	authSvcConcrete, ok := authMod.AuthService.(*authService.AuthService)
+	if !ok {
+		logger.Warn("AuthService is not *AuthService; lockout management will be unavailable")
+	}
+	adminCtrl := adminController.NewAdminController(accountMod.Service, oauth2Mod.ConsentService, auditQueryRepo, authSvcConcrete, logger)
 
 	var passkeyCtrl *authController.PasskeyController
 	if authMod.PasskeyService != nil {

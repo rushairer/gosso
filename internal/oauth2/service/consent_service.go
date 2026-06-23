@@ -153,6 +153,19 @@ func (s *ConsentService) buildConsentKey(accountID, clientID string) string {
 	return fmt.Sprintf("%s%s|%s", consentKeyPrefix, accountID, clientID)
 }
 
+// ListConsentsByAccountID returns all non-deleted consent records for the given account.
+// This is used by the admin API to view an account's OAuth2 consent grants.
+func (s *ConsentService) ListConsentsByAccountID(ctx context.Context, accountID string) ([]*domain.Consent, error) {
+	if accountID == "" {
+		return nil, &ValidationError{Message: "account_id is required"}
+	}
+	consents, err := s.consentRepo.FindByAccountID(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("list consents: %w", err)
+	}
+	return consents, nil
+}
+
 // DeleteConsentsByAccount removes all consent cache entries for the given account.
 // Uses SCAN to iterate matching keys and deletes them in batches.
 // This is called when an account is deleted to prevent stale consent cache entries.

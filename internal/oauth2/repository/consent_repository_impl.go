@@ -91,3 +91,24 @@ func (r *consentRepositoryImpl) SoftDelete(ctx context.Context, tx *sql.Tx, acco
 	}
 	return nil
 }
+
+// FindByAccountID returns all non-deleted consent records for the given account.
+func (r *consentRepositoryImpl) FindByAccountID(ctx context.Context, accountID string) ([]*domain.Consent, error) {
+	query := `
+		SELECT id, account_id, client_id, scopes, granted_at, created_at, updated_at, deleted_at
+		FROM oauth2_consents
+		WHERE account_id = $1 AND deleted_at IS NULL
+		ORDER BY granted_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("query consents by account: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	consents, err := scanConsents(rows)
+	if err != nil {
+		return nil, err
+	}
+	return consents, nil
+}

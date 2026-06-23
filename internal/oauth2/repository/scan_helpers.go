@@ -73,3 +73,19 @@ func scanConsent(s dbPkg.Scannable) (*domain.Consent, error) {
 
 	return &consent, nil
 }
+
+// scanConsents iterates all rows and returns a slice of Consent.
+func scanConsents(rows *sql.Rows) ([]*domain.Consent, error) {
+	var consents []*domain.Consent
+	for rows.Next() {
+		consent, err := scanConsent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan consent: %w", err)
+		}
+		consents = append(consents, consent)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate consents: %w", err)
+	}
+	return consents, nil
+}

@@ -319,6 +319,7 @@ Each internal module follows a three-layer architecture: **domain** (models), **
 | [Architecture Invariants](doc/ARCHITECTURE_INVARIANTS.md) | Non-negotiable code rules (CI-enforced) |
 | [Architecture Decision Records](doc/ADR/) | Design decisions (observability, API versioning, etc.) |
 | [API Versioning](doc/API_VERSIONING.md) | API version policy and deprecation rules |
+| [API Stability](doc/api-stability.md) | Stability tiers for all endpoints (Stable vs Experimental) |
 | [Backup & Restore](doc/BACKUP_RESTORE.md) | PostgreSQL backup and recovery |
 | [OpenAPI Spec](docs/openapi.yaml) | Machine-readable API specification |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting and deployment checklist |

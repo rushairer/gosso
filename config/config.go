@@ -168,6 +168,7 @@ type AuthConfig struct {
 	RSAKeyBits                     int           `mapstructure:"rsa_key_bits"`
 	AccountValidatorCacheTTL       time.Duration `mapstructure:"account_validator_cache_ttl"`
 	EnforceIPBinding               bool          `mapstructure:"enforce_ip_binding"`
+	EnforcePKCEForConfidential     bool          `mapstructure:"enforce_pkce_for_confidential"`
 	MFAAccountMaxAttempts          int           `mapstructure:"mfa_account_max_attempts"`
 	MFAAccountRateLimitWindow      time.Duration `mapstructure:"mfa_account_rate_limit_window"`
 }

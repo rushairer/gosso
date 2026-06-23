@@ -130,6 +130,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("auth.device_code_interval", "5s")
 	v.SetDefault("auth.id_token_expiry", "15m")
 	v.SetDefault("auth.max_sessions", 5)
+	v.SetDefault("auth.enforce_pkce_for_confidential", false)
 	// Redis configuration
 	v.SetDefault("redis.max_active_conns", 10)
 	v.SetDefault("redis.pool_timeout_seconds", 5)

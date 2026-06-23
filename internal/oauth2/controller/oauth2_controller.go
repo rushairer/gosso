@@ -77,21 +77,22 @@ var resultTemplateFS embed.FS
 
 // OAuth2Controller handles OAuth2 protocol endpoints.
 type OAuth2Controller struct {
-	clientSvc        oauth2Service.OAuth2ClientService
-	authCodeSvc      AuthCodeManager
-	consentSvc       ConsentManager
-	tokenSvc         authService.TokenManager
-	idTokenSvc       IDTokenManager
-	deviceCodeSvc    DeviceCodeManager
-	clientAuth       ClientAuthManager
-	accountValidator AccountValidator
-	sessionValidator sessionDomain.SessionValidator
-	redis            *cache.RedisClient
-	issuer           string
-	consentTmpl      *template.Template // html/template — never use text/template (would enable XSS)
-	deviceTmpl       *template.Template
-	resultTmpl       *template.Template
-	logger           *zap.Logger
+	clientSvc                   oauth2Service.OAuth2ClientService
+	authCodeSvc                 AuthCodeManager
+	consentSvc                  ConsentManager
+	tokenSvc                    authService.TokenManager
+	idTokenSvc                  IDTokenManager
+	deviceCodeSvc               DeviceCodeManager
+	clientAuth                  ClientAuthManager
+	accountValidator            AccountValidator
+	sessionValidator            sessionDomain.SessionValidator
+	redis                       *cache.RedisClient
+	issuer                      string
+	enforcePKCEForConfidential  bool
+	consentTmpl                 *template.Template // html/template — never use text/template (would enable XSS)
+	deviceTmpl                  *template.Template
+	resultTmpl                  *template.Template
+	logger                      *zap.Logger
 }
 
 // NewOAuth2Controller creates a new OAuth2 controller instance.
@@ -146,29 +147,35 @@ func NewOAuth2Controller(
 // OAuth2ControllerConfig holds all dependencies for OAuth2Controller construction.
 // Use NewOAuth2ControllerFromConfig to create a controller from this struct.
 type OAuth2ControllerConfig struct {
-	ClientSvc        oauth2Service.OAuth2ClientService
-	AuthCodeSvc      AuthCodeManager
-	ConsentSvc       ConsentManager
-	TokenSvc         authService.TokenManager
-	IDTokenSvc       IDTokenManager
-	DeviceCodeSvc    DeviceCodeManager
-	ClientAuth       ClientAuthManager
-	AccountValidator AccountValidator
-	SessionValidator sessionDomain.SessionValidator
-	Redis            *cache.RedisClient
-	Issuer           string
-	Logger           *zap.Logger
+	ClientSvc                  oauth2Service.OAuth2ClientService
+	AuthCodeSvc                AuthCodeManager
+	ConsentSvc                 ConsentManager
+	TokenSvc                   authService.TokenManager
+	IDTokenSvc                 IDTokenManager
+	DeviceCodeSvc              DeviceCodeManager
+	ClientAuth                 ClientAuthManager
+	AccountValidator           AccountValidator
+	SessionValidator           sessionDomain.SessionValidator
+	Redis                      *cache.RedisClient
+	Issuer                     string
+	EnforcePKCEForConfidential bool
+	Logger                     *zap.Logger
 }
 
 // NewOAuth2ControllerFromConfig creates a new OAuth2 controller from a config struct.
 // This is a convenience wrapper around NewOAuth2Controller for better readability
 // when many dependencies are passed.
 func NewOAuth2ControllerFromConfig(cfg OAuth2ControllerConfig) (*OAuth2Controller, error) {
-	return NewOAuth2Controller(
+	c, err := NewOAuth2Controller(
 		cfg.ClientSvc, cfg.AuthCodeSvc, cfg.ConsentSvc, cfg.TokenSvc,
 		cfg.IDTokenSvc, cfg.DeviceCodeSvc, cfg.ClientAuth, cfg.AccountValidator,
 		cfg.SessionValidator, cfg.Redis, cfg.Issuer, cfg.Logger,
 	)
+	if err != nil {
+		return nil, err
+	}
+	c.enforcePKCEForConfidential = cfg.EnforcePKCEForConfidential
+	return c, nil
 }
 
 // authenticateRequest extracts and validates the access token from the Authorization header.
