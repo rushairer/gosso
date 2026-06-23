@@ -13,21 +13,25 @@ import (
 
 // OAuth2Client OAuth2 client entity
 type OAuth2Client struct {
-	ID                     string         `json:"id"`
-	AccountID              string         `json:"account_id"`
-	ClientID               string         `json:"client_id"`
-	ClientSecretHash       string         `json:"-"` // Only has value for confidential clients
-	Name                   string         `json:"name"`
-	Description            string         `json:"description,omitempty"`
-	RedirectURIs           []string       `json:"redirect_uris"`
-	PostLogoutRedirectURIs []string       `json:"post_logout_redirect_uris,omitempty"`
-	GrantTypes             []string       `json:"grant_types"`
-	Scopes                 []string       `json:"scopes"`
-	IsConfidential         bool           `json:"is_confidential"`
-	Metadata               map[string]any `json:"metadata"`
-	CreatedAt              time.Time      `json:"created_at"`
-	UpdatedAt              time.Time      `json:"updated_at"`
-	DeletedAt              *time.Time     `json:"deleted_at,omitempty"`
+	ID                               string         `json:"id"`
+	AccountID                        string         `json:"account_id"`
+	ClientID                         string         `json:"client_id"`
+	ClientSecretHash                 string         `json:"-"` // Only has value for confidential clients
+	Name                             string         `json:"name"`
+	Description                      string         `json:"description,omitempty"`
+	RedirectURIs                     []string       `json:"redirect_uris"`
+	PostLogoutRedirectURIs           []string       `json:"post_logout_redirect_uris,omitempty"`
+	GrantTypes                       []string       `json:"grant_types"`
+	Scopes                           []string       `json:"scopes"`
+	IsConfidential                   bool           `json:"is_confidential"`
+	Metadata                         map[string]any `json:"metadata"`
+	FrontchannelLogoutURI            string         `json:"frontchannel_logout_uri,omitempty"`
+	FrontchannelLogoutSessionRequired bool          `json:"frontchannel_logout_session_required,omitempty"`
+	BackchannelLogoutURI             string         `json:"backchannel_logout_uri,omitempty"`
+	BackchannelLogoutSessionRequired bool          `json:"backchannel_logout_session_required,omitempty"`
+	CreatedAt                        time.Time      `json:"created_at"`
+	UpdatedAt                        time.Time      `json:"updated_at"`
+	DeletedAt                        *time.Time     `json:"deleted_at,omitempty"`
 }
 
 // ValidateRedirectURI validates that the redirect URI is in the registered list.

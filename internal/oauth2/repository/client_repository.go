@@ -19,4 +19,10 @@ type OAuth2ClientRepository interface {
 	Update(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client, expectedUpdatedAt time.Time) error
 	SoftDelete(ctx context.Context, tx *sql.Tx, id string, deletedAt time.Time) error
 	SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
+	// FindFrontchannelLogoutClientsByAccountID returns clients that have a
+	// non-empty frontchannel_logout_uri and a non-deleted consent for the account.
+	FindFrontchannelLogoutClientsByAccountID(ctx context.Context, accountID string) ([]*domain.OAuth2Client, error)
+	// FindBackchannelLogoutClientsByAccountID returns clients that have a
+	// non-empty backchannel_logout_uri and a non-deleted consent for the account.
+	FindBackchannelLogoutClientsByAccountID(ctx context.Context, accountID string) ([]*domain.OAuth2Client, error)
 }

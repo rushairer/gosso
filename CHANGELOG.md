@@ -12,12 +12,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `.devcontainer/devcontainer.json` for instant contributor onboarding with VS Code.
 - PR auto-labeling via `actions/labeler` (`.github/labeler.yml`, `.github/workflows/labeler.yml`).
 - Helm chart OCI publishing to GHCR in release workflow.
+- **OIDC Front-Channel Logout 1.0**: `GET /oidc/frontchannel_logout` renders HTML page with hidden iframes for each RP's `frontchannel_logout_uri`. New database columns `frontchannel_logout_uri` and `frontchannel_logout_session_required` on `oauth2_clients` (`internal/oidc/controller/oidc_controller.go`, `internal/oidc/service/logout_service.go`, `db/migrations/0018_logout_uris.up.sql`).
+- **OIDC Back-Channel Logout 1.0**: `LogoutByAccountID` now asynchronously sends signed `logout_token` JWTs to registered `backchannel_logout_uri` endpoints. New database columns `backchannel_logout_uri` and `backchannel_logout_session_required` on `oauth2_clients` (`internal/oidc/service/logout_service.go`, `db/migrations/0018_logout_uris.up.sql`).
+- **OIDC Discovery**: `frontchannel_logout_supported`, `frontchannel_logout_session_supported`, and `backchannel_logout_supported` advertised in `/.well-known/openid-configuration` (`internal/oidc/service/discovery_service.go`).
+- **HTTP-layer integration test harness**: `tests/http/httptest_helpers.go` provides `HTTPTestEnv` that spins up a full Gin engine with real PostgreSQL and Redis, enabling end-to-end HTTP testing of OAuth2/OIDC flows.
+- **HTTP-layer integration tests**: 14 test scenarios covering Health, OIDC Discovery, JWKS, Client Credentials, Authorization Code, PKCE, Refresh Token, Introspection, Revocation, UserInfo, Logout, Front-Channel Logout, Back-Channel Logout, and error cases (`tests/http/oauth2_http_integration_test.go`).
+- **CI**: HTTP-layer integration tests added to `ci.yml` integration-test job; timeout increased from 120s to 180s.
+- **Makefile**: `test-integration-http` target for running HTTP-layer tests independently.
 
 ### Changed
-
-### Fixed
-
-### Removed
+- `NewLogoutService` signature now accepts `oauth2Repo.OAuth2ClientRepository` and `*http.Client` parameters to support front/back-channel logout (`internal/oidc/service/logout_service.go`).
+- `InitializeOIDCModule` signature now accepts `clientRepo` and `httpClient` parameters (`internal/oidc/module.go`).
+- `OAuth2ClientRepository` interface extended with `FindFrontchannelLogoutClientsByAccountID` and `FindBackchannelLogoutClientsByAccountID` methods (`internal/oauth2/repository/client_repository.go`).
+- `oauth2_clients` table now has 19 columns (was 15); all SQL queries and scan helpers updated accordingly (`internal/oauth2/repository/`).
+- `test-integration` Makefile target now includes `./tests/http/` in addition to existing service-layer integration tests.
 
 
 ## [1.0.0] - 2026-06-22

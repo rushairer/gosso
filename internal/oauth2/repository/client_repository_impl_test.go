@@ -33,7 +33,10 @@ func newTestOAuth2Client() *domain.OAuth2Client {
 
 func clientColumns() []string {
 	return []string{"id", "account_id", "client_id", "client_secret_hash", "name", "description",
-		"redirect_uris", "post_logout_redirect_uris", "grant_types", "scopes", "is_confidential", "metadata", "created_at", "updated_at", "deleted_at"}
+		"redirect_uris", "post_logout_redirect_uris", "grant_types", "scopes", "is_confidential", "metadata",
+		"frontchannel_logout_uri", "frontchannel_logout_session_required",
+		"backchannel_logout_uri", "backchannel_logout_session_required",
+		"created_at", "updated_at", "deleted_at"}
 }
 
 func clientRowValues(c *domain.OAuth2Client) []driver.Value {
@@ -46,7 +49,10 @@ func clientRowValues(c *domain.OAuth2Client) []driver.Value {
 		md, _ = json.Marshal(c.Metadata)
 	}
 	return []driver.Value{c.ID, c.AccountID, c.ClientID, c.ClientSecretHash, c.Name, c.Description,
-		ru, plu, gt, sc, c.IsConfidential, md, time.Now(), time.Now(), nil}
+		ru, plu, gt, sc, c.IsConfidential, md,
+		c.FrontchannelLogoutURI, c.FrontchannelLogoutSessionRequired,
+		c.BackchannelLogoutURI, c.BackchannelLogoutSessionRequired,
+		time.Now(), time.Now(), nil}
 }
 
 // ──────────────────────────────────────────────
@@ -141,7 +147,9 @@ func TestCreate_Success(t *testing.T) {
 	c := newTestOAuth2Client()
 	mock.ExpectQuery("INSERT INTO oauth2_clients").
 		WithArgs(c.AccountID, c.ClientID, c.ClientSecretHash, c.Name, c.Description,
-			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), c.IsConfidential, sqlmock.AnyArg()).
+			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), c.IsConfidential, sqlmock.AnyArg(),
+			c.FrontchannelLogoutURI, c.FrontchannelLogoutSessionRequired,
+			c.BackchannelLogoutURI, c.BackchannelLogoutSessionRequired).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at"}).AddRow(c.ID, time.Now(), time.Now()))
 
 	repo := NewOAuth2ClientRepository(db)
@@ -167,7 +175,10 @@ func TestUpdate_Success(t *testing.T) {
 	c.Name = "Updated App"
 	expectedUpdatedAt := time.Now().Add(-1 * time.Hour)
 	mock.ExpectQuery("UPDATE oauth2_clients").
-		WithArgs(c.Name, c.Description, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), c.ID, expectedUpdatedAt).
+		WithArgs(c.Name, c.Description, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+			c.FrontchannelLogoutURI, c.FrontchannelLogoutSessionRequired,
+			c.BackchannelLogoutURI, c.BackchannelLogoutSessionRequired,
+			sqlmock.AnyArg(), c.ID, expectedUpdatedAt).
 		WillReturnRows(sqlmock.NewRows([]string{"updated_at"}).AddRow(time.Now()))
 
 	repo := NewOAuth2ClientRepository(db)

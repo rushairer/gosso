@@ -62,7 +62,12 @@ test-ui:
 test-integration:
 	@echo "🧪 Running integration tests..."
 	@echo "📋 Ensure docker-compose.test.yml is running (make docker-test-up)"
-	$(GO_TEST_ENV) go test -p 1 -tags=integration -v -count=1 -timeout=120s ./internal/auth/service/ ./internal/session/service/ ./internal/token/service/ ./internal/account/ ./middleware/
+	$(GO_TEST_ENV) go test -p 1 -tags=integration -v -count=1 -timeout=180s ./internal/auth/service/ ./internal/session/service/ ./internal/token/service/ ./internal/account/ ./middleware/ ./tests/http/
+
+test-integration-http:
+	@echo "🧪 Running HTTP-layer integration tests..."
+	@echo "📋 Ensure docker-compose.test.yml is running (make docker-test-up)"
+	$(GO_TEST_ENV) go test -p 1 -tags=integration -v -count=1 -timeout=180s ./tests/http/
 
 test-migrations:
 	@echo "🔄 Testing migration up/down cycle..."

@@ -4,20 +4,29 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	oauth2Repo "github.com/rushairer/gosso/internal/oauth2/repository"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 	"github.com/rushairer/gosso/internal/utility"
 )
 
-// LogoutService handles OIDC RP-Initiated Logout operations.
+// LogoutService handles OIDC RP-Initiated Logout, Front-Channel Logout, and
+// Back-Channel Logout operations.
 type LogoutService struct {
 	tokenSvc   *tokenService.TokenService
 	sessionSvc *sessionService.SessionService
 	jwksSvc    *JWKSService // for key rotation fallback in id_token_hint validation
+	clientRepo oauth2Repo.OAuth2ClientRepository
+	httpClient *http.Client
 	issuer     string
 	logger     *zap.Logger
 	parser     *jwt.Parser
@@ -29,12 +38,19 @@ func NewLogoutService(
 	sessionSvc *sessionService.SessionService,
 	jwksSvc *JWKSService,
 	issuer string,
+	clientRepo oauth2Repo.OAuth2ClientRepository,
+	httpClient *http.Client,
 	logger *zap.Logger,
 ) *LogoutService {
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 5 * time.Second}
+	}
 	return &LogoutService{
 		tokenSvc:   tokenSvc,
 		sessionSvc: sessionSvc,
 		jwksSvc:    jwksSvc,
+		clientRepo: clientRepo,
+		httpClient: httpClient,
 		issuer:     issuer,
 		logger:     logger,
 		parser:     jwt.NewParser(jwt.WithoutClaimsValidation()),
@@ -160,6 +176,10 @@ func (s *LogoutService) LogoutByAccountID(ctx context.Context, accountID string)
 	}
 
 	s.logger.Info("Account logout successful", zap.String("account_id", utility.MaskOpaqueID(accountID)))
+
+	// Trigger back-channel logout notifications to all registered clients.
+	s.triggerBackChannelLogout(ctx, accountID, "")
+
 	return nil
 }
 
@@ -183,4 +203,147 @@ func (s *LogoutService) LogoutBySessionID(ctx context.Context, accountID, sessio
 	s.logger.Info("Session logout successful",
 		zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
 	return nil
+}
+
+// ──────────────────────────────────────────────
+// Front-Channel Logout (OIDC Front-Channel Logout 1.0)
+// ──────────────────────────────────────────────
+
+// FrontChannelLogoutEntry represents a client's front-channel logout endpoint.
+type FrontChannelLogoutEntry struct {
+	URI             string
+	SessionRequired bool
+	ClientID        string
+}
+
+// GetFrontChannelLogoutURIs returns front-channel logout entries for all clients
+// that have a non-empty frontchannel_logout_uri and a consent record for the given account.
+func (s *LogoutService) GetFrontChannelLogoutURIs(ctx context.Context, accountID string) ([]FrontChannelLogoutEntry, error) {
+	if s.clientRepo == nil {
+		return nil, nil
+	}
+
+	clients, err := s.clientRepo.FindFrontchannelLogoutClientsByAccountID(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("find frontchannel logout clients: %w", err)
+	}
+
+	entries := make([]FrontChannelLogoutEntry, 0, len(clients))
+	for _, c := range clients {
+		entries = append(entries, FrontChannelLogoutEntry{
+			URI:             c.FrontchannelLogoutURI,
+			SessionRequired: c.FrontchannelLogoutSessionRequired,
+			ClientID:        c.ClientID,
+		})
+	}
+	return entries, nil
+}
+
+// ──────────────────────────────────────────────
+// Back-Channel Logout (OIDC Back-Channel Logout 1.0)
+// ──────────────────────────────────────────────
+
+// LogoutTokenClaims represents the claims in a back-channel logout token.
+// Per OIDC Back-Channel Logout §2.4, the logout token contains the standard
+// registered claims plus an "events" claim and optional "sid" claim.
+type LogoutTokenClaims struct {
+	jwt.RegisteredClaims
+	Events map[string]map[string]any `json:"events"`
+	SID    string                    `json:"sid,omitempty"`
+}
+
+// sendBackChannelLogoutAsync asynchronously sends a logout_token to the given
+// backchannel_logout_uri for a single client. Fire-and-forget: errors are logged
+// but do not block the caller.
+func (s *LogoutService) sendBackChannelLogoutAsync(clientID, accountID, sessionID, backchannelURI string, sessionRequired bool) {
+	go func() {
+		// 5-second timeout for the HTTP POST
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		logoutToken, err := s.generateLogoutToken(clientID, accountID, sessionID, sessionRequired)
+		if err != nil {
+			s.logger.Error("Failed to generate back-channel logout token",
+				zap.String("client_id", clientID), zap.Error(err))
+			return
+		}
+
+		form := url.Values{}
+		form.Set("logout_token", logoutToken)
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, backchannelURI, strings.NewReader(form.Encode()))
+		if err != nil {
+			s.logger.Error("Failed to create back-channel logout request",
+				zap.String("client_id", clientID), zap.String("uri", backchannelURI), zap.Error(err))
+			return
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			s.logger.Warn("Back-channel logout POST failed",
+				zap.String("client_id", clientID), zap.String("uri", backchannelURI), zap.Error(err))
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode >= 400 {
+			s.logger.Warn("Back-channel logout POST returned error status",
+				zap.String("client_id", clientID), zap.String("uri", backchannelURI),
+				zap.Int("status", resp.StatusCode))
+		} else {
+			s.logger.Debug("Back-channel logout POST succeeded",
+				zap.String("client_id", clientID), zap.String("uri", backchannelURI))
+		}
+	}()
+}
+
+// generateLogoutToken creates a signed JWT logout token per OIDC Back-Channel Logout §2.4.
+func (s *LogoutService) generateLogoutToken(clientID, accountID, sessionID string, sessionRequired bool) (string, error) {
+	now := time.Now()
+	claims := &LogoutTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    s.issuer,
+			Subject:   accountID,
+			Audience:  jwt.ClaimStrings{clientID},
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
+			ID:        uuid.New().String(),
+		},
+		Events: map[string]map[string]any{
+			"http://schemas.openid.net/event/backchannel-logout": {},
+		},
+	}
+	if sessionRequired && sessionID != "" {
+		claims.SID = sessionID
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	token.Header["kid"] = s.tokenSvc.KeyService().KeyID()
+
+	privateKey := s.tokenSvc.KeyService().PrivateKey()
+	if privateKey == nil {
+		return "", fmt.Errorf("no private key available for signing logout token")
+	}
+
+	return token.SignedString(privateKey)
+}
+
+// triggerBackChannelLogout sends back-channel logout notifications to all clients
+// that have a non-empty backchannel_logout_uri and a consent record for the account.
+func (s *LogoutService) triggerBackChannelLogout(ctx context.Context, accountID, sessionID string) {
+	if s.clientRepo == nil {
+		return
+	}
+
+	clients, err := s.clientRepo.FindBackchannelLogoutClientsByAccountID(ctx, accountID)
+	if err != nil {
+		s.logger.Warn("Failed to find backchannel logout clients",
+			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
+		return
+	}
+
+	for _, c := range clients {
+		s.sendBackChannelLogoutAsync(c.ClientID, accountID, sessionID, c.BackchannelLogoutURI, c.BackchannelLogoutSessionRequired)
+	}
 }

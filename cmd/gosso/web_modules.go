@@ -109,7 +109,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize oauth2 module: %w", err)
 	}
-	oidcMod := oidc.InitializeOIDCModule(tokenSvc, accountMod.Service, cfg.AuthConfig, authMod.SessionService, accountMod.CredentialRepo, logger)
+	oidcMod := oidc.InitializeOIDCModule(tokenSvc, accountMod.Service, cfg.AuthConfig, authMod.SessionService, accountMod.CredentialRepo, oauth2Mod.ClientRepo, nil, logger)
 
 	// Wire cross-module dependencies into account service via a single atomic call.
 	// This replaces the previous three Set* calls that had temporal coupling risks.

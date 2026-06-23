@@ -9,7 +9,7 @@ import (
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 )
 
-// scanOAuth2Client scans a single oauth2_clients row (15 columns) into an OAuth2Client.
+// scanOAuth2Client scans a single oauth2_clients row (19 columns) into an OAuth2Client.
 func scanOAuth2Client(s dbPkg.Scannable) (*domain.OAuth2Client, error) {
 	client := &domain.OAuth2Client{}
 	var redirectURIs, postLogoutURIs, grantTypes, scopes, metadata []byte
@@ -17,7 +17,10 @@ func scanOAuth2Client(s dbPkg.Scannable) (*domain.OAuth2Client, error) {
 	if err := s.Scan(
 		&client.ID, &client.AccountID, &client.ClientID, &client.ClientSecretHash,
 		&client.Name, &client.Description, &redirectURIs, &postLogoutURIs, &grantTypes, &scopes,
-		&client.IsConfidential, &metadata, &client.CreatedAt, &client.UpdatedAt, &client.DeletedAt,
+		&client.IsConfidential, &metadata,
+		&client.FrontchannelLogoutURI, &client.FrontchannelLogoutSessionRequired,
+		&client.BackchannelLogoutURI, &client.BackchannelLogoutSessionRequired,
+		&client.CreatedAt, &client.UpdatedAt, &client.DeletedAt,
 	); err != nil {
 		return nil, err
 	}

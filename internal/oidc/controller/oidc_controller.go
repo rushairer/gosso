@@ -65,7 +65,7 @@ func NewOIDCController(
 	}
 }
 
-// RegisterRoutes registers OIDC routes (UserInfo + Logout).
+// RegisterRoutes registers OIDC routes (UserInfo + Logout + Front-Channel Logout).
 // .well-known routes are registered at the router layer for independent rate limiting.
 // GET /logout is intentionally omitted to prevent CSRF via image tags or link prefetching.
 // Clients must use POST or redirect with id_token_hint (handled in Logout).
@@ -73,6 +73,7 @@ func (c *OIDCController) RegisterRoutes(server *gin.RouterGroup, authMiddleware 
 	server.GET("/userinfo", authMiddleware, c.UserInfo)
 	server.POST("/userinfo", authMiddleware, c.UserInfo)
 	server.POST("/logout", c.Logout)
+	server.GET("/frontchannel_logout", c.FrontChannelLogout)
 }
 
 // Discovery GET /.well-known/openid-configuration
@@ -308,4 +309,93 @@ func (c *OIDCController) handlePostLogoutRedirect(ctx *gin.Context, req logoutRe
 		redirectURI = u.String()
 	}
 	ctx.Redirect(http.StatusFound, redirectURI)
+}
+
+// ──────────────────────────────────────────────
+// Front-Channel Logout (OIDC Front-Channel Logout 1.0)
+// ──────────────────────────────────────────────
+
+// frontChannelLogoutRequest holds the parameters for front-channel logout.
+type frontChannelLogoutRequest struct {
+	IDTokenHint string `form:"id_token_hint"`
+	ClientID    string `form:"client_id"`
+}
+
+// FrontChannelLogout handles GET /oidc/frontchannel_logout per OIDC Front-Channel Logout 1.0.
+// It renders an HTML page with hidden iframes pointing to each RP's frontchannel_logout_uri,
+// allowing the OP to signal logout to multiple RPs simultaneously via the browser.
+func (c *OIDCController) FrontChannelLogout(ctx *gin.Context) {
+	var req frontChannelLogoutRequest
+	if err := ctx.ShouldBind(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request"))
+		return
+	}
+
+	// Identify the account from id_token_hint or Bearer token
+	var accountID, sessionID string
+
+	if req.IDTokenHint != "" {
+		claims, err := c.logoutSvc.ValidateIDTokenHint(req.IDTokenHint, req.ClientID)
+		if err != nil {
+			c.logger.Debug("id_token_hint validation failed for front-channel logout", zap.Error(err))
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid id_token_hint"))
+			return
+		}
+		accountID = claims.Subject
+	} else {
+		// Try Bearer token
+		bearerClaims := c.validateBearerToken(ctx)
+		if ctx.IsAborted() {
+			return
+		}
+		if bearerClaims == nil {
+			ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
+			return
+		}
+		accountID = bearerClaims.AccountID
+		sessionID = bearerClaims.SessionID
+	}
+
+	// Get front-channel logout URIs for this account
+	entries, err := c.logoutSvc.GetFrontChannelLogoutURIs(ctx, accountID)
+	if err != nil {
+		c.logger.Error("Failed to get front-channel logout URIs",
+			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout failed"))
+		return
+	}
+
+	// Build iframe HTML
+	iframes := buildFrontChannelIframes(entries, c.issuer, sessionID)
+
+	ctx.Header("Content-Type", "text/html; charset=utf-8")
+	ctx.Status(http.StatusOK)
+	_, _ = ctx.Writer.WriteString(`<!DOCTYPE html>
+<html>
+<head><title>Logout</title></head>
+<body>
+` + iframes + `
+</body>
+</html>`)
+}
+
+// buildFrontChannelIframes generates hidden iframe elements for front-channel logout.
+func buildFrontChannelIframes(entries []oidcService.FrontChannelLogoutEntry, issuer, sessionID string) string {
+	if len(entries) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	for _, e := range entries {
+		sb.WriteString(`<iframe src="`)
+		sb.WriteString(e.URI)
+		sb.WriteString(`?iss=`)
+		sb.WriteString(url.QueryEscape(issuer))
+		if e.SessionRequired && sessionID != "" {
+			sb.WriteString(`&sid=`)
+			sb.WriteString(url.QueryEscape(sessionID))
+		}
+		sb.WriteString(`" style="display:none" width="0" height="0"></iframe>`)
+		sb.WriteString("\n")
+	}
+	return sb.String()
 }

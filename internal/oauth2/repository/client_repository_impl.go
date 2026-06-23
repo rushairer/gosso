@@ -92,8 +92,8 @@ func (r *oauth2ClientRepositoryImpl) Create(ctx context.Context, tx *sql.Tx, cli
 	}
 
 	query := `
-		INSERT INTO oauth2_clients (account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO oauth2_clients (account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, frontchannel_logout_uri, frontchannel_logout_session_required, backchannel_logout_uri, backchannel_logout_session_required)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, created_at, updated_at`
 
 	err = tx.QueryRowContext(ctx, query,
@@ -108,6 +108,10 @@ func (r *oauth2ClientRepositoryImpl) Create(ctx context.Context, tx *sql.Tx, cli
 		f.scopes,
 		client.IsConfidential,
 		f.metadata,
+		client.FrontchannelLogoutURI,
+		client.FrontchannelLogoutSessionRequired,
+		client.BackchannelLogoutURI,
+		client.BackchannelLogoutSessionRequired,
 	).Scan(&client.ID, &client.CreatedAt, &client.UpdatedAt)
 
 	if err != nil {
@@ -128,7 +132,7 @@ func (r *oauth2ClientRepositoryImpl) FindByClientIDTx(ctx context.Context, tx *s
 // findByClientID is the shared implementation for both transactional and non-transactional variants.
 func findByClientID(ctx context.Context, queryRow func(context.Context, string, ...any) *sql.Row, clientID string) (*domain.OAuth2Client, error) {
 	const query = `
-		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at, deleted_at
+		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, frontchannel_logout_uri, frontchannel_logout_session_required, backchannel_logout_uri, backchannel_logout_session_required, created_at, updated_at, deleted_at
 		FROM oauth2_clients
 		WHERE client_id = $1 AND deleted_at IS NULL`
 
@@ -145,7 +149,7 @@ func findByClientID(ctx context.Context, queryRow func(context.Context, string, 
 
 func (r *oauth2ClientRepositoryImpl) FindByAccountID(ctx context.Context, accountID string) ([]*domain.OAuth2Client, error) {
 	query := `
-		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, created_at, updated_at, deleted_at
+		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, frontchannel_logout_uri, frontchannel_logout_session_required, backchannel_logout_uri, backchannel_logout_session_required, created_at, updated_at, deleted_at
 		FROM oauth2_clients
 		WHERE account_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC`
@@ -167,12 +171,15 @@ func (r *oauth2ClientRepositoryImpl) Update(ctx context.Context, tx *sql.Tx, cli
 
 	query := `
 		UPDATE oauth2_clients
-		SET name = $1, description = $2, redirect_uris = $3, post_logout_redirect_uris = $4, grant_types = $5, scopes = $6, metadata = $7, updated_at = $8
-		WHERE id = $9 AND deleted_at IS NULL AND updated_at = $10
+		SET name = $1, description = $2, redirect_uris = $3, post_logout_redirect_uris = $4, grant_types = $5, scopes = $6, metadata = $7, frontchannel_logout_uri = $8, frontchannel_logout_session_required = $9, backchannel_logout_uri = $10, backchannel_logout_session_required = $11, updated_at = $12
+		WHERE id = $13 AND deleted_at IS NULL AND updated_at = $14
 		RETURNING updated_at`
 
 	err = tx.QueryRowContext(ctx, query,
-		client.Name, client.Description, f.redirectURIs, f.postLogoutURIs, f.grantTypes, f.scopes, f.metadata, time.Now(), client.ID, expectedUpdatedAt,
+		client.Name, client.Description, f.redirectURIs, f.postLogoutURIs, f.grantTypes, f.scopes, f.metadata,
+		client.FrontchannelLogoutURI, client.FrontchannelLogoutSessionRequired,
+		client.BackchannelLogoutURI, client.BackchannelLogoutSessionRequired,
+		time.Now(), client.ID, expectedUpdatedAt,
 	).Scan(&client.UpdatedAt)
 
 	if errors.Is(err, sql.ErrNoRows) {
@@ -215,4 +222,50 @@ func (r *oauth2ClientRepositoryImpl) SoftDeleteByAccountID(ctx context.Context, 
 		return fmt.Errorf("soft delete oauth2_clients by account_id: %w", err)
 	}
 	return nil
+}
+
+// FindFrontchannelLogoutClientsByAccountID returns clients that have a
+// non-empty frontchannel_logout_uri and a non-deleted consent for the account.
+func (r *oauth2ClientRepositoryImpl) FindFrontchannelLogoutClientsByAccountID(ctx context.Context, accountID string) ([]*domain.OAuth2Client, error) {
+	query := `
+		SELECT c.id, c.account_id, c.client_id, c.client_secret_hash, c.name, c.description,
+		       c.redirect_uris, c.post_logout_redirect_uris, c.grant_types, c.scopes,
+		       c.is_confidential, c.metadata,
+		       c.frontchannel_logout_uri, c.frontchannel_logout_session_required,
+		       c.backchannel_logout_uri, c.backchannel_logout_session_required,
+		       c.created_at, c.updated_at, c.deleted_at
+		FROM oauth2_clients c
+		INNER JOIN oauth2_consents oc ON oc.client_id = c.client_id AND oc.account_id = $1 AND oc.deleted_at IS NULL
+		WHERE c.frontchannel_logout_uri != '' AND c.deleted_at IS NULL`
+
+	rows, err := r.db.QueryContext(ctx, query, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("find frontchannel logout clients: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanOAuth2Clients(rows)
+}
+
+// FindBackchannelLogoutClientsByAccountID returns clients that have a
+// non-empty backchannel_logout_uri and a non-deleted consent for the account.
+func (r *oauth2ClientRepositoryImpl) FindBackchannelLogoutClientsByAccountID(ctx context.Context, accountID string) ([]*domain.OAuth2Client, error) {
+	query := `
+		SELECT c.id, c.account_id, c.client_id, c.client_secret_hash, c.name, c.description,
+		       c.redirect_uris, c.post_logout_redirect_uris, c.grant_types, c.scopes,
+		       c.is_confidential, c.metadata,
+		       c.frontchannel_logout_uri, c.frontchannel_logout_session_required,
+		       c.backchannel_logout_uri, c.backchannel_logout_session_required,
+		       c.created_at, c.updated_at, c.deleted_at
+		FROM oauth2_clients c
+		INNER JOIN oauth2_consents oc ON oc.client_id = c.client_id AND oc.account_id = $1 AND oc.deleted_at IS NULL
+		WHERE c.backchannel_logout_uri != '' AND c.deleted_at IS NULL`
+
+	rows, err := r.db.QueryContext(ctx, query, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("find backchannel logout clients: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanOAuth2Clients(rows)
 }
