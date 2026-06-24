@@ -5,8 +5,9 @@
 # advisory lock, so multiple replicas do not apply migrations at the same time.
 # Exit code 0 from "migrate up" means migrations were applied.
 # Exit code 1 with "no change" in output means DB is already up to date.
-echo "Running database migrations..."
-output=$(/app/gosso migrate up 2>&1) && rc=0 || rc=$?
+ENV_VAL=${GOUNO_ENV:-production}
+echo "Running database migrations for environment $ENV_VAL..."
+output=$(/app/gosso migrate up -e "$ENV_VAL" 2>&1) && rc=0 || rc=$?
 echo "$output"
 
 if [ "$rc" -eq 0 ]; then

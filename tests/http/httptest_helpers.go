@@ -163,6 +163,7 @@ func SetupHTTPTestEnv(t *testing.T) *HTTPTestEnv {
 		Issuer:                     "http://localhost",
 		EnforcePKCEForConfidential: false,
 		Logger:                     logger,
+		RoleFetcher:                &accountRoleFetcherAdapter{accountSvc: accountMod.Service},
 	})
 	require.NoError(t, err)
 
@@ -392,4 +393,20 @@ func generateTestClientSecret() string {
 func marshalJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+type accountRoleFetcherAdapter struct {
+	accountSvc accountService.AccountService
+}
+
+func (a *accountRoleFetcherAdapter) GetAccountRoles(ctx context.Context, accountID string) ([]string, error) {
+	roles, err := a.accountSvc.GetAccountRoles(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	roleNames := make([]string, len(roles))
+	for i, r := range roles {
+		roleNames[i] = r.Name
+	}
+	return roleNames, nil
 }

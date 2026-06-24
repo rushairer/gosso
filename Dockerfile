@@ -31,7 +31,7 @@ RUN addgroup -S gosso && adduser -S gosso -G gosso
 WORKDIR /app
 
 COPY --from=builder /build/bin/gosso /app/gosso
-COPY --from=builder /build/config/production.yaml /app/config/production.yaml
+COPY --from=builder /build/config /app/config
 COPY --from=builder /build/db/migrations /app/db/migrations
 COPY --from=builder /build/script/entrypoint.sh /app/entrypoint.sh
 
