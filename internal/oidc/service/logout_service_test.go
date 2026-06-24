@@ -277,3 +277,96 @@ func TestLogoutBySessionID_SessionNotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "revoke session")
 }
+
+// ──────────────────────────────────────────────
+// GetFrontChannelLogoutURIs tests
+// ──────────────────────────────────────────────
+
+func TestGetFrontChannelLogoutURIs_NilClientRepo(t *testing.T) {
+	svc, _ := setupTestLogoutService(t) // clientRepo is nil
+
+	entries, err := svc.GetFrontChannelLogoutURIs(context.Background(), "account-001")
+	assert.NoError(t, err)
+	assert.Nil(t, entries)
+}
+
+// ──────────────────────────────────────────────
+// generateLogoutToken tests
+// ──────────────────────────────────────────────
+
+func TestGenerateLogoutToken_Success(t *testing.T) {
+	svc, keySvc := setupTestLogoutService(t)
+
+	tokenString, err := svc.generateLogoutToken("client-001", "account-001", "session-001", true)
+	require.NoError(t, err)
+	assert.NotEmpty(t, tokenString)
+
+	// Parse and validate the token
+	parser := jwt.NewParser(jwt.WithoutClaimsValidation())
+	token, _, err := parser.ParseUnverified(tokenString, jwt.MapClaims{})
+	require.NoError(t, err)
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	require.True(t, ok)
+
+	assert.Equal(t, "https://sso.example.com", claims["iss"])
+	assert.Equal(t, "account-001", claims["sub"])
+	assert.Equal(t, "session-001", claims["sid"])
+	assert.NotNil(t, claims["iat"])
+	assert.NotNil(t, claims["exp"])
+	assert.NotNil(t, claims["jti"])
+
+	// Verify events claim
+	events, ok := claims["events"].(map[string]any)
+	require.True(t, ok)
+	_, hasLogoutEvent := events["http://schemas.openid.net/event/backchannel-logout"]
+	assert.True(t, hasLogoutEvent)
+
+	// Verify audience
+	aud, ok := claims["aud"].([]any)
+	require.True(t, ok)
+	assert.Contains(t, aud, "client-001")
+
+	// Verify kid header
+	assert.Equal(t, keySvc.KeyID(), token.Header["kid"])
+}
+
+func TestGenerateLogoutToken_WithoutSessionRequired(t *testing.T) {
+	svc, _ := setupTestLogoutService(t)
+
+	tokenString, err := svc.generateLogoutToken("client-001", "account-001", "session-001", false)
+	require.NoError(t, err)
+
+	parser := jwt.NewParser(jwt.WithoutClaimsValidation())
+	token, _, err := parser.ParseUnverified(tokenString, jwt.MapClaims{})
+	require.NoError(t, err)
+
+	claims := token.Claims.(jwt.MapClaims)
+	// When sessionRequired is false, sid should be omitted
+	assert.Nil(t, claims["sid"])
+}
+
+func TestGenerateLogoutToken_WithSessionRequired(t *testing.T) {
+	svc, _ := setupTestLogoutService(t)
+
+	tokenString, err := svc.generateLogoutToken("client-001", "account-001", "session-001", true)
+	require.NoError(t, err)
+
+	parser := jwt.NewParser(jwt.WithoutClaimsValidation())
+	token, _, err := parser.ParseUnverified(tokenString, jwt.MapClaims{})
+	require.NoError(t, err)
+
+	claims := token.Claims.(jwt.MapClaims)
+	assert.Equal(t, "session-001", claims["sid"])
+}
+
+// ──────────────────────────────────────────────
+// triggerBackChannelLogout tests
+// ──────────────────────────────────────────────
+
+func TestTriggerBackChannelLogout_NilClientRepo(t *testing.T) {
+	svc, _ := setupTestLogoutService(t) // clientRepo is nil
+
+	// Should not panic
+	svc.triggerBackChannelLogout(context.Background(), "account-001", "session-001")
+}

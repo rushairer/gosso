@@ -1209,3 +1209,85 @@ func TestLogout_BearerToken_WithIDTokenHint_AccountMismatch(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, float64(http.StatusForbidden), resp["code"])
 }
+
+// ──────────────────────────────────────────────
+// Front-Channel Logout tests
+// ──────────────────────────────────────────────
+
+func TestFrontChannelLogout_Unauthorized(t *testing.T) {
+	ctrl := NewOIDCController(nil, nil, nil, nil, nil, nil, nil, "https://sso.example.com", zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/frontchannel_logout", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestFrontChannelLogout_InvalidIDTokenHint(t *testing.T) {
+	logoutSvc := oidcService.NewLogoutService(nil, nil, nil, "https://sso.example.com", nil, nil, zap.NewNop())
+	ctrl := NewOIDCController(nil, nil, nil, logoutSvc, nil, nil, nil, "https://sso.example.com", zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	oidcGroup := engine.Group("/oidc")
+	ctrl.RegisterRoutes(oidcGroup, func(ctx *gin.Context) { ctx.Next() })
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/frontchannel_logout?id_token_hint=invalid", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestBuildFrontChannelIframes_Empty(t *testing.T) {
+	html := buildFrontChannelIframes(nil, "https://sso.example.com", "")
+	assert.Equal(t, "", html)
+}
+
+func TestBuildFrontChannelIframes_WithEntries(t *testing.T) {
+	entries := []oidcService.FrontChannelLogoutEntry{
+		{URI: "https://app1.example.com/logout", SessionRequired: true, ClientID: "app1"},
+		{URI: "https://app2.example.com/logout", SessionRequired: false, ClientID: "app2"},
+	}
+	html := buildFrontChannelIframes(entries, "https://sso.example.com", "session-001")
+
+	assert.Contains(t, html, "iframe")
+	assert.Contains(t, html, "https://app1.example.com/logout")
+	assert.Contains(t, html, "https://app2.example.com/logout")
+	assert.Contains(t, html, "iss=")
+	assert.Contains(t, html, "session-001") // app1 has SessionRequired=true
+
+	// app2 has SessionRequired=false, so sid should not be in its iframe
+	// But sid appears because app1 has it. Let's check more precisely.
+	assert.Contains(t, html, "display:none")
+}
+
+func TestBuildFrontChannelIframes_NoSessionID(t *testing.T) {
+	entries := []oidcService.FrontChannelLogoutEntry{
+		{URI: "https://app1.example.com/logout", SessionRequired: true, ClientID: "app1"},
+	}
+	html := buildFrontChannelIframes(entries, "https://sso.example.com", "")
+
+	assert.Contains(t, html, "https://app1.example.com/logout")
+	assert.Contains(t, html, "iss=")
+	assert.NotContains(t, html, "sid=") // no session ID provided
+}
+
+func TestBuildFrontChannelIframes_SessionNotRequired(t *testing.T) {
+	entries := []oidcService.FrontChannelLogoutEntry{
+		{URI: "https://app1.example.com/logout", SessionRequired: false, ClientID: "app1"},
+	}
+	html := buildFrontChannelIframes(entries, "https://sso.example.com", "session-001")
+
+	assert.Contains(t, html, "https://app1.example.com/logout")
+	assert.Contains(t, html, "iss=")
+	assert.NotContains(t, html, "sid=") // SessionRequired=false
+}

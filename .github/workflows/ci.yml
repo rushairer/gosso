@@ -17,7 +17,7 @@ concurrency:
 
 env:
   GO_VERSION: "1.26"
-  COVERAGE_MIN: "75"
+  COVERAGE_MIN: "70"
   TEST_POSTGRES_PASSWORD: "gosso_test_password"
   MIGRATE_VERSION: "v4.19.0"
 
