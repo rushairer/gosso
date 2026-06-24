@@ -23,5 +23,4 @@ Dockerfile
 .golangci.yml
 coverage*.out
 doc/
-docs/
 examples/
