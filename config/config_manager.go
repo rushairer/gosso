@@ -97,6 +97,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("web_server.request_timeout", "10s")
 	v.SetDefault("web_server.shutdown_timeout", "30s")
 	v.SetDefault("web_server.max_body_size", 10*1024*1024) // 10MB
+	v.SetDefault("web_server.csrf_skip_paths", []string{})
 	v.SetDefault("web_server.rate_limits.login", 5)
 	v.SetDefault("web_server.rate_limits.token", 10)
 	v.SetDefault("web_server.rate_limits.passkey", 10)
@@ -131,6 +132,11 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("auth.id_token_expiry", "15m")
 	v.SetDefault("auth.max_sessions", 5)
 	v.SetDefault("auth.enforce_pkce_for_confidential", false)
+	v.SetDefault("auth.login_url", "/login")
+	v.SetDefault("auth.enable_cookie_auth", false)
+	v.SetDefault("auth.auth_cookie_name", "access_token")
+	v.SetDefault("auth.include_user_roles", false)
+	v.SetDefault("auth.include_user_permissions", false)
 	// Redis configuration
 	v.SetDefault("redis.max_active_conns", 10)
 	v.SetDefault("redis.pool_timeout_seconds", 5)

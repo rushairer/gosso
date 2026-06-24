@@ -13,10 +13,11 @@ import (
 func scanOAuth2Client(s dbPkg.Scannable) (*domain.OAuth2Client, error) {
 	client := &domain.OAuth2Client{}
 	var redirectURIs, postLogoutURIs, grantTypes, scopes, metadata []byte
+	var clientSecretHash, description sql.NullString
 
 	if err := s.Scan(
-		&client.ID, &client.AccountID, &client.ClientID, &client.ClientSecretHash,
-		&client.Name, &client.Description, &redirectURIs, &postLogoutURIs, &grantTypes, &scopes,
+		&client.ID, &client.AccountID, &client.ClientID, &clientSecretHash,
+		&client.Name, &description, &redirectURIs, &postLogoutURIs, &grantTypes, &scopes,
 		&client.IsConfidential, &metadata,
 		&client.FrontchannelLogoutURI, &client.FrontchannelLogoutSessionRequired,
 		&client.BackchannelLogoutURI, &client.BackchannelLogoutSessionRequired,
@@ -24,6 +25,9 @@ func scanOAuth2Client(s dbPkg.Scannable) (*domain.OAuth2Client, error) {
 	); err != nil {
 		return nil, err
 	}
+
+	client.ClientSecretHash = clientSecretHash.String
+	client.Description = description.String
 
 	if err := unmarshalClientJSONFields(client, &clientJSONFields{
 		redirectURIs: redirectURIs, postLogoutURIs: postLogoutURIs,

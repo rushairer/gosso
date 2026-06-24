@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -30,11 +31,26 @@ type TokenValidator interface {
 // Detailed reasons are logged server-side only to prevent information leakage.
 var errUnauthorized = errors.New("unauthorized")
 
+// AuthConfigOptions holds configuration options for the JWT auth middleware.
+type AuthConfigOptions struct {
+	LoginURL         string
+	EnableCookieAuth bool
+	AuthCookieName   string
+}
+
 // ValidateBearerToken extracts and validates the Bearer token from the request.
 // Returns the claims on success, or nil with an error on failure.
 // This is the shared logic used by both JWTAuthMiddleware and inline authentication in handlers.
 func ValidateBearerToken(ctx *gin.Context, tokenSvc TokenValidator, sessionValidator sessionDomain.SessionValidator) (*tokenDomain.AccessTokenClaims, error) {
-	tokenString := extractBearerToken(ctx)
+	return ValidateBearerTokenWithConfig(ctx, tokenSvc, sessionValidator, AuthConfigOptions{
+		EnableCookieAuth: true,
+		AuthCookieName:   "access_token",
+	})
+}
+
+// ValidateBearerTokenWithConfig validates token with specific config options.
+func ValidateBearerTokenWithConfig(ctx *gin.Context, tokenSvc TokenValidator, sessionValidator sessionDomain.SessionValidator, cfg AuthConfigOptions) (*tokenDomain.AccessTokenClaims, error) {
+	tokenString := extractBearerTokenWithConfig(ctx, cfg.EnableCookieAuth, cfg.AuthCookieName)
 	if tokenString == "" {
 		return nil, errUnauthorized
 	}
@@ -70,12 +86,38 @@ func ValidateBearerToken(ctx *gin.Context, tokenSvc TokenValidator, sessionValid
 // ensuring revoked sessions (e.g. after account deletion or suspension) are rejected.
 // Returns an error if sessionValidator is nil.
 func JWTAuthMiddleware(tokenSvc TokenValidator, sessionValidator sessionDomain.SessionValidator) (gin.HandlerFunc, error) {
+	return JWTAuthMiddlewareWithConfig(tokenSvc, sessionValidator, AuthConfigOptions{
+		LoginURL:         "/login",
+		EnableCookieAuth: true,
+		AuthCookieName:   "access_token",
+	})
+}
+
+// JWTAuthMiddlewareWithConfig creates the middleware with custom config options.
+func JWTAuthMiddlewareWithConfig(tokenSvc TokenValidator, sessionValidator sessionDomain.SessionValidator, cfg AuthConfigOptions) (gin.HandlerFunc, error) {
 	if sessionValidator == nil {
 		return nil, fmt.Errorf("JWTAuthMiddleware: sessionValidator must not be nil — session validation is required for security")
 	}
 	return func(ctx *gin.Context) {
-		claims, err := ValidateBearerToken(ctx, tokenSvc, sessionValidator)
+		claims, err := ValidateBearerTokenWithConfig(ctx, tokenSvc, sessionValidator, cfg)
 		if err != nil {
+			// If it's a browser request to /oauth2/authorize, redirect to the custom login page!
+			if ctx.Request.Method == "GET" && strings.HasPrefix(ctx.Request.URL.Path, "/oauth2/authorize") {
+				loginURL := cfg.LoginURL
+				if loginURL == "" {
+					loginURL = "/login"
+				}
+				redirectURL := loginURL
+				if strings.Contains(redirectURL, "?") {
+					redirectURL += "&redirect_uri=" + url.QueryEscape(ctx.Request.RequestURI)
+				} else {
+					redirectURL += "?redirect_uri=" + url.QueryEscape(ctx.Request.RequestURI)
+				}
+				ctx.Redirect(http.StatusFound, redirectURL)
+				ctx.Abort()
+				return
+			}
+
 			status := http.StatusUnauthorized
 			msg := "unauthorized"
 			if errors.Is(err, ErrTokenScopeNotAllowed) {
@@ -93,15 +135,24 @@ func JWTAuthMiddleware(tokenSvc TokenValidator, sessionValidator sessionDomain.S
 }
 
 func extractBearerToken(ctx *gin.Context) string {
+	return extractBearerTokenWithConfig(ctx, true, "access_token")
+}
+
+func extractBearerTokenWithConfig(ctx *gin.Context, enableCookieAuth bool, authCookieName string) string {
 	authHeader := ctx.GetHeader("Authorization")
-	if authHeader == "" {
-		return ""
+	if authHeader != "" {
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			return parts[1]
+		}
 	}
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return ""
+	// Fallback to access_token cookie if enabled
+	if enableCookieAuth && authCookieName != "" {
+		if cookie, err := ctx.Cookie(authCookieName); err == nil {
+			return cookie
+		}
 	}
-	return parts[1]
+	return ""
 }
 
 // AdminRequiredMiddleware checks for admin role (must be used after JWTAuthMiddleware)

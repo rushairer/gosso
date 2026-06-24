@@ -66,6 +66,11 @@ type AccountValidator interface {
 	IsAccountActive(ctx context.Context, accountID string) bool
 }
 
+// AccountRoleFetcher defines operations to get roles for an account.
+type AccountRoleFetcher interface {
+	GetAccountRoles(ctx context.Context, accountID string) ([]string, error)
+}
+
 //go:embed template/consent.html
 var consentTemplateFS embed.FS
 
@@ -93,6 +98,8 @@ type OAuth2Controller struct {
 	deviceTmpl                  *template.Template
 	resultTmpl                  *template.Template
 	logger                      *zap.Logger
+	roleFetcher                 AccountRoleFetcher
+	includeUserRoles            bool
 }
 
 // NewOAuth2Controller creates a new OAuth2 controller instance.
@@ -160,6 +167,8 @@ type OAuth2ControllerConfig struct {
 	Issuer                     string
 	EnforcePKCEForConfidential bool
 	Logger                     *zap.Logger
+	RoleFetcher                AccountRoleFetcher
+	IncludeUserRoles           bool
 }
 
 // NewOAuth2ControllerFromConfig creates a new OAuth2 controller from a config struct.
@@ -175,6 +184,8 @@ func NewOAuth2ControllerFromConfig(cfg OAuth2ControllerConfig) (*OAuth2Controlle
 		return nil, err
 	}
 	c.enforcePKCEForConfidential = cfg.EnforcePKCEForConfidential
+	c.roleFetcher = cfg.RoleFetcher
+	c.includeUserRoles = cfg.IncludeUserRoles
 	return c, nil
 }
 

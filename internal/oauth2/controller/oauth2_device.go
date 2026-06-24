@@ -317,10 +317,22 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 	// Use claimedDC for token issuance
 	dc = claimedDC
 
+	var roles []string
+	if c.includeUserRoles && c.roleFetcher != nil {
+		var err error
+		roles, err = c.roleFetcher.GetAccountRoles(ctx, dc.AccountID)
+		if err != nil {
+			c.logger.Error("Failed to fetch roles for account", zap.Error(err), zap.String("account_id", dc.AccountID))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+	}
+
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		AccountID: dc.AccountID,
 		Scope:     strings.Join(dc.Scopes, " "),
 		ClientID:  dc.ClientID,
+		Roles:     roles,
 	})
 	if err != nil {
 		c.logger.Error("Failed to generate access token for device code", zap.Error(err), zap.String("client_id", dc.ClientID))

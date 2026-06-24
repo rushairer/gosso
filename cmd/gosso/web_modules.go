@@ -143,6 +143,8 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		Issuer:                     cfg.AuthConfig.Issuer,
 		EnforcePKCEForConfidential: cfg.AuthConfig.EnforcePKCEForConfidential,
 		Logger:                     logger,
+		RoleFetcher:                &accountRoleFetcherAdapter{accountSvc: accountMod.Service},
+		IncludeUserRoles:           cfg.AuthConfig.IncludeUserRoles,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
@@ -332,4 +334,20 @@ type oauth2ClientDeleterAdapter struct {
 
 func (a *oauth2ClientDeleterAdapter) SoftDeleteOAuth2ClientsByAccount(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error {
 	return a.clientRepo.SoftDeleteByAccountID(ctx, tx, accountID, deletedAt)
+}
+
+type accountRoleFetcherAdapter struct {
+	accountSvc accountService.AccountService
+}
+
+func (a *accountRoleFetcherAdapter) GetAccountRoles(ctx context.Context, accountID string) ([]string, error) {
+	roles, err := a.accountSvc.GetAccountRoles(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	roleNames := make([]string, len(roles))
+	for i, r := range roles {
+		roleNames[i] = r.Name
+	}
+	return roleNames, nil
 }

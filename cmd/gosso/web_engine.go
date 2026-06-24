@@ -29,6 +29,19 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		return nil, fmt.Errorf("invalid CORS configuration: %w", err)
 	}
 
+	csrfSkipPaths := []string{
+		"/api/passkey/login/begin",
+		"/api/passkey/login/complete",
+		"/api/passkey/mfa/begin",
+		"/api/passkey/mfa/complete",
+		"/oauth2/token",
+		"/oauth2/introspect",
+		"/oauth2/device/code",
+		"/.well-known",
+		"/swagger",
+	}
+	csrfSkipPaths = append(csrfSkipPaths, cfg.WebServerConfig.CSRFSkipPaths...)
+
 	engine.Use(
 		middleware.RecoveryMiddleware(logger),
 		cors.New(corsConfig),
@@ -37,17 +50,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		middleware.SecurityHeadersMiddleware(cfg.WebServerConfig.Production),
 		middleware.MaxBodySizeMiddleware(cfg.WebServerConfig.MaxBodySize),
 		middleware.TimeoutMiddleware(cfg.WebServerConfig.RequestTimeout),
-		middleware.CSRFMiddleware(cfg.WebServerConfig.Production, logger, cfg.AuthConfig.CSRFCookieMaxAge,
-			"/api/passkey/login/begin",
-			"/api/passkey/login/complete",
-			"/api/passkey/mfa/begin",
-			"/api/passkey/mfa/complete",
-			"/oauth2/token",
-			"/oauth2/introspect",
-			"/oauth2/device/code",
-			"/.well-known",
-			"/swagger",
-		),
+		middleware.CSRFMiddleware(cfg.WebServerConfig.Production, logger, cfg.AuthConfig.CSRFCookieMaxAge, csrfSkipPaths...),
 	)
 
 	// Prometheus metrics middleware (after CSRF, before routes)
@@ -67,6 +70,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		PasskeyCtrl:      m.passkeyCtrl,
 		Redis:            redis,
 		RateLimits:       cfg.WebServerConfig.RateLimits,
+		AuthConfig:       cfg.AuthConfig,
 		Debug:            cfg.WebServerConfig.Debug,
 		SessionValidator: m.sessionSvc,
 		Logger:           logger,

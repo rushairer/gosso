@@ -16,6 +16,8 @@ web_server:
     trusted_proxies:
         - "127.0.0.1"
         - "::1"
+    csrf_skip_paths:
+        - "/api/v1/auth/login"
     rate_limits:
         login: 5
         token: 10
@@ -79,6 +81,11 @@ auth:
     #     - "198.51.100.5"
     mfa_account_rate_limit_window: 15m
     password_reset_revoke_concurrency: 5
+    # SPA integration
+    login_url: "/login"
+    enable_cookie_auth: true
+    auth_cookie_name: "access_token"
+    include_user_roles: true
 observability:
     metrics_enabled: false
     tracing_enabled: false

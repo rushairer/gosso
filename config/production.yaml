@@ -18,6 +18,8 @@ web_server:
     shutdown_timeout: 30s
     trusted_proxies:
         - "172.22.0.0/16"  # Docker network (gosso-prod-network)
+    csrf_skip_paths:
+        - "/api/v1/auth/login"
     rate_limits:
         login: 5
         token: 10
@@ -91,6 +93,11 @@ auth:
     key_id: ""
     password_reset_base_url: ""
     account_validator_cache_ttl: 5s
+    # SPA integration
+    login_url: "/login"
+    enable_cookie_auth: true
+    auth_cookie_name: "access_token"
+    include_user_roles: true
     # WebAuthn / Passkey configuration (REQUIRED for passkey support)
     webauthn_rp_id: ""
     webauthn_rp_name: ""

@@ -30,8 +30,8 @@ func (r *consentRepositoryImpl) Upsert(ctx context.Context, tx *sql.Tx, consent 
 
 	query := `
 		INSERT INTO oauth2_consents (account_id, client_id, scopes, granted_at)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (account_id, client_id)
+		VALUES ($1, (SELECT id FROM oauth2_clients WHERE client_id = $2 AND deleted_at IS NULL), $3, $4)
+		ON CONFLICT (account_id, client_id) WHERE deleted_at IS NULL
 		DO UPDATE SET scopes = EXCLUDED.scopes, granted_at = EXCLUDED.granted_at, deleted_at = NULL
 		RETURNING id, created_at, updated_at`
 
@@ -60,9 +60,10 @@ func (r *consentRepositoryImpl) FindByAccountAndClientTx(ctx context.Context, tx
 // findConsentByAccountAndClient is the shared implementation for FindByAccountAndClient and FindByAccountAndClientTx.
 func findConsentByAccountAndClient(ctx context.Context, q db.Queryable, accountID, clientID string) (*domain.Consent, error) {
 	query := `
-		SELECT id, account_id, client_id, scopes, granted_at, created_at, updated_at, deleted_at
-		FROM oauth2_consents
-		WHERE account_id = $1 AND client_id = $2 AND deleted_at IS NULL`
+		SELECT c.id, c.account_id, cl.client_id, c.scopes, c.granted_at, c.created_at, c.updated_at, c.deleted_at
+		FROM oauth2_consents c
+		INNER JOIN oauth2_clients cl ON cl.id = c.client_id
+		WHERE c.account_id = $1 AND cl.client_id = $2 AND c.deleted_at IS NULL`
 
 	consent, err := scanConsent(q.QueryRowContext(ctx, query, accountID, clientID))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -77,7 +78,12 @@ func findConsentByAccountAndClient(ctx context.Context, q db.Queryable, accountI
 
 // SoftDelete soft-deletes a consent record.
 func (r *consentRepositoryImpl) SoftDelete(ctx context.Context, tx *sql.Tx, accountID, clientID string, deletedAt time.Time) error {
-	query := `UPDATE oauth2_consents SET deleted_at = $3, updated_at = $3 WHERE account_id = $1 AND client_id = $2 AND deleted_at IS NULL`
+	query := `
+		UPDATE oauth2_consents 
+		SET deleted_at = $3, updated_at = $3 
+		WHERE account_id = $1 
+		  AND client_id = (SELECT id FROM oauth2_clients WHERE client_id = $2 AND deleted_at IS NULL) 
+		  AND deleted_at IS NULL`
 	result, err := tx.ExecContext(ctx, query, accountID, clientID, deletedAt)
 	if err != nil {
 		return fmt.Errorf("soft delete consent: %w", err)
@@ -95,10 +101,11 @@ func (r *consentRepositoryImpl) SoftDelete(ctx context.Context, tx *sql.Tx, acco
 // FindByAccountID returns all non-deleted consent records for the given account.
 func (r *consentRepositoryImpl) FindByAccountID(ctx context.Context, accountID string) ([]*domain.Consent, error) {
 	query := `
-		SELECT id, account_id, client_id, scopes, granted_at, created_at, updated_at, deleted_at
-		FROM oauth2_consents
-		WHERE account_id = $1 AND deleted_at IS NULL
-		ORDER BY granted_at DESC`
+		SELECT c.id, c.account_id, cl.client_id, c.scopes, c.granted_at, c.created_at, c.updated_at, c.deleted_at
+		FROM oauth2_consents c
+		INNER JOIN oauth2_clients cl ON cl.id = c.client_id
+		WHERE c.account_id = $1 AND c.deleted_at IS NULL
+		ORDER BY c.granted_at DESC`
 
 	rows, err := r.db.QueryContext(ctx, query, accountID)
 	if err != nil {

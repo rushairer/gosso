@@ -14,6 +14,8 @@ web_server:
     shutdown_timeout: 30s
     trusted_proxies:
         - "172.21.0.0/16"  # Docker network (gosso-dev-network)
+    csrf_skip_paths:
+        - "/api/v1/auth/login"
     rate_limits:
         login: 10
         token: 30
@@ -56,6 +58,7 @@ auth:
     issuer: "http://localhost:8080"
     # Dev-only TOTP key — set via GOUNO_AUTH_TOTP_ENCRYPTION_KEY env var (see docker-compose).
     # Default from config_manager.go is used when the env var is unset.
+    totp_encryption_key: ""
     access_token_expiry: 15m
     refresh_token_expiry: 168h
     authorization_code_expiry: 10m
@@ -91,10 +94,16 @@ auth:
     #     - "198.51.100.5"
     # Password reset
     password_reset_revoke_concurrency: 5
+    # SPA integration
+    login_url: "/login"
+    enable_cookie_auth: true
+    auth_cookie_name: "access_token"
+    include_user_roles: true
 cors:
     allowed_origins:
         - "http://localhost:3000"
         - "http://localhost:5173"
+        - "http://localhost:8080"
     allowed_methods:
         - GET
         - POST

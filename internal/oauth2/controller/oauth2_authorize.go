@@ -66,6 +66,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 
 	client, err := c.clientSvc.FindByClientID(ctx, clientID)
 	if err != nil {
+		c.logger.Error("Authorize: FindByClientID failed", zap.String("client_id", clientID), zap.Error(err))
 		if c.clientAuth != nil {
 			c.clientAuth.DummyAuthenticate()
 		}

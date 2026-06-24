@@ -41,6 +41,7 @@ type WebServerConfig struct {
 	MaxBodySize       int64            `mapstructure:"max_body_size"`
 	TrustedProxies    []string         `mapstructure:"trusted_proxies"`
 	RateLimits        RateLimitsConfig `mapstructure:"rate_limits"`
+	CSRFSkipPaths     []string         `mapstructure:"csrf_skip_paths"`
 }
 
 type RateLimitsConfig struct {
@@ -171,6 +172,11 @@ type AuthConfig struct {
 	EnforcePKCEForConfidential     bool          `mapstructure:"enforce_pkce_for_confidential"`
 	MFAAccountMaxAttempts          int           `mapstructure:"mfa_account_max_attempts"`
 	MFAAccountRateLimitWindow      time.Duration `mapstructure:"mfa_account_rate_limit_window"`
+	LoginURL                       string        `mapstructure:"login_url"`
+	EnableCookieAuth               bool          `mapstructure:"enable_cookie_auth"`
+	AuthCookieName                 string        `mapstructure:"auth_cookie_name"`
+	IncludeUserRoles               bool          `mapstructure:"include_user_roles"`
+	IncludeUserPermissions         bool          `mapstructure:"include_user_permissions"`
 }
 
 type CORSConfig struct {

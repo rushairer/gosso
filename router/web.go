@@ -38,6 +38,7 @@ type RouterDeps struct {
 	PasskeyCtrl      *authController.PasskeyController
 	Redis            *cache.RedisClient
 	RateLimits       config.RateLimitsConfig
+	AuthConfig       config.AuthConfig
 	Debug            bool
 	SessionValidator sessionDomain.SessionValidator
 	Logger           *zap.Logger
@@ -66,7 +67,11 @@ func RegisterWebRouter(deps RouterDeps) error {
 	}
 
 	// JWT auth middleware
-	jwtAuth, err := authMiddleware.JWTAuthMiddleware(deps.TokenSvc, deps.SessionValidator)
+	jwtAuth, err := authMiddleware.JWTAuthMiddlewareWithConfig(deps.TokenSvc, deps.SessionValidator, authMiddleware.AuthConfigOptions{
+		LoginURL:         deps.AuthConfig.LoginURL,
+		EnableCookieAuth: deps.AuthConfig.EnableCookieAuth,
+		AuthCookieName:   deps.AuthConfig.AuthCookieName,
+	})
 	if err != nil {
 		return err
 	}

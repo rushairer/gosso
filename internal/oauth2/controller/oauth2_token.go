@@ -133,10 +133,22 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		return
 	}
 
+	var roles []string
+	if c.includeUserRoles && c.roleFetcher != nil {
+		var err error
+		roles, err = c.roleFetcher.GetAccountRoles(ctx, authCode.AccountID)
+		if err != nil {
+			c.logger.Error("Failed to fetch roles for account", zap.Error(err), zap.String("account_id", authCode.AccountID))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+	}
+
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		AccountID: authCode.AccountID,
 		Scope:     strings.Join(authCode.Scopes, " "),
 		ClientID:  authCode.ClientID,
+		Roles:     roles,
 	})
 	if err != nil {
 		c.logger.Error("Failed to generate access token for authorization code", zap.Error(err), zap.String("client_id", req.ClientID))
@@ -257,11 +269,24 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 	if req.Scope != "" {
 		accessTokenScope = req.Scope
 	}
+
+	var roles []string
+	if c.includeUserRoles && c.roleFetcher != nil {
+		var err error
+		roles, err = c.roleFetcher.GetAccountRoles(ctx, newRefreshToken.AccountID)
+		if err != nil {
+			c.logger.Error("Failed to fetch roles for account", zap.Error(err), zap.String("account_id", newRefreshToken.AccountID))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+	}
+
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		AccountID: newRefreshToken.AccountID,
 		Scope:     accessTokenScope,
 		ClientID:  newRefreshToken.ClientID,
 		SessionID: newRefreshToken.SessionID,
+		Roles:     roles,
 	})
 	if err != nil {
 		c.logger.Error("Failed to generate access token for refresh", zap.Error(err), zap.String("client_id", newRefreshToken.ClientID))
