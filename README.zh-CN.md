@@ -155,6 +155,10 @@ make docker-test-up
 make docker-prod-up
 ```
 
+本仓库根目录提供一套本地管理台编排（`../docker-compose.yml`）：启动后访问 `http://localhost:8080`，默认管理员为 `admin` / `admin123`。登录管理台后进入 **User Accounts**，点击 **Add User** 可创建普通用户账号；如需授予管理员权限，再通过 **Roles** 分配 `admin` 角色。
+
+用户自助安全功能走认证域接口：修改自己的密码使用 `/api/v1/auth/password/change`，TOTP MFA 使用 `/api/v1/auth/mfa/*`，Passkey 使用 `/api/v1/passkey/*`。管理员代管他人账号的创建、启用/禁用、删除、重置密码和角色分配保留在 `/api/v1/admin/*`。
+
 生产环境启动前，先复制 `.env.production.example` 到 `.env.production`，填写真实值，并将 RSA 私钥放到 `./keys/private.pem`，容器内挂载路径为 `/app/keys/private.pem`。生产环境变量文件由 Docker Compose 读取，请保持 `KEY=value` 格式。内置 Postgres 服务默认使用 `sslmode=disable`；只有连接已配置 TLS 的数据库时才切换为 `sslmode=require`。
 
 使用对应的 `make docker-*-down` 停止。
@@ -198,6 +202,19 @@ make docker-prod-up
 | GET | `/api/auth/session` | 当前会话信息（已认证） |
 | GET | `/api/auth/sessions` | 会话列表（已认证） |
 | DELETE | `/api/auth/sessions/:id` | 撤销会话（已认证） |
+| POST | `/api/auth/password/change` | 修改自己的密码（已认证） |
+
+### 管理 API
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/admin/accounts` | 账号列表（管理员） |
+| POST | `/api/admin/accounts` | 创建用户账号（管理员） |
+| POST | `/api/admin/accounts/:account_id/password` | 重置用户密码（管理员，不能用于自己） |
+| POST | `/api/admin/accounts/:account_id/disable` | 禁用用户账号（管理员，不能用于自己） |
+| POST | `/api/admin/accounts/:account_id/enable` | 启用用户账号（管理员，不能用于自己） |
+| POST | `/api/admin/accounts/:account_id/roles` | 分配角色（管理员，不能用于自己） |
+| DELETE | `/api/admin/accounts/:account_id/roles/:role_id` | 移除角色（管理员，不能用于自己） |
 
 ### MFA
 

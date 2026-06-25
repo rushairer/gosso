@@ -31,8 +31,8 @@ import (
 
 // mockConsentManager implements AdminConsentManager for testing.
 type mockConsentManager struct {
-	listFn    func() ([]*oauth2Domain.Consent, error)
-	deleteFn  func() error
+	listFn   func() ([]*oauth2Domain.Consent, error)
+	deleteFn func() error
 }
 
 func (m *mockConsentManager) ListConsentsByAccountID(_ context.Context, _ string) ([]*oauth2Domain.Consent, error) {
@@ -79,18 +79,22 @@ func (m *mockLockoutManager) ClearLockout(_ context.Context, _ string) error {
 }
 
 type mockAccountService struct {
-	findByIDFn     func() (*accountDomain.Account, error)
-	listAccountsFn func() ([]*accountDomain.Account, int, error)
-	deleteFn       func() error
-	suspendFn      func() error
-	activateFn     func() error
-	getRolesFn     func() ([]*accountDomain.Role, error)
-	assignRoleFn   func() error
-	removeRoleFn   func() error
+	registerAccountFn     func(req *accountService.RegisterAccountRequest) (*accountDomain.Account, error)
+	findByIDFn            func() (*accountDomain.Account, error)
+	listAccountsFn        func() ([]*accountDomain.Account, int, error)
+	deleteFn              func() error
+	suspendFn             func() error
+	activateFn            func() error
+	getRolesFn            func() ([]*accountDomain.Role, error)
+	assignRoleFn          func() error
+	removeRoleFn          func() error
 	adminChangePasswordFn func(accountID, newPassword string) error
 }
 
-func (m *mockAccountService) RegisterAccount(_ context.Context, _ *accountService.RegisterAccountRequest) (*accountDomain.Account, error) {
+func (m *mockAccountService) RegisterAccount(_ context.Context, req *accountService.RegisterAccountRequest) (*accountDomain.Account, error) {
+	if m.registerAccountFn != nil {
+		return m.registerAccountFn(req)
+	}
 	return nil, fmt.Errorf("not implemented")
 }
 func (m *mockAccountService) FindAccountByID(_ context.Context, _ string) (*accountDomain.Account, error) {
@@ -282,6 +286,57 @@ func TestListAccounts_LargePageSizeClamped(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestCreateAccount_Success(t *testing.T) {
+	accountSvc := &mockAccountService{
+		registerAccountFn: func(req *accountService.RegisterAccountRequest) (*accountDomain.Account, error) {
+			assert.Equal(t, "new.user", req.Username)
+			assert.Equal(t, "New User", req.DisplayName)
+			assert.Equal(t, "new.user@example.com", req.Email)
+			assert.Equal(t, "StrongPassword123!", req.Password)
+			return newAdminTestAccount(), nil
+		},
+	}
+	engine := setupAdminController(accountSvc)
+
+	body := `{"username":"new.user","display_name":"New User","email":"new.user@example.com","password":"StrongPassword123!"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+}
+
+func TestCreateAccount_RequiresContact(t *testing.T) {
+	engine := setupAdminController(&mockAccountService{})
+
+	body := `{"username":"new.user","display_name":"New User","password":"StrongPassword123!"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "email or phone is required")
+}
+
+func TestCreateAccount_EmailConflict(t *testing.T) {
+	accountSvc := &mockAccountService{
+		registerAccountFn: func(req *accountService.RegisterAccountRequest) (*accountDomain.Account, error) {
+			return nil, accountService.ErrEmailAlreadyRegistered
+		},
+	}
+	engine := setupAdminController(accountSvc)
+
+	body := `{"username":"new.user","display_name":"New User","email":"new.user@example.com","password":"StrongPassword123!"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusConflict, w.Code)
 }
 
 func TestAddRole_InvalidAccountUUID(t *testing.T) {

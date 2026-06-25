@@ -159,6 +159,10 @@ make docker-test-up
 make docker-prod-up
 ```
 
+The repository root includes a local admin stack (`../docker-compose.yml`). After startup, open `http://localhost:8080` and sign in with the seeded admin account `admin` / `admin123`. In the admin console, go to **User Accounts** and use **Add User** to create normal users; grant the `admin` role separately through **Roles** when needed.
+
+User self-service security flows stay under the auth endpoints: change your own password via `/api/v1/auth/password/change`, manage TOTP MFA via `/api/v1/auth/mfa/*`, and manage passkeys via `/api/v1/passkey/*`. Admin-mediated account creation, enable/disable, deletion, password reset, and role assignment remain under `/api/v1/admin/*`.
+
 Before starting production Docker, copy `.env.production.example` to `.env.production`,
 fill in real values, and place the RSA private key at `./keys/private.pem`
 so it is mounted into the container at `/app/keys/private.pem`.
@@ -207,6 +211,19 @@ Stop with the corresponding `make docker-*-down` commands.
 | GET | `/api/auth/session` | Current session info (authenticated) |
 | GET | `/api/auth/sessions` | List sessions (authenticated) |
 | DELETE | `/api/auth/sessions/:id` | Revoke a session (authenticated) |
+| POST | `/api/auth/password/change` | Change your own password (authenticated) |
+
+### Admin API
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/accounts` | List accounts (admin) |
+| POST | `/api/admin/accounts` | Create a user account (admin) |
+| POST | `/api/admin/accounts/:account_id/password` | Reset a user's password (admin, not self) |
+| POST | `/api/admin/accounts/:account_id/disable` | Disable an account (admin, not self) |
+| POST | `/api/admin/accounts/:account_id/enable` | Enable an account (admin, not self) |
+| POST | `/api/admin/accounts/:account_id/roles` | Assign a role (admin, not self) |
+| DELETE | `/api/admin/accounts/:account_id/roles/:role_id` | Remove a role (admin, not self) |
 
 ### MFA
 

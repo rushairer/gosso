@@ -29,6 +29,13 @@ var adminAccountErrorMap = []controllerutil.ErrorRule{
 	{Sentinel: accountRepository.ErrInvalidStatusTransition, Mapping: controllerutil.ErrorMapping{Status: http.StatusConflict, Message: "invalid account status transition"}},
 }
 
+// adminCreateAccountErrorMap maps account creation errors to HTTP responses.
+var adminCreateAccountErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: accountService.ErrUsernameAlreadyTaken, Mapping: controllerutil.ErrorMapping{Status: http.StatusConflict, Message: "username already taken"}},
+	{Sentinel: accountService.ErrEmailAlreadyRegistered, Mapping: controllerutil.ErrorMapping{Status: http.StatusConflict, Message: "email already registered"}},
+	{Sentinel: accountService.ErrPhoneAlreadyRegistered, Mapping: controllerutil.ErrorMapping{Status: http.StatusConflict, Message: "phone already registered"}},
+}
+
 // adminDeleteAccountErrorMap maps account deletion errors to HTTP responses.
 var adminDeleteAccountErrorMap = []controllerutil.ErrorRule{
 	{Sentinel: accountService.ErrAccountNotActive, Mapping: controllerutil.ErrorMapping{Status: http.StatusConflict, Message: "account is not active"}},
@@ -65,11 +72,11 @@ type AdminLockoutManager interface {
 
 // AdminController handles admin operations
 type AdminController struct {
-	accountSvc     accountService.AccountService
-	consentMgr     AdminConsentManager
-	auditQueryMgr  AdminAuditQueryManager
-	lockoutMgr     AdminLockoutManager
-	logger         *zap.Logger
+	accountSvc    accountService.AccountService
+	consentMgr    AdminConsentManager
+	auditQueryMgr AdminAuditQueryManager
+	lockoutMgr    AdminLockoutManager
+	logger        *zap.Logger
 }
 
 // NewAdminController creates a new admin controller instance
@@ -96,6 +103,7 @@ func (c *AdminController) RegisterRoutes(rg *gin.RouterGroup) {
 	accounts := rg.Group("/accounts")
 	{
 		accounts.GET("", c.ListAccounts)
+		accounts.POST("", c.CreateAccount)
 		accounts.GET("/:account_id", c.GetAccount)
 		accounts.DELETE("/:account_id", c.DeleteAccount)
 		accounts.POST("/:account_id/disable", c.DisableAccount)
@@ -109,6 +117,64 @@ func (c *AdminController) RegisterRoutes(rg *gin.RouterGroup) {
 		accounts.POST("/:account_id/lockout/clear", c.ClearLockout)
 		accounts.POST("/:account_id/password", c.ChangePassword)
 	}
+}
+
+// CreateAccountRequestBody is the request body for administrator-created accounts.
+type CreateAccountRequestBody struct {
+	Username    string `json:"username" binding:"required,min=2,max=64"`
+	DisplayName string `json:"display_name" binding:"required,max=255"`
+	Email       string `json:"email" binding:"omitempty,email,max=254"`
+	Phone       string `json:"phone" binding:"omitempty,max=32"`
+	Password    string `json:"password" binding:"required,min=12,max=72"`
+	Locale      string `json:"locale" binding:"omitempty,max=10"`
+	Timezone    string `json:"timezone" binding:"omitempty,max=64"`
+}
+
+// CreateAccount POST /api/admin/accounts
+func (c *AdminController) CreateAccount(ctx *gin.Context) {
+	var req CreateAccountRequestBody
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+
+	if strings.TrimSpace(req.Email) == "" && strings.TrimSpace(req.Phone) == "" {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "email or phone is required"))
+		return
+	}
+
+	account, err := c.accountSvc.RegisterAccount(ctx, &accountService.RegisterAccountRequest{
+		Username:    strings.TrimSpace(req.Username),
+		DisplayName: strings.TrimSpace(req.DisplayName),
+		Email:       strings.TrimSpace(req.Email),
+		Phone:       strings.TrimSpace(req.Phone),
+		Password:    req.Password,
+		Locale:      strings.TrimSpace(req.Locale),
+		Timezone:    strings.TrimSpace(req.Timezone),
+	})
+	if err != nil {
+		if errors.Is(err, accountService.ErrUsernameAlreadyTaken) ||
+			errors.Is(err, accountService.ErrEmailAlreadyRegistered) ||
+			errors.Is(err, accountService.ErrPhoneAlreadyRegistered) {
+			controllerutil.AbortWithServiceError(ctx, c.logger, err, adminCreateAccountErrorMap,
+				http.StatusConflict, "failed to create account")
+			return
+		}
+		if strings.Contains(err.Error(), "validation failed") ||
+			strings.Contains(err.Error(), "password") ||
+			strings.Contains(err.Error(), "username") ||
+			strings.Contains(err.Error(), "credential:") ||
+			strings.Contains(err.Error(), "account:") ||
+			strings.Contains(err.Error(), "invalid timezone") {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+			return
+		}
+		c.logger.Error("Failed to create account", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to create account"))
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, gouno.NewSuccessResponse(account))
 }
 
 // ListAccounts GET /api/admin/accounts
