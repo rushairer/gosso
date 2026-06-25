@@ -573,9 +573,9 @@ func TestLoginByPasskey_MFARequired(t *testing.T) {
 	result, err := fixture.svc.LoginByPasskey(context.Background(), "account-001", "127.0.0.1", "test-agent")
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.True(t, result.RequiresMFA)
-	assert.NotEmpty(t, result.MFAToken)
-	assert.Contains(t, result.MFATypes, "totp")
+	// Passkey is inherently multi-factor — MFA is not required even when TOTP is configured.
+	assert.False(t, result.RequiresMFA)
+	assert.NotEmpty(t, result.AccessToken)
 }
 
 // TestLoginByPasskey_IPRateLimited was removed because IP rate limiting for passkey

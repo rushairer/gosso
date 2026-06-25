@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -148,8 +150,16 @@ func (c *PasskeyController) RegisterComplete(ctx *gin.Context) {
 	}
 
 	var req RegisterCompleteRequest
-	// Name is optional — ignore parse errors (the body is the WebAuthn attestation)
+	// Buffer body before binding so the service can read it again for WebAuthn parsing.
+	bodyBytes, err := io.ReadAll(ctx.Request.Body)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to read request body"))
+		return
+	}
+	ctx.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	_ = ctx.ShouldBindJSON(&req)
+	// Restore body for CompleteRegistration
+	ctx.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
 	cred, err := c.passkeySvc.CompleteRegistration(ctx, requestID, accountID, username, displayName, req.Name, ctx.Request)
 	if err != nil {
@@ -225,10 +235,17 @@ type LoginCompleteRequest struct {
 // LoginComplete POST /api/auth/passkey/login/complete
 func (c *PasskeyController) LoginComplete(ctx *gin.Context) {
 	var req LoginCompleteRequest
+	bodyBytes, err := io.ReadAll(ctx.Request.Body)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to read request body"))
+		return
+	}
+	ctx.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
 		return
 	}
+	ctx.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
 	accountID, _, err := c.passkeySvc.CompleteLogin(ctx, req.RequestID, ctx.Request)
 	if err != nil {
@@ -302,10 +319,17 @@ type MFACompleteRequest struct {
 // MFAComplete POST /api/auth/passkey/mfa/complete
 func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 	var req MFACompleteRequest
+	bodyBytes, err := io.ReadAll(ctx.Request.Body)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to read request body"))
+		return
+	}
+	ctx.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
 		return
 	}
+	ctx.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
 	claims, err := c.authSvc.ValidateMFAToken(ctx, req.MFAToken)
 	if err != nil {

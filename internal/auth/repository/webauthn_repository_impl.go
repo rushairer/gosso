@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,7 +40,7 @@ func (r *webAuthnCredentialRepositoryImpl) CreateCredential(ctx context.Context,
 	_, err = tx.ExecContext(ctx, query,
 		cred.ID,
 		cred.AccountID,
-		cred.CredentialID,
+		base64.RawURLEncoding.EncodeToString(cred.CredentialID),
 		cred.PublicKey,
 		cred.SignCount,
 		cred.AAGUID,

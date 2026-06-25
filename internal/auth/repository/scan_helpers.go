@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"encoding/base64"
+	"fmt"
 	"time"
 
 	dbPkg "github.com/rushairer/gosso/internal/db"
@@ -41,6 +43,16 @@ func scanWebAuthnCredential(s dbPkg.Scannable) (*domain.WebAuthnCredential, erro
 
 	if err := dbPkg.UnmarshalJSONField(transportsJSON, &cred.Transports, "transports"); err != nil {
 		return nil, err
+	}
+
+	// credential_id is stored as base64-encoded text in the database.
+	// Decode back to the raw authenticator bytes that the webauthn library expects.
+	if len(cred.CredentialID) > 0 {
+		decoded, err := base64.RawURLEncoding.DecodeString(string(cred.CredentialID))
+		if err != nil {
+			return nil, fmt.Errorf("decode credential_id: %w", err)
+		}
+		cred.CredentialID = decoded
 	}
 
 	return cred, nil

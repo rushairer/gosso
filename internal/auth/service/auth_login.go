@@ -251,7 +251,9 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	return s.completeLogin(ctx, account, ip, userAgent, auditDomain.ActionMFALoginSuccess, nil, true)
 }
 
-// LoginByPasskey login directly after passkey verification (skipping password check)
+// LoginByPasskey login directly after passkey verification (skipping password check).
+// Passkey authentication is inherently multi-factor (device possession + user verification),
+// so MFA is not required — the session is marked as MFA-verified unconditionally.
 func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAgent string) (result *LoginResult, err error) {
 	defer func() {
 		if err != nil {
@@ -280,15 +282,10 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 		return nil, ErrInvalidCredentials
 	}
 
-	// 3. Check if MFA is required
-	mfaResult, mfaErr := s.handleMFARequirement(ctx, account)
-	if mfaResult != nil || mfaErr != nil {
-		return mfaResult, mfaErr
-	}
-
-	// 4. Complete login (session, tokens, rate limit clear, audit)
+	// 3. Complete login (session, tokens, rate limit clear, audit).
+	// Passkey provides inherent multi-factor authentication — session is MFA-verified.
 	return s.completeLogin(ctx, account, ip, userAgent, auditDomain.ActionLoginSuccess,
-		map[string]any{"method": "passkey"}, false)
+		map[string]any{"method": "passkey"}, true)
 }
 
 // Logout deletes session and revokes tokens
