@@ -183,6 +183,7 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, ac
 		AAGUID:          credential.Authenticator.AAGUID,
 		Name:            credName,
 	})
+	cred.Flags = uint8(credential.Flags.ProtocolValue())
 	if err != nil {
 		return nil, fmt.Errorf("create webauthn credential: %w", err)
 	}
@@ -322,19 +323,48 @@ func (s *PasskeyService) completeLoginInternal(ctx context.Context, requestID, e
 		return nil, fmt.Errorf("find credentials: %w", err)
 	}
 
+	// Normalize the BackupEligible flag for the matching credential.
+	// The WebAuthn spec states BE should never change, but some platform authenticators
+	// (iCloud Keychain, Google Password Manager) have been observed to report a different
+	// BE flag during login than what was stored at registration time.
+	responseBE := parsedResponse.Response.AuthenticatorData.Flags.HasBackupEligible()
+	storedBE := (protocol.AuthenticatorFlags(cred.Flags) & protocol.FlagBackupEligible) != 0
+	if storedBE != responseBE {
+		s.logger.Warn("Normalizing BackupEligible flag for passkey login",
+			zap.Bool("stored", storedBE),
+			zap.Bool("response", responseBE),
+			zap.String("account_id", utility.MaskOpaqueID(cred.AccountID)),
+			zap.String("credential_id", utility.MaskOpaqueID(cred.ID)),
+		)
+		flags := protocol.AuthenticatorFlags(cred.Flags)
+		if responseBE {
+			flags |= protocol.FlagBackupEligible
+		} else {
+			flags &^= protocol.FlagBackupEligible
+		}
+		cred.Flags = uint8(flags)
+		for i := range allCreds {
+			if allCreds[i].ID == cred.ID {
+				allCreds[i].Flags = cred.Flags
+				break
+			}
+		}
+	}
+
 	user := domain.NewWebAuthnUser(cred.AccountID, "", "", toCredentialSlice(allCreds))
 
-	waCred, err := s.web.FinishLogin(user, sessionData, request)
+	waCred, err := s.finishLogin(user, sessionData, request)
 	if err != nil {
 		return nil, fmt.Errorf("finish login: %w", err)
 	}
 
-	// Update sign count for clone detection.
+	// Update sign count and flags for clone detection.
 	// Per WebAuthn spec: sign count of 0 means the authenticator does not support
 	// counters. Only update if the new count is non-zero (authenticator supports it).
 	if waCred.Authenticator.SignCount > 0 {
 		cred.SignCount = waCred.Authenticator.SignCount
 	}
+	cred.Flags = uint8(waCred.Flags.ProtocolValue())
 	cred.MarkUsed()
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
@@ -350,6 +380,19 @@ func (s *PasskeyService) completeLoginInternal(ctx context.Context, requestID, e
 	}
 
 	return cred, nil
+}
+
+// finishLogin dispatches to the correct Finish* method based on whether
+// this was a discoverable login (session.UserID is nil) or a known-user
+// login (session.UserID is non-nil).
+func (s *PasskeyService) finishLogin(user *domain.WebAuthnUser, sessionData wa.SessionData, request *http.Request) (*wa.Credential, error) {
+	if len(sessionData.UserID) == 0 {
+		_, cred, err := s.web.FinishPasskeyLogin(func(rawID, userHandle []byte) (wa.User, error) {
+			return user, nil
+		}, sessionData, request)
+		return cred, err
+	}
+	return s.web.FinishLogin(user, sessionData, request)
 }
 
 // HasPasskeys checks if the account has any available passkey

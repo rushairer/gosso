@@ -29,7 +29,7 @@ func (r *webAuthnCredentialRepositoryImpl) CreateCredential(ctx context.Context,
 
 	query := `
 		INSERT INTO webauthn_credentials
-		(id, account_id, credential_id, public_key, sign_count, aaguid, transports, attestation_type, name, verified, created_at, updated_at)
+		(id, account_id, credential_id, public_key, sign_count, aaguid, transports, attestation_type, name, flags, verified, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 
@@ -47,6 +47,7 @@ func (r *webAuthnCredentialRepositoryImpl) CreateCredential(ctx context.Context,
 		transportsJSON,
 		cred.AttestationType,
 		cred.Name,
+		cred.Flags,
 		cred.Verified,
 		cred.CreatedAt,
 		cred.UpdatedAt,
@@ -60,7 +61,7 @@ func (r *webAuthnCredentialRepositoryImpl) CreateCredential(ctx context.Context,
 
 func (r *webAuthnCredentialRepositoryImpl) FindByCredentialID(ctx context.Context, credentialID string) (*domain.WebAuthnCredential, error) {
 	query := `
-		SELECT id, account_id, credential_id, public_key, sign_count, aaguid, transports, attestation_type, name, verified, created_at, updated_at, last_used_at, deleted_at
+		SELECT id, account_id, credential_id, public_key, sign_count, aaguid, transports, attestation_type, name, flags, verified, created_at, updated_at, last_used_at, deleted_at
 		FROM webauthn_credentials
 		WHERE credential_id = $1 AND deleted_at IS NULL
 		LIMIT 1
@@ -79,7 +80,7 @@ func (r *webAuthnCredentialRepositoryImpl) FindByCredentialID(ctx context.Contex
 
 func (r *webAuthnCredentialRepositoryImpl) FindByAccountID(ctx context.Context, accountID string) ([]*domain.WebAuthnCredential, error) {
 	query := `
-		SELECT id, account_id, credential_id, public_key, sign_count, aaguid, transports, attestation_type, name, verified, created_at, updated_at, last_used_at, deleted_at
+		SELECT id, account_id, credential_id, public_key, sign_count, aaguid, transports, attestation_type, name, flags, verified, created_at, updated_at, last_used_at, deleted_at
 		FROM webauthn_credentials
 		WHERE account_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at ASC
@@ -114,7 +115,7 @@ func (r *webAuthnCredentialRepositoryImpl) UpdateCredential(ctx context.Context,
 
 	query := `
 		UPDATE webauthn_credentials
-		SET sign_count = $2, transports = $3, last_used_at = $4, name = $5, updated_at = NOW()
+		SET sign_count = $2, transports = $3, last_used_at = $4, name = $5, flags = $6, updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
@@ -124,6 +125,7 @@ func (r *webAuthnCredentialRepositoryImpl) UpdateCredential(ctx context.Context,
 		transportsJSON,
 		cred.LastUsedAt,
 		cred.Name,
+		cred.Flags,
 	)
 	if err != nil {
 		return fmt.Errorf("update webauthn credential: %w", err)

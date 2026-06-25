@@ -31,6 +31,7 @@ type WebAuthnCredential struct {
 	Transports      []string   `json:"transports,omitempty"`
 	AttestationType string     `json:"attestation_type"`
 	Name            string     `json:"name"`
+	Flags           uint8      `json:"flags"`
 	Verified        bool       `json:"verified"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
@@ -117,6 +118,7 @@ func (c *WebAuthnCredential) ToWebAuthnCredential() wa.Credential {
 		ID:              c.CredentialID,
 		PublicKey:       c.PublicKey,
 		AttestationType: c.AttestationType,
+		Flags:           wa.CredentialFlagsFromMsgpByte(c.Flags),
 		Authenticator: wa.Authenticator{
 			AAGUID:    c.AAGUID,
 			SignCount: c.SignCount,
