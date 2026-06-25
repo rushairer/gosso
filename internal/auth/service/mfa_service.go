@@ -117,8 +117,8 @@ func (s *MFAService) RequireTOTPEncryption() error {
 
 // MFAStatus holds the combined MFA status for an account.
 type MFAStatus struct {
-	Enabled bool
-	Types   []string
+	Enabled bool     `json:"enabled"`
+	Types   []string `json:"types"`
 }
 
 // GetMFAStatus returns the MFA enabled flag and the list of available MFA types
@@ -270,10 +270,43 @@ func (s *MFAService) VerifyTOTP(ctx context.Context, accountID, code string) (bo
 	return false, nil
 }
 
+// verifyTOTPIncludeUnverified verifies TOTP code against ALL non-deleted credentials,
+// including those with Verified=false. Used by ActivateTOTP during first-time enrollment
+// when the only credential is the newly enrolled (unverified) one.
+func (s *MFAService) verifyTOTPIncludeUnverified(ctx context.Context, accountID, code string) (bool, error) {
+	creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
+	if err != nil {
+		return false, fmt.Errorf("find totp credential: %w", err)
+	}
+
+	for _, c := range creds {
+		if c.IsDeleted() {
+			continue
+		}
+		secret := c.Value
+		if s.totpEncryptionKey != nil {
+			dec, err := decryptSecret(c.Value, s.totpEncryptionKey)
+			if err != nil {
+				s.logger.Error("Failed to decrypt TOTP secret", zap.String("cred_id", c.ID), zap.Error(err))
+				continue
+			}
+			secret = dec
+		}
+		if totp.Validate(code, secret) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // ActivateTOTP activates TOTP (marks as verified)
 func (s *MFAService) ActivateTOTP(ctx context.Context, accountID, code string) error {
-	// Verify code first
-	valid, err := s.VerifyTOTP(ctx, accountID, code)
+	// Verify code against ALL non-deleted TOTP credentials, including unverified ones.
+	// During first-time enrollment, the only credential is the newly enrolled one
+	// (Verified=false). The standard VerifyTOTP skips unverified credentials, so we
+	// use a dedicated activation verification that checks all non-deleted credentials.
+	valid, err := s.verifyTOTPIncludeUnverified(ctx, accountID, code)
 	if err != nil {
 		return err
 	}

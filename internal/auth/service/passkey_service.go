@@ -140,7 +140,8 @@ func (s *PasskeyService) BeginRegistration(ctx context.Context, accountID, usern
 
 // CompleteRegistration completes Passkey registration.
 // requestID must match the one returned by BeginRegistration.
-func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, accountID, username, displayName string, request *http.Request) (*domain.WebAuthnCredential, error) {
+// name is the user-chosen friendly name for the passkey; defaults to "Passkey" if empty.
+func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, accountID, username, displayName, name string, request *http.Request) (*domain.WebAuthnCredential, error) {
 	// Get challenge from Redis using the requestID
 	key := fmt.Sprintf(redisKeyRegChallenge, requestID)
 	data, err := s.redis.GetDel(ctx, key)
@@ -168,6 +169,10 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, ac
 	}
 
 	// Save credential to database
+	credName := name
+	if credName == "" {
+		credName = "Passkey"
+	}
 	cred, err := domain.NewWebAuthnCredential(domain.NewWebAuthnCredentialParams{
 		AccountID:       accountID,
 		CredentialID:    credential.ID,
@@ -176,7 +181,7 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, ac
 		Transports:      transportsToStrings(credential.Transport),
 		SignCount:       credential.Authenticator.SignCount,
 		AAGUID:          credential.Authenticator.AAGUID,
-		Name:            "Passkey",
+		Name:            credName,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create webauthn credential: %w", err)

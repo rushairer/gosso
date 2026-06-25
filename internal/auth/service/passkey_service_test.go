@@ -426,7 +426,7 @@ func TestCompleteRegistration_MissingChallenge(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{}"))
-	_, err := svc.CompleteRegistration(context.Background(), "test-request-id", "acct-1", "alice", "Alice", req)
+	_, err := svc.CompleteRegistration(context.Background(), "test-request-id", "acct-1", "alice", "Alice", "", req)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "challenge not found")
 }

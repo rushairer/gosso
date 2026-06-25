@@ -44,12 +44,21 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		}
 	}
 
-	// 3. Validate session BEFORE rotation (prevents orphaned token on failure)
+	// 3. Validate session BEFORE rotation (prevents orphaned token on failure).
+	// Skip session validation when SessionID is empty — this happens for OIDC
+	// tokens that don't carry a session binding. The JWT auth middleware already
+	// permits SessionID="" (skips session check), so the refresh flow must be
+	// consistent: an OIDC token that works as an access token must also be refreshable.
 	sessionID := oldRT.SessionID
-	session, err := s.sessionSvc.ValidateSession(ctx, sessionID)
-	if err != nil {
-		s.logger.Debug("Session validation failed during token refresh", zap.Error(err))
-		return nil, ErrSessionInvalid
+	if sessionID != "" {
+		_, err := s.sessionSvc.ValidateSession(ctx, sessionID)
+		if err != nil {
+			s.logger.Debug("Session validation failed during token refresh", zap.Error(err))
+			return nil, ErrSessionInvalid
+		}
+	} else {
+		s.logger.Debug("Refresh token has no session binding; skipping session validation",
+			zap.String("account_id", utility.MaskOpaqueID(oldRT.AccountID)))
 	}
 
 	// 4 & 5. Validate account and build token claims in parallel — neither depends on the other.
@@ -68,7 +77,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 
 	g.Go(func() error {
 		var buildErr error
-		claims, buildErr = s.buildTokenClaims(gctx, oldRT.AccountID, session.ID)
+		claims, buildErr = s.buildTokenClaims(gctx, oldRT.AccountID, sessionID)
 		if buildErr != nil {
 			return fmt.Errorf("build token claims: %w", buildErr)
 		}
@@ -93,17 +102,20 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 
 	// 7. Refresh session TTL (best-effort). If this fails the new tokens are
 	// still valid and usable, but the session may expire sooner than expected.
+	// Skip for session-less tokens (OIDC flow with empty SessionID).
 	sessionRefreshOK := true
-	if err := s.sessionSvc.RefreshSession(ctx, sessionID); err != nil {
-		sessionRefreshOK = false
-		s.logger.Warn("Failed to refresh session; tokens are still valid but session may expire early",
-			zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
+	if sessionID != "" {
+		if err := s.sessionSvc.RefreshSession(ctx, sessionID); err != nil {
+			sessionRefreshOK = false
+			s.logger.Warn("Failed to refresh session; tokens are still valid but session may expire early",
+				zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
+		}
 	}
 
 	return &RefreshResult{
 		AccessToken:          accessToken,
 		RefreshToken:         newRefreshToken.Token,
-		SessionID:            session.ID,
+		SessionID:            sessionID,
 		SessionRefreshFailed: !sessionRefreshOK,
 	}, nil
 }

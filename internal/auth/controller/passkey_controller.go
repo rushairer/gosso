@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/google/uuid"
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
@@ -29,7 +30,23 @@ var passkeyDeleteErrorMap = []controllerutil.ErrorRule{
 }
 
 // passkeyOptionsResponse constructs the passkey options response body.
+// Unwraps the go-webauthn library's "publicKey" wrapper so the frontend
+// receives options at the top level (challenge, rp, user, etc.).
 func passkeyOptionsResponse(options any, requestID string) gin.H {
+	// go-webauthn wraps options as {"publicKey": {...}}.
+	// The frontend and navigator.credentials.create expect the inner object directly.
+	if cc, ok := options.(*protocol.CredentialCreation); ok {
+		return gin.H{
+			"options":    cc.Response,
+			"request_id": requestID,
+		}
+	}
+	if ca, ok := options.(*protocol.CredentialAssertion); ok {
+		return gin.H{
+			"options":    ca.Response,
+			"request_id": requestID,
+		}
+	}
 	return gin.H{
 		"options":    options,
 		"request_id": requestID,
@@ -113,6 +130,11 @@ func (c *PasskeyController) RegisterBegin(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(passkeyOptionsResponse(options, requestID)))
 }
 
+// RegisterCompleteRequest is the passkey registration complete request body.
+type RegisterCompleteRequest struct {
+	Name string `json:"name"` // User-chosen friendly name; defaults to "Passkey" if empty
+}
+
 // RegisterComplete POST /api/auth/passkey/register/complete
 func (c *PasskeyController) RegisterComplete(ctx *gin.Context) {
 	requestID, ok := controllerutil.ValidateUUID(ctx, ctx.Query("request_id"), "request_id")
@@ -125,7 +147,11 @@ func (c *PasskeyController) RegisterComplete(ctx *gin.Context) {
 		return
 	}
 
-	cred, err := c.passkeySvc.CompleteRegistration(ctx, requestID, accountID, username, displayName, ctx.Request)
+	var req RegisterCompleteRequest
+	// Name is optional — ignore parse errors (the body is the WebAuthn attestation)
+	_ = ctx.ShouldBindJSON(&req)
+
+	cred, err := c.passkeySvc.CompleteRegistration(ctx, requestID, accountID, username, displayName, req.Name, ctx.Request)
 	if err != nil {
 		c.logger.Error("Failed to complete passkey registration", zap.Error(err))
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "registration failed"))

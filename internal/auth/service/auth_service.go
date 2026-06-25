@@ -369,6 +369,7 @@ func (s *AuthService) buildTokenClaims(ctx context.Context, accountID, sessionID
 		Roles:       roleNames,
 		Permissions: permissions,
 		SessionID:   sessionID,
+		Scope:       "openid profile email",
 	}, nil
 }
 
