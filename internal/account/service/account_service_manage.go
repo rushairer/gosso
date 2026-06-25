@@ -242,6 +242,72 @@ func (s *accountServiceImpl) ChangePassword(ctx context.Context, accountID, oldP
 	return nil
 }
 
+// AdminChangePassword changes the account password from an administrator context.
+func (s *accountServiceImpl) AdminChangePassword(ctx context.Context, accountID, newPassword string) error {
+	// 1. Validate new password strength before doing expensive work
+	if err := utility.ValidatePasswordStrength(newPassword); err != nil {
+		return err
+	}
+
+	// 2. Fail-fast: ensure session revoker is configured before modifying data
+	if s.sessionRevoker == nil {
+		return fmt.Errorf("%w: cannot revoke sessions on password change", ErrSessionRevokerNotBound)
+	}
+
+	// 3. Hash new password (CPU-intensive, done outside the transaction)
+	newPasswordHash, err := domain.HashPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("hash new password: %w", err)
+	}
+
+	// 4. Find + update inside a single transaction with row-level locking
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// Verify account is active inside the transaction
+		account, findErr := s.accountRepo.FindByIDTx(ctx, tx, accountID)
+		if findErr != nil {
+			return findErr
+		}
+		if !account.IsActive() {
+			return ErrAccountNotActive
+		}
+
+		// Find password credential with row-level locking
+		creds, credErr := s.credentialRepo.FindByAccountAndTypeForUpdate(ctx, tx, accountID, domain.CredentialTypePassword)
+		if credErr != nil {
+			return fmt.Errorf("find password credential: %w", credErr)
+		}
+		if len(creds) == 0 {
+			return repository.ErrCredentialNotFound
+		}
+		passwordCred := creds[0]
+
+		// Update password without verifying old password
+		passwordCred.Value = newPasswordHash
+		return s.credentialRepo.UpdateCredential(ctx, tx, passwordCred)
+	})
+	if err != nil {
+		return err
+	}
+
+	// 5. Revoke all existing sessions so that any attacker with a stolen session is kicked out
+	if revokeErr := s.sessionRevoker.RevokeAllForAccount(ctx, accountID); revokeErr != nil {
+		s.logger.Error("Failed to revoke sessions after admin password change",
+			zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(revokeErr))
+		return fmt.Errorf("password changed but session revocation failed: %w", revokeErr)
+	}
+
+	// 6. Audit log (sync — critical security event)
+	s.auditLogSync(ctx, auditDomain.NewRecord(
+		auditDomain.ActionPasswordChange,
+		audit.IPFromContext(ctx),
+		utility.Ptr[string](accountID),
+		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID, "admin_action": true}),
+		auditMetaFromContext(ctx),
+	))
+
+	return nil
+}
+
 // SuspendAccount suspends the account atomically.
 func (s *accountServiceImpl) SuspendAccount(ctx context.Context, accountID string) error {
 	// Fail-fast: ensure session revoker is configured before modifying data

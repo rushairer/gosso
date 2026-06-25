@@ -12,6 +12,7 @@ import (
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
 // ──────────────────────────────────────────────
@@ -168,4 +169,106 @@ func TestResetPassword_InvalidToken(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, w.Body.String(), "invalid or expired reset token")
+}
+
+// ──────────────────────────────────────────────
+// ChangePassword tests
+// ──────────────────────────────────────────────
+
+func TestChangePassword_Success(t *testing.T) {
+	passwordChanged := false
+	authSvc := &mockAuthOrchestrator{
+		verifyPasswordFn: func() error {
+			return nil
+		},
+		changePasswordFn: func(oldPassword, newPassword string) error {
+			assert.Equal(t, "oldPassword123!", oldPassword)
+			assert.Equal(t, "newPassword123!", newPassword)
+			passwordChanged = true
+			return nil
+		},
+	}
+	tokenMgr := &mockTokenManager{}
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+	}
+	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+
+	body := `{"current_password":"oldPassword123!","new_password":"newPassword123!"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/password/change", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, passwordChanged)
+}
+
+func TestChangePassword_InvalidCurrentPassword(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{
+		verifyPasswordFn: func() error {
+			return fmt.Errorf("incorrect password")
+		},
+	}
+	tokenMgr := &mockTokenManager{}
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+	}
+	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+
+	body := `{"current_password":"wrongPassword!","new_password":"newPassword123!"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/password/change", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "incorrect current password")
+}
+
+func TestChangePassword_InvalidBody(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
+	tokenMgr := &mockTokenManager{}
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+	}
+	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+
+	// Password too short (requires min 12 characters as defined in binding)
+	body := `{"current_password":"oldPassword123!","new_password":"short"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/password/change", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestChangePassword_ValidationError(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{
+		verifyPasswordFn: func() error {
+			return nil
+		},
+		changePasswordFn: func(oldPassword, newPassword string) error {
+			return fmt.Errorf("password must contain uppercase, lowercase, digit, and special character")
+		},
+	}
+	tokenMgr := &mockTokenManager{}
+	claims := &tokenDomain.AccessTokenClaims{
+		AccountID: "account-001",
+	}
+	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+
+	body := `{"current_password":"oldPassword123!","new_password":"newPassword123!"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/password/change", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "password must contain uppercase, lowercase, digit, and special character")
 }

@@ -43,6 +43,7 @@ type mockAuthOrchestrator struct {
 	revokeSessionFn   func() error
 	verifyPasswordFn  func() error
 	mfaSvc            *service.MFAService
+	changePasswordFn  func(oldPassword, newPassword string) error
 }
 
 func (m *mockAuthOrchestrator) LoginByUsernamePassword(_ context.Context, _ *service.LoginCommand) (*service.LoginResult, error) {
@@ -107,6 +108,13 @@ func (m *mockAuthOrchestrator) VerifyCurrentPassword(_ context.Context, _, _ str
 
 func (m *mockAuthOrchestrator) MFAService() *service.MFAService         { return m.mfaSvc }
 func (m *mockAuthOrchestrator) PasskeyService() *service.PasskeyService { return nil }
+
+func (m *mockAuthOrchestrator) ChangePassword(_ context.Context, _, oldPassword, newPassword string) error {
+	if m.changePasswordFn != nil {
+		return m.changePasswordFn(oldPassword, newPassword)
+	}
+	return nil
+}
 
 type mockTokenManager struct {
 	accessExpiry time.Duration
@@ -343,6 +351,10 @@ func (m *mockAccountServiceForSocial) VerifyContactCredential(_ context.Context,
 }
 
 func (m *mockAccountServiceForSocial) ChangePassword(_ context.Context, _, _, _ string) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockAccountServiceForSocial) AdminChangePassword(_ context.Context, _, _ string) error {
 	return fmt.Errorf("not implemented")
 }
 

@@ -337,6 +337,10 @@ func (m *mockAccountSvcForReset) ChangePassword(_ context.Context, _, _, _ strin
 	return fmt.Errorf("not implemented")
 }
 
+func (m *mockAccountSvcForReset) AdminChangePassword(_ context.Context, _, _ string) error {
+	return fmt.Errorf("not implemented")
+}
+
 func (m *mockAccountSvcForReset) BindFederatedIdentity(_ context.Context, _ string, _ accountDomain.Provider, _ string, _ map[string]interface{}) error {
 	return fmt.Errorf("not implemented")
 }

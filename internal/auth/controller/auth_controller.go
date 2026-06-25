@@ -44,6 +44,7 @@ type authServiceDeps interface {
 	RevokeSession(ctx context.Context, accountID, sessionID string) error
 	ConfirmVerificationCredential(ctx context.Context, credType, identifier, accountID string) error
 	VerifyCurrentPassword(ctx context.Context, accountID, password string) error
+	ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error
 	MFAService() *authService.MFAService
 	PasskeyService() *authService.PasskeyService
 }
@@ -124,6 +125,7 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, cfg AuthRouteConfig
 		{
 			protected.POST("/logout", c.Logout)
 			protected.GET("/session", c.GetSession)
+			protected.POST("/password/change", withOptionalLimit(cfg.PasswordLimit, c.ChangePassword)...)
 
 			// Session management (JWT + optional rate limiting)
 			protected.GET("/sessions", withOptionalLimit(cfg.SessionLimit, c.ListSessions)...)

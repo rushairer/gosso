@@ -48,6 +48,9 @@ func (m *mockAccountService) VerifyContactCredential(_ context.Context, _ string
 func (m *mockAccountService) ChangePassword(_ context.Context, _, _, _ string) error {
 	return nil
 }
+func (m *mockAccountService) AdminChangePassword(_ context.Context, _, _ string) error {
+	return nil
+}
 func (m *mockAccountService) BindFederatedIdentity(_ context.Context, _ string, _ accountDomain.Provider, _ string, _ map[string]interface{}) error {
 	return nil
 }

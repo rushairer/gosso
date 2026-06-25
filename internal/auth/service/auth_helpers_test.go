@@ -74,6 +74,10 @@ func (m *testAccountService) ChangePassword(_ context.Context, _, _, _ string) e
 	return fmt.Errorf("not implemented")
 }
 
+func (m *testAccountService) AdminChangePassword(_ context.Context, _, _ string) error {
+	return fmt.Errorf("not implemented")
+}
+
 func (m *testAccountService) BindFederatedIdentity(_ context.Context, _ string, _ accountDomain.Provider, _ string, _ map[string]interface{}) error {
 	return fmt.Errorf("not implemented")
 }

@@ -250,6 +250,11 @@ func (s *AuthService) VerifyCurrentPassword(ctx context.Context, accountID, pass
 	return nil
 }
 
+// ChangePassword changes the password for an account.
+func (s *AuthService) ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error {
+	return s.accountSvc.ChangePassword(ctx, accountID, oldPassword, newPassword)
+}
+
 // ConfirmVerificationCredential confirms a verification code and marks the credential as verified.
 // It verifies that the credential belongs to the specified account before updating.
 func (s *AuthService) ConfirmVerificationCredential(ctx context.Context, credType, identifier, accountID string) error {

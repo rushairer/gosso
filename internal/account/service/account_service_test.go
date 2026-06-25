@@ -1248,6 +1248,7 @@ func (f *fakeAccountService) UpdateAccount(_ context.Context, _ *domain.Account)
 func (f *fakeAccountService) SoftDeleteAccount(_ context.Context, _ string) error       { return nil }
 func (f *fakeAccountService) VerifyContactCredential(_ context.Context, _ string) error { return nil }
 func (f *fakeAccountService) ChangePassword(_ context.Context, _, _, _ string) error    { return nil }
+func (f *fakeAccountService) AdminChangePassword(_ context.Context, _, _ string) error  { return nil }
 func (f *fakeAccountService) BindFederatedIdentity(_ context.Context, _ string, _ domain.Provider, _ string, _ map[string]interface{}) error {
 	return nil
 }

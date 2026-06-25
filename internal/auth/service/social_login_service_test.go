@@ -64,6 +64,9 @@ func (m *mockSocialAccountService) VerifyContactCredential(_ context.Context, _ 
 func (m *mockSocialAccountService) ChangePassword(_ context.Context, _, _, _ string) error {
 	panic("not implemented")
 }
+func (m *mockSocialAccountService) AdminChangePassword(_ context.Context, _, _ string) error {
+	panic("not implemented")
+}
 func (m *mockSocialAccountService) BindFederatedIdentity(_ context.Context, _ string, _ accountDomain.Provider, _ string, _ map[string]interface{}) error {
 	panic("not implemented")
 }

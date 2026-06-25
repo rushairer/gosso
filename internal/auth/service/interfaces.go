@@ -24,6 +24,7 @@ type AuthOrchestrator interface {
 	CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip, userAgent string) (*LoginResult, error)
 	ConfirmVerificationCredential(ctx context.Context, credType, identifier, accountID string) error
 	VerifyCurrentPassword(ctx context.Context, accountID, password string) error
+	ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error
 	MFAService() *MFAService
 	PasskeyService() *PasskeyService
 }

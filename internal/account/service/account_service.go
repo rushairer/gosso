@@ -50,6 +50,9 @@ type AccountService interface {
 	// ChangePassword changes the account password.
 	ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error
 
+	// AdminChangePassword changes the account password from an administrator context.
+	AdminChangePassword(ctx context.Context, accountID, newPassword string) error
+
 	// BindFederatedIdentity binds a third-party identity to the account.
 	BindFederatedIdentity(ctx context.Context, accountID string, provider domain.Provider, providerUserID string, profile map[string]any) error
 

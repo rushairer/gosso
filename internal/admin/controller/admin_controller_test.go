@@ -87,6 +87,7 @@ type mockAccountService struct {
 	getRolesFn     func() ([]*accountDomain.Role, error)
 	assignRoleFn   func() error
 	removeRoleFn   func() error
+	adminChangePasswordFn func(accountID, newPassword string) error
 }
 
 func (m *mockAccountService) RegisterAccount(_ context.Context, _ *accountService.RegisterAccountRequest) (*accountDomain.Account, error) {
@@ -115,6 +116,12 @@ func (m *mockAccountService) SoftDeleteAccount(_ context.Context, _ string) erro
 }
 func (m *mockAccountService) VerifyContactCredential(_ context.Context, _ string) error { return nil }
 func (m *mockAccountService) ChangePassword(_ context.Context, _, _, _ string) error    { return nil }
+func (m *mockAccountService) AdminChangePassword(_ context.Context, accountID, newPassword string) error {
+	if m.adminChangePasswordFn != nil {
+		return m.adminChangePasswordFn(accountID, newPassword)
+	}
+	return nil
+}
 func (m *mockAccountService) BindFederatedIdentity(_ context.Context, _ string, _ accountDomain.Provider, _ string, _ map[string]interface{}) error {
 	return nil
 }
@@ -764,4 +771,82 @@ func TestRemoveRole_SelfAccount(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestChangePassword_Success(t *testing.T) {
+	accountSvc := &mockAccountService{
+		adminChangePasswordFn: func(accountID, newPassword string) error {
+			assert.Equal(t, validUUID, accountID)
+			assert.Equal(t, "newPassword123!", newPassword)
+			return nil
+		},
+	}
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
+
+	body := `{"new_password":"newPassword123!"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/password", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestChangePassword_SelfAccount(t *testing.T) {
+	engine := setupAdminControllerWithAdminID(&mockAccountService{}, validUUID)
+
+	body := `{"new_password":"newPassword123!"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/password", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestChangePassword_InvalidBody(t *testing.T) {
+	engine := setupAdminControllerWithAdminID(&mockAccountService{}, adminUUID)
+
+	body := `{"new_password":"short"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/password", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestChangePassword_InactiveAccount(t *testing.T) {
+	accountSvc := &mockAccountService{
+		adminChangePasswordFn: func(accountID, newPassword string) error {
+			return accountService.ErrAccountNotActive
+		},
+	}
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
+
+	body := `{"new_password":"newPassword123!"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/password", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusConflict, w.Code)
+}
+
+func TestChangePassword_ValidationError(t *testing.T) {
+	accountSvc := &mockAccountService{
+		adminChangePasswordFn: func(accountID, newPassword string) error {
+			return fmt.Errorf("password must contain uppercase, lowercase, digit, and special character")
+		},
+	}
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
+
+	body := `{"new_password":"newPassword123!"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/password", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "password must contain uppercase, lowercase, digit, and special character")
 }
