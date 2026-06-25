@@ -92,6 +92,9 @@ func (m *mockSocialAccountService) GetAccountRoles(_ context.Context, _ string) 
 	panic("not implemented")
 }
 func (m *mockSocialAccountService) SetOptions(_ *accountService.AccountServiceOptions) {}
+func (m *mockSocialAccountService) ResetMFA(_ context.Context, _ string) error {
+	panic("not implemented")
+}
 
 // mockSocialFederatedIdentityRepo implements accountRepo.FederatedIdentityRepository.
 type mockSocialFederatedIdentityRepo struct {

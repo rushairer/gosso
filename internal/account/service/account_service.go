@@ -77,6 +77,9 @@ type AccountService interface {
 	// GetAccountRoles returns the roles assigned to the account.
 	GetAccountRoles(ctx context.Context, accountID string) ([]*domain.Role, error)
 
+	// ResetMFA soft-deletes all TOTP, WebAuthn (Passkeys) and BackupCode credentials for the account.
+	ResetMFA(ctx context.Context, accountID string) error
+
 	// SetOptions configures optional cross-module dependencies.
 	// Must be called during initialization before any dependent operations.
 	// The call is atomic: all fields in opts are applied together.

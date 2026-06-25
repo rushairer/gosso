@@ -116,6 +116,7 @@ func (c *AdminController) RegisterRoutes(rg *gin.RouterGroup) {
 		accounts.GET("/:account_id/lockout", c.GetLockoutStatus)
 		accounts.POST("/:account_id/lockout/clear", c.ClearLockout)
 		accounts.POST("/:account_id/password", c.ChangePassword)
+		accounts.POST("/:account_id/mfa/reset", c.ResetMFA)
 	}
 }
 
@@ -563,3 +564,29 @@ func (c *AdminController) ChangePassword(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("password changed successfully"))
 }
+
+// ResetMFA POST /api/admin/accounts/:account_id/mfa/reset
+func (c *AdminController) ResetMFA(ctx *gin.Context) {
+	accountID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("account_id"), "account_id")
+	if !ok {
+		return
+	}
+
+	if isSelfAccount(ctx, accountID) {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "cannot perform this operation on your own account"))
+		return
+	}
+
+	if err := c.accountSvc.ResetMFA(ctx, accountID); err != nil {
+		c.logger.Error("Failed to reset MFA", zap.String("account_id", accountID), zap.Error(err))
+		if errors.Is(err, accountRepository.ErrAccountNotFound) {
+			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "account not found"))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to reset MFA"))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("MFA reset successfully"))
+}
+

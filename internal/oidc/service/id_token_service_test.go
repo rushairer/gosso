@@ -69,6 +69,9 @@ func (m *mockAccountService) GetAccountRoles(_ context.Context, _ string) ([]*ac
 	return nil, nil
 }
 func (m *mockAccountService) SetOptions(_ *accountService.AccountServiceOptions) {}
+func (m *mockAccountService) ResetMFA(_ context.Context, _ string) error {
+	return nil
+}
 
 // mockCredentialRepo implements accountRepo.CredentialRepository for testing
 type mockCredentialRepo struct {

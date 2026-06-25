@@ -144,3 +144,28 @@ func (c *AuthController) MFAGenerateBackupCodes(ctx *gin.Context) {
 		"backup_codes": codes,
 	}))
 }
+
+// MFAStatus GET /api/auth/mfa
+func (c *AuthController) MFAStatus(ctx *gin.Context) {
+	tc, ok := getClaimsFromContext(ctx)
+	if !ok {
+		return
+	}
+
+	mfaSvc := c.authSvc.MFAService()
+	if mfaSvc == nil {
+		ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "MFA service not available"))
+		return
+	}
+
+	status, err := mfaSvc.GetMFAStatus(ctx, tc.AccountID)
+	if err != nil {
+		c.logger.Error("Failed to get MFA status", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to get MFA status"))
+		return
+	}
+
+	controllerutil.SetNoCacheHeaders(ctx)
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(status))
+}
+

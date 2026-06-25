@@ -391,6 +391,9 @@ func (m *mockAccountServiceForSocial) GetAccountRoles(_ context.Context, _ strin
 }
 
 func (m *mockAccountServiceForSocial) SetOptions(_ *accountService.AccountServiceOptions) {}
+func (m *mockAccountServiceForSocial) ResetMFA(_ context.Context, _ string) error {
+	return fmt.Errorf("not implemented")
+}
 
 type mockFederatedIdentityRepoForSocial struct {
 	findByProviderFn func(ctx context.Context, provider accountDomain.Provider, providerUserID string) (*accountDomain.FederatedIdentity, error)

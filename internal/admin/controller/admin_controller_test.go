@@ -89,6 +89,7 @@ type mockAccountService struct {
 	assignRoleFn          func() error
 	removeRoleFn          func() error
 	adminChangePasswordFn func(accountID, newPassword string) error
+	resetMFAFn            func() error
 }
 
 func (m *mockAccountService) RegisterAccount(_ context.Context, req *accountService.RegisterAccountRequest) (*accountDomain.Account, error) {
@@ -169,6 +170,12 @@ func (m *mockAccountService) GetAccountRoles(_ context.Context, _ string) ([]*ac
 	return nil, nil
 }
 func (m *mockAccountService) SetOptions(_ *accountService.AccountServiceOptions) {}
+func (m *mockAccountService) ResetMFA(_ context.Context, _ string) error {
+	if m.resetMFAFn != nil {
+		return m.resetMFAFn()
+	}
+	return nil
+}
 
 // ──────────────────────────────────────────────
 // Test helpers
@@ -905,3 +912,33 @@ func TestChangePassword_ValidationError(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, w.Body.String(), "password must contain uppercase, lowercase, digit, and special character")
 }
+
+func TestResetMFA_Success(t *testing.T) {
+	accountSvc := &mockAccountService{
+		resetMFAFn: func() error {
+			return nil
+		},
+	}
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+validUUID+"/mfa/reset", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "MFA reset successfully")
+}
+
+func TestResetMFA_SelfAccount(t *testing.T) {
+	accountSvc := &mockAccountService{}
+	engine := setupAdminControllerWithAdminID(accountSvc, adminUUID)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/accounts/"+adminUUID+"/mfa/reset", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+

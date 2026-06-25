@@ -374,3 +374,43 @@ func (s *accountServiceImpl) classifyRegistrationConflict(ctx context.Context, r
 	// If neither credential conflicts, it must be a username conflict
 	return ErrUsernameAlreadyTaken
 }
+
+// ResetMFA soft-deletes all TOTP, WebAuthn (Passkeys) and BackupCode credentials for the account.
+func (s *accountServiceImpl) ResetMFA(ctx context.Context, accountID string) error {
+	_, err := s.accountRepo.FindByID(ctx, accountID)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		// Soft delete TOTP credentials
+		if err := s.credentialRepo.SoftDeleteCredentialsByType(ctx, tx, accountID, domain.CredentialTypeTOTP, now); err != nil {
+			return fmt.Errorf("delete totp: %w", err)
+		}
+		// Soft delete Backup Code credentials
+		if err := s.credentialRepo.SoftDeleteCredentialsByType(ctx, tx, accountID, domain.CredentialTypeBackupCode, now); err != nil {
+			return fmt.Errorf("delete backup codes: %w", err)
+		}
+		// Soft delete WebAuthn (Passkey) credentials
+		if err := s.credentialRepo.SoftDeleteCredentialsByType(ctx, tx, accountID, domain.CredentialTypeWebAuthn, now); err != nil {
+			return fmt.Errorf("delete webauthn: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// Write audit log
+	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+		auditDomain.ActionMFADisable,
+		audit.IPFromContext(ctx),
+		utility.Ptr[string](accountID),
+		utility.MarshalJSONOrEmpty(map[string]any{"account_id": accountID, "reset_by": "admin"}),
+		auditMetaFromContext(ctx),
+	))
+
+	return nil
+}
+

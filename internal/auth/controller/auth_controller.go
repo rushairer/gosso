@@ -136,6 +136,7 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, cfg AuthRouteConfig
 			protected.POST("/verify/confirm", withOptionalLimit(cfg.VerifyLimit, c.ConfirmVerification)...)
 
 			// MFA management (requires JWT + optional rate limiting)
+			protected.GET("/mfa", withOptionalLimit(cfg.MFALimit, c.MFAStatus)...)
 			protected.POST("/mfa/enroll", withOptionalLimit(cfg.MFALimit, c.MFAEnroll)...)
 			protected.POST("/mfa/activate", withOptionalLimit(cfg.MFALimit, c.MFAActivate)...)
 			protected.DELETE("/mfa", withOptionalLimit(cfg.MFALimit, c.MFADisable)...)

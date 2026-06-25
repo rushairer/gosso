@@ -110,6 +110,9 @@ func (m *testAccountService) GetAccountRoles(_ context.Context, _ string) ([]*ac
 	return nil, fmt.Errorf("not implemented")
 }
 func (m *testAccountService) SetOptions(_ *accountService.AccountServiceOptions) {}
+func (m *testAccountService) ResetMFA(_ context.Context, _ string) error {
+	return fmt.Errorf("not implemented")
+}
 
 // ──────────────────────────────────────────────
 // mock RoleRepository for auth tests
