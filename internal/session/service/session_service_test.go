@@ -612,6 +612,63 @@ func TestSessionService_EnforceSessionLimit(t *testing.T) {
 	assert.LessOrEqual(t, len(sessions), 2)
 }
 
+func TestSessionService_EnforceSessionLimit_PreservesProtectedSessionOnTimestampTie(t *testing.T) {
+	redisClient, mr := testutil.SetupTestRedis(t)
+	defer mr.Close()
+	testutil.SkipIfNoCJSON(t, redisClient)
+
+	logger := zap.NewNop()
+	svc, err := NewSessionServiceWithConfig(redisClient, logger, SessionConfig{
+		SessionTTL:   10 * time.Second,
+		MaxSessions:  2,
+		TokenRevoker: &stubTokenRevoker{},
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	accountID := uuid.New().String()
+	sharedTime := time.Unix(1700000000, 0).UTC()
+
+	sessionIDs := []string{
+		uuid.New().String(),
+		uuid.New().String(),
+		uuid.New().String(),
+	}
+	protectedID := sessionIDs[2]
+
+	indexKey := svc.buildAccountSessionsKey(accountID)
+	for _, sid := range sessionIDs {
+		session := &domain.Session{
+			ID:           sid,
+			AccountID:    accountID,
+			Username:     "u",
+			IP:           "1.1.1.1",
+			UserAgent:    "a",
+			CreatedAt:    sharedTime,
+			LastActiveAt: sharedTime,
+		}
+		data, err := json.Marshal(session)
+		require.NoError(t, err)
+		require.NoError(t, redisClient.Set(ctx, svc.buildSessionKey(sid), data, 10*time.Second))
+		require.NoError(t, redisClient.SAdd(ctx, indexKey, sid))
+	}
+	require.NoError(t, redisClient.Expire(ctx, indexKey, 10*time.Second))
+
+	err = svc.enforceSessionLimit(ctx, accountID, protectedID)
+	require.NoError(t, err)
+
+	remaining, err := svc.ListSessionsByAccount(ctx, accountID)
+	require.NoError(t, err)
+	require.Len(t, remaining, 2)
+
+	remainingIDs := make(map[string]struct{}, len(remaining))
+	for _, session := range remaining {
+		remainingIDs[session.ID] = struct{}{}
+	}
+	_, ok := remainingIDs[protectedID]
+	assert.True(t, ok, "protected session should not be evicted when other sessions can be removed")
+}
+
 func TestSessionService_EnforceSessionLimit_Disabled(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	defer mr.Close()

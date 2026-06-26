@@ -25,10 +25,12 @@ return members
 //
 // KEYS[1] = account_sessions:{accountID}
 // ARGV[1] = maxSessions (number of sessions to keep)
+// ARGV[2] = protectedSessionID (optional session ID to preserve during eviction)
 // Returns: array of evicted session ID strings (may be empty)
 var evictOldestSessionsScript = redis.NewScript(`
 local indexKey = KEYS[1]
 local maxSessions = tonumber(ARGV[1])
+local protectedSessionID = ARGV[2] or ''
 local cjson_ok, cjson = pcall(require, 'cjson')
 
 local sessionIDs = redis.call('SMEMBERS', indexKey)
@@ -73,16 +75,48 @@ for i = 1, #corrupted do
     redis.call('SREM', indexKey, corrupted[i])
 end
 
--- Sort by last_active_at (ascending = oldest first)
-table.sort(sessions, function(a, b) return a.ts < b.ts end)
+-- Sort by last_active_at (ascending = oldest first).
+-- Break ties by session ID to keep eviction deterministic when timestamps match.
+table.sort(sessions, function(a, b)
+    if a.ts == b.ts then
+        return a.id < b.id
+    end
+    return a.ts < b.ts
+end)
 
--- Evict the oldest sessions exceeding the limit
-local toRemove = #sessions - maxSessions
 local evicted = {}
-for i = 1, toRemove do
-    redis.call('DEL', 'session:' .. sessions[i].id)
-    redis.call('SREM', indexKey, sessions[i].id)
-    table.insert(evicted, sessions[i].id)
+local remaining = #sessions
+
+-- First pass: evict oldest non-protected sessions.
+for i = 1, #sessions do
+    if remaining <= maxSessions then
+        break
+    end
+    local sid = sessions[i].id
+    if sid ~= protectedSessionID then
+        redis.call('DEL', 'session:' .. sid)
+        redis.call('SREM', indexKey, sid)
+        table.insert(evicted, sid)
+        remaining = remaining - 1
+    end
+end
+
+-- Second pass: if preservation would otherwise exceed the limit, evict the
+-- protected session as a last resort. This should only happen with invalid
+-- configs such as maxSessions < 1.
+if remaining > maxSessions and protectedSessionID ~= '' then
+    for i = 1, #sessions do
+        if remaining <= maxSessions then
+            break
+        end
+        local sid = sessions[i].id
+        if sid == protectedSessionID then
+            redis.call('DEL', 'session:' .. sid)
+            redis.call('SREM', indexKey, sid)
+            table.insert(evicted, sid)
+            remaining = remaining - 1
+        end
+    end
 end
 return evicted
 `)

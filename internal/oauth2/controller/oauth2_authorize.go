@@ -16,12 +16,25 @@ import (
 
 	"github.com/rushairer/gosso/internal/cache"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
 	"github.com/rushairer/gosso/middleware"
 )
 
 const consentStateTTL = 10 * time.Minute
 const consentStateKeyPrefix = "consent_state:"
+
+func sessionIDFromContext(ctx *gin.Context) string {
+	claimsRaw, ok := ctx.Get(middleware.ContextKeyClaims)
+	if !ok {
+		return ""
+	}
+	claims, ok := claimsRaw.(*tokenDomain.AccessTokenClaims)
+	if !ok {
+		return ""
+	}
+	return claims.SessionID
+}
 
 // consentState stores the PKCE and authorization parameters from the GET /authorize request.
 // It is persisted in Redis to prevent tampering between the consent page render and the POST.
@@ -101,6 +114,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 	if !ok {
 		return
 	}
+	sessionID := sessionIDFromContext(ctx)
 
 	// Verify the account is still active — suspended accounts must not generate authorization codes.
 	if !c.accountValidator.IsAccountActive(ctx, accountIDStr) {
@@ -160,7 +174,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 			})
 			return
 		}
-		code, err := c.authCodeSvc.GenerateCode(ctx, clientID, accountIDStr, redirectURI, allowedScopes, codeChallenge, codeChallengeMethod, nonce)
+		code, err := c.authCodeSvc.GenerateCode(ctx, clientID, accountIDStr, redirectURI, allowedScopes, codeChallenge, codeChallengeMethod, nonce, sessionID)
 		if err != nil {
 			c.logger.Error("Failed to generate authorization code for existing consent", zap.Error(err))
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -338,7 +352,8 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		return
 	}
 
-	code, err := c.authCodeSvc.GenerateCode(ctx, req.ClientID, accountIDStr, req.RedirectURI, scopes, req.CodeChallenge, req.CodeChallengeMethod, req.Nonce)
+	sessionID := sessionIDFromContext(ctx)
+	code, err := c.authCodeSvc.GenerateCode(ctx, req.ClientID, accountIDStr, req.RedirectURI, scopes, req.CodeChallenge, req.CodeChallengeMethod, req.Nonce, sessionID)
 	if err != nil {
 		c.logger.Error("Failed to generate authorization code after consent approval", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})

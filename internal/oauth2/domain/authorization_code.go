@@ -13,6 +13,7 @@ type AuthorizationCode struct {
 	Code                string    `json:"code"`
 	ClientID            string    `json:"client_id"`
 	AccountID           string    `json:"account_id"`
+	SessionID           string    `json:"session_id,omitempty"`
 	RedirectURI         string    `json:"redirect_uri"`
 	Scopes              []string  `json:"scopes"`
 	CodeChallenge       string    `json:"code_challenge,omitempty"`

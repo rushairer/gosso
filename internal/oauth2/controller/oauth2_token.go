@@ -148,6 +148,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		AccountID: authCode.AccountID,
 		Scope:     strings.Join(authCode.Scopes, " "),
 		ClientID:  authCode.ClientID,
+		SessionID: authCode.SessionID,
 		Roles:     roles,
 	})
 	if err != nil {
@@ -158,7 +159,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 
 	var refreshToken *tokenDomain.RefreshToken
 	if client.HasGrantType("refresh_token") {
-		refreshToken, err = c.tokenSvc.GenerateRefreshToken(ctx, authCode.AccountID, authCode.ClientID, "", strings.Join(authCode.Scopes, " "))
+		refreshToken, err = c.tokenSvc.GenerateRefreshToken(ctx, authCode.AccountID, authCode.ClientID, authCode.SessionID, strings.Join(authCode.Scopes, " "))
 		if err != nil {
 			c.logger.Error("Failed to generate refresh token for authorization code", zap.Error(err), zap.String("client_id", req.ClientID))
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})

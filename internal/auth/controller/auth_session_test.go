@@ -96,18 +96,14 @@ func TestGetSession_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestGetSession_ServiceError(t *testing.T) {
-	authSvc := &mockAuthOrchestrator{
-		validateSessionFn: func() (*sessionDomain.Session, error) {
-			return nil, fmt.Errorf("session not found")
-		},
-	}
+func TestGetSession_MissingValidatedSession(t *testing.T) {
+	authSvc := &mockAuthOrchestrator{}
 	tokenMgr := &mockTokenManager{}
 	claims := &tokenDomain.AccessTokenClaims{
 		AccountID: "account-001",
 		SessionID: "session-001",
 	}
-	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
+	engine := setupAuthControllerWithClaimsOnly(authSvc, tokenMgr, claims)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
 	w := httptest.NewRecorder()

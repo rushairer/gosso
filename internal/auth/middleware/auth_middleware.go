@@ -73,9 +73,13 @@ func ValidateBearerTokenWithConfig(ctx *gin.Context, tokenSvc TokenValidator, se
 		if sessionValidator == nil {
 			return nil, errUnauthorized
 		}
-		if _, err := sessionValidator.ValidateSession(ctx.Request.Context(), claims.SessionID); err != nil {
+		session, err := sessionValidator.ValidateSession(ctx.Request.Context(), claims.SessionID)
+		if err != nil {
 			return nil, errUnauthorized
 		}
+		// Store session in context so downstream handlers (e.g. GetSession) can
+		// reuse it without a second Redis round-trip.
+		ctx.Set(middleware.ContextKeySession, session)
 	}
 
 	return claims, nil

@@ -168,7 +168,7 @@ func (s *SessionService) CreateSession(ctx context.Context, session *domain.Sess
 	}
 
 	// Enforce maximum concurrent session limit
-	if err := s.EnforceSessionLimit(ctx, session.AccountID); err != nil {
+	if err := s.enforceSessionLimit(ctx, session.AccountID, session.ID); err != nil {
 		if s.indexFailClosed {
 			s.logger.Error("Failed to enforce session limit (fail-closed)",
 				zap.Error(err), zap.String("account_id", utility.MaskOpaqueID(session.AccountID)))
@@ -359,6 +359,11 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 	key := s.buildSessionKey(sessionID)
 	data, err := s.redis.GetEx(ctx, key, s.sessionTTL)
 	if errors.Is(err, cache.ErrKeyNotFound) {
+		s.logger.Warn("ValidateSession: session key not found in Redis (expired or deleted)",
+			zap.String("session_id", utility.MaskOpaqueID(sessionID)),
+			zap.Duration("session_ttl", s.sessionTTL),
+			zap.Duration("max_session_age", s.maxSessionAge),
+		)
 		return nil, ErrSessionNotFound
 	}
 	if err != nil {
@@ -388,8 +393,10 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 
 	// Check absolute max session lifetime (prevents indefinite session extension)
 	if s.maxSessionAge > 0 && time.Since(session.CreatedAt) > s.maxSessionAge {
-		s.logger.Warn("Session exceeded max lifetime",
+		s.logger.Warn("ValidateSession: session exceeded max lifetime",
 			zap.String("session_id", utility.MaskOpaqueID(sessionID)),
+			zap.Time("created_at", session.CreatedAt),
+			zap.Duration("age", time.Since(session.CreatedAt)),
 			zap.Duration("max_age", s.maxSessionAge))
 		s.expireSession(ctx, sessionID, s.buildAccountSessionsKey(session.AccountID))
 		return nil, ErrSessionExpired
@@ -397,7 +404,11 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 
 	// Check if session has expired due to inactivity
 	if session.IsExpired(s.sessionTTL) {
-		s.logger.Warn("Session expired", zap.String("session_id", utility.MaskOpaqueID(sessionID)))
+		s.logger.Warn("ValidateSession: session expired due to inactivity",
+			zap.String("session_id", utility.MaskOpaqueID(sessionID)),
+			zap.Time("last_active_at", session.LastActiveAt),
+			zap.Duration("inactive_for", time.Since(session.LastActiveAt)),
+			zap.Duration("ttl", s.sessionTTL))
 		s.expireSession(ctx, sessionID, s.buildAccountSessionsKey(session.AccountID))
 		return nil, ErrSessionExpired
 	}

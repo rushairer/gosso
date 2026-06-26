@@ -34,7 +34,7 @@ func TestGenerateCode(t *testing.T) {
 	ctx := context.Background()
 
 	code, err := svc.GenerateCode(ctx, "client-001", "account-001", "http://localhost/callback",
-		[]string{"openid", "profile"}, "", "", "test-nonce")
+		[]string{"openid", "profile"}, "", "", "test-nonce", "session-001")
 	require.NoError(t, err)
 
 	assert.NotEmpty(t, code.Code)
@@ -43,6 +43,7 @@ func TestGenerateCode(t *testing.T) {
 	assert.Equal(t, "http://localhost/callback", code.RedirectURI)
 	assert.Equal(t, []string{"openid", "profile"}, code.Scopes)
 	assert.Equal(t, "test-nonce", code.Nonce)
+	assert.Equal(t, "session-001", code.SessionID)
 	assert.True(t, code.ExpiresAt.After(time.Now()))
 }
 
@@ -53,12 +54,13 @@ func TestValidateCode_Success(t *testing.T) {
 	ctx := context.Background()
 
 	code, err := svc.GenerateCode(ctx, "client-002", "account-002", "http://localhost/callback",
-		[]string{"openid"}, "", "", "")
+		[]string{"openid"}, "", "", "", "session-002")
 	require.NoError(t, err)
 
 	validated, err := svc.ValidateCode(ctx, code.Code, "client-002", "http://localhost/callback", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "account-002", validated.AccountID)
+	assert.Equal(t, "session-002", validated.SessionID)
 	assert.Equal(t, []string{"openid"}, validated.Scopes)
 }
 
@@ -69,7 +71,7 @@ func TestValidateCode_SingleUse(t *testing.T) {
 	ctx := context.Background()
 
 	code, err := svc.GenerateCode(ctx, "client-003", "account-003", "http://localhost/callback",
-		[]string{"openid"}, "", "", "")
+		[]string{"openid"}, "", "", "", "")
 	require.NoError(t, err)
 
 	// First use succeeds
@@ -88,7 +90,7 @@ func TestValidateCode_ClientMismatch(t *testing.T) {
 	ctx := context.Background()
 
 	code, err := svc.GenerateCode(ctx, "client-004", "account-004", "http://localhost/callback",
-		[]string{"openid"}, "", "", "")
+		[]string{"openid"}, "", "", "", "")
 	require.NoError(t, err)
 
 	_, err = svc.ValidateCode(ctx, code.Code, "wrong-client", "http://localhost/callback", nil)
@@ -102,7 +104,7 @@ func TestValidateCode_URIMismatch(t *testing.T) {
 	ctx := context.Background()
 
 	code, err := svc.GenerateCode(ctx, "client-005", "account-005", "http://localhost/callback",
-		[]string{"openid"}, "", "", "")
+		[]string{"openid"}, "", "", "", "")
 	require.NoError(t, err)
 
 	_, err = svc.ValidateCode(ctx, code.Code, "client-005", "http://localhost/wrong", nil)
@@ -120,7 +122,7 @@ func TestValidateCode_PKCE_Success(t *testing.T) {
 	codeChallenge := domain.HashPKCEVerifier("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
 
 	code, err := svc.GenerateCode(ctx, "client-006", "account-006", "http://localhost/callback",
-		[]string{"openid"}, codeChallenge, "S256", "")
+		[]string{"openid"}, codeChallenge, "S256", "", "")
 	require.NoError(t, err)
 
 	verifier := "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
@@ -138,7 +140,7 @@ func TestValidateCode_PKCE_Fail(t *testing.T) {
 	codeChallenge := domain.HashPKCEVerifier("correct-verifier-must-be-at-least-43-characters-long")
 
 	code, err := svc.GenerateCode(ctx, "client-007", "account-007", "http://localhost/callback",
-		[]string{"openid"}, codeChallenge, "S256", "")
+		[]string{"openid"}, codeChallenge, "S256", "", "")
 	require.NoError(t, err)
 
 	wrongVerifier := "wrong-verifier-must-be-at-least-43-characters-long"
@@ -154,7 +156,7 @@ func TestValidateCode_Expired(t *testing.T) {
 
 	ctx := context.Background()
 	code, err := svc.GenerateCode(ctx, "client", "account", "http://localhost/callback",
-		[]string{"openid"}, "", "", "nonce")
+		[]string{"openid"}, "", "", "nonce", "")
 	require.NoError(t, err)
 
 	// Overwrite stored data with expired ExpiresAt while keeping Redis key alive
@@ -175,7 +177,7 @@ func TestValidateCode_PKCE_NilVerifier(t *testing.T) {
 	ctx := context.Background()
 	codeChallenge := domain.HashPKCEVerifier("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
 	code, err := svc.GenerateCode(ctx, "client", "account", "http://localhost/callback",
-		[]string{"openid"}, codeChallenge, "S256", "")
+		[]string{"openid"}, codeChallenge, "S256", "", "")
 	require.NoError(t, err)
 
 	// PKCE challenge was set but verifier is nil
@@ -191,7 +193,7 @@ func TestValidateCode_CorruptData(t *testing.T) {
 
 	ctx := context.Background()
 	code, err := svc.GenerateCode(ctx, "client", "account", "http://localhost/callback",
-		[]string{"openid"}, "", "", "")
+		[]string{"openid"}, "", "", "", "")
 	require.NoError(t, err)
 
 	// Overwrite stored data with invalid JSON
@@ -212,7 +214,7 @@ func TestGenerateCode_RedisError(t *testing.T) {
 	mr.Close()
 
 	_, err = svc.GenerateCode(ctx, "client", "account", "http://localhost/callback",
-		[]string{"openid"}, "", "", "")
+		[]string{"openid"}, "", "", "", "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "store authorization code")
 }

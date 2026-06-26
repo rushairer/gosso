@@ -206,6 +206,10 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 // number of concurrent sessions. Uses an atomic Lua script to eliminate the
 // TOCTOU window between reading the session list and deleting excess sessions.
 func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID string) error {
+	return s.enforceSessionLimit(ctx, accountID, "")
+}
+
+func (s *SessionService) enforceSessionLimit(ctx context.Context, accountID, protectedSessionID string) error {
 	if s.maxSessions <= 0 {
 		return nil
 	}
@@ -217,7 +221,7 @@ func (s *SessionService) EnforceSessionLimit(ctx context.Context, accountID stri
 	indexKey := s.buildAccountSessionsKey(accountID)
 	rdb := s.redis.GetClient()
 
-	raw, err := evictOldestSessionsScript.Run(ctx, rdb, []string{indexKey}, s.maxSessions).Result()
+	raw, err := evictOldestSessionsScript.Run(ctx, rdb, []string{indexKey}, s.maxSessions, protectedSessionID).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return fmt.Errorf("evict oldest sessions: %w", err)
 	}

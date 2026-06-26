@@ -9,8 +9,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/controllerutil"
+	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	utility "github.com/rushairer/gosso/internal/utility"
+	"github.com/rushairer/gosso/middleware"
 )
 
 // revokeSessionErrorMap maps session revocation errors to HTTP responses.
@@ -42,14 +44,19 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 
 // GetSession GET /api/auth/session
 func (c *AuthController) GetSession(ctx *gin.Context) {
-	tc, ok := getClaimsFromContext(ctx)
+	_, ok := getClaimsFromContext(ctx)
 	if !ok {
 		return
 	}
 
-	session, err := c.authSvc.ValidateSession(ctx, tc.SessionID)
-	if err != nil {
+	sessionRaw, exists := ctx.Get(middleware.ContextKeySession)
+	if !exists {
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "session invalid"))
+		return
+	}
+	session, ok := sessionRaw.(*sessionDomain.Session)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "invalid session type"))
 		return
 	}
 

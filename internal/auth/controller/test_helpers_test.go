@@ -476,6 +476,30 @@ func setupAuthControllerWithClaims(authSvc *mockAuthOrchestrator, tokenMgr *mock
 	engine := gin.New()
 	engine.Use(func(ctx *gin.Context) {
 		ctx.Set(middleware.ContextKeyClaims, claims)
+		ctx.Set(middleware.ContextKeySession, &sessionDomain.Session{
+			ID:           claims.SessionID,
+			AccountID:    claims.AccountID,
+			Username:     "test-user",
+			IP:           "127.0.0.1",
+			UserAgent:    "test-agent",
+			CreatedAt:    time.Now(),
+			LastActiveAt: time.Now(),
+		})
+		ctx.Next()
+	})
+
+	ctrl := NewAuthController(authSvc, tokenMgr, nil, nil, nil, false, zap.NewNop())
+	api := engine.Group("/api")
+	ctrl.RegisterRoutes(api, testRouteConfig())
+
+	return engine
+}
+
+func setupAuthControllerWithClaimsOnly(authSvc *mockAuthOrchestrator, tokenMgr *mockTokenManager, claims *tokenDomain.AccessTokenClaims) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyClaims, claims)
 		ctx.Next()
 	})
 

@@ -81,16 +81,28 @@ type mockTokenMgr struct {
 	introspectFn      func() (map[string]any, error)
 	validateRefreshFn func() (*tokenDomain.RefreshToken, error)
 	validateAccessFn  func() (*tokenDomain.AccessTokenClaims, error)
+	lastAccessClaims  *tokenDomain.AccessTokenClaims
+	lastRefreshArgs   struct {
+		accountID string
+		clientID  string
+		sessionID string
+		scope     string
+	}
 }
 
-func (m *mockTokenMgr) GenerateAccessToken(_ *tokenDomain.AccessTokenClaims) (string, error) {
+func (m *mockTokenMgr) GenerateAccessToken(claims *tokenDomain.AccessTokenClaims) (string, error) {
+	m.lastAccessClaims = claims
 	if m.generateAccessFn != nil {
 		return m.generateAccessFn()
 	}
 	return "mock-access-token", nil
 }
 
-func (m *mockTokenMgr) GenerateRefreshToken(_ context.Context, _, _, _, _ string) (*tokenDomain.RefreshToken, error) {
+func (m *mockTokenMgr) GenerateRefreshToken(_ context.Context, accountID, clientID, sessionID, scope string) (*tokenDomain.RefreshToken, error) {
+	m.lastRefreshArgs.accountID = accountID
+	m.lastRefreshArgs.clientID = clientID
+	m.lastRefreshArgs.sessionID = sessionID
+	m.lastRefreshArgs.scope = scope
 	if m.generateRefreshFn != nil {
 		return m.generateRefreshFn()
 	}
@@ -258,7 +270,7 @@ func (m *mockAuthCodeMgr) ValidateCode(_ context.Context, _, _, _ string, _ *str
 	}, nil
 }
 
-func (m *mockAuthCodeMgr) GenerateCode(_ context.Context, _, _, _ string, _ []string, _, _, _ string) (*oauth2Domain.AuthorizationCode, error) {
+func (m *mockAuthCodeMgr) GenerateCode(_ context.Context, _, _, _ string, _ []string, _, _, _, _ string) (*oauth2Domain.AuthorizationCode, error) {
 	if m.generateCodeFn != nil {
 		return m.generateCodeFn()
 	}
@@ -1999,12 +2011,24 @@ func setupAuthCodeRouter(
 
 func TestToken_AuthCode_Success(t *testing.T) {
 	client := newConfidentialTestClient()
+	tokenMgr := &mockTokenMgr{}
 	engine := setupAuthCodeRouter(
 		&mockOAuth2ClientSvcForOAuth2{
 			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
 		},
-		&mockTokenMgr{},
-		&mockAuthCodeMgr{},
+		tokenMgr,
+		&mockAuthCodeMgr{
+			validateCodeFn: func() (*oauth2Domain.AuthorizationCode, error) {
+				return &oauth2Domain.AuthorizationCode{
+					Code:      "valid-code",
+					ClientID:  "cid-test",
+					AccountID: "account-001",
+					SessionID: "session-001",
+					Scopes:    []string{"profile"},
+					AuthTime:  time.Now(),
+				}, nil
+			},
+		},
 		nil,
 		&mockAccountValidatorAlwaysActive{},
 	)
@@ -2024,6 +2048,9 @@ func TestToken_AuthCode_Success(t *testing.T) {
 	assert.Equal(t, "Bearer", resp["token_type"])
 	assert.Equal(t, float64(900), resp["expires_in"])
 	assert.Nil(t, resp["id_token"], "should not include id_token without openid scope")
+	require.NotNil(t, tokenMgr.lastAccessClaims)
+	assert.Equal(t, "session-001", tokenMgr.lastAccessClaims.SessionID)
+	assert.Equal(t, "session-001", tokenMgr.lastRefreshArgs.sessionID)
 }
 
 func TestToken_AuthCode_SuccessWithOpenID(t *testing.T) {

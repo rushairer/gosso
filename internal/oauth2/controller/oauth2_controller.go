@@ -39,7 +39,7 @@ type DeviceCodeManager interface {
 // AuthCodeManager defines authorization code generation and validation operations.
 type AuthCodeManager interface {
 	ValidateCode(ctx context.Context, code, clientID, redirectURI string, codeVerifier *string) (*oauth2Domain.AuthorizationCode, error)
-	GenerateCode(ctx context.Context, clientID, accountID, redirectURI string, scopes []string, codeChallenge, codeChallengeMethod, nonce string) (*oauth2Domain.AuthorizationCode, error)
+	GenerateCode(ctx context.Context, clientID, accountID, redirectURI string, scopes []string, codeChallenge, codeChallengeMethod, nonce, sessionID string) (*oauth2Domain.AuthorizationCode, error)
 }
 
 // ConsentManager defines user consent persistence and retrieval operations.
@@ -82,24 +82,24 @@ var resultTemplateFS embed.FS
 
 // OAuth2Controller handles OAuth2 protocol endpoints.
 type OAuth2Controller struct {
-	clientSvc                   oauth2Service.OAuth2ClientService
-	authCodeSvc                 AuthCodeManager
-	consentSvc                  ConsentManager
-	tokenSvc                    authService.TokenManager
-	idTokenSvc                  IDTokenManager
-	deviceCodeSvc               DeviceCodeManager
-	clientAuth                  ClientAuthManager
-	accountValidator            AccountValidator
-	sessionValidator            sessionDomain.SessionValidator
-	redis                       *cache.RedisClient
-	issuer                      string
-	enforcePKCEForConfidential  bool
-	consentTmpl                 *template.Template // html/template — never use text/template (would enable XSS)
-	deviceTmpl                  *template.Template
-	resultTmpl                  *template.Template
-	logger                      *zap.Logger
-	roleFetcher                 AccountRoleFetcher
-	includeUserRoles            bool
+	clientSvc                  oauth2Service.OAuth2ClientService
+	authCodeSvc                AuthCodeManager
+	consentSvc                 ConsentManager
+	tokenSvc                   authService.TokenManager
+	idTokenSvc                 IDTokenManager
+	deviceCodeSvc              DeviceCodeManager
+	clientAuth                 ClientAuthManager
+	accountValidator           AccountValidator
+	sessionValidator           sessionDomain.SessionValidator
+	redis                      *cache.RedisClient
+	issuer                     string
+	enforcePKCEForConfidential bool
+	consentTmpl                *template.Template // html/template — never use text/template (would enable XSS)
+	deviceTmpl                 *template.Template
+	resultTmpl                 *template.Template
+	logger                     *zap.Logger
+	roleFetcher                AccountRoleFetcher
+	includeUserRoles           bool
 }
 
 // NewOAuth2Controller creates a new OAuth2 controller instance.

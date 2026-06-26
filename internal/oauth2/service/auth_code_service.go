@@ -52,7 +52,7 @@ func (s *AuthCodeService) GenerateCode(
 	ctx context.Context,
 	clientID, accountID, redirectURI string,
 	scopes []string,
-	codeChallenge, codeChallengeMethod, nonce string,
+	codeChallenge, codeChallengeMethod, nonce, sessionID string,
 ) (*domain.AuthorizationCode, error) {
 	bytes := make([]byte, authCodeLength)
 	if _, err := rand.Read(bytes); err != nil {
@@ -65,6 +65,7 @@ func (s *AuthCodeService) GenerateCode(
 	if err != nil {
 		return nil, fmt.Errorf("create authorization code: %w", err)
 	}
+	ac.SessionID = sessionID
 	ac.CodeChallenge = codeChallenge
 	ac.CodeChallengeMethod = codeChallengeMethod
 	ac.Nonce = nonce
