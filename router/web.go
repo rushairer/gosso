@@ -227,6 +227,7 @@ func registerHealthRoutes(server *gin.Engine, db *sql.DB, redis *cache.RedisClie
 	})
 
 	server.GET("/readiness", healthLimit, func(ctx *gin.Context) {
+		start := time.Now()
 		checks := make(map[string]string)
 		ready := true
 
@@ -258,9 +259,12 @@ func registerHealthRoutes(server *gin.Engine, db *sql.DB, redis *cache.RedisClie
 		}
 
 		ctx.JSON(status, gin.H{
-			"status": statusStr,
-			"ready":  ready,
-			"checks": checks,
+			"status":      statusStr,
+			"ready":       ready,
+			"checks":      checks,
+			"checked_at":  time.Now().UTC().Format(time.RFC3339Nano),
+			"duration_ms": time.Since(start).Milliseconds(),
+			"http_status": status,
 		})
 	})
 }

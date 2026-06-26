@@ -65,6 +65,9 @@ func TestHealthRoutes(t *testing.T) {
 
 		assert.Equal(t, "ok", response["status"])
 		assert.Equal(t, true, response["ready"])
+		assert.Equal(t, float64(http.StatusOK), response["http_status"])
+		assert.NotEmpty(t, response["checked_at"])
+		assert.GreaterOrEqual(t, response["duration_ms"].(float64), float64(0))
 
 		checks := response["checks"].(map[string]interface{})
 		assert.Equal(t, "ok", checks["database"])
@@ -96,6 +99,8 @@ func TestHealthRoutes(t *testing.T) {
 
 		assert.Equal(t, "unavailable", response["status"])
 		assert.Equal(t, false, response["ready"])
+		assert.Equal(t, float64(http.StatusServiceUnavailable), response["http_status"])
+		assert.NotEmpty(t, response["checked_at"])
 
 		checks := response["checks"].(map[string]interface{})
 		assert.Equal(t, "unavailable", checks["database"])
