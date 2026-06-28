@@ -25,6 +25,9 @@ type AuthOrchestrator interface {
 	ConfirmVerificationCredential(ctx context.Context, credType, identifier, accountID string) error
 	VerifyCurrentPassword(ctx context.Context, accountID, password string) error
 	ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error
+	UpdateProfile(ctx context.Context, accountID string, displayName string) (*accountDomain.Account, error)
+	UpdateEmail(ctx context.Context, accountID string, newEmail string) error
+	IsEmailAvailable(ctx context.Context, email string) (bool, error)
 	MFAService() *MFAService
 	PasskeyService() *PasskeyService
 }

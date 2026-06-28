@@ -59,6 +59,7 @@ auth:
     # Dev-only TOTP key — set via GOUNO_AUTH_TOTP_ENCRYPTION_KEY env var (see docker-compose).
     # Default from config_manager.go is used when the env var is unset.
     totp_encryption_key: ""
+    verify_hash_pepper: ""
     access_token_expiry: 15m
     refresh_token_expiry: 168h
     authorization_code_expiry: 10m

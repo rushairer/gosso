@@ -30,7 +30,7 @@ func (r *webAuthnCredentialRepositoryImpl) CreateCredential(ctx context.Context,
 	query := `
 		INSERT INTO webauthn_credentials
 		(id, account_id, credential_id, public_key, sign_count, aaguid, transports, attestation_type, name, flags, verified, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`
 
 	if cred.UpdatedAt.IsZero() {

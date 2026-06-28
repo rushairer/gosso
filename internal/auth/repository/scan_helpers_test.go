@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"testing"
 	"time"
@@ -41,8 +42,8 @@ func TestScanWebAuthnCredential_Success(t *testing.T) {
 	}
 
 	rows := sqlmock.NewRows(webauthnColumns()).AddRow(
-		cred.ID, cred.AccountID, cred.CredentialID, cred.PublicKey, cred.SignCount,
-		cred.AAGUID, trJSON, cred.AttestationType, cred.Name, cred.Verified,
+		cred.ID, cred.AccountID, base64.RawURLEncoding.EncodeToString(cred.CredentialID), cred.PublicKey, cred.SignCount,
+		cred.AAGUID, trJSON, cred.AttestationType, cred.Name, cred.Flags, cred.Verified,
 		cred.CreatedAt, cred.UpdatedAt, lastUsedAt, nil, // deleted_at is NULL
 	)
 	mock.ExpectQuery("SELECT .+ FROM webauthn_credentials").WillReturnRows(rows)
@@ -86,8 +87,8 @@ func TestScanWebAuthnCredential_NilTransports(t *testing.T) {
 	now := time.Now()
 
 	rows := sqlmock.NewRows(webauthnColumns()).AddRow(
-		"cred-002", "account-002", []byte("cid"), []byte("pk"), uint32(0),
-		[]byte("aaguid"), nil, "none", "Passkey", false,
+		"cred-002", "account-002", base64.RawURLEncoding.EncodeToString([]byte("cid")), []byte("pk"), uint32(0),
+		[]byte("aaguid"), nil, "none", "Passkey", uint8(0), false,
 		now, now, nil, nil, // transports is nil (NULL), lastUsedAt NULL, deletedAt NULL
 	)
 	mock.ExpectQuery("SELECT .+ FROM webauthn_credentials").WillReturnRows(rows)
@@ -117,8 +118,8 @@ func TestScanWebAuthnCredential_NullableTimestamps(t *testing.T) {
 	trJSON, _ := json.Marshal([]string{"usb"})
 
 	rows := sqlmock.NewRows(webauthnColumns()).AddRow(
-		"cred-003", "account-003", []byte("cid"), []byte("pk"), uint32(10),
-		[]byte("aaguid"), trJSON, "none", "Hardware Key", true,
+		"cred-003", "account-003", base64.RawURLEncoding.EncodeToString([]byte("cid")), []byte("pk"), uint32(10),
+		[]byte("aaguid"), trJSON, "none", "Hardware Key", uint8(0), true,
 		now, now, lastUsedAt, deletedAt,
 	)
 	mock.ExpectQuery("SELECT .+ FROM webauthn_credentials").WillReturnRows(rows)

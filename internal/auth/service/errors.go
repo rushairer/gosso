@@ -49,4 +49,7 @@ var (
 
 	// Configuration errors
 	ErrInvalidConfig = errors.New("invalid configuration")
+
+	// Profile / Email errors
+	ErrEmailAlreadyInUse = errors.New("email already in use")
 )

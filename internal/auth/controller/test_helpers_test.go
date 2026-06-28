@@ -44,6 +44,9 @@ type mockAuthOrchestrator struct {
 	verifyPasswordFn  func() error
 	mfaSvc            *service.MFAService
 	changePasswordFn  func(oldPassword, newPassword string) error
+	updateProfileFn   func(accountID, displayName string) (*accountDomain.Account, error)
+	updateEmailFn     func(accountID, newEmail string) error
+	isEmailAvailableFn func(email string) (bool, error)
 }
 
 func (m *mockAuthOrchestrator) LoginByUsernamePassword(_ context.Context, _ *service.LoginCommand) (*service.LoginResult, error) {
@@ -114,6 +117,27 @@ func (m *mockAuthOrchestrator) ChangePassword(_ context.Context, _, oldPassword,
 		return m.changePasswordFn(oldPassword, newPassword)
 	}
 	return nil
+}
+
+func (m *mockAuthOrchestrator) UpdateProfile(_ context.Context, accountID string, displayName string) (*accountDomain.Account, error) {
+	if m.updateProfileFn != nil {
+		return m.updateProfileFn(accountID, displayName)
+	}
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockAuthOrchestrator) UpdateEmail(_ context.Context, accountID string, newEmail string) error {
+	if m.updateEmailFn != nil {
+		return m.updateEmailFn(accountID, newEmail)
+	}
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockAuthOrchestrator) IsEmailAvailable(_ context.Context, email string) (bool, error) {
+	if m.isEmailAvailableFn != nil {
+		return m.isEmailAvailableFn(email)
+	}
+	return false, fmt.Errorf("not implemented")
 }
 
 type mockTokenManager struct {

@@ -137,6 +137,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("auth.auth_cookie_name", "access_token")
 	v.SetDefault("auth.include_user_roles", false)
 	v.SetDefault("auth.include_user_permissions", false)
+	v.SetDefault("auth.verify_hash_pepper", "")
 	// Redis configuration
 	v.SetDefault("redis.max_active_conns", 10)
 	v.SetDefault("redis.pool_timeout_seconds", 5)

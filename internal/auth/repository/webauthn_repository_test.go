@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql/driver"
+	"encoding/base64"
 	"encoding/json"
 	"testing"
 	"time"
@@ -34,13 +35,13 @@ func newTestWebAuthnCred() *domain.WebAuthnCredential {
 
 func webauthnColumns() []string {
 	return []string{"id", "account_id", "credential_id", "public_key", "sign_count",
-		"aaguid", "transports", "attestation_type", "name", "verified", "created_at", "updated_at", "last_used_at", "deleted_at"}
+		"aaguid", "transports", "attestation_type", "name", "flags", "verified", "created_at", "updated_at", "last_used_at", "deleted_at"}
 }
 
 func webauthnRowValues(c *domain.WebAuthnCredential) []driver.Value {
 	trJSON, _ := json.Marshal(c.Transports)
-	return []driver.Value{c.ID, c.AccountID, c.CredentialID, c.PublicKey, c.SignCount,
-		c.AAGUID, trJSON, c.AttestationType, c.Name, c.Verified, c.CreatedAt, c.UpdatedAt, c.LastUsedAt, c.DeletedAt}
+	return []driver.Value{c.ID, c.AccountID, base64.RawURLEncoding.EncodeToString(c.CredentialID), c.PublicKey, c.SignCount,
+		c.AAGUID, trJSON, c.AttestationType, c.Name, c.Flags, c.Verified, c.CreatedAt, c.UpdatedAt, c.LastUsedAt, c.DeletedAt}
 }
 
 // ──────────────────────────────────────────────
@@ -57,8 +58,8 @@ func TestWebAuthn_CreateCredential_Success(t *testing.T) {
 
 	c := newTestWebAuthnCred()
 	mock.ExpectExec("INSERT INTO webauthn_credentials").
-		WithArgs(c.ID, c.AccountID, c.CredentialID, c.PublicKey, c.SignCount,
-			c.AAGUID, sqlmock.AnyArg(), c.AttestationType, c.Name, c.Verified, c.CreatedAt, c.UpdatedAt).
+		WithArgs(c.ID, c.AccountID, base64.RawURLEncoding.EncodeToString(c.CredentialID), c.PublicKey, c.SignCount,
+			c.AAGUID, sqlmock.AnyArg(), c.AttestationType, c.Name, c.Flags, c.Verified, c.CreatedAt, c.UpdatedAt).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewWebAuthnCredentialRepository(db)
@@ -168,7 +169,7 @@ func TestWebAuthn_UpdateCredential_Success(t *testing.T) {
 	now := time.Now()
 	c.LastUsedAt = &now
 	mock.ExpectExec("UPDATE webauthn_credentials").
-		WithArgs(c.ID, c.SignCount, sqlmock.AnyArg(), c.LastUsedAt, c.Name).
+		WithArgs(c.ID, c.SignCount, sqlmock.AnyArg(), c.LastUsedAt, c.Name, c.Flags).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	repo := NewWebAuthnCredentialRepository(db)

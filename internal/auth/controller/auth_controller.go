@@ -9,6 +9,7 @@ import (
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
+	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/controllerutil"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
@@ -45,6 +46,9 @@ type authServiceDeps interface {
 	ConfirmVerificationCredential(ctx context.Context, credType, identifier, accountID string) error
 	VerifyCurrentPassword(ctx context.Context, accountID, password string) error
 	ChangePassword(ctx context.Context, accountID, oldPassword, newPassword string) error
+	UpdateProfile(ctx context.Context, accountID string, displayName string) (*accountDomain.Account, error)
+	UpdateEmail(ctx context.Context, accountID string, newEmail string) error
+	IsEmailAvailable(ctx context.Context, email string) (bool, error)
 	MFAService() *authService.MFAService
 	PasskeyService() *authService.PasskeyService
 }
@@ -126,6 +130,9 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, cfg AuthRouteConfig
 			protected.POST("/logout", c.Logout)
 			protected.GET("/session", c.GetSession)
 			protected.POST("/password/change", withOptionalLimit(cfg.PasswordLimit, c.ChangePassword)...)
+			protected.PUT("/profile", c.UpdateProfile)
+			protected.POST("/profile/email/change/request", withOptionalLimit(cfg.VerifyLimit, c.RequestEmailChange)...)
+			protected.POST("/profile/email/change/confirm", withOptionalLimit(cfg.VerifyLimit, c.ConfirmEmailChange)...)
 
 			// Session management (JWT + optional rate limiting)
 			protected.GET("/sessions", withOptionalLimit(cfg.SessionLimit, c.ListSessions)...)

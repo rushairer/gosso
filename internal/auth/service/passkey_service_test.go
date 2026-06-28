@@ -307,9 +307,7 @@ func TestResolveAccountForRegistration_AccountNotFound(t *testing.T) {
 
 func TestDeleteCredential_NotFound(t *testing.T) {
 	credRepo := &mockWebAuthnRepo{
-		findByCredentialIDFn: func(_ context.Context, _ string) (*domain.WebAuthnCredential, error) {
-			return nil, errors.New("not found")
-		},
+		creds: map[string][]*domain.WebAuthnCredential{},
 	}
 	svc := newTestPasskeyService(credRepo)
 
@@ -319,14 +317,17 @@ func TestDeleteCredential_NotFound(t *testing.T) {
 
 func TestDeleteCredential_WrongAccount(t *testing.T) {
 	credRepo := &mockWebAuthnRepo{
-		findByCredentialIDFn: func(_ context.Context, _ string) (*domain.WebAuthnCredential, error) {
-			return &domain.WebAuthnCredential{ID: "cred-1", AccountID: "acct-owner"}, nil
+		creds: map[string][]*domain.WebAuthnCredential{
+			"acct-1": {
+				{ID: "cred-1", AccountID: "acct-1"},
+			},
 		},
 	}
 	svc := newTestPasskeyService(credRepo)
 
+	// Since we query by accountID "acct-other", it returns nothing and should throw Not Found
 	err := svc.DeleteCredential(context.Background(), "acct-other", "cred-1")
-	assert.ErrorIs(t, err, ErrCredentialOwnership)
+	assert.ErrorIs(t, err, accountRepository.ErrCredentialNotFound)
 }
 
 func TestDeleteCredential_Success(t *testing.T) {
@@ -338,8 +339,10 @@ func TestDeleteCredential_Success(t *testing.T) {
 	sqlMock.ExpectCommit()
 
 	credRepo := &mockWebAuthnRepo{
-		findByCredentialIDFn: func(_ context.Context, _ string) (*domain.WebAuthnCredential, error) {
-			return &domain.WebAuthnCredential{ID: "cred-1", AccountID: "acct-1"}, nil
+		creds: map[string][]*domain.WebAuthnCredential{
+			"acct-1": {
+				{ID: "cred-1", AccountID: "acct-1"},
+			},
 		},
 	}
 	svc := newTestPasskeyServiceWithDB(t, credRepo, sqlDB)

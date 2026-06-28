@@ -423,17 +423,25 @@ func (s *PasskeyService) ListCredentials(ctx context.Context, accountID string) 
 
 // DeleteCredential deletes a passkey (ownership check)
 func (s *PasskeyService) DeleteCredential(ctx context.Context, accountID, credentialID string) error {
-	cred, err := s.credRepo.FindByCredentialID(ctx, credentialID)
+	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
 	if err != nil {
+		return fmt.Errorf("find credentials by account: %w", err)
+	}
+
+	var target *domain.WebAuthnCredential
+	for _, c := range creds {
+		if c.ID == credentialID {
+			target = c
+			break
+		}
+	}
+
+	if target == nil {
 		return accountRepository.ErrCredentialNotFound
 	}
 
-	if cred.AccountID != accountID {
-		return ErrCredentialOwnership
-	}
-
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
-		return s.credRepo.SoftDeleteCredential(ctx, tx, cred.ID, time.Now())
+		return s.credRepo.SoftDeleteCredential(ctx, tx, target.ID, time.Now())
 	})
 	if err != nil {
 		return fmt.Errorf("delete credential: %w", err)
@@ -441,7 +449,7 @@ func (s *PasskeyService) DeleteCredential(ctx context.Context, accountID, creden
 
 	s.logger.Info("Passkey deleted",
 		zap.String("account_id", utility.MaskOpaqueID(accountID)),
-		zap.String("credential_id", utility.MaskOpaqueID(cred.ID)))
+		zap.String("credential_id", utility.MaskOpaqueID(target.ID)))
 
 	return nil
 }
