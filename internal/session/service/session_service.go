@@ -317,7 +317,7 @@ func (s *SessionService) RefreshSession(ctx context.Context, sessionID string) e
 
 	// Reject refresh if session has exceeded absolute max lifetime
 	if s.maxSessionAge > 0 && time.Since(session.CreatedAt) > s.maxSessionAge {
-		s.expireSession(ctx, sessionID, s.buildAccountSessionsKey(session.AccountID))
+		s.forceExpireSession(ctx, sessionID, s.buildAccountSessionsKey(session.AccountID))
 		return ErrSessionExpired
 	}
 
@@ -398,7 +398,7 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 			zap.Time("created_at", session.CreatedAt),
 			zap.Duration("age", time.Since(session.CreatedAt)),
 			zap.Duration("max_age", s.maxSessionAge))
-		s.expireSession(ctx, sessionID, s.buildAccountSessionsKey(session.AccountID))
+		s.forceExpireSession(ctx, sessionID, s.buildAccountSessionsKey(session.AccountID))
 		return nil, ErrSessionExpired
 	}
 
@@ -409,11 +409,47 @@ func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) 
 			zap.Time("last_active_at", session.LastActiveAt),
 			zap.Duration("inactive_for", time.Since(session.LastActiveAt)),
 			zap.Duration("ttl", s.sessionTTL))
-		s.expireSession(ctx, sessionID, s.buildAccountSessionsKey(session.AccountID))
+		s.forceExpireSession(ctx, sessionID, s.buildAccountSessionsKey(session.AccountID))
 		return nil, ErrSessionExpired
 	}
 
 	return session, nil
+}
+
+// isSessionActive checks logical session validity without refreshing Redis TTL.
+func (s *SessionService) isSessionActive(session *domain.Session) bool {
+	if session == nil {
+		return false
+	}
+	if s.maxSessionAge > 0 && time.Since(session.CreatedAt) > s.maxSessionAge {
+		return false
+	}
+	return !session.IsExpired(s.sessionTTL)
+}
+
+// forceExpireSession removes a session that is logically expired even if its
+// Redis TTL is still positive because a prior read refreshed the sliding window.
+func (s *SessionService) forceExpireSession(ctx context.Context, sessionID string, accountSessionsKey string) {
+	sessionKey := s.buildSessionKey(sessionID)
+	if err := s.redis.Del(ctx, sessionKey); err != nil {
+		s.logger.Warn("Failed to delete logically expired session",
+			zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(err))
+	}
+	if accountSessionsKey != "" {
+		if err := s.redis.SRem(ctx, accountSessionsKey, sessionID); err != nil {
+			s.logger.Warn("Failed to remove logically expired session from index",
+				zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(err))
+		}
+	}
+	if _, loaded := s.sessionCache.LoadAndDelete(sessionID); loaded {
+		s.cacheSize.Add(-1)
+	}
+	if s.tokenRevoker != nil {
+		if err := s.tokenRevoker.RevokeAllForSession(ctx, sessionID); err != nil {
+			s.logger.Warn("Failed to revoke tokens for logically expired session",
+				zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(err))
+		}
+	}
 }
 
 // expireSession cascades token revocation and deletes the session.

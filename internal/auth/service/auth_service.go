@@ -65,10 +65,9 @@ type LoginResult struct {
 
 // RefreshResult refresh token result
 type RefreshResult struct {
-	AccessToken          string
-	RefreshToken         string
-	SessionID            string
-	SessionRefreshFailed bool // true if session TTL extension failed (best-effort); tokens are still valid
+	AccessToken  string
+	RefreshToken string
+	SessionID    string
 }
 
 // AuthService authentication orchestration service

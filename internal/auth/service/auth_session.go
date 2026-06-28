@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -10,15 +12,29 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/audit"
+	"github.com/rushairer/gosso/internal/cache"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
 )
 
+const (
+	refreshTokenLockPrefix      = "auth_refresh_lock:"
+	refreshTokenLockTTL         = 30 * time.Second
+	refreshTokenLockWaitTimeout = 5 * time.Second
+	refreshTokenLockPoll        = 25 * time.Millisecond
+)
+
 // RefreshTokens refreshes access and refresh tokens
 func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*RefreshResult, error) {
+	return s.withRefreshTokenLock(ctx, refreshToken, func() (*RefreshResult, error) {
+		return s.refreshTokensLocked(ctx, refreshToken)
+	})
+}
+
+func (s *AuthService) refreshTokensLocked(ctx context.Context, refreshToken string) (*RefreshResult, error) {
 	// 1. Validate old refresh token (read-only, no rotation)
-	oldRT, err := s.tokenSvc.ValidateRefreshToken(ctx, refreshToken)
+	oldRT, replayedRotation, err := s.loadRefreshTokenForRefresh(ctx, refreshToken)
 	if err != nil {
 		s.logger.Debug("Refresh token validation failed", zap.Error(err))
 		return nil, ErrInvalidRefreshToken
@@ -93,31 +109,101 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		return nil, fmt.Errorf("generate access token: %w", err)
 	}
 
-	// 6. Rotate refresh token (old token deleted from Redis)
-	newRefreshToken, err := s.tokenSvc.RotateRefreshToken(ctx, refreshToken)
-	if err != nil {
-		s.logger.Debug("Refresh token rotation failed", zap.Error(err))
-		return nil, ErrInvalidRefreshToken
-	}
-
-	// 7. Refresh session TTL (best-effort). If this fails the new tokens are
-	// still valid and usable, but the session may expire sooner than expected.
-	// Skip for session-less tokens (OIDC flow with empty SessionID).
-	sessionRefreshOK := true
+	// 6. Refresh session activity before token rotation. A successful refresh
+	// response must mean the backing session is still active and has been
+	// extended; otherwise the caller would receive fresh tokens bound to a
+	// session that may immediately fail validation.
 	if sessionID != "" {
 		if err := s.sessionSvc.RefreshSession(ctx, sessionID); err != nil {
-			sessionRefreshOK = false
-			s.logger.Warn("Failed to refresh session; tokens are still valid but session may expire early",
+			s.logger.Debug("Session refresh failed during token refresh",
 				zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
+			return nil, ErrSessionInvalid
+		}
+	}
+
+	newRefreshToken := oldRT
+	if !replayedRotation {
+		// 7. Rotate refresh token (old token deleted from Redis)
+		var rotateErr error
+		newRefreshToken, rotateErr = s.tokenSvc.RotateRefreshToken(ctx, refreshToken)
+		if rotateErr != nil {
+			s.logger.Debug("Refresh token rotation failed", zap.Error(rotateErr))
+			return nil, ErrInvalidRefreshToken
 		}
 	}
 
 	return &RefreshResult{
-		AccessToken:          accessToken,
-		RefreshToken:         newRefreshToken.Token,
-		SessionID:            sessionID,
-		SessionRefreshFailed: !sessionRefreshOK,
+		AccessToken:  accessToken,
+		RefreshToken: newRefreshToken.Token,
+		SessionID:    sessionID,
 	}, nil
+}
+
+func (s *AuthService) loadRefreshTokenForRefresh(ctx context.Context, refreshToken string) (*tokenDomain.RefreshToken, bool, error) {
+	rt, err := s.tokenSvc.ValidateRefreshToken(ctx, refreshToken)
+	if err == nil {
+		return rt, false, nil
+	}
+	if !errors.Is(err, cache.ErrKeyNotFound) {
+		return nil, false, err
+	}
+
+	replayedRT, replayErr := s.tokenSvc.RotateRefreshToken(ctx, refreshToken)
+	if replayErr != nil {
+		return nil, false, err
+	}
+	return replayedRT, true, nil
+}
+
+func refreshTokenHashPrefix(refreshToken string) string {
+	if refreshToken == "" {
+		return ""
+	}
+	hash := tokenDomain.HashToken(refreshToken)
+	if len(hash) > 16 {
+		return hash[:16]
+	}
+	return hash
+}
+
+func (s *AuthService) withRefreshTokenLock(ctx context.Context, refreshToken string, fn func() (*RefreshResult, error)) (*RefreshResult, error) {
+	if s.redis == nil || refreshToken == "" {
+		return fn()
+	}
+
+	lockKey := refreshTokenLockPrefix + refreshTokenHashPrefix(refreshToken)
+	deadline := time.Now().Add(refreshTokenLockWaitTimeout)
+	for {
+		acquired, err := s.redis.SetNX(ctx, lockKey, "1", refreshTokenLockTTL)
+		if err != nil {
+			s.logger.Warn("Failed to acquire refresh token lock",
+				zap.Error(err),
+				zap.String("refresh_token_hash", refreshTokenHashPrefix(refreshToken)))
+			return nil, err
+		}
+		if acquired {
+			defer func() {
+				if err := s.redis.Del(context.Background(), lockKey); err != nil {
+					s.logger.Warn("Failed to release refresh token lock",
+						zap.Error(err),
+						zap.String("refresh_token_hash", refreshTokenHashPrefix(refreshToken)))
+				}
+			}()
+			return fn()
+		}
+
+		if time.Now().After(deadline) {
+			s.logger.Warn("Timed out waiting for refresh token lock",
+				zap.String("refresh_token_hash", refreshTokenHashPrefix(refreshToken)))
+			return nil, ErrInvalidRefreshToken
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(refreshTokenLockPoll):
+		}
+	}
 }
 
 // ValidateSession validates the session

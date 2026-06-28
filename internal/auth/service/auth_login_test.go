@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -285,6 +286,9 @@ func TestRefreshTokens_Success(t *testing.T) {
 		UserAgent: "test-agent",
 	})
 	require.NoError(t, err)
+	originalLastActiveAt := loginResult.Session.LastActiveAt
+
+	time.Sleep(2 * time.Millisecond)
 
 	refreshResult, err := fixture.svc.RefreshTokens(context.Background(), loginResult.RefreshToken)
 	require.NoError(t, err)
@@ -292,6 +296,75 @@ func TestRefreshTokens_Success(t *testing.T) {
 	assert.NotEmpty(t, refreshResult.RefreshToken)
 	assert.NotEqual(t, loginResult.RefreshToken, refreshResult.RefreshToken)
 	assert.Equal(t, loginResult.Session.ID, refreshResult.SessionID)
+
+	refreshedSession, err := fixture.sessionSvc.GetSession(context.Background(), loginResult.Session.ID)
+	require.NoError(t, err)
+	assert.True(t, refreshedSession.LastActiveAt.After(originalLastActiveAt))
+}
+
+func TestRefreshTokens_ReplaysRecentRotation(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
+		Username:  "testuser",
+		Password:  "password123",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	})
+	require.NoError(t, err)
+
+	firstRefresh, err := fixture.svc.RefreshTokens(context.Background(), loginResult.RefreshToken)
+	require.NoError(t, err)
+
+	replayedRefresh, err := fixture.svc.RefreshTokens(context.Background(), loginResult.RefreshToken)
+	require.NoError(t, err)
+	assert.NotEmpty(t, replayedRefresh.AccessToken)
+	assert.Equal(t, firstRefresh.RefreshToken, replayedRefresh.RefreshToken)
+	assert.Equal(t, loginResult.Session.ID, replayedRefresh.SessionID)
+}
+
+func TestRefreshTokens_ConcurrentSameRefreshToken(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
+		Username:  "testuser",
+		Password:  "password123",
+		IP:        "127.0.0.1",
+		UserAgent: "test-agent",
+	})
+	require.NoError(t, err)
+
+	const workers = 2
+	results := make([]*RefreshResult, workers)
+	errs := make([]error, workers)
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func(index int) {
+			defer wg.Done()
+			results[index], errs[index] = fixture.svc.RefreshTokens(context.Background(), loginResult.RefreshToken)
+		}(i)
+	}
+	wg.Wait()
+
+	for _, err := range errs {
+		require.NoError(t, err)
+	}
+	require.NotNil(t, results[0])
+	require.NotNil(t, results[1])
+	assert.NotEmpty(t, results[0].AccessToken)
+	assert.NotEmpty(t, results[1].AccessToken)
+	assert.Equal(t, results[0].RefreshToken, results[1].RefreshToken)
+	assert.Equal(t, loginResult.Session.ID, results[0].SessionID)
+	assert.Equal(t, loginResult.Session.ID, results[1].SessionID)
 }
 
 func TestRefreshTokens_InvalidToken(t *testing.T) {

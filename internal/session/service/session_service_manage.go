@@ -181,6 +181,10 @@ func (s *SessionService) ListSessionsByAccount(ctx context.Context, accountID st
 			staleIDs = append(staleIDs, entries[i].rawID)
 			continue
 		}
+		if !s.isSessionActive(&session) {
+			s.forceExpireSession(ctx, entries[i].rawID, indexKey)
+			continue
+		}
 		sessions = append(sessions, &session)
 	}
 

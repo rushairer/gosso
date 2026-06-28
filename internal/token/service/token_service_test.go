@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -243,6 +244,88 @@ func TestRotateRefreshToken(t *testing.T) {
 
 	// Clean up
 	_ = svc.RevokeRefreshToken(ctx, newRT.Token)
+}
+
+func TestRotateRefreshToken_ReplaysRecentRotation(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	ctx := audit.SetMetadata(context.Background(), "192.0.2.10", "test-agent", "req-001")
+
+	rt, err := svc.GenerateRefreshToken(ctx, "account-003", "client-003", "session-003", "openid")
+	require.NoError(t, err)
+
+	firstRotation, err := svc.RotateRefreshToken(ctx, rt.Token)
+	require.NoError(t, err)
+
+	replayedRotation, err := svc.RotateRefreshToken(ctx, rt.Token)
+	require.NoError(t, err)
+	assert.Equal(t, firstRotation.Token, replayedRotation.Token)
+	assert.Equal(t, firstRotation.AccountID, replayedRotation.AccountID)
+	assert.Equal(t, firstRotation.SessionID, replayedRotation.SessionID)
+
+	validated, err := svc.ValidateRefreshToken(ctx, replayedRotation.Token)
+	require.NoError(t, err)
+	assert.Equal(t, firstRotation.SessionID, validated.SessionID)
+
+	_ = svc.RevokeRefreshToken(ctx, firstRotation.Token)
+}
+
+func TestRotateRefreshToken_ReplaysWhenOldTokenDisappearsDuringRotation(t *testing.T) {
+	svc, cleanup := setupTestTokenService(t)
+	defer cleanup()
+
+	ctx := audit.SetMetadata(context.Background(), "192.0.2.10", "test-agent", "req-001")
+
+	rt, err := svc.GenerateRefreshToken(ctx, "account-003", "client-003", "session-003", "openid")
+	require.NoError(t, err)
+
+	firstRotation, err := svc.RotateRefreshToken(ctx, rt.Token)
+	require.NoError(t, err)
+
+	oldKey := svc.buildRefreshTokenKey(rt.Token)
+	oldHash := domain.HashToken(rt.Token)
+	newToken := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	newKey := svc.buildRefreshTokenKey(newToken)
+	newHash := domain.HashToken(newToken)
+	replayKey := svc.buildRefreshTokenReplayKey(oldHash)
+
+	newData, err := json.Marshal(&domain.RefreshToken{
+		AccountID: firstRotation.AccountID,
+		ClientID:  firstRotation.ClientID,
+		SessionID: firstRotation.SessionID,
+		Scope:     firstRotation.Scope,
+		IP:        firstRotation.IP,
+		UserAgent: firstRotation.UserAgent,
+		ExpiresAt: time.Now().Add(time.Hour),
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+	replayData, err := json.Marshal(refreshTokenReplay{
+		Token:     newToken,
+		AccountID: firstRotation.AccountID,
+		ClientID:  firstRotation.ClientID,
+		SessionID: firstRotation.SessionID,
+		Scope:     firstRotation.Scope,
+		IP:        firstRotation.IP,
+		UserAgent: firstRotation.UserAgent,
+		ExpiresAt: time.Now().Add(time.Hour),
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	result, err := svc.redis.RunScript(ctx, rotateTokenScript,
+		[]string{oldKey, newKey, replayKey},
+		oldHash, newHash, sessionTokensKeyPrefix, 3600, string(newData), string(replayData), 30,
+	).Result()
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	rotated, err := parseRefreshTokenReplay(result.(string))
+	require.NoError(t, err)
+	assert.Equal(t, firstRotation.Token, rotated.Token)
+
+	_ = svc.RevokeRefreshToken(ctx, firstRotation.Token)
 }
 
 func TestRevokeRefreshToken(t *testing.T) {

@@ -787,7 +787,8 @@ func TestSessionService_ListSessionsByAccount_StaleEntries(t *testing.T) {
 
 	// Manually create a valid session key in Redis (bypasses CreateSession
 	// to avoid EnforceSessionLimit's cjson Lua script failing in miniredis).
-	session := &domain.Session{ID: validID, AccountID: accountID, Username: "u", IP: "1.1.1.1", UserAgent: "a"}
+	now := time.Now()
+	session := &domain.Session{ID: validID, AccountID: accountID, Username: "u", IP: "1.1.1.1", UserAgent: "a", CreatedAt: now, LastActiveAt: now}
 	data, err := json.Marshal(session)
 	require.NoError(t, err)
 	require.NoError(t, service.redis.Set(ctx, service.buildSessionKey(validID), data, 10*time.Second))
@@ -814,6 +815,47 @@ func TestSessionService_ListSessionsByAccount_StaleEntries(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, members, 1)
 	assert.Equal(t, validID, members[0])
+}
+
+func TestSessionService_ListSessionsByAccount_OnlyReturnsActiveSessions(t *testing.T) {
+	service, cleanup := setupTestSessionService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	accountID := uuid.New().String()
+	now := time.Now()
+	validID := uuid.New().String()
+	expiredByInactivityID := uuid.New().String()
+	expiredByMaxAgeID := uuid.New().String()
+
+	service.maxSessionAge = 1 * time.Hour
+	sessions := []*domain.Session{
+		{ID: validID, AccountID: accountID, Username: "u", IP: "1.1.1.1", UserAgent: "a", CreatedAt: now, LastActiveAt: now},
+		{ID: expiredByInactivityID, AccountID: accountID, Username: "u", IP: "2.2.2.2", UserAgent: "b", CreatedAt: now, LastActiveAt: now.Add(-2 * service.sessionTTL)},
+		{ID: expiredByMaxAgeID, AccountID: accountID, Username: "u", IP: "3.3.3.3", UserAgent: "c", CreatedAt: now.Add(-2 * service.maxSessionAge), LastActiveAt: now},
+	}
+
+	indexKey := service.buildAccountSessionsKey(accountID)
+	for _, session := range sessions {
+		data, err := json.Marshal(session)
+		require.NoError(t, err)
+		require.NoError(t, service.redis.Set(ctx, service.buildSessionKey(session.ID), data, service.sessionTTL))
+		require.NoError(t, service.redis.GetClient().SAdd(ctx, indexKey, session.ID).Err())
+	}
+
+	active, err := service.ListSessionsByAccount(ctx, accountID)
+	require.NoError(t, err)
+	require.Len(t, active, 1)
+	assert.Equal(t, validID, active[0].ID)
+
+	_, err = service.GetSession(ctx, expiredByInactivityID)
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+	_, err = service.GetSession(ctx, expiredByMaxAgeID)
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+
+	members, err := service.redis.SMembers(ctx, indexKey)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{validID}, members)
 }
 
 func TestSessionService_RevokeSession_RevokerError(t *testing.T) {

@@ -21,6 +21,23 @@ import (
 	"github.com/rushairer/gosso/internal/utility"
 )
 
+const (
+	refreshTokenReplayKeyPrefix = "refresh_token_replay:"
+	refreshTokenReplayTTL       = 30 * time.Second
+)
+
+type refreshTokenReplay struct {
+	Token     string    `json:"token"`
+	AccountID string    `json:"account_id"`
+	ClientID  string    `json:"client_id,omitempty"`
+	SessionID string    `json:"session_id,omitempty"`
+	Scope     string    `json:"scope,omitempty"`
+	IP        string    `json:"ip,omitempty"`
+	UserAgent string    `json:"user_agent,omitempty"`
+	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // rotateAndDeleteAndCleanSessionScript atomically retrieves and deletes a refresh token,
 // then removes the token hash from the session index — all in a single Redis round-trip.
 // This prevents TOCTOU race conditions during refresh token rotation.
@@ -51,22 +68,28 @@ end
 return data
 `)
 
-// rotateTokenScript atomically reads and deletes the old refresh token, then
-// updates the session index (SREM old hash, SADD new hash) in a single Lua script.
+// rotateTokenScript atomically reads and deletes the old refresh token, stores
+// the new refresh token, records a short replay result, and updates the session
+// index (SREM old hash, SADD new hash) in a single Lua script.
 // The session ID is parsed from the old token JSON inside the script, eliminating
 // the need for a separate pre-read round-trip in Go.
 // Uses cjson.decode for robust JSON parsing when available (real Redis), falling back
 // to string pattern matching for environments without cjson (e.g., miniredis in tests).
 // KEYS[1] = old token key
+// KEYS[2] = new token key
+// KEYS[3] = replay key for old token hash
 // ARGV[1] = old token hash, ARGV[2] = new token hash, ARGV[3] = session key prefix,
-// ARGV[4] = expiry seconds (for session key TTL)
-// Returns old token data on success, nil if old token not found.
+// ARGV[4] = refresh token expiry seconds, ARGV[5] = new token data,
+// ARGV[6] = replay data, ARGV[7] = replay TTL seconds
+// Returns replay data on fresh rotation or replay hit, nil if old token not found.
 var rotateTokenScript = redis.NewScript(`
 local oldData = redis.call('GET', KEYS[1])
 if not oldData then
-    return nil
+    return redis.call('GET', KEYS[3])
 end
 redis.call('DEL', KEYS[1])
+redis.call('SET', KEYS[2], ARGV[5], 'EX', ARGV[4])
+redis.call('SET', KEYS[3], ARGV[6], 'EX', ARGV[7])
 local sessionID
 local cjson_ok, cjson = pcall(require, 'cjson')
 if cjson_ok then
@@ -83,8 +106,8 @@ if sessionID and sessionID ~= '' then
     redis.call('SADD', sessionKey, ARGV[2])
     redis.call('EXPIRE', sessionKey, ARGV[4])
 end
-return oldData
-`)
+return ARGV[6]
+	`)
 
 // revokeAllSessionScript atomically revokes all refresh tokens under a session:
 // reads all token hashes from the session set, deletes each refresh token key,
@@ -103,17 +126,10 @@ return #members
 `)
 
 // RotateRefreshToken rotates refresh tokens atomically.
-// The old token is read and deleted in a single Lua script that also updates the
-// session index, eliminating the separate pre-read round-trip. The new token is
-// then stored based on the old token data returned by the script.
-//
-// KNOWN TRADE-OFF: The old token deletion (step 3) and new token storage (step 5)
-// are NOT atomic — they are separate Redis commands. If the process crashes between
-// these steps, the old token is consumed and the new token is lost, forcing the user
-// to re-authenticate. This is a fail-safe design: the worst case is a lost session,
-// not a stolen token. Making this fully atomic would require a Lua script that
-// generates the new token token inside Redis (eliminating the Go-side step), but
-// that would couple token generation logic to Redis Lua and complicate error handling.
+// It consumes the old token, stores the new token, updates the session-token
+// index, and writes a short replay record in one Redis script. The replay record
+// lets concurrent browser retries using the just-consumed token receive the same
+// rotated token instead of failing the whole session.
 func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) (*domain.RefreshToken, error) {
 	// 1. Generate new token
 	newBytes := make([]byte, refreshTokenLength)
@@ -122,34 +138,26 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	}
 	newTokenString := hex.EncodeToString(newBytes)
 
-	// 2. Build keys and hashes
+	// 2. Load the old token metadata used to construct the replacement. If the
+	// old token was just consumed by a concurrent refresh, return the replayed
+	// rotated token when it is still inside the short grace window.
 	oldKey := s.buildRefreshTokenKey(oldToken)
-	newHash := domain.HashToken(newTokenString)
 	oldHash := domain.HashToken(oldToken)
-	newKey := s.buildRefreshTokenKey(newTokenString)
-	expirySeconds := int(math.Ceil(s.refreshExpiry.Seconds()))
-
-	// 3. Atomically read+delete old token and update session index in one Lua script.
-	//    The script parses session_id from the old token JSON in-script, avoiding
-	//    a separate pre-read GET round-trip.
-	result, err := s.redis.RunScript(ctx, rotateTokenScript,
-		[]string{oldKey},
-		oldHash, newHash, sessionTokensKeyPrefix, expirySeconds,
-	).Result()
-	if errors.Is(err, redis.Nil) || result == nil {
+	replayKey := s.buildRefreshTokenReplayKey(oldHash)
+	oldData, err := s.redis.Get(ctx, oldKey)
+	if errors.Is(err, cache.ErrKeyNotFound) {
+		replay, replayErr := s.getRefreshTokenReplay(ctx, replayKey)
+		if replayErr == nil {
+			return replay, nil
+		}
 		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("rotate refresh token: %w", err)
+		return nil, fmt.Errorf("get refresh token for rotation: %w", err)
 	}
 
-	// 4. Parse old token data returned by the script to build the new token.
-	oldDataStr, ok := result.(string)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type from rotate script: %T", result)
-	}
 	var oldRT domain.RefreshToken
-	if unmarshalErr := json.Unmarshal([]byte(oldDataStr), &oldRT); unmarshalErr != nil {
+	if unmarshalErr := json.Unmarshal([]byte(oldData), &oldRT); unmarshalErr != nil {
 		return nil, fmt.Errorf("unmarshal old refresh token: %w", unmarshalErr)
 	}
 
@@ -163,23 +171,64 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	newRT.IP = oldRT.IP
 	newRT.UserAgent = oldRT.UserAgent
 
-	// 5. Store the new token in Redis.
+	// 3. Atomically consume old token, store new token, update indexes, and
+	// publish a short replay result for concurrent retries.
+	newHash := domain.HashToken(newTokenString)
+	newKey := s.buildRefreshTokenKey(newTokenString)
+	expirySeconds := int(math.Ceil(s.refreshExpiry.Seconds()))
+	replaySeconds := int(math.Ceil(refreshTokenReplayTTL.Seconds()))
+
 	newData, err := json.Marshal(newRT)
 	if err != nil {
 		return nil, fmt.Errorf("marshal new refresh token: %w", err)
 	}
-	if err := s.redis.Set(ctx, newKey, newData, s.refreshExpiry); err != nil {
-		return nil, fmt.Errorf("store new refresh token: %w", err)
+	replayData, err := json.Marshal(refreshTokenReplay{
+		Token:     newRT.Token,
+		AccountID: newRT.AccountID,
+		ClientID:  newRT.ClientID,
+		SessionID: newRT.SessionID,
+		Scope:     newRT.Scope,
+		IP:        newRT.IP,
+		UserAgent: newRT.UserAgent,
+		ExpiresAt: newRT.ExpiresAt,
+		CreatedAt: newRT.CreatedAt,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal refresh token replay: %w", err)
+	}
+
+	result, err := s.redis.RunScript(ctx, rotateTokenScript,
+		[]string{oldKey, newKey, replayKey},
+		oldHash, newHash, sessionTokensKeyPrefix, expirySeconds, string(newData), string(replayData), replaySeconds,
+	).Result()
+	if errors.Is(err, redis.Nil) || result == nil {
+		replay, replayErr := s.getRefreshTokenReplay(ctx, replayKey)
+		if replayErr == nil {
+			return replay, nil
+		}
+		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("rotate refresh token: %w", err)
+	}
+
+	resultData, ok := result.(string)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type from rotate script: %T", result)
+	}
+	rotatedRT, err := parseRefreshTokenReplay(resultData)
+	if err != nil {
+		return nil, err
 	}
 
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionTokenRotate,
 		audit.IPFromContext(ctx),
-		utility.Ptr[string](newRT.AccountID),
+		utility.Ptr[string](rotatedRT.AccountID),
 		utility.MarshalJSONOrEmpty(map[string]any{
-			"session_id": newRT.SessionID,
+			"session_id": rotatedRT.SessionID,
 			"old_token":  oldHash,
-			"new_token":  newHash,
+			"new_token":  domain.HashToken(rotatedRT.Token),
 		}),
 		utility.MarshalJSONOrEmpty(map[string]any{
 			"ip":         audit.IPFromContext(ctx),
@@ -187,7 +236,47 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 		}),
 	))
 
-	return newRT, nil
+	return rotatedRT, nil
+}
+
+func (s *TokenService) buildRefreshTokenReplayKey(oldHash string) string {
+	return refreshTokenReplayKeyPrefix + oldHash
+}
+
+func (s *TokenService) getRefreshTokenReplay(ctx context.Context, replayKey string) (*domain.RefreshToken, error) {
+	data, err := s.redis.Get(ctx, replayKey)
+	if err != nil {
+		return nil, err
+	}
+	replay, err := parseRefreshTokenReplay(data)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.ValidateRefreshToken(ctx, replay.Token); err != nil {
+		return nil, err
+	}
+	return replay, nil
+}
+
+func parseRefreshTokenReplay(data string) (*domain.RefreshToken, error) {
+	var replay refreshTokenReplay
+	if err := json.Unmarshal([]byte(data), &replay); err != nil {
+		return nil, fmt.Errorf("unmarshal refresh token replay: %w", err)
+	}
+	if replay.Token == "" || replay.AccountID == "" || replay.ExpiresAt.IsZero() {
+		return nil, fmt.Errorf("invalid refresh token replay")
+	}
+	return &domain.RefreshToken{
+		Token:     replay.Token,
+		AccountID: replay.AccountID,
+		ClientID:  replay.ClientID,
+		SessionID: replay.SessionID,
+		Scope:     replay.Scope,
+		IP:        replay.IP,
+		UserAgent: replay.UserAgent,
+		ExpiresAt: replay.ExpiresAt,
+		CreatedAt: replay.CreatedAt,
+	}, nil
 }
 
 // RevokeRefreshToken revokes a refresh token and removes it from the session index.
