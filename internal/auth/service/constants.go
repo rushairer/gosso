@@ -4,6 +4,8 @@ package service
 const (
 	// ScopeMFA is the JWT scope for MFA verification tokens.
 	ScopeMFA = "mfa"
+	// ScopeAdmin is required on OAuth access tokens used for admin APIs.
+	ScopeAdmin = "admin"
 )
 
 // Role constants for RBAC.

@@ -163,6 +163,44 @@ gosso uses Viper for configuration. Settings are loaded in order: **YAML files â
 | `GOUNO_SMTP_FROM` | Sender address (e.g., `noreply@sso.example.com`) |
 | `GOUNO_SMTP_TLS_POLICY` | Must be `mandatory` in production |
 
+GOSSO uses SMTP for email verification codes and password reset links. SMTP is optional only if those flows are not used; once `GOUNO_SMTP_HOST` is configured, validation also requires a valid password reset base URL.
+
+#### Development with Mailpit
+
+The development Compose profiles use Mailpit as a local SMTP sink:
+
+```env
+GOUNO_SMTP_HOST=mailpit
+GOUNO_SMTP_PORT=1025
+GOUNO_SMTP_FROM=noreply@gosso.com
+GOUNO_SMTP_TLS_POLICY=notls
+GOUNO_AUTH_PASSWORD_RESET_BASE_URL=http://localhost:3000/reset-password
+```
+
+Mailpit accepts messages on SMTP port `1025` and exposes the inbox at `http://localhost:8025` (or the configured `MAILPIT_WEB_EXTERNAL_PORT`). Use it to verify email-change codes and password-reset links without sending external mail.
+
+#### Production SMTP
+
+Use a real SMTP provider in production:
+
+```env
+GOUNO_SMTP_HOST=smtp.example.com
+GOUNO_SMTP_PORT=587
+GOUNO_SMTP_USERNAME=your-smtp-user
+GOUNO_SMTP_PASSWORD=your-smtp-password
+GOUNO_SMTP_FROM=noreply@sso.example.com
+GOUNO_SMTP_TLS_POLICY=mandatory
+GOUNO_AUTH_PASSWORD_RESET_BASE_URL=https://sso.example.com/reset-password
+```
+
+Operational notes:
+
+- `GOUNO_SMTP_TLS_POLICY` supports `mandatory`, `opportunistic`, and `notls`; production rejects `notls`.
+- `GOUNO_AUTH_PASSWORD_RESET_BASE_URL` is required when SMTP is configured and must use HTTPS in production.
+- Store `GOUNO_SMTP_PASSWORD` in a secret manager or deployment secret, not in Git.
+- Use a verified sender/domain for `GOUNO_SMTP_FROM` and configure SPF/DKIM/DMARC with your SMTP provider.
+- `/readiness` checks PostgreSQL and Redis only; SMTP failures appear in application logs when a send is attempted.
+
 ### Optional: OAuth / Social Login
 
 | Variable | Description |

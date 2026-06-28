@@ -15,8 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	authService "github.com/rushairer/gosso/internal/auth/service"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/middleware"
 )
 
@@ -31,9 +33,12 @@ type mockOAuth2ClientService struct {
 	updateFn          func() error
 	updateByAccountFn func() (*oauth2Domain.OAuth2Client, error)
 	deleteFn          func() error
+	lastRegisterReq   *oauth2Service.RegisterClientRequest
+	lastUpdateReq     *oauth2Service.UpdateClientRequest
 }
 
-func (m *mockOAuth2ClientService) RegisterClient(_ context.Context, _ *oauth2Service.RegisterClientRequest) (*oauth2Domain.OAuth2Client, string, error) {
+func (m *mockOAuth2ClientService) RegisterClient(_ context.Context, req *oauth2Service.RegisterClientRequest) (*oauth2Domain.OAuth2Client, string, error) {
+	m.lastRegisterReq = req
 	if m.registerFn != nil {
 		return m.registerFn()
 	}
@@ -61,7 +66,8 @@ func (m *mockOAuth2ClientService) UpdateClient(_ context.Context, _ *oauth2Domai
 	return nil
 }
 
-func (m *mockOAuth2ClientService) UpdateClientByAccountID(_ context.Context, _, _ string, _ *oauth2Service.UpdateClientRequest) (*oauth2Domain.OAuth2Client, error) {
+func (m *mockOAuth2ClientService) UpdateClientByAccountID(_ context.Context, _, _ string, req *oauth2Service.UpdateClientRequest) (*oauth2Domain.OAuth2Client, error) {
+	m.lastUpdateReq = req
 	if m.updateByAccountFn != nil {
 		return m.updateByAccountFn()
 	}
@@ -89,6 +95,26 @@ func setupClientController(clientSvc *mockOAuth2ClientService) *gin.Engine {
 	api := engine.Group("/api")
 	api.Use(func(ctx *gin.Context) {
 		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctx.Next()
+	})
+	ctrl.RegisterRoutes(api, func(ctx *gin.Context) { ctx.Next() })
+
+	return engine
+}
+
+func setupAdminClientController(clientSvc *mockOAuth2ClientService) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+
+	ctrl := NewClientController(clientSvc, zap.NewNop())
+
+	api := engine.Group("/api")
+	api.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctx.Set(middleware.ContextKeyClaims, &tokenDomain.AccessTokenClaims{
+			Roles: []string{authService.RoleAdmin},
+			Scope: "openid admin",
+		})
 		ctx.Next()
 	})
 	ctrl.RegisterRoutes(api, func(ctx *gin.Context) { ctx.Next() })
@@ -139,6 +165,29 @@ func TestRegisterClient_Success(t *testing.T) {
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, "550e8400-e29b-41d4-a716-446655440000", data["client_id"])
 	assert.Equal(t, "secret-123", data["client_secret"])
+}
+
+func TestRegisterClient_AdminCallerCanManageReservedScopes(t *testing.T) {
+	client := newTestClient("account-001")
+	client.Scopes = []string{"openid", "admin"}
+	client.Metadata = map[string]any{oauth2Domain.ClientCapabilityMetadataKey: oauth2Domain.ClientCapabilityAdmin}
+	clientSvc := &mockOAuth2ClientService{
+		registerFn: func() (*oauth2Domain.OAuth2Client, string, error) {
+			return client, "", nil
+		},
+	}
+	engine := setupAdminClientController(clientSvc)
+
+	body := `{"name":"Admin App","redirect_uris":["https://admin.example.com/callback"],"scopes":["openid","admin"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/oauth2/clients", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	require.NotNil(t, clientSvc.lastRegisterReq)
+	assert.True(t, clientSvc.lastRegisterReq.AllowReservedScopes)
 }
 
 func TestRegisterClient_InvalidBody(t *testing.T) {

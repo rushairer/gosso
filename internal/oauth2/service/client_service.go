@@ -34,6 +34,7 @@ type RegisterClientRequest struct {
 	Scopes                 []string
 	IsConfidential         bool
 	Metadata               map[string]any
+	AllowReservedScopes    bool
 }
 
 // OAuth2ClientService is the OAuth2 client service interface
@@ -114,6 +115,15 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 	if validationErr := validateScopes(scopes); validationErr != nil {
 		return nil, "", validationErr
 	}
+	if !req.AllowReservedScopes {
+		if validationErr := validateUserManagedScopes(scopes); validationErr != nil {
+			return nil, "", validationErr
+		}
+	}
+	metadata := syncAdminCapability(req.Metadata, scopes)
+	if len(metadata) == 0 {
+		metadata = nil
+	}
 
 	client, err := domain.NewOAuth2Client(req.AccountID, req.Name, clientID, grantTypes)
 	if err != nil {
@@ -125,7 +135,7 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 	client.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
 	client.Scopes = scopes
 	client.IsConfidential = req.IsConfidential
-	client.Metadata = req.Metadata
+	client.Metadata = metadata
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		return s.clientRepo.Create(ctx, tx, client)
@@ -173,6 +183,7 @@ type UpdateClientRequest struct {
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
 	GrantTypes             []string `json:"grant_types"`
 	Scopes                 []string `json:"scopes"`
+	AllowReservedScopes    bool     `json:"-"`
 }
 
 // UpdateClientByAccountID loads a client by ID, verifies ownership, applies partial updates with
@@ -239,7 +250,13 @@ func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, a
 			if err := validateScopes(req.Scopes); err != nil {
 				return err
 			}
+			if !req.AllowReservedScopes {
+				if err := validateUserManagedScopes(req.Scopes); err != nil {
+					return err
+				}
+			}
 			c.Scopes = req.Scopes
+			c.Metadata = syncAdminCapability(c.Metadata, c.Scopes)
 		}
 
 		expectedUpdatedAt := c.UpdatedAt
@@ -334,6 +351,34 @@ func validateScopes(scopes []string) error {
 		}
 	}
 	return nil
+}
+
+func validateUserManagedScopes(scopes []string) error {
+	for _, s := range scopes {
+		if domain.IsAdminScope(s) {
+			return &ValidationError{Message: fmt.Sprintf("scope %q is reserved for administrator clients", s)}
+		}
+	}
+	return nil
+}
+
+func syncAdminCapability(metadata map[string]any, scopes []string) map[string]any {
+	hasAdminScope := false
+	for _, scope := range scopes {
+		if domain.IsAdminScope(scope) {
+			hasAdminScope = true
+			break
+		}
+	}
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
+	if hasAdminScope {
+		metadata[domain.ClientCapabilityMetadataKey] = domain.ClientCapabilityAdmin
+	} else {
+		delete(metadata, domain.ClientCapabilityMetadataKey)
+	}
+	return metadata
 }
 
 func validateRedirectURIs(uris []string) error {

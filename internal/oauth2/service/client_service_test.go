@@ -318,6 +318,54 @@ func TestRegisterClient_Public(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestRegisterClient_RejectsReservedAdminScopes(t *testing.T) {
+	db, _, svc := setupTestClientService(t)
+	defer db.Close()
+
+	req := &RegisterClientRequest{
+		AccountID:    "account-001",
+		Name:         "Escalating App",
+		RedirectURIs: []string{"http://localhost/callback"},
+		Scopes:       []string{"openid", "admin"},
+	}
+
+	client, secret, err := svc.RegisterClient(context.Background(), req)
+	require.Error(t, err)
+	assert.Nil(t, client)
+	assert.Empty(t, secret)
+	assert.Contains(t, err.Error(), "reserved for administrator clients")
+}
+
+func TestRegisterClient_AllowsReservedAdminScopesForPrivilegedCaller(t *testing.T) {
+	db, mock, svc := setupTestClientService(t)
+	defer db.Close()
+
+	ctx := context.Background()
+	now := time.Now()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("INSERT INTO oauth2_clients").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at"}).
+			AddRow("client-uuid-admin", now, now))
+	mock.ExpectCommit()
+
+	req := &RegisterClientRequest{
+		AccountID:           "account-001",
+		Name:                "Admin Console",
+		RedirectURIs:        []string{"https://admin.example.com/callback"},
+		Scopes:              []string{"openid", "admin"},
+		AllowReservedScopes: true,
+	}
+
+	client, _, err := svc.RegisterClient(ctx, req)
+	require.NoError(t, err)
+	require.NotNil(t, client)
+	assert.Equal(t, domain.ClientCapabilityAdmin, client.Metadata[domain.ClientCapabilityMetadataKey])
+	assert.Equal(t, []string{"openid", "admin"}, client.Scopes)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestFindByClientID(t *testing.T) {
 	db, mock, svc := setupTestClientService(t)
 	defer db.Close()

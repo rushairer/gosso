@@ -116,6 +116,7 @@ func TestAdminRequired_HasAdminRole(t *testing.T) {
 	engine2.GET("/admin", func(ctx *gin.Context) {
 		ctx.Set(gm.ContextKeyClaims, &tokenDomain.AccessTokenClaims{
 			Roles: []string{"admin", "user"},
+			Scope: "openid admin",
 		})
 		ctx.Next()
 	}, AdminRequiredMiddleware(), func(ctx *gin.Context) {
@@ -129,11 +130,50 @@ func TestAdminRequired_HasAdminRole(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
+func TestAdminRequired_AdminRoleWithoutAdminScope(t *testing.T) {
+	engine := setupGin()
+	engine.GET("/admin", func(ctx *gin.Context) {
+		ctx.Set(gm.ContextKeyClaims, &tokenDomain.AccessTokenClaims{
+			Roles: []string{"admin"},
+			Scope: "openid profile",
+		})
+		ctx.Next()
+	}, AdminRequiredMiddleware(), func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestAdminRequired_AdminScopeWithoutAdminRole(t *testing.T) {
+	engine := setupGin()
+	engine.GET("/admin", func(ctx *gin.Context) {
+		ctx.Set(gm.ContextKeyClaims, &tokenDomain.AccessTokenClaims{
+			Roles: []string{"user", "viewer"},
+			Scope: "openid admin",
+		})
+		ctx.Next()
+	}, AdminRequiredMiddleware(), func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
 func TestAdminRequired_NonAdminRole(t *testing.T) {
 	engine := setupGin()
 	engine.GET("/admin", func(ctx *gin.Context) {
 		ctx.Set(gm.ContextKeyClaims, &tokenDomain.AccessTokenClaims{
 			Roles: []string{"user", "viewer"},
+			Scope: "openid profile",
 		})
 		ctx.Next()
 	}, AdminRequiredMiddleware(), func(ctx *gin.Context) {
@@ -165,6 +205,7 @@ func TestAdminRequired_EmptyRoles(t *testing.T) {
 	engine.GET("/admin", func(ctx *gin.Context) {
 		ctx.Set(gm.ContextKeyClaims, &tokenDomain.AccessTokenClaims{
 			Roles: []string{},
+			Scope: "admin",
 		})
 		ctx.Next()
 	}, AdminRequiredMiddleware(), func(ctx *gin.Context) {

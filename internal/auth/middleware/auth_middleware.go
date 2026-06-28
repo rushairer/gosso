@@ -174,15 +174,36 @@ func AdminRequiredMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		for _, role := range claims.Roles {
-			if role == authService.RoleAdmin {
-				ctx.Next()
-				return
-			}
+		if !hasScope(claims.Scope, authService.ScopeAdmin) {
+			ctx.AbortWithStatusJSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "admin client scope required"))
+			return
 		}
 
-		ctx.AbortWithStatusJSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "admin access required"))
+		if !hasRole(claims.Roles, authService.RoleAdmin) {
+			ctx.AbortWithStatusJSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "admin access required"))
+			return
+		}
+
+		ctx.Next()
 	}
+}
+
+func hasRole(roles []string, required string) bool {
+	for _, role := range roles {
+		if role == required {
+			return true
+		}
+	}
+	return false
+}
+
+func hasScope(scopeClaim, required string) bool {
+	for _, scope := range strings.Fields(scopeClaim) {
+		if scope == required {
+			return true
+		}
+	}
+	return false
 }
 
 // AuditMetadataMiddleware stores client IP, user agent, and request ID in request context for audit logging.

@@ -78,6 +78,23 @@ func TestValidateScope_NoneValid(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+func TestValidateScope_AdminScopeRequiresAdminCapability(t *testing.T) {
+	c := newTestClient()
+	c.Scopes = []string{"openid", "admin", "admin:clients"}
+
+	assert.Equal(t, []string{"openid"}, c.ValidateScope([]string{"openid", "admin", "admin:clients"}))
+
+	c.Metadata = map[string]any{ClientCapabilityMetadataKey: ClientCapabilityAdmin}
+	assert.Equal(t, []string{"openid", "admin", "admin:clients"}, c.ValidateScope([]string{"openid", "admin", "admin:clients"}))
+}
+
+func TestHasAdminCapability(t *testing.T) {
+	assert.False(t, (*OAuth2Client)(nil).HasAdminCapability())
+	assert.False(t, (&OAuth2Client{}).HasAdminCapability())
+	assert.False(t, (&OAuth2Client{Metadata: map[string]any{ClientCapabilityMetadataKey: "normal"}}).HasAdminCapability())
+	assert.True(t, (&OAuth2Client{Metadata: map[string]any{ClientCapabilityMetadataKey: ClientCapabilityAdmin}}).HasAdminCapability())
+}
+
 func TestValidateScope_Empty(t *testing.T) {
 	c := newTestClient()
 	result := c.ValidateScope([]string{})

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,26 +14,33 @@ import (
 
 // OAuth2Client OAuth2 client entity
 type OAuth2Client struct {
-	ID                               string         `json:"id"`
-	AccountID                        string         `json:"account_id"`
-	ClientID                         string         `json:"client_id"`
-	ClientSecretHash                 string         `json:"-"` // Only has value for confidential clients
-	Name                             string         `json:"name"`
-	Description                      string         `json:"description,omitempty"`
-	RedirectURIs                     []string       `json:"redirect_uris"`
-	PostLogoutRedirectURIs           []string       `json:"post_logout_redirect_uris,omitempty"`
-	GrantTypes                       []string       `json:"grant_types"`
-	Scopes                           []string       `json:"scopes"`
-	IsConfidential                   bool           `json:"is_confidential"`
-	Metadata                         map[string]any `json:"metadata"`
-	FrontchannelLogoutURI            string         `json:"frontchannel_logout_uri,omitempty"`
-	FrontchannelLogoutSessionRequired bool          `json:"frontchannel_logout_session_required,omitempty"`
-	BackchannelLogoutURI             string         `json:"backchannel_logout_uri,omitempty"`
-	BackchannelLogoutSessionRequired bool          `json:"backchannel_logout_session_required,omitempty"`
-	CreatedAt                        time.Time      `json:"created_at"`
-	UpdatedAt                        time.Time      `json:"updated_at"`
-	DeletedAt                        *time.Time     `json:"deleted_at,omitempty"`
+	ID                                string         `json:"id"`
+	AccountID                         string         `json:"account_id"`
+	ClientID                          string         `json:"client_id"`
+	ClientSecretHash                  string         `json:"-"` // Only has value for confidential clients
+	Name                              string         `json:"name"`
+	Description                       string         `json:"description,omitempty"`
+	RedirectURIs                      []string       `json:"redirect_uris"`
+	PostLogoutRedirectURIs            []string       `json:"post_logout_redirect_uris,omitempty"`
+	GrantTypes                        []string       `json:"grant_types"`
+	Scopes                            []string       `json:"scopes"`
+	IsConfidential                    bool           `json:"is_confidential"`
+	Metadata                          map[string]any `json:"metadata"`
+	FrontchannelLogoutURI             string         `json:"frontchannel_logout_uri,omitempty"`
+	FrontchannelLogoutSessionRequired bool           `json:"frontchannel_logout_session_required,omitempty"`
+	BackchannelLogoutURI              string         `json:"backchannel_logout_uri,omitempty"`
+	BackchannelLogoutSessionRequired  bool           `json:"backchannel_logout_session_required,omitempty"`
+	CreatedAt                         time.Time      `json:"created_at"`
+	UpdatedAt                         time.Time      `json:"updated_at"`
+	DeletedAt                         *time.Time     `json:"deleted_at,omitempty"`
 }
+
+const (
+	ClientCapabilityMetadataKey = "capability"
+	ClientCapabilityAdmin       = "admin"
+	ScopeAdmin                  = "admin"
+	adminScopePrefix            = "admin:"
+)
 
 // ValidateRedirectURI validates that the redirect URI is in the registered list.
 // Uses constant-time comparison throughout: all registered URIs are checked even
@@ -107,11 +115,26 @@ func (c *OAuth2Client) ValidateScope(requestedScopes []string) []string {
 	}
 	var valid []string
 	for _, s := range requestedScopes {
+		if IsAdminScope(s) && !c.HasAdminCapability() {
+			continue
+		}
 		if slices.Contains(c.Scopes, s) {
 			valid = append(valid, s)
 		}
 	}
 	return valid
+}
+
+func (c *OAuth2Client) HasAdminCapability() bool {
+	if c == nil || c.Metadata == nil {
+		return false
+	}
+	capability, ok := c.Metadata[ClientCapabilityMetadataKey].(string)
+	return ok && capability == ClientCapabilityAdmin
+}
+
+func IsAdminScope(scope string) bool {
+	return scope == ScopeAdmin || strings.HasPrefix(scope, adminScopePrefix)
 }
 
 // Grant Type constants

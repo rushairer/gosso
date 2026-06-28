@@ -2,14 +2,17 @@ package controller
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
+	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/controllerutil"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
 	"github.com/rushairer/gosso/middleware"
 )
@@ -84,6 +87,7 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 		GrantTypes:             req.GrantTypes,
 		Scopes:                 req.Scopes,
 		IsConfidential:         req.IsConfidential,
+		AllowReservedScopes:    canManageReservedClientScopes(ctx),
 	})
 	if err != nil {
 		if isValidationError(err) {
@@ -175,6 +179,7 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 		PostLogoutRedirectURIs: req.PostLogoutRedirectURIs,
 		GrantTypes:             req.GrantTypes,
 		Scopes:                 req.Scopes,
+		AllowReservedScopes:    canManageReservedClientScopes(ctx),
 	}
 
 	client, err := c.clientSvc.UpdateClientByAccountID(ctx, accountID, clientID, svcReq)
@@ -225,4 +230,31 @@ func (c *ClientController) DeleteClient(ctx *gin.Context) {
 // isValidationError checks if the error is a client validation error (as opposed to an internal server error).
 func isValidationError(err error) bool {
 	return oauth2Service.IsValidationError(err)
+}
+
+func canManageReservedClientScopes(ctx *gin.Context) bool {
+	claimsRaw, exists := ctx.Get(middleware.ContextKeyClaims)
+	if !exists {
+		return false
+	}
+	claims, ok := claimsRaw.(*tokenDomain.AccessTokenClaims)
+	if !ok {
+		return false
+	}
+	hasAdminRole := false
+	for _, role := range claims.Roles {
+		if role == authService.RoleAdmin {
+			hasAdminRole = true
+			break
+		}
+	}
+	if !hasAdminRole {
+		return false
+	}
+	for _, scope := range strings.Fields(claims.Scope) {
+		if scope == authService.ScopeAdmin {
+			return true
+		}
+	}
+	return false
 }
