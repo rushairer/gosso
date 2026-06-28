@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"runtime"
+	"slices"
 	"time"
 
 	"go.uber.org/zap"
@@ -363,12 +364,17 @@ func (s *AuthService) buildTokenClaims(ctx context.Context, accountID, sessionID
 		return nil, err
 	}
 
+	scope := "openid profile email"
+	if slices.Contains(roleNames, RoleAdmin) {
+		scope = "openid profile email admin"
+	}
+
 	return &tokenDomain.AccessTokenClaims{
 		AccountID:   accountID,
 		Roles:       roleNames,
 		Permissions: permissions,
 		SessionID:   sessionID,
-		Scope:       "openid profile email",
+		Scope:       scope,
 	}, nil
 }
 

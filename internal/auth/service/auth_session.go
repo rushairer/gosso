@@ -104,6 +104,11 @@ func (s *AuthService) refreshTokensLocked(ctx context.Context, refreshToken stri
 		return nil, waitErr
 	}
 
+	claims.ClientID = oldRT.ClientID
+	if oldRT.Scope != "" {
+		claims.Scope = oldRT.Scope
+	}
+
 	accessToken, err := s.tokenSvc.GenerateAccessToken(claims)
 	if err != nil {
 		return nil, fmt.Errorf("generate access token: %w", err)

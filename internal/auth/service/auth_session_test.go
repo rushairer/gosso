@@ -10,6 +10,7 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/audit"
+	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 )
 
@@ -222,4 +223,35 @@ func TestBuildTokenClaims_DedupPermissions(t *testing.T) {
 	assert.ElementsMatch(t, []string{"editor", "admin"}, claims.Roles)
 	// "read" appears in both roles but should be deduplicated.
 	assert.ElementsMatch(t, []string{"read", "write", "delete"}, claims.Permissions)
+}
+
+func TestRefreshTokens_PreservesClientIDAndScope(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+
+	// Create session
+	session, err := sessionDomain.NewSession("account-001", "testuser", "127.0.0.1", "test-agent", false)
+	require.NoError(t, err)
+	err = fixture.sessionSvc.CreateSession(context.Background(), session)
+	require.NoError(t, err)
+
+	// Generate refresh token with ClientID and Scope
+	clientID := "gosso-admin-spa"
+	scopes := "openid profile email admin"
+	rt, err := fixture.tokenSvc.GenerateRefreshToken(context.Background(), "account-001", clientID, session.ID, scopes)
+	require.NoError(t, err)
+
+	// Call RefreshTokens
+	refreshResult, err := fixture.svc.RefreshTokens(context.Background(), rt.Token)
+	require.NoError(t, err)
+	assert.NotEmpty(t, refreshResult.AccessToken)
+
+	// Validate Access Token Claims
+	claims, err := fixture.tokenSvc.ValidateAccessTokenWithContext(context.Background(), refreshResult.AccessToken)
+	require.NoError(t, err)
+	assert.Equal(t, clientID, claims.ClientID)
+	assert.Equal(t, scopes, claims.Scope)
 }
