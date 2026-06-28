@@ -25,6 +25,11 @@ var passkeyLoginErrorMap = []controllerutil.ErrorRule{
 	{Sentinel: authService.ErrPasskeyNotFound, Mapping: controllerutil.ErrorMapping{Status: http.StatusNotFound, Message: "login failed"}},
 }
 
+// passkeyRegistrationErrorMap maps passkey registration errors to HTTP responses.
+var passkeyRegistrationErrorMap = []controllerutil.ErrorRule{
+	{Sentinel: authService.ErrPasskeyAlreadyRegistered, Mapping: controllerutil.ErrorMapping{Status: http.StatusConflict, Message: "passkey already registered"}},
+}
+
 // passkeyDeleteErrorMap maps passkey credential deletion errors to HTTP responses.
 var passkeyDeleteErrorMap = []controllerutil.ErrorRule{
 	{Sentinel: authService.ErrCredentialOwnership, Mapping: controllerutil.ErrorMapping{Status: http.StatusForbidden, Message: "credential does not belong to account"}},
@@ -163,8 +168,8 @@ func (c *PasskeyController) RegisterComplete(ctx *gin.Context) {
 
 	cred, err := c.passkeySvc.CompleteRegistration(ctx, requestID, accountID, username, displayName, req.Name, ctx.Request)
 	if err != nil {
-		c.logger.Error("Failed to complete passkey registration", zap.Error(err))
-		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "registration failed"))
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, passkeyRegistrationErrorMap,
+			http.StatusBadRequest, "registration failed")
 		return
 	}
 

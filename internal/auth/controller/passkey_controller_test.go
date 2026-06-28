@@ -220,6 +220,13 @@ func TestPasskey_RegisterComplete_NoAuth(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
+func TestPasskeyRegistrationErrorMap_DuplicatePasskey(t *testing.T) {
+	require.Len(t, passkeyRegistrationErrorMap, 1)
+	assert.Equal(t, service.ErrPasskeyAlreadyRegistered, passkeyRegistrationErrorMap[0].Sentinel)
+	assert.Equal(t, http.StatusConflict, passkeyRegistrationErrorMap[0].Mapping.Status)
+	assert.Equal(t, "passkey already registered", passkeyRegistrationErrorMap[0].Mapping.Message)
+}
+
 // ──────────────────────────────────────────────
 // ListCredentials — success and error paths
 // ──────────────────────────────────────────────

@@ -25,10 +25,11 @@ var (
 	ErrInvalidRefreshToken = errors.New("invalid refresh token")
 
 	// Passkey/WebAuthn errors
-	ErrChallengeNotFound   = errors.New("challenge not found or expired")
-	ErrPasskeyNotFound     = errors.New("no passkey found for account")
-	ErrRequestBodyTooLarge = errors.New("request body too large")
-	ErrCredentialOwnership = errors.New("credential does not belong to account")
+	ErrChallengeNotFound        = errors.New("challenge not found or expired")
+	ErrPasskeyNotFound          = errors.New("no passkey found for account")
+	ErrPasskeyAlreadyRegistered = errors.New("passkey already registered")
+	ErrRequestBodyTooLarge      = errors.New("request body too large")
+	ErrCredentialOwnership      = errors.New("credential does not belong to account")
 
 	// Password reset errors
 	ErrPasswordResetInvalidToken = errors.New("invalid or expired reset token")

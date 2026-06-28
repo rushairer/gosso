@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,6 +24,7 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepository "github.com/rushairer/gosso/internal/account/repository"
 	"github.com/rushairer/gosso/internal/auth/domain"
+	"github.com/rushairer/gosso/internal/auth/repository"
 	"github.com/rushairer/gosso/internal/testutil"
 )
 
@@ -42,16 +44,17 @@ type mockWebAuthnRepo struct {
 	// findByCredentialIDFn overrides FindByCredentialID when set.
 	findByCredentialIDFn func(ctx context.Context, credentialID string) (*domain.WebAuthnCredential, error)
 	// findByAccountIDErr forces FindByAccountID to return this error when set.
-	findByAccountIDErr error
+	findByAccountIDErr  error
+	createCredentialErr error
 }
 
 func (m *mockWebAuthnRepo) CreateCredential(_ context.Context, _ *sql.Tx, _ *domain.WebAuthnCredential) error {
-	return nil
+	return m.createCredentialErr
 }
 
-func (m *mockWebAuthnRepo) FindByCredentialID(_ context.Context, _ string) (*domain.WebAuthnCredential, error) {
+func (m *mockWebAuthnRepo) FindByCredentialID(ctx context.Context, credentialID string) (*domain.WebAuthnCredential, error) {
 	if m.findByCredentialIDFn != nil {
-		return m.findByCredentialIDFn(context.Background(), "")
+		return m.findByCredentialIDFn(ctx, credentialID)
 	}
 	return nil, nil
 }
@@ -434,6 +437,44 @@ func TestCompleteRegistration_MissingChallenge(t *testing.T) {
 	assert.Contains(t, err.Error(), "challenge not found")
 }
 
+func TestEnsureCredentialNotRegistered_AllowsNewCredential(t *testing.T) {
+	credentialID := []byte("new-credential-id")
+	credRepo := &mockWebAuthnRepo{
+		findByCredentialIDFn: func(_ context.Context, got string) (*domain.WebAuthnCredential, error) {
+			assert.Equal(t, base64.RawURLEncoding.EncodeToString(credentialID), got)
+			return nil, fmt.Errorf("%w: missing", repository.ErrWebAuthnCredentialNotFound)
+		},
+	}
+	svc := newTestPasskeyService(credRepo)
+
+	err := svc.ensureCredentialNotRegistered(context.Background(), "acct-1", credentialID)
+	require.NoError(t, err)
+}
+
+func TestEnsureCredentialNotRegistered_RejectsDuplicateForSameAccount(t *testing.T) {
+	credRepo := &mockWebAuthnRepo{
+		findByCredentialIDFn: func(_ context.Context, _ string) (*domain.WebAuthnCredential, error) {
+			return &domain.WebAuthnCredential{ID: "cred-1", AccountID: "acct-1"}, nil
+		},
+	}
+	svc := newTestPasskeyService(credRepo)
+
+	err := svc.ensureCredentialNotRegistered(context.Background(), "acct-1", []byte("existing-credential-id"))
+	require.ErrorIs(t, err, ErrPasskeyAlreadyRegistered)
+}
+
+func TestEnsureCredentialNotRegistered_RejectsDuplicateForOtherAccount(t *testing.T) {
+	credRepo := &mockWebAuthnRepo{
+		findByCredentialIDFn: func(_ context.Context, _ string) (*domain.WebAuthnCredential, error) {
+			return &domain.WebAuthnCredential{ID: "cred-1", AccountID: "acct-other"}, nil
+		},
+	}
+	svc := newTestPasskeyService(credRepo)
+
+	err := svc.ensureCredentialNotRegistered(context.Background(), "acct-1", []byte("existing-credential-id"))
+	require.ErrorIs(t, err, ErrPasskeyAlreadyRegistered)
+}
+
 func TestCompleteLogin_MissingChallenge(t *testing.T) {
 	redisClient, mr := testutil.SetupTestRedis(t)
 	defer mr.Close()
@@ -574,6 +615,8 @@ func TestBeginRegistration_WithExistingCreds(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, cc)
 	assert.NotEmpty(t, requestID)
+	require.Len(t, cc.Response.CredentialExcludeList, 1)
+	assert.Equal(t, []byte("cred-id-1"), []byte(cc.Response.CredentialExcludeList[0].CredentialID))
 }
 
 func TestBeginLogin_Success(t *testing.T) {

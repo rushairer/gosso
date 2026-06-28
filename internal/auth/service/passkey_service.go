@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -118,7 +119,8 @@ func (s *PasskeyService) BeginRegistration(ctx context.Context, accountID, usern
 
 	user := domain.NewWebAuthnUser(accountID, username, displayName, toCredentialSlice(existingCreds))
 
-	options, sessionData, err := s.web.BeginRegistration(user)
+	exclusions := wa.Credentials(user.WebAuthnCredentials()).CredentialDescriptors()
+	options, sessionData, err := s.web.BeginRegistration(user, wa.WithExclusions(exclusions))
 	if err != nil {
 		return nil, "", fmt.Errorf("begin registration: %w", err)
 	}
@@ -167,6 +169,9 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, ac
 	if err != nil {
 		return nil, fmt.Errorf("finish registration: %w", err)
 	}
+	if err := s.ensureCredentialNotRegistered(ctx, accountID, credential.ID); err != nil {
+		return nil, err
+	}
 
 	// Save credential to database
 	credName := name
@@ -193,6 +198,9 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, ac
 		return s.credRepo.CreateCredential(ctx, tx, cred)
 	})
 	if err != nil {
+		if dbutil.IsUniqueViolation(err) {
+			return nil, ErrPasskeyAlreadyRegistered
+		}
 		return nil, fmt.Errorf("save credential: %w", err)
 	}
 
@@ -201,6 +209,26 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, ac
 		zap.String("credential_id", utility.MaskOpaqueID(cred.ID)))
 
 	return cred, nil
+}
+
+func (s *PasskeyService) ensureCredentialNotRegistered(ctx context.Context, accountID string, credentialID []byte) error {
+	existing, err := s.credRepo.FindByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credentialID))
+	if err == nil {
+		if existing == nil {
+			return nil
+		}
+		if existing.AccountID != accountID {
+			s.logger.Warn("Passkey credential already belongs to another account",
+				zap.String("account_id", utility.MaskOpaqueID(accountID)),
+				zap.String("existing_account_id", utility.MaskOpaqueID(existing.AccountID)),
+				zap.String("credential_id", utility.MaskOpaqueID(existing.ID)))
+		}
+		return ErrPasskeyAlreadyRegistered
+	}
+	if errors.Is(err, repository.ErrWebAuthnCredentialNotFound) {
+		return nil
+	}
+	return fmt.Errorf("check existing credential: %w", err)
 }
 
 // BeginLogin starts Passkey login (login scenario, known accountID)

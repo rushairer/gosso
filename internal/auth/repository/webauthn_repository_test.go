@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 	"encoding/base64"
 	"encoding/json"
+	"regexp"
 	"testing"
 	"time"
 
@@ -192,7 +193,7 @@ func TestWebAuthn_SoftDeleteCredential_Success(t *testing.T) {
 	tx, _ := db.Begin()
 
 	deletedAt := time.Now()
-	mock.ExpectExec("UPDATE webauthn_credentials SET deleted_at").
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE webauthn_credentials SET deleted_at = $2, updated_at = $2, public_key = '', credential_id = 'deleted-' || id::text")).
 		WithArgs("cred-001", deletedAt).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -216,7 +217,7 @@ func TestWebAuthn_SoftDeleteByAccountID_Success(t *testing.T) {
 	tx, _ := db.Begin()
 
 	deletedAt := time.Now()
-	mock.ExpectExec("UPDATE webauthn_credentials SET deleted_at").
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE webauthn_credentials SET deleted_at = $2, updated_at = $2, public_key = '', credential_id = 'deleted-' || id::text")).
 		WithArgs("account-001", deletedAt).
 		WillReturnResult(sqlmock.NewResult(0, 2))
 
