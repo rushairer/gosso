@@ -1465,6 +1465,267 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /api/v1/admin/accounts/{account_id}/consents:
+    get:
+      tags: [Admin]
+      summary: List account consents
+      description: Lists OAuth2 application consents granted by an account. Requires admin role and admin-capable client token.
+      operationId: adminListAccountConsents
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AccountID"
+      responses:
+        "200":
+          description: Account consent list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Consent"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/accounts/{account_id}/consents/{client_id}:
+    delete:
+      tags: [Admin]
+      summary: Revoke account consent
+      description: Revokes a user's consent grant for a specific OAuth2 client.
+      operationId: adminRevokeAccountConsent
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AccountID"
+        - $ref: "#/components/parameters/ClientID"
+      responses:
+        "200":
+          description: Consent revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: consent revoked
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/accounts/{account_id}/lockout:
+    get:
+      tags: [Admin]
+      summary: Get account lockout status
+      description: Returns current login lockout counters and locked-out state for an account.
+      operationId: adminGetAccountLockoutStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AccountID"
+      responses:
+        "200":
+          description: Account lockout status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: success
+                  data:
+                    $ref: "#/components/schemas/LockoutStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/admin/accounts/{account_id}/lockout/clear:
+    post:
+      tags: [Admin]
+      summary: Clear account lockout
+      description: Clears login lockout counters for another account. Administrators cannot clear their own lockout through this endpoint.
+      operationId: adminClearAccountLockout
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AccountID"
+      responses:
+        "200":
+          description: Lockout cleared
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: lockout cleared
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/admin/accounts/{account_id}/password:
+    post:
+      tags: [Admin]
+      summary: Reset account password
+      description: Sets a new password for another account and revokes existing sessions. Administrators cannot reset their own password here.
+      operationId: adminChangeAccountPassword
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AccountID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminChangePasswordRequest"
+      responses:
+        "200":
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: password changed successfully
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Account is not active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/accounts/{account_id}/mfa/reset:
+    post:
+      tags: [Admin]
+      summary: Reset account MFA
+      description: Removes TOTP and backup-code credentials for another account. Administrators cannot reset their own MFA here.
+      operationId: adminResetAccountMFA
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AccountID"
+      responses:
+        "200":
+          description: MFA reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              example:
+                code: 200
+                message: success
+                data: MFA reset successfully
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/audit-logs:
+    get:
+      tags: [Admin]
+      summary: Query audit logs
+      description: Queries structured audit events with optional account, event type, time range, and pagination filters.
+      operationId: adminListAuditLogs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: account_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: event_type
+          in: query
+          schema:
+            type: string
+          description: Audit action/event type filter
+        - name: start_time
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive RFC3339 start timestamp
+        - name: end_time
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive RFC3339 end timestamp
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+      responses:
+        "200":
+          description: Paginated audit log list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: success
+                  data:
+                    $ref: "#/components/schemas/PaginatedAuditLogs"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
 # ════════════════════════════════════════════════
 # Passkey (WebAuthn) Endpoints
 # ════════════════════════════════════════════════
@@ -1825,8 +2086,9 @@ components:
       type: object
       properties:
         status:
-          type: integer
-          example: 200
+          type: string
+          enum: [ok, unavailable]
+          example: ok
         ready:
           type: boolean
           example: true
@@ -1835,10 +2097,16 @@ components:
           properties:
             database:
               type: string
-              enum: [ok, unavailable]
+              enum: [ok, error, unavailable]
             redis:
               type: string
-              enum: [ok, unavailable]
+              enum: [ok, error, unavailable]
+        checked_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+          description: Dependency probe duration in milliseconds
 
     Session:
       type: object
@@ -2165,6 +2433,81 @@ components:
           type: string
           format: date-time
 
+    Consent:
+      type: object
+      properties:
+        account_id:
+          type: string
+          format: uuid
+        client_id:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        granted_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    LockoutStatus:
+      type: object
+      properties:
+        locked_out:
+          type: boolean
+        counters:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              attempts:
+                type: integer
+              expires_at:
+                type: string
+                format: date-time
+
+    AuditRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        account_id:
+          type: string
+          format: uuid
+          nullable: true
+        actor_account_id:
+          type: string
+          format: uuid
+          nullable: true
+        actor_ip:
+          type: string
+          nullable: true
+        user_agent:
+          type: string
+          nullable: true
+        resource_type:
+          type: string
+          nullable: true
+        resource_id:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        correlation_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
     OAuth2Client:
       type: object
       properties:
@@ -2227,6 +2570,16 @@ components:
             page: 1
             page_size: 20
 
+    PaginatedAuditLogs:
+      allOf:
+        - $ref: "#/components/schemas/PaginatedResponse"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/AuditRecord"
+
     PaginatedResponse:
       type: object
       description: Generic pagination wrapper
@@ -2245,6 +2598,16 @@ components:
           example: 20
 
     # -- OAuth2 Client Management --
+
+    AdminChangePasswordRequest:
+      type: object
+      required: [new_password]
+      properties:
+        new_password:
+          type: string
+          format: password
+          minLength: 12
+          maxLength: 72
 
     RegisterClientRequest:
       type: object
