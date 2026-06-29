@@ -258,10 +258,6 @@ else
     redis.call('SET', KEYS[2], now)
 end
 local cjson = cjson
-if not cjson then
-    local ok, res = pcall(require, 'cjson')
-    if ok then cjson = res end
-end
 local dc = cjson.decode(data)
 dc.last_poll_at = os.date("!%Y-%m-%dT%H:%M:%SZ", now)
 if pttl > 0 then
@@ -304,10 +300,6 @@ func (s *DeviceCodeService) CheckAndUpdatePollRate(ctx context.Context, deviceCo
 // Returns: updated JSON data, or nil if not found or not pending.
 var authorizeDeviceCodeScript = redis.NewScript(`
 local cjson = cjson
-if not cjson then
-    local ok, res = pcall(require, 'cjson')
-    if ok then cjson = res end
-end
 local data = redis.call('GET', KEYS[1])
 if not data then
     return nil
@@ -334,10 +326,6 @@ return updated
 // Returns updated JSON on success, nil if not pending.
 var denyDeviceCodeScript = redis.NewScript(`
 local cjson = cjson
-if not cjson then
-    local ok, res = pcall(require, 'cjson')
-    if ok then cjson = res end
-end
 local data = redis.call('GET', KEYS[1])
 if not data then
     return nil
@@ -370,10 +358,6 @@ return 1
 // or the client_id does not match. ARGV[1] = client_id to verify ownership.
 var claimAuthorizedScript = redis.NewScript(`
 local cjson = cjson
-if not cjson then
-    local ok, res = pcall(require, 'cjson')
-    if ok then cjson = res end
-end
 assert(ARGV[1] ~= '', 'client_id is required')
 local data = redis.call('GET', KEYS[1])
 if not data then

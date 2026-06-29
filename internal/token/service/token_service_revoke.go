@@ -41,8 +41,8 @@ type refreshTokenReplay struct {
 // rotateAndDeleteAndCleanSessionScript atomically retrieves and deletes a refresh token,
 // then removes the token hash from the session index — all in a single Redis round-trip.
 // This prevents TOCTOU race conditions during refresh token rotation.
-// Uses cjson.decode for robust JSON parsing when available (real Redis), falling back
-// to string pattern matching for environments without cjson (e.g., miniredis in tests).
+// Uses string pattern matching instead of cjson so it works across Redis Lua
+// sandboxes and miniredis-backed tests.
 // KEYS[1] = refresh token key
 // ARGV[1] = session tokens key prefix (session_tokens:)
 // ARGV[2] = token hash
@@ -51,16 +51,7 @@ var rotateAndDeleteScript = redis.NewScript(`
 local data = redis.call('GET', KEYS[1])
 if data then
     redis.call('DEL', KEYS[1])
-    local sessionID
-    local cjson_ok, cjson = pcall(require, 'cjson')
-    if cjson_ok then
-        local ok, obj = pcall(cjson.decode, data)
-        if ok and obj then
-            sessionID = obj.session_id
-        end
-    else
-        sessionID = data:match('"session_id":"([^"]*)"')
-    end
+    local sessionID = data:match('"session_id":"([^"]*)"')
     if sessionID and sessionID ~= '' then
         redis.call('SREM', ARGV[1] .. sessionID, ARGV[2])
     end
@@ -73,8 +64,8 @@ return data
 // index (SREM old hash, SADD new hash) in a single Lua script.
 // The session ID is parsed from the old token JSON inside the script, eliminating
 // the need for a separate pre-read round-trip in Go.
-// Uses cjson.decode for robust JSON parsing when available (real Redis), falling back
-// to string pattern matching for environments without cjson (e.g., miniredis in tests).
+// Uses string pattern matching instead of cjson so it works across Redis Lua
+// sandboxes and miniredis-backed tests.
 // KEYS[1] = old token key
 // KEYS[2] = new token key
 // KEYS[3] = replay key for old token hash
@@ -90,16 +81,7 @@ end
 redis.call('DEL', KEYS[1])
 redis.call('SET', KEYS[2], ARGV[5], 'EX', ARGV[4])
 redis.call('SET', KEYS[3], ARGV[6], 'EX', ARGV[7])
-local sessionID
-local cjson_ok, cjson = pcall(require, 'cjson')
-if cjson_ok then
-    local ok, obj = pcall(cjson.decode, oldData)
-    if ok and obj then
-        sessionID = obj.session_id
-    end
-else
-    sessionID = oldData:match('"session_id":"([^"]*)"')
-end
+local sessionID = oldData:match('"session_id":"([^"]*)"')
 if sessionID and sessionID ~= '' then
     local sessionKey = ARGV[3] .. sessionID
     redis.call('SREM', sessionKey, ARGV[1])

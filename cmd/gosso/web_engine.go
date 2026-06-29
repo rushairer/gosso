@@ -33,6 +33,8 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		"/api/v1/auth/login",
 		"/api/v1/auth/refresh",
 		"/api/v1/auth/mfa/verify",
+		"/api/v1/auth/password/forgot",
+		"/api/v1/auth/password/reset",
 		"/api/v1/passkey/login/begin",
 		"/api/v1/passkey/login/complete",
 		"/api/v1/passkey/mfa/begin",

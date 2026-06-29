@@ -66,6 +66,26 @@ func TestCSRF_SkipPath_Skipped(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
+func TestCSRF_PasswordResetSkipPaths_Skipped(t *testing.T) {
+	r := setupCSRFTestRouter(false, "/api/v1/auth/password/forgot", "/api/v1/auth/password/reset")
+	r.POST("/api/v1/auth/password/forgot", func(c *gin.Context) {
+		c.String(http.StatusOK, "forgot")
+	})
+	r.POST("/api/v1/auth/password/reset", func(c *gin.Context) {
+		c.String(http.StatusOK, "reset")
+	})
+
+	for _, path := range []string{"/api/v1/auth/password/forgot", "/api/v1/auth/password/reset"} {
+		t.Run(path, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, path, nil)
+			r.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+		})
+	}
+}
+
 func TestCSRF_MissingCookie_403(t *testing.T) {
 	r := setupCSRFTestRouter(false)
 	r.POST("/test", func(c *gin.Context) {

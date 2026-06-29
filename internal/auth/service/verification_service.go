@@ -45,10 +45,6 @@ var (
 // ARGV[1]=SHA256 hex hash of the code, ARGV[2]=max_attempts, ARGV[3]=default_ttl_seconds
 var verifyAndIncrementScript = redis.NewScript(`
 local cjson = cjson
-if not cjson then
-    local ok, res = pcall(require, 'cjson')
-    if ok then cjson = res end
-end
 local data = redis.call('GET', KEYS[1])
 if not data then
     return cjson.encode({"not_found", ""})

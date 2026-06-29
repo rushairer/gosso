@@ -174,7 +174,7 @@ GOUNO_SMTP_HOST=mailpit
 GOUNO_SMTP_PORT=1025
 GOUNO_SMTP_FROM=noreply@gosso.com
 GOUNO_SMTP_TLS_POLICY=notls
-GOUNO_AUTH_PASSWORD_RESET_BASE_URL=http://localhost:3000/reset-password
+GOUNO_AUTH_PASSWORD_RESET_BASE_URL=http://localhost:8080/reset-password
 ```
 
 Mailpit 在 SMTP `1025` 端口接收邮件，并通过 `http://localhost:8025` 提供 Web 收件箱（或使用已配置的 `MAILPIT_WEB_EXTERNAL_PORT`）。本地可以用它验证邮箱变更验证码和密码重置链接，而不会向外部真实邮箱发信。

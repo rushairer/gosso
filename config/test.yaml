@@ -18,6 +18,8 @@ web_server:
         - "::1"
     csrf_skip_paths:
         - "/api/v1/auth/login"
+        - "/api/v1/auth/password/forgot"
+        - "/api/v1/auth/password/reset"
     rate_limits:
         login: 5
         token: 10
@@ -69,7 +71,7 @@ auth:
         - email
     private_key_path: ""
     key_id: "test-key"
-    password_reset_base_url: "http://localhost:3000/reset-password"
+    password_reset_base_url: "http://localhost:8080/reset-password"
     login_rate_limit_window: 15m
     # Per-IP rate limit exemption for known NAT/proxy exit addresses.
     # The per-IP counter is intentionally NOT cleared after successful login

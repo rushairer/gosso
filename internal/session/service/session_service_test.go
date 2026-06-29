@@ -785,8 +785,8 @@ func TestSessionService_ListSessionsByAccount_StaleEntries(t *testing.T) {
 	validID := uuid.New().String()
 	staleID := uuid.New().String()
 
-	// Manually create a valid session key in Redis (bypasses CreateSession
-	// to avoid EnforceSessionLimit's cjson Lua script failing in miniredis).
+	// Manually create a valid session key in Redis to focus this test on
+	// cleanup behavior rather than session creation.
 	now := time.Now()
 	session := &domain.Session{ID: validID, AccountID: accountID, Username: "u", IP: "1.1.1.1", UserAgent: "a", CreatedAt: now, LastActiveAt: now}
 	data, err := json.Marshal(session)

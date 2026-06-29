@@ -159,8 +159,7 @@ func TestResetPassword_InvalidToken(t *testing.T) {
 	accountSvc := &mockAccountServiceForSocial{}
 	engine := setupAuthControllerWithPasswordResetSvc(t, credRepo, emailSender, accountSvc)
 
-	// Password meets ValidatePasswordStrength (12+ chars, upper+lower+digit+special),
-	// but the cjson Lua script fails on miniredis so VerifyAndReset returns error.
+	// Password meets ValidatePasswordStrength; token is not present in Redis.
 	body := `{"token":"fake-invalid-token-abc123","new_password":"ValidP@ssw0rd!"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/password/reset", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")

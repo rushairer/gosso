@@ -20,6 +20,8 @@ web_server:
         - "172.22.0.0/16"  # Docker network (gosso-prod-network)
     csrf_skip_paths:
         - "/api/v1/auth/login"
+        - "/api/v1/auth/password/forgot"
+        - "/api/v1/auth/password/reset"
     rate_limits:
         login: 5
         token: 10

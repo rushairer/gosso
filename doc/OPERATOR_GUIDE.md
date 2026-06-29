@@ -174,7 +174,7 @@ GOUNO_SMTP_HOST=mailpit
 GOUNO_SMTP_PORT=1025
 GOUNO_SMTP_FROM=noreply@gosso.com
 GOUNO_SMTP_TLS_POLICY=notls
-GOUNO_AUTH_PASSWORD_RESET_BASE_URL=http://localhost:3000/reset-password
+GOUNO_AUTH_PASSWORD_RESET_BASE_URL=http://localhost:8080/reset-password
 ```
 
 Mailpit accepts messages on SMTP port `1025` and exposes the inbox at `http://localhost:8025` (or the configured `MAILPIT_WEB_EXTERNAL_PORT`). Use it to verify email-change codes and password-reset links without sending external mail.

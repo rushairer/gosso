@@ -42,49 +42,20 @@ const (
 
 // checkAndIncrementAttemptsScript atomically checks attempt count, increments, and returns the data.
 // Returns: data string on success, -1 if exhausted (key deleted), nil if key not found.
-// Uses cjson.decode for robust JSON parsing when available (real Redis), falling back
-// to string pattern matching for environments without cjson (e.g., miniredis in tests).
+// Uses string pattern matching instead of cjson so it works across Redis Lua
+// sandboxes and miniredis-backed tests.
 var checkAndIncrementAttemptsScript = redis.NewScript(`
 local data = redis.call('GET', KEYS[1])
 if not data then
     return nil
 end
 local max_attempts = tonumber(ARGV[1])
-local attempts
-local account_id, email, username
-local cjson_ok, cjson = pcall(require, 'cjson')
-if cjson_ok then
-    local ok, obj = pcall(cjson.decode, data)
-    if ok and obj then
-        attempts = obj.attempts
-        account_id = obj.account_id
-        email = obj.email
-        username = obj.username
-    end
-end
-if not attempts then
-    attempts = tonumber(data:match('"attempts":(%d+)')) or 0
-    if not account_id then
-        account_id = data:match('"account_id":"([^"]*)"')
-    end
-    if not email then
-        email = data:match('"email":"([^"]*)"')
-    end
-    if not username then
-        username = data:match('"username":"([^"]*)"')
-    end
-end
+local attempts = tonumber(data:match('"attempts":(%d+)')) or 0
 if attempts >= max_attempts then
     redis.call('DEL', KEYS[1])
     return -1
 end
-local updated
-if cjson_ok then
-    local obj = {account_id = account_id or '', email = email or '', username = username or '', attempts = attempts + 1}
-    updated = cjson.encode(obj)
-else
-    updated = data:gsub('"attempts":' .. attempts, '"attempts":' .. (attempts + 1))
-end
+local updated = data:gsub('"attempts":' .. attempts, '"attempts":' .. (attempts + 1))
 redis.call('SETEX', KEYS[1], ARGV[2], updated)
 return updated
 `)
@@ -320,6 +291,7 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 
 // VerifyAndReset verifies the reset token and sets a new password
 func (s *PasswordResetService) VerifyAndReset(ctx context.Context, token, newPassword string) error {
+	token = strings.TrimSpace(token)
 	if err := utility.ValidatePasswordStrength(newPassword); err != nil {
 		return err
 	}

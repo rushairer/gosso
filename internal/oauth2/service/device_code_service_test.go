@@ -372,9 +372,7 @@ func TestDenyDeviceCode_AlreadyAuthorized(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────
-// Script error paths (miniredis doesn't support cjson)
-// These exercise the code paths between TTL check and RunScript result
-// handling. If miniredis adds cjson support, convert to CJSON tests.
+// Script edge paths under the base Redis test harness.
 // ──────────────────────────────────────────────
 
 func TestClaimAuthorizedDeviceCode_ScriptError(t *testing.T) {
@@ -397,9 +395,8 @@ func TestAuthorizeDeviceCode_ScriptError(t *testing.T) {
 	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
 	require.NoError(t, err)
 
-	// authorizeDeviceCodeScript uses cjson which fails on miniredis
 	err = svc.AuthorizeDeviceCode(ctx, dc.DeviceCode, "account-123")
-	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+	assert.NoError(t, err)
 }
 
 func TestDenyDeviceCode_ScriptError(t *testing.T) {
@@ -409,9 +406,8 @@ func TestDenyDeviceCode_ScriptError(t *testing.T) {
 	dc, err := svc.CreateDeviceCode(ctx, "test-client", []string{"openid"})
 	require.NoError(t, err)
 
-	// denyDeviceCodeScript uses cjson which fails on miniredis
 	err = svc.DenyDeviceCode(ctx, dc.DeviceCode)
-	assert.ErrorIs(t, err, domain.ErrDeviceCodeNotFound)
+	assert.NoError(t, err)
 }
 
 func TestCheckAndUpdatePollRate_ScriptError(t *testing.T) {
