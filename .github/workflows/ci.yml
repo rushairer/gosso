@@ -331,14 +331,14 @@ jobs:
             --build-arg VERSION=${{ github.sha }} \
             -t gosso:${{ github.sha }} \
             -t gosso:latest \
-            ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && format('-t ghcr.io/{0}/gosso:{1} -t ghcr.io/{0}/gosso:latest', github.repository) || '' }} \
+            ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && format('-t ghcr.io/{0}/gosso:sha-{1} -t ghcr.io/{0}/gosso:main', github.repository_owner, github.sha) || '' }} \
             .
 
       - name: Push Docker image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          docker push ghcr.io/${{ github.repository }}/gosso:${{ github.sha }}
-          docker push ghcr.io/${{ github.repository }}/gosso:latest
+          docker push ghcr.io/${{ github.repository_owner }}/gosso:sha-${{ github.sha }}
+          docker push ghcr.io/${{ github.repository_owner }}/gosso:main
 
   security-scan:
     name: Security Scan
