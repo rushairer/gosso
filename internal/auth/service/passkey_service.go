@@ -338,7 +338,10 @@ func (s *PasskeyService) completeLoginInternal(ctx context.Context, requestID, e
 	credID := parsedResponse.RawID
 	cred, err := s.credRepo.FindByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credID))
 	if err != nil {
-		return nil, accountRepository.ErrCredentialNotFound
+		if errors.Is(err, repository.ErrWebAuthnCredentialNotFound) {
+			return nil, accountRepository.ErrCredentialNotFound
+		}
+		return nil, fmt.Errorf("find credential: %w", err)
 	}
 
 	// Ownership check for MFA scenario
@@ -453,13 +456,18 @@ func (s *PasskeyService) ListCredentials(ctx context.Context, accountID string) 
 func (s *PasskeyService) DeleteCredential(ctx context.Context, accountID, credentialID string) error {
 	target, err := s.credRepo.FindByCredentialID(ctx, credentialID)
 	if err != nil {
-		return accountRepository.ErrCredentialNotFound
+		if errors.Is(err, repository.ErrWebAuthnCredentialNotFound) {
+			return accountRepository.ErrCredentialNotFound
+		}
+		return fmt.Errorf("find credential: %w", err)
 	}
 	if target == nil {
 		return accountRepository.ErrCredentialNotFound
 	}
 	if target.AccountID != accountID {
-		return ErrCredentialOwnership
+		// Prevent resource existence leak by returning ErrCredentialNotFound (404)
+		// rather than ErrCredentialOwnership (403).
+		return accountRepository.ErrCredentialNotFound
 	}
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {

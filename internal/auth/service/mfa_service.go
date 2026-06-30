@@ -165,7 +165,6 @@ func (s *MFAService) GetMFAStatus(ctx context.Context, accountID string) (*MFASt
 	}
 
 	if hasPasskeys {
-		status.Enabled = true
 		status.Types = append(status.Types, "passkey")
 	}
 

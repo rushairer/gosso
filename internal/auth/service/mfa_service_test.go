@@ -672,7 +672,7 @@ func TestGetMFAStatus_WithPasskey(t *testing.T) {
 
 	status, err := svc.GetMFAStatus(context.Background(), "account-001")
 	require.NoError(t, err)
-	assert.True(t, status.Enabled)
+	assert.False(t, status.Enabled)
 	assert.Contains(t, status.Types, "passkey")
 	assert.NotContains(t, status.Types, "totp")
 }

@@ -336,7 +336,7 @@ func TestDeleteCredential_WrongAccount(t *testing.T) {
 	svc := newTestPasskeyService(credRepo)
 
 	err := svc.DeleteCredential(context.Background(), "acct-other", "cred-1")
-	assert.ErrorIs(t, err, ErrCredentialOwnership)
+	assert.ErrorIs(t, err, accountRepository.ErrCredentialNotFound)
 }
 
 func TestDeleteCredential_Success(t *testing.T) {

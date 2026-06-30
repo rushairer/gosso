@@ -299,7 +299,7 @@ func TestPasskey_ListCredentials_ServiceError(t *testing.T) {
 
 func TestPasskey_DeleteCredential_NotFound(t *testing.T) {
 	credRepo := &mockWebAuthnCredRepo{
-		findByCredentialIDErr: fmt.Errorf("not found"),
+		findByCredentialIDErr: repository.ErrWebAuthnCredentialNotFound,
 	}
 	sqlDB, _, err := sqlmock.New()
 	require.NoError(t, err)
@@ -352,7 +352,7 @@ func TestPasskey_DeleteCredential_OwnershipMismatch(t *testing.T) {
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestPasskey_DeleteCredential_Success(t *testing.T) {
