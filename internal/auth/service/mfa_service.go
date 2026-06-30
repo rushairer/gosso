@@ -419,7 +419,7 @@ func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) 
 			ID:         uuid.New().String(),
 			AccountID:  accountID,
 			Type:       accountDomain.CredentialTypeBackupCode,
-			Identifier: &accountID,
+			Identifier: nil,
 			Value:      string(hashes[i]),
 			Verified:   true,
 			Metadata:   map[string]any{},
