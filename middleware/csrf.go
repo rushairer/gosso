@@ -67,7 +67,8 @@ func CSRFMiddleware(secure bool, logger *zap.Logger, maxAge time.Duration, skipP
 		// cookie for CSRF while the JWT bypasses the check — so only skip when no session
 		// cookie coexists with the Bearer token.
 		if auth := ctx.GetHeader("Authorization"); strings.HasPrefix(auth, "Bearer ") {
-			if IsPlausibleJWT(strings.TrimPrefix(auth, "Bearer ")) && !hasSessionCookie(ctx) {
+			token := strings.TrimPrefix(auth, "Bearer ")
+			if IsPlausibleJWT(token) && hasOnlyAccessTokenCookie(ctx, token) {
 				ctx.Next()
 				return
 			}
@@ -211,9 +212,6 @@ var sessionCookieNames = []string{
 	"session_id",
 	"gosso_session",
 	"gosso_session_id",
-	"access_token",
-	"__secure-access_token",
-	"__host-access_token",
 }
 
 func hasSessionCookie(ctx *gin.Context) bool {
@@ -224,10 +222,44 @@ func hasSessionCookie(ctx *gin.Context) bool {
 				return true
 			}
 		}
-		// Also match common patterns: *_session_id, *-sid (but not substrings like "ads_sid")
 		if strings.HasSuffix(name, "_session_id") || strings.HasSuffix(name, "-session-id") {
 			return true
 		}
 	}
 	return false
+}
+
+func hasOnlyAccessTokenCookie(ctx *gin.Context, bearerToken string) bool {
+	hasSession := false
+	hasAccessCookie := false
+	matches := false
+
+	for _, c := range ctx.Request.Cookies() {
+		name := strings.ToLower(c.Name)
+		isSession := false
+		for _, sn := range sessionCookieNames {
+			if name == sn {
+				isSession = true
+				break
+			}
+		}
+		if isSession || strings.HasSuffix(name, "_session_id") || strings.HasSuffix(name, "-session-id") {
+			hasSession = true
+		}
+
+		if name == "access_token" || name == "__secure-access_token" || name == "__host-access_token" {
+			hasAccessCookie = true
+			if c.Value == bearerToken {
+				matches = true
+			}
+		}
+	}
+
+	if hasSession {
+		return false
+	}
+	if hasAccessCookie {
+		return matches
+	}
+	return true
 }

@@ -244,3 +244,23 @@ func TestCSRF_BearerAuth_WithSessionCookie_NotBypassed(t *testing.T) {
 		})
 	}
 }
+
+func TestCSRF_BearerAuth_WithMatchingAccessTokenCookie_Bypassed(t *testing.T) {
+	r := setupCSRFTestRouter(false)
+	r.POST("/test", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	token := "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature"
+	for _, cookieName := range []string{"access_token", "__secure-access_token", "__host-access_token"} {
+		t.Run(cookieName, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("POST", "/test", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			req.Header.Set("Cookie", cookieName+"="+token)
+			r.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+		})
+	}
+}
