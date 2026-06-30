@@ -319,10 +319,10 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 
 	var roles []string
 	if c.includeUserRoles && c.roleFetcher != nil {
-		var err error
-		roles, err = c.roleFetcher.GetAccountRoles(ctx, dc.AccountID)
-		if err != nil {
-			c.logger.Error("Failed to fetch roles for account", zap.Error(err), zap.String("account_id", dc.AccountID))
+		var rolesErr error
+		roles, rolesErr = c.roleFetcher.GetAccountRoles(ctx, dc.AccountID)
+		if rolesErr != nil {
+			c.logger.Error("Failed to fetch roles for account", zap.Error(rolesErr), zap.String("account_id", dc.AccountID))
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}

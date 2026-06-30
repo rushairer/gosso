@@ -385,16 +385,16 @@ func (s *accountServiceImpl) ResetMFA(ctx context.Context, accountID string) err
 	now := time.Now()
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		// Soft delete TOTP credentials
-		if err := s.credentialRepo.SoftDeleteCredentialsByType(ctx, tx, accountID, domain.CredentialTypeTOTP, now); err != nil {
-			return fmt.Errorf("delete totp: %w", err)
+		if deleteErr := s.credentialRepo.SoftDeleteCredentialsByType(ctx, tx, accountID, domain.CredentialTypeTOTP, now); deleteErr != nil {
+			return fmt.Errorf("delete totp: %w", deleteErr)
 		}
 		// Soft delete Backup Code credentials
-		if err := s.credentialRepo.SoftDeleteCredentialsByType(ctx, tx, accountID, domain.CredentialTypeBackupCode, now); err != nil {
-			return fmt.Errorf("delete backup codes: %w", err)
+		if deleteErr := s.credentialRepo.SoftDeleteCredentialsByType(ctx, tx, accountID, domain.CredentialTypeBackupCode, now); deleteErr != nil {
+			return fmt.Errorf("delete backup codes: %w", deleteErr)
 		}
 		// Soft delete WebAuthn (Passkey) credentials
-		if err := s.credentialRepo.SoftDeleteCredentialsByType(ctx, tx, accountID, domain.CredentialTypeWebAuthn, now); err != nil {
-			return fmt.Errorf("delete webauthn: %w", err)
+		if deleteErr := s.credentialRepo.SoftDeleteCredentialsByType(ctx, tx, accountID, domain.CredentialTypeWebAuthn, now); deleteErr != nil {
+			return fmt.Errorf("delete webauthn: %w", deleteErr)
 		}
 		return nil
 	})
@@ -413,4 +413,3 @@ func (s *accountServiceImpl) ResetMFA(ctx context.Context, accountID string) err
 
 	return nil
 }
-

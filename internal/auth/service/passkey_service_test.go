@@ -56,6 +56,13 @@ func (m *mockWebAuthnRepo) FindByCredentialID(ctx context.Context, credentialID 
 	if m.findByCredentialIDFn != nil {
 		return m.findByCredentialIDFn(ctx, credentialID)
 	}
+	for _, creds := range m.creds {
+		for _, cred := range creds {
+			if cred.ID == credentialID {
+				return cred, nil
+			}
+		}
+	}
 	return nil, nil
 }
 
@@ -328,9 +335,8 @@ func TestDeleteCredential_WrongAccount(t *testing.T) {
 	}
 	svc := newTestPasskeyService(credRepo)
 
-	// Since we query by accountID "acct-other", it returns nothing and should throw Not Found
 	err := svc.DeleteCredential(context.Background(), "acct-other", "cred-1")
-	assert.ErrorIs(t, err, accountRepository.ErrCredentialNotFound)
+	assert.ErrorIs(t, err, ErrCredentialOwnership)
 }
 
 func TestDeleteCredential_Success(t *testing.T) {

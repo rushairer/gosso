@@ -452,59 +452,6 @@ func (s *SessionService) forceExpireSession(ctx context.Context, sessionID strin
 	}
 }
 
-// expireSession cascades token revocation and deletes the session.
-// Uses a Lua script to atomically verify the session is still expired before
-// deleting, preventing a concurrent RefreshSession from being invalidated.
-// The accountSessionsKey parameter (may be empty) enables cleanup of stale
-// entries from the account_sessions index set.
-func (s *SessionService) expireSession(ctx context.Context, sessionID string, accountSessionsKey string) {
-	sessionKey := s.buildSessionKey(sessionID)
-	result, err := s.redis.RunScript(ctx, deleteIfExpiredScript,
-		[]string{sessionKey, accountSessionsKey}, sessionID).Int()
-	if err != nil {
-		s.logger.Warn("Failed to atomically check and delete expired session",
-			zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(err))
-		// Fallback to non-atomic delete.
-		// NOTE: There is a small race window — if a concurrent RefreshSession
-		// re-creates this session key between the failed Lua script and this
-		// DEL, the newly-refreshed session will be incorrectly deleted. This
-		// is acceptable as a rare edge case since the Lua script failure itself
-		// is uncommon and the TTL-based refresh window is short.
-		if delErr := s.redis.Del(ctx, sessionKey); delErr != nil {
-			s.logger.Warn("Failed to delete expired session (fallback)",
-				zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(delErr))
-		}
-		if accountSessionsKey != "" {
-			if remErr := s.redis.SRem(ctx, accountSessionsKey, sessionID); remErr != nil {
-				s.logger.Warn("Failed to remove stale session index entry (fallback)",
-					zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(remErr))
-			}
-		}
-		// Revoke tokens in fallback path — session was deleted (best-effort).
-		if s.tokenRevoker != nil {
-			if revokeErr := s.tokenRevoker.RevokeAllForSession(ctx, sessionID); revokeErr != nil {
-				s.logger.Warn("Failed to revoke tokens for expired session (fallback)",
-					zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(revokeErr))
-			}
-		}
-		return
-	} else if result == 0 {
-		s.logger.Info("Session was refreshed concurrently, skipping expiry",
-			zap.String("session_id", utility.MaskOpaqueID(sessionID)))
-		return
-	}
-
-	// Session was atomically confirmed expired and deleted — safe to revoke tokens.
-	// Token revocation is done AFTER the atomic check to prevent revoking tokens
-	// for a session that was concurrently refreshed by RefreshSession.
-	if s.tokenRevoker != nil {
-		if err := s.tokenRevoker.RevokeAllForSession(ctx, sessionID); err != nil {
-			s.logger.Warn("Failed to revoke tokens for expired session",
-				zap.String("session_id", utility.MaskOpaqueID(sessionID)), zap.Error(err))
-		}
-	}
-}
-
 // buildSessionKey builds the Redis key for a session.
 func (s *SessionService) buildSessionKey(sessionID string) string {
 	return sessionKeyPrefix + sessionID

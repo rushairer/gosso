@@ -246,7 +246,7 @@ func (c *PasskeyController) LoginComplete(ctx *gin.Context) {
 		return
 	}
 	ctx.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-	if err := ctx.ShouldBindJSON(&req); err != nil {
+	if bindErr := ctx.ShouldBindJSON(&req); bindErr != nil {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
 		return
 	}
@@ -330,7 +330,7 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 		return
 	}
 	ctx.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-	if err := ctx.ShouldBindJSON(&req); err != nil {
+	if bindErr := ctx.ShouldBindJSON(&req); bindErr != nil {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
 		return
 	}

@@ -451,21 +451,15 @@ func (s *PasskeyService) ListCredentials(ctx context.Context, accountID string) 
 
 // DeleteCredential deletes a passkey (ownership check)
 func (s *PasskeyService) DeleteCredential(ctx context.Context, accountID, credentialID string) error {
-	creds, err := s.credRepo.FindByAccountID(ctx, accountID)
+	target, err := s.credRepo.FindByCredentialID(ctx, credentialID)
 	if err != nil {
-		return fmt.Errorf("find credentials by account: %w", err)
+		return accountRepository.ErrCredentialNotFound
 	}
-
-	var target *domain.WebAuthnCredential
-	for _, c := range creds {
-		if c.ID == credentialID {
-			target = c
-			break
-		}
-	}
-
 	if target == nil {
 		return accountRepository.ErrCredentialNotFound
+	}
+	if target.AccountID != accountID {
+		return ErrCredentialOwnership
 	}
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {

@@ -67,9 +67,9 @@ func (s *AuthService) refreshTokensLocked(ctx context.Context, refreshToken stri
 	// consistent: an OIDC token that works as an access token must also be refreshable.
 	sessionID := oldRT.SessionID
 	if sessionID != "" {
-		_, err := s.sessionSvc.ValidateSession(ctx, sessionID)
-		if err != nil {
-			s.logger.Debug("Session validation failed during token refresh", zap.Error(err))
+		_, sessionErr := s.sessionSvc.ValidateSession(ctx, sessionID)
+		if sessionErr != nil {
+			s.logger.Debug("Session validation failed during token refresh", zap.Error(sessionErr))
 			return nil, ErrSessionInvalid
 		}
 	} else {

@@ -51,10 +51,13 @@ func (m *mockConsentManager) DeleteConsent(_ context.Context, _, _ string) error
 
 // mockAuditQueryManager implements AdminAuditQueryManager for testing.
 type mockAuditQueryManager struct {
-	queryFn func() ([]any, int, error)
+	queryFn func() ([]*auditDomain.AuditRecord, int, error)
 }
 
 func (m *mockAuditQueryManager) Query(_ context.Context, _ auditRepository.AuditQueryFilter) ([]*auditDomain.AuditRecord, int, error) {
+	if m.queryFn != nil {
+		return m.queryFn()
+	}
 	return nil, 0, nil
 }
 
@@ -941,4 +944,3 @@ func TestResetMFA_SelfAccount(t *testing.T) {
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 }
-

@@ -165,6 +165,7 @@ func (s *MFAService) GetMFAStatus(ctx context.Context, accountID string) (*MFASt
 	}
 
 	if hasPasskeys {
+		status.Enabled = true
 		status.Types = append(status.Types, "passkey")
 	}
 
@@ -375,6 +376,7 @@ func (s *MFAService) GenerateBackupCodes(ctx context.Context, accountID string) 
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(s.backupCodeCount)
 	for i := 0; i < s.backupCodeCount; i++ {
+		i := i
 		g.Go(func() error {
 			hash, err := bcrypt.GenerateFromPassword([]byte(codes[i]), bcrypt.DefaultCost)
 			if err != nil {

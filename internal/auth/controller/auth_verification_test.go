@@ -225,14 +225,12 @@ func TestConfirmVerification_CodeVerifyFails(t *testing.T) {
 	emailSender := &mockEmailSender{}
 	engine := setupAuthControllerWithVerificationSvc(t, claims, credRepo, emailSender)
 
-	// miniredis does not support cjson Lua scripts, so VerifyCode will fail
-	// with a Redis infrastructure error → 503 Service Unavailable (not 400).
 	body := `{"type":"email","identifier":"user@example.com","code":"123456"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/verify/confirm", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
-	assert.Contains(t, w.Body.String(), "service temporarily unavailable")
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid verification code")
 }
