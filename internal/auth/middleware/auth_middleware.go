@@ -155,6 +155,11 @@ func extractBearerTokenWithConfig(ctx *gin.Context, enableCookieAuth bool, authC
 		if cookie, err := ctx.Cookie(authCookieName); err == nil {
 			return cookie
 		}
+		if !strings.HasPrefix(authCookieName, "__Secure-") {
+			if cookie, err := ctx.Cookie("__Secure-" + authCookieName); err == nil {
+				return cookie
+			}
+		}
 	}
 	return ""
 }

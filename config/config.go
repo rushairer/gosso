@@ -427,6 +427,12 @@ func (c *GoUnoConfig) validateAuth() error {
 	if c.WebServerConfig.Production && c.AuthConfig.VerifyHashPepper == "" {
 		return fmt.Errorf("auth: verify_hash_pepper is required in production (env GOUNO_AUTH_VERIFY_HASH_PEPPER)")
 	}
+	if isWeakSecret(c.AuthConfig.TOTPEncryptionKey) {
+		fmt.Fprintln(os.Stderr, "WARNING: auth.totp_encryption_key is using a weak repeating dummy value (e.g. all zeros). This neutralizes cryptographic security.")
+	}
+	if isWeakSecret(c.AuthConfig.VerifyHashPepper) {
+		fmt.Fprintln(os.Stderr, "WARNING: auth.verify_hash_pepper is using a weak repeating dummy value (e.g. all zeros). This neutralizes cryptographic security.")
+	}
 	return c.validateWebAuthn()
 }
 
@@ -688,4 +694,17 @@ func (c *GoUnoConfig) validateObservability() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func isWeakSecret(secret string) bool {
+	if len(secret) == 0 {
+		return false
+	}
+	first := secret[0]
+	for i := 1; i < len(secret); i++ {
+		if secret[i] != first {
+			return false
+		}
+	}
+	return true
 }

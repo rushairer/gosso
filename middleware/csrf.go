@@ -211,6 +211,9 @@ var sessionCookieNames = []string{
 	"session_id",
 	"gosso_session",
 	"gosso_session_id",
+	"access_token",
+	"__secure-access_token",
+	"__host-access_token",
 }
 
 func hasSessionCookie(ctx *gin.Context) bool {

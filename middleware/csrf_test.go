@@ -224,3 +224,23 @@ func TestCSRF_BearerAuth_NoAlg_Blocked(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.Contains(t, w.Body.String(), "CSRF token missing")
 }
+
+func TestCSRF_BearerAuth_WithSessionCookie_NotBypassed(t *testing.T) {
+	r := setupCSRFTestRouter(false)
+	r.POST("/test", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	for _, cookieName := range []string{"session", "access_token", "__secure-access_token", "__host-access_token"} {
+		t.Run(cookieName, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("POST", "/test", nil)
+			req.Header.Set("Authorization", "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature")
+			req.Header.Set("Cookie", cookieName+"=some-value")
+			r.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusForbidden, w.Code)
+			assert.Contains(t, w.Body.String(), "CSRF token missing")
+		})
+	}
+}
