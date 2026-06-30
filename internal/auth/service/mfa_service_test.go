@@ -363,7 +363,7 @@ func TestActivateTOTP_InvalidCode(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalidMFACode)
 }
 
-func TestActivateTOTP_NoPendingEnrollment(t *testing.T) {
+func TestActivateTOTP_Idempotent(t *testing.T) {
 	sqlDB, sqlMock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer sqlDB.Close()
@@ -383,7 +383,6 @@ func TestActivateTOTP_NoPendingEnrollment(t *testing.T) {
 				},
 			},
 		},
-		// VerifyFirstUnverifiedTOTP returns false — no pending enrollment.
 		verifyFirstFn: func(_ context.Context, _ *sql.Tx, _ string) (bool, error) {
 			return false, nil
 		},
@@ -394,8 +393,7 @@ func TestActivateTOTP_NoPendingEnrollment(t *testing.T) {
 	sqlMock.ExpectCommit()
 
 	err = svc.ActivateTOTP(context.Background(), "account-001", code)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no pending TOTP enrollment found")
+	assert.NoError(t, err)
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
 }
 

@@ -325,6 +325,25 @@ func (s *MFAService) ActivateTOTP(ctx context.Context, accountID, code string) e
 		return fmt.Errorf("activate totp credential: %w", err)
 	}
 	if !activated {
+		// Check if it is already verified (idempotency fallback)
+		creds, err := s.credentialRepo.FindByAccountAndType(ctx, accountID, accountDomain.CredentialTypeTOTP)
+		if err != nil {
+			return fmt.Errorf("find totp credentials: %w", err)
+		}
+		for _, c := range creds {
+			if c.Verified && !c.IsDeleted() {
+				secret := c.Value
+				if s.totpEncryptionKey != nil {
+					dec, err := decryptSecret(c.Value, s.totpEncryptionKey)
+					if err == nil {
+						secret = dec
+					}
+				}
+				if totp.Validate(code, secret) {
+					return nil // Already activated with matching code, treat as success (idempotent)
+				}
+			}
+		}
 		return ErrNoPendingTOTPEnrollment
 	}
 
