@@ -186,6 +186,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 
 	// Prevent caching of responses containing tokens
 	controllerutil.SetNoCacheHeaders(ctx)
+	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
 		result.AccessToken, result.RefreshToken, result.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),
@@ -214,6 +215,7 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 
 	// Prevent caching of responses containing tokens
 	controllerutil.SetNoCacheHeaders(ctx)
+	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
 		result.AccessToken, result.RefreshToken, result.SessionID, int(c.tokenMgr.AccessExpiry().Seconds()),
@@ -258,6 +260,7 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 
 	// Prevent caching of responses containing tokens
 	controllerutil.SetNoCacheHeaders(ctx)
+	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
 		result.AccessToken, result.RefreshToken, result.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),

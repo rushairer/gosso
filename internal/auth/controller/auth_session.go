@@ -39,6 +39,7 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 		return
 	}
 
+	clearSSOAuthCookie(ctx, c.secureCookie)
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("logged out"))
 }
 

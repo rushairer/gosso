@@ -274,6 +274,7 @@ func (c *PasskeyController) LoginComplete(ctx *gin.Context) {
 	}
 
 	controllerutil.SetNoCacheHeaders(ctx)
+	setSSOAuthCookie(ctx, loginResult.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), isSecureRequest(ctx))
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
 		loginResult.AccessToken, loginResult.RefreshToken, loginResult.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),
 	)))
@@ -367,6 +368,7 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 	}
 
 	controllerutil.SetNoCacheHeaders(ctx)
+	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), isSecureRequest(ctx))
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
 		result.AccessToken, result.RefreshToken, result.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),

@@ -21,6 +21,19 @@ import (
 // for clients that include optional fields (e.g., long redirect_uri values) while still
 // preventing abuse via excessively large form bodies.
 const oauth2MaxFormBodySize = 8 * 1024
+const authCookieName = "access_token"
+
+func setSSOAuthCookie(ctx *gin.Context, accessToken string, maxAgeSeconds int) {
+	http.SetCookie(ctx.Writer, &http.Cookie{
+		Name:     authCookieName,
+		Value:    accessToken,
+		Path:     "/",
+		MaxAge:   maxAgeSeconds,
+		HttpOnly: true,
+		Secure:   ctx.Request.TLS != nil || ctx.GetHeader("X-Forwarded-Proto") == "https",
+		SameSite: http.SameSiteLaxMode,
+	})
+}
 
 // TokenRequest is the token exchange request body.
 type TokenRequest struct {
@@ -186,6 +199,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 	}
 
 	controllerutil.SetNoCacheHeaders(ctx)
+	setSSOAuthCookie(ctx, accessToken, int(c.tokenSvc.AccessExpiry().Seconds()))
 	ctx.JSON(http.StatusOK, response)
 }
 
@@ -296,6 +310,7 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 	}
 
 	controllerutil.SetNoCacheHeaders(ctx)
+	setSSOAuthCookie(ctx, accessToken, int(c.tokenSvc.AccessExpiry().Seconds()))
 	ctx.JSON(http.StatusOK, gin.H{
 		"access_token":  accessToken,
 		"refresh_token": newRefreshToken.Token,

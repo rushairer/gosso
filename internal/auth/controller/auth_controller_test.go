@@ -52,6 +52,11 @@ func TestLogin_Success(t *testing.T) {
 	assert.Equal(t, "Bearer", data["token_type"])
 	assert.Equal(t, float64(900), data["expires_in"])
 	assert.Equal(t, session.ID, data["session_id"])
+	require.Len(t, w.Result().Cookies(), 1)
+	assert.Equal(t, "access_token", w.Result().Cookies()[0].Name)
+	assert.Equal(t, "access-123", w.Result().Cookies()[0].Value)
+	assert.True(t, w.Result().Cookies()[0].HttpOnly)
+	assert.Equal(t, http.SameSiteLaxMode, w.Result().Cookies()[0].SameSite)
 }
 
 func TestLogin_MFARequired(t *testing.T) {
@@ -148,6 +153,10 @@ func TestRefresh_Success(t *testing.T) {
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, "new-access", data["access_token"])
 	assert.Equal(t, "new-refresh", data["refresh_token"])
+	require.Len(t, w.Result().Cookies(), 1)
+	assert.Equal(t, "access_token", w.Result().Cookies()[0].Name)
+	assert.Equal(t, "new-access", w.Result().Cookies()[0].Value)
+	assert.True(t, w.Result().Cookies()[0].HttpOnly)
 }
 
 func TestRefresh_InvalidToken(t *testing.T) {
@@ -204,6 +213,10 @@ func TestMFAVerify_Success(t *testing.T) {
 	assert.Equal(t, "Bearer", data["token_type"])
 	assert.Equal(t, float64(900), data["expires_in"])
 	assert.Equal(t, session.ID, data["session_id"])
+	require.Len(t, w.Result().Cookies(), 1)
+	assert.Equal(t, "access_token", w.Result().Cookies()[0].Name)
+	assert.Equal(t, "mfa-access-123", w.Result().Cookies()[0].Value)
+	assert.True(t, w.Result().Cookies()[0].HttpOnly)
 }
 
 func TestMFAVerify_MissingCode(t *testing.T) {
