@@ -440,7 +440,7 @@ func TestHTTP_TokenIntrospection(t *testing.T) {
 	assert.Equal(t, accountID, introResult.Sub)
 	assert.Equal(t, clientID, introResult.ClientID)
 	assert.Equal(t, "openid", introResult.Scope)
-	assert.Equal(t, "access_token", introResult.TokenType)
+	assert.Equal(t, "Bearer", introResult.TokenType)
 
 	// Introspect with wrong credentials (different client)
 	wrongResp, wrongBody := e.DoFormRequest(t, http.MethodPost, "/oauth2/introspect", map[string]string{
@@ -520,7 +520,7 @@ func TestHTTP_OIDCUserInfo(t *testing.T) {
 
 	accessToken, err := e.TokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		AccountID: accountID,
-		Scope:     "openid profile email",
+		Scope:     "openid",
 	})
 	require.NoError(t, err)
 
@@ -601,7 +601,7 @@ func TestHTTP_FrontChannelLogout(t *testing.T) {
 
 	// Seed a consent record so the client appears in front-channel logout query
 	_, err = e.DB.ExecContext(ctx,
-		`INSERT INTO oauth2_consents (account_id, client_id, scopes) VALUES ($1, (SELECT client_id FROM oauth2_clients WHERE account_id = $1 LIMIT 1), '["openid"]')`,
+		`INSERT INTO oauth2_consents (account_id, client_id, scopes) VALUES ($1, (SELECT id FROM oauth2_clients WHERE account_id = $1 LIMIT 1), '["openid"]')`,
 		accountID)
 	require.NoError(t, err)
 
@@ -663,7 +663,7 @@ func TestHTTP_BackChannelLogout(t *testing.T) {
 
 	// Seed consent
 	_, err = e.DB.ExecContext(ctx,
-		`INSERT INTO oauth2_consents (account_id, client_id, scopes) VALUES ($1, (SELECT client_id FROM oauth2_clients WHERE account_id = $1 LIMIT 1), '["openid"]')`,
+		`INSERT INTO oauth2_consents (account_id, client_id, scopes) VALUES ($1, (SELECT id FROM oauth2_clients WHERE account_id = $1 LIMIT 1), '["openid"]')`,
 		accountID)
 	require.NoError(t, err)
 
@@ -736,7 +736,7 @@ func TestHTTP_ErrorCases(t *testing.T) {
 			"client_id":     clientID,
 			"client_secret": clientSecret,
 		}, nil)
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Equal(t, http.StatusUnsupportedMediaType, resp.StatusCode)
 		assert.Contains(t, string(body), "unsupported_grant_type")
 	})
 

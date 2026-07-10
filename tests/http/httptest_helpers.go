@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -313,6 +314,14 @@ func (e *HTTPTestEnv) SeedOAuth2Client(t *testing.T, ctx context.Context, accoun
 // DoRequest makes an HTTP request to the test server.
 func (e *HTTPTestEnv) DoRequest(t *testing.T, method, path string, body io.Reader, headers map[string]string) (*http.Response, []byte) {
 	t.Helper()
+	if method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions {
+		if headers == nil {
+			headers = make(map[string]string)
+		}
+		if headers["X-CSRF-Token"] == "" {
+			headers["X-CSRF-Token"] = e.csrfToken(t)
+		}
+	}
 
 	req, err := http.NewRequest(method, e.Server.URL+path, body)
 	require.NoError(t, err)
@@ -329,6 +338,31 @@ func (e *HTTPTestEnv) DoRequest(t *testing.T, method, path string, body io.Reade
 	_ = resp.Body.Close()
 
 	return resp, respBody
+}
+
+func (e *HTTPTestEnv) csrfToken(t *testing.T) string {
+	t.Helper()
+	serverURL, err := url.Parse(e.Server.URL)
+	require.NoError(t, err)
+
+	findToken := func() string {
+		for _, cookie := range e.Client.Jar.Cookies(serverURL) {
+			if cookie.Name == "csrf_token" {
+				return cookie.Value
+			}
+		}
+		return ""
+	}
+	if token := findToken(); token != "" {
+		return token
+	}
+
+	resp, err := e.Client.Get(e.Server.URL + "/health")
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	token := findToken()
+	require.NotEmpty(t, token)
+	return token
 }
 
 // DoFormRequest makes a form-encoded POST request.
