@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -20,21 +19,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var env *HTTPTestEnv
-
-func TestMain(m *testing.M) {
-	// TestMain is called before any test in the package.
-	// We can't use SetupHTTPTestEnv here because it requires *testing.T.
-	// Instead, each test function will set up its own env.
-	os.Exit(m.Run())
-}
-
 func setupTest(t *testing.T) *HTTPTestEnv {
 	t.Helper()
-	if env == nil {
-		env = SetupHTTPTestEnv(t)
-	}
-	return env
+	return SetupHTTPTestEnv(t)
 }
 
 // ──────────────────────────────────────────────
