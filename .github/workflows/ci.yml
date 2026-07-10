@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: "1.26"
+  GO_VERSION: "1.26.5"
   COVERAGE_MIN: "70"
   TEST_POSTGRES_PASSWORD: "gosso_test_password"
   MIGRATE_VERSION: "v4.19.0"

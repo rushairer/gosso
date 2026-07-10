@@ -196,6 +196,32 @@ func TestRoleRepo_FindRolesByAccountID_Empty(t *testing.T) {
 	assert.Len(t, results, 0)
 }
 
+func TestFindRolesByAccountIDs(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	role := newTestRole()
+	values := append([]driver.Value{"account-001"}, roleRowValues(role)...)
+	rows := sqlmock.NewRows(append([]string{"account_id"}, roleColumns()...)).AddRow(values...)
+	mock.ExpectQuery("SELECT ar.account_id, r.id").
+		WithArgs("account-001", "account-002").
+		WillReturnRows(rows)
+
+	result, err := FindRolesByAccountIDs(context.Background(), sqlDB, []string{"account-001", "account-002"})
+	require.NoError(t, err)
+	require.Len(t, result["account-001"], 1)
+	assert.Equal(t, "admin", result["account-001"][0].Name)
+	assert.Empty(t, result["account-002"])
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestFindRolesByAccountIDsEmptyPage(t *testing.T) {
+	result, err := FindRolesByAccountIDs(context.Background(), nil, nil)
+	require.NoError(t, err)
+	assert.Empty(t, result)
+}
+
 func TestRoleRepo_AssignRoleToAccount(t *testing.T) {
 	sqlDB, mock, err := sqlmock.New()
 	require.NoError(t, err)

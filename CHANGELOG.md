@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-10
+
 ### Added
+- Fine-grained admin permissions (`admin:users:read`, `admin:users:manage`, `admin:audit:read`) with an `admin:*` break-glass wildcard and migration `0020` for the built-in administrator role.
+- Admin account listing supports `include=roles`, returning role summaries for a page with one bounded aggregate query so consoles no longer issue per-account role requests.
 - Integrator guide with OIDC client integration examples in Go, JavaScript, and Python (`doc/INTEGRATOR_GUIDE.md`).
 - `.devcontainer/devcontainer.json` for instant contributor onboarding with VS Code.
 - PR auto-labeling via `actions/labeler` (`.github/labeler.yml`, `.github/workflows/labeler.yml`).
@@ -21,11 +25,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Makefile**: `test-integration-http` target for running HTTP-layer tests independently.
 
 ### Changed
+- OpenAPI contract version is now `1.2.0` for the backward-compatible account-role projection and fine-grained admin authorization additions.
 - `NewLogoutService` signature now accepts `oauth2Repo.OAuth2ClientRepository` and `*http.Client` parameters to support front/back-channel logout (`internal/oidc/service/logout_service.go`).
 - `InitializeOIDCModule` signature now accepts `clientRepo` and `httpClient` parameters (`internal/oidc/module.go`).
 - `OAuth2ClientRepository` interface extended with `FindFrontchannelLogoutClientsByAccountID` and `FindBackchannelLogoutClientsByAccountID` methods (`internal/oauth2/repository/client_repository.go`).
 - `oauth2_clients` table now has 19 columns (was 15); all SQL queries and scan helpers updated accordingly (`internal/oauth2/repository/`).
 - `test-integration` Makefile target now includes `./tests/http/` in addition to existing service-layer integration tests.
+
+### Fixed
+- Updated MFA idempotency and passkey deletion controller tests to match the hardened service behavior, restoring a clean full-suite quality gate.
+
+### Security
+- Updated the required Go toolchain and container builder to Go 1.26.5 for standard-library TLS, X.509, URL, and networking security fixes.
+- Updated `quic-go` to 0.59.1 to fix the reachable HTTP/3 QPACK trailer expansion memory-exhaustion vulnerability.
 
 
 ## [1.0.0] - 2026-06-22
@@ -2070,3 +2082,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Device code user code validation now enforces exact 8-character length (`internal/oauth2/service/device_code_service.go`).
 - Migrate command `--env` default changed to `production`; migration driver uses configured driver name instead of hardcoded `"pgx"` (`cmd/gouno/migrate.go`).
 
+[Unreleased]: https://github.com/rushairer/gosso/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/rushairer/gosso/compare/v0.0.1...v1.1.0

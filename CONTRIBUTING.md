@@ -4,7 +4,7 @@ Thank you for your interest in contributing to gosso. This guide will help you g
 
 ## Prerequisites
 
-- **Go 1.26.0+**
+- **Go 1.26.5+**
 - **PostgreSQL 15+**
 - **Redis 7+**
 - **Docker & Docker Compose** (optional, for containerized development)
@@ -179,7 +179,7 @@ By contributing to gosso, you agree that your contributions will be licensed und
 
 ## 环境要求
 
-- **Go 1.26.0+**
+- **Go 1.26.5+**
 - **PostgreSQL 15+**
 - **Redis 7+**
 - **Docker & Docker Compose**（可选，用于容器化开发）

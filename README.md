@@ -53,7 +53,7 @@ gosso provides a complete SSO server with OAuth 2.0 authorization, OIDC discover
 
 ## Prerequisites
 
-- Go 1.26.0+
+- Go 1.26.5+
 - PostgreSQL 15+
 - Redis 7+
 
@@ -466,7 +466,7 @@ gosso 提供完整的 SSO 服务器，包含 OAuth 2.0 授权、OIDC 发现、JW
 
 ## 前置条件
 
-- Go 1.26.0+
+- Go 1.26.5+
 - PostgreSQL 15+
 - Redis 7+
 

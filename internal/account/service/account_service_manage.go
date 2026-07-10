@@ -364,6 +364,36 @@ func (s *accountServiceImpl) ListAccounts(ctx context.Context, page, pageSize in
 	return s.accountRepo.FindAll(ctx, page, pageSize, status)
 }
 
+// AccountSummary is the scalable admin-list projection. Lockout state is not
+// included because it is derived from Redis key scans and must be requested for
+// one selected account rather than multiplied by the page size.
+type AccountSummary struct {
+	*domain.Account
+	Roles []*domain.Role `json:"roles"`
+}
+
+// ListAccountSummaries returns one page of accounts and all role assignments in
+// two bounded queries, avoiding the admin console's previous per-row requests.
+func (s *accountServiceImpl) ListAccountSummaries(ctx context.Context, page, pageSize int, status string) ([]*AccountSummary, int, error) {
+	accounts, total, err := s.accountRepo.FindAll(ctx, page, pageSize, status)
+	if err != nil {
+		return nil, 0, err
+	}
+	accountIDs := make([]string, len(accounts))
+	for i, account := range accounts {
+		accountIDs[i] = account.ID
+	}
+	rolesByAccount, err := repository.FindRolesByAccountIDs(ctx, s.db, accountIDs)
+	if err != nil {
+		return nil, 0, err
+	}
+	summaries := make([]*AccountSummary, len(accounts))
+	for i, account := range accounts {
+		summaries[i] = &AccountSummary{Account: account, Roles: rolesByAccount[account.ID]}
+	}
+	return summaries, total, nil
+}
+
 // GetAccountRoles returns the roles assigned to the account.
 func (s *accountServiceImpl) GetAccountRoles(ctx context.Context, accountID string) ([]*domain.Role, error) {
 	return s.roleRepo.FindRolesByAccountID(ctx, accountID)
