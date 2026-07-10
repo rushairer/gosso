@@ -84,6 +84,7 @@ func SetupHTTPTestEnv(t *testing.T) *HTTPTestEnv {
 
 	env := testutil.SetupTestEnvT(t)
 	ctx := context.Background()
+	require.NoError(t, env.TruncateAll(ctx))
 	logger := zap.NewNop()
 
 	auditor := service.NewAuditor(ctx, env.DB, nil, logger)
@@ -383,6 +384,17 @@ func (e *HTTPTestEnv) DoFormRequest(t *testing.T, method, path string, formData 
 	}
 
 	return e.DoRequest(t, method, path, body, headers)
+}
+
+func (e *HTTPTestEnv) DoJSONRequest(t *testing.T, method, path string, payload any, headers map[string]string) (*http.Response, []byte) {
+	t.Helper()
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+	headers["Content-Type"] = "application/json"
+	return e.DoRequest(t, method, path, strings.NewReader(string(body)), headers)
 }
 
 // DoBearerRequest makes an HTTP request with a Bearer token.

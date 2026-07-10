@@ -163,7 +163,7 @@ func TestHTTP_AuthorizationCodeFlow(t *testing.T) {
 	})
 
 	// Step 1: Login to get an access token (we'll use this to authorize)
-	loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
+	loginResp, loginBody := e.DoJSONRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"username": "authcode-user",
 		"password": "password123",
 	}, nil)
@@ -263,7 +263,7 @@ func TestHTTP_AuthorizationCodeFlow_PKCE(t *testing.T) {
 	codeChallenge := base64.RawURLEncoding.EncodeToString(h[:])
 
 	// Login
-	loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
+	loginResp, loginBody := e.DoJSONRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"username": "pkce-user",
 		"password": "password123",
 	}, nil)
@@ -350,7 +350,7 @@ func TestHTTP_RefreshTokenFlow(t *testing.T) {
 	})
 
 	// Login
-	loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
+	loginResp, loginBody := e.DoJSONRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"username": "refresh-user",
 		"password": "password123",
 	}, nil)
@@ -552,7 +552,7 @@ func TestHTTP_OIDCLogout(t *testing.T) {
 	})
 
 	// Login
-	loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
+	loginResp, loginBody := e.DoJSONRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"username": "logout-user",
 		"password": "password123",
 	}, nil)
@@ -606,7 +606,7 @@ func TestHTTP_FrontChannelLogout(t *testing.T) {
 	require.NoError(t, err)
 
 	// Login
-	loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
+	loginResp, loginBody := e.DoJSONRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"username": "fc-logout-user",
 		"password": "password123",
 	}, nil)
@@ -668,7 +668,7 @@ func TestHTTP_BackChannelLogout(t *testing.T) {
 	require.NoError(t, err)
 
 	// Login
-	loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
+	loginResp, loginBody := e.DoJSONRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"username": "bc-logout-user",
 		"password": "password123",
 	}, nil)
@@ -761,7 +761,7 @@ func TestHTTP_ErrorCases(t *testing.T) {
 	})
 
 	t.Run("InvalidRedirectURI", func(t *testing.T) {
-		loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
+		loginResp, loginBody := e.DoJSONRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
 			"username": "error-user",
 			"password": "password123",
 		}, nil)
