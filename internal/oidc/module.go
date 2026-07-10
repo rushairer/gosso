@@ -8,8 +8,8 @@ import (
 	"github.com/rushairer/gosso/config"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
-	oidcService "github.com/rushairer/gosso/internal/oidc/service"
 	oauth2Repo "github.com/rushairer/gosso/internal/oauth2/repository"
+	oidcService "github.com/rushairer/gosso/internal/oidc/service"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )

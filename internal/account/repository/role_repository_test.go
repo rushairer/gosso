@@ -205,7 +205,7 @@ func TestFindRolesByAccountIDs(t *testing.T) {
 	values := append([]driver.Value{"account-001"}, roleRowValues(role)...)
 	rows := sqlmock.NewRows(append([]string{"account_id"}, roleColumns()...)).AddRow(values...)
 	mock.ExpectQuery("SELECT ar.account_id, r.id").
-		WithArgs("account-001", "account-002").
+		WithArgs(`{"account-001","account-002"}`).
 		WillReturnRows(rows)
 
 	result, err := FindRolesByAccountIDs(context.Background(), sqlDB, []string{"account-001", "account-002"})

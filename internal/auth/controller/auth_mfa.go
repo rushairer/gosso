@@ -168,4 +168,3 @@ func (c *AuthController) MFAStatus(ctx *gin.Context) {
 	controllerutil.SetNoCacheHeaders(ctx)
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(status))
 }
-

@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
+
+	"github.com/lib/pq"
 
 	"github.com/rushairer/gosso/internal/account/domain"
 	dbPkg "github.com/rushairer/gosso/internal/db"
@@ -286,11 +287,7 @@ func FindRolesByAccountIDs(ctx context.Context, db *sql.DB, accountIDs []string)
 		return result, nil
 	}
 
-	placeholders := make([]string, len(accountIDs))
-	args := make([]any, len(accountIDs))
-	for i, accountID := range accountIDs {
-		placeholders[i] = fmt.Sprintf("$%d", i+1)
-		args[i] = accountID
+	for _, accountID := range accountIDs {
 		result[accountID] = make([]*domain.Role, 0)
 	}
 
@@ -299,11 +296,11 @@ func FindRolesByAccountIDs(ctx context.Context, db *sql.DB, accountIDs []string)
 		       r.created_at, r.updated_at, r.deleted_at
 		FROM account_roles ar
 		INNER JOIN roles r ON r.id = ar.role_id
-		WHERE ar.account_id IN (` + strings.Join(placeholders, ",") + `)
+		WHERE ar.account_id = ANY($1::uuid[])
 		  AND ar.deleted_at IS NULL AND r.deleted_at IS NULL
 		ORDER BY ar.account_id, r.name`
 
-	rows, err := db.QueryContext(ctx, query, args...)
+	rows, err := db.QueryContext(ctx, query, pq.Array(accountIDs))
 	if err != nil {
 		return nil, fmt.Errorf("query roles for account page: %w", err)
 	}

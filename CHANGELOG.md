@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 - Updated MFA idempotency and passkey deletion controller tests to match the hardened service behavior, restoring a clean full-suite quality gate.
+- Restored a clean lint gate, including deterministic refresh-lock release and correct context-cancellation propagation from lockout scans.
 
 ### Security
 - Updated the required Go toolchain and container builder to Go 1.26.5 for standard-library TLS, X.509, URL, and networking security fixes.

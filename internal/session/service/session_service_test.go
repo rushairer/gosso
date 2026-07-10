@@ -647,8 +647,8 @@ func TestSessionService_EnforceSessionLimit_PreservesProtectedSessionOnTimestamp
 			CreatedAt:    sharedTime,
 			LastActiveAt: sharedTime,
 		}
-		data, err := json.Marshal(session)
-		require.NoError(t, err)
+		data, marshalErr := json.Marshal(session)
+		require.NoError(t, marshalErr)
 		require.NoError(t, redisClient.Set(ctx, svc.buildSessionKey(sid), data, 10*time.Second))
 		require.NoError(t, redisClient.SAdd(ctx, indexKey, sid))
 	}
