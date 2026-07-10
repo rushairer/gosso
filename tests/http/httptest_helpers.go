@@ -17,15 +17,16 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/rushairer/gosso/internal/account"
-	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	adminController "github.com/rushairer/gosso/internal/admin/controller"
-	"github.com/rushairer/gosso/internal/audit/service"
 	auditRepository "github.com/rushairer/gosso/internal/audit/repository"
+	"github.com/rushairer/gosso/internal/audit/service"
 	"github.com/rushairer/gosso/internal/auth"
 	authController "github.com/rushairer/gosso/internal/auth/controller"
 	authServicePkg "github.com/rushairer/gosso/internal/auth/service"
@@ -288,9 +289,9 @@ func (e *HTTPTestEnv) SeedOAuth2Client(t *testing.T, ctx context.Context, accoun
 	secret := ""
 	if opts.Confidential {
 		secret = generateTestClientSecret()
-		hashedSecret, hashErr := accountDomain.HashPassword(secret)
+		hashedSecret, hashErr := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
 		require.NoError(t, hashErr)
-		client.ClientSecretHash = hashedSecret
+		client.ClientSecretHash = string(hashedSecret)
 	}
 
 	_, err = e.DB.ExecContext(ctx,
@@ -375,11 +376,7 @@ func (a *oauth2ClientDeleterAdapter) SoftDeleteOAuth2ClientsByAccount(ctx contex
 }
 
 func generateTestClientID() string {
-	b := make([]byte, 16)
-	for i := range b {
-		b[i] = byte(i + 1)
-	}
-	return "test-" + hex.EncodeToString(b)
+	return "test-" + uuid.NewString()
 }
 
 func generateTestClientSecret() string {

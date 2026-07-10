@@ -43,12 +43,18 @@ func setupSessionTest(t *testing.T) (context.Context, *service.SessionService) {
 		_ = rdb.FlushDB(ctx).Err()
 	}
 
-	svc, err := service.NewSessionService(env.Redis, zap.NewNop())
+	svc, err := service.NewSessionServiceWithConfig(env.Redis, zap.NewNop(), service.SessionConfig{
+		TokenRevoker: integrationTokenRevoker{},
+	})
 	if err != nil {
 		t.Fatalf("NewSessionService: %v", err)
 	}
 	return ctx, svc
 }
+
+type integrationTokenRevoker struct{}
+
+func (integrationTokenRevoker) RevokeAllForSession(_ context.Context, _ string) error { return nil }
 
 func createTestSession(accountID string) *domain.Session {
 	return &domain.Session{
@@ -168,8 +174,7 @@ func TestRevokeSession_WrongAccount(t *testing.T) {
 	require.NoError(t, svc.CreateSession(ctx, session))
 
 	err := svc.RevokeSession(ctx, uuid.New().String(), session.ID)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "does not belong")
+	assert.ErrorIs(t, err, service.ErrSessionAccessDenied)
 }
 
 func TestRevokeAllForAccount(t *testing.T) {
@@ -199,7 +204,8 @@ func TestEnforceSessionLimit(t *testing.T) {
 	}
 
 	svc, err := service.NewSessionServiceWithConfig(env.Redis, zap.NewNop(), service.SessionConfig{
-		MaxSessions: 3,
+		MaxSessions:  3,
+		TokenRevoker: integrationTokenRevoker{},
 	})
 	if err != nil {
 		t.Fatalf("NewSessionServiceWithConfig: %v", err)

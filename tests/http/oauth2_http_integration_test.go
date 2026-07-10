@@ -17,6 +17,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
 func setupTest(t *testing.T) *HTTPTestEnv {
@@ -154,10 +156,10 @@ func TestHTTP_AuthorizationCodeFlow(t *testing.T) {
 	require.NoError(t, err)
 
 	clientID, clientSecret := e.SeedOAuth2Client(t, ctx, accountID, SeedClientOptions{
-		Confidential:   true,
-		RedirectURIs:   []string{"https://app.example.com/callback"},
-		GrantTypes:     []string{"authorization_code", "refresh_token"},
-		Scopes:         []string{"openid", "profile", "email"},
+		Confidential: true,
+		RedirectURIs: []string{"https://app.example.com/callback"},
+		GrantTypes:   []string{"authorization_code", "refresh_token"},
+		Scopes:       []string{"openid", "profile", "email"},
 	})
 
 	// Step 1: Login to get an access token (we'll use this to authorize)
@@ -427,10 +429,10 @@ func TestHTTP_TokenIntrospection(t *testing.T) {
 	assert.Equal(t, http.StatusOK, introResp.StatusCode)
 
 	var introResult struct {
-		Active   bool   `json:"active"`
-		Sub      string `json:"sub"`
-		ClientID string `json:"client_id"`
-		Scope    string `json:"scope"`
+		Active    bool   `json:"active"`
+		Sub       string `json:"sub"`
+		ClientID  string `json:"client_id"`
+		Scope     string `json:"scope"`
 		TokenType string `json:"token_type"`
 	}
 	require.NoError(t, json.Unmarshal(introBody, &introResult))
@@ -513,26 +515,17 @@ func TestHTTP_OIDCUserInfo(t *testing.T) {
 	e := setupTest(t)
 	ctx := context.Background()
 
-	_, err := e.SeedAccount(ctx, "userinfo-user", "userinfo@example.com", "password123")
+	accountID, err := e.SeedAccount(ctx, "userinfo-user", "userinfo@example.com", "password123")
 	require.NoError(t, err)
 
-	// Login to get an access token
-	loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/auth/login", map[string]string{
-		"username": "userinfo-user",
-		"password": "password123",
-	}, nil)
-	require.Equal(t, http.StatusOK, loginResp.StatusCode)
-
-	var loginResult struct {
-		Data struct {
-			AccessToken string `json:"access_token"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(loginBody, &loginResult))
-	require.NotEmpty(t, loginResult.Data.AccessToken)
+	accessToken, err := e.TokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
+		AccountID: accountID,
+		Scope:     "openid profile email",
+	})
+	require.NoError(t, err)
 
 	// GET /oidc/userinfo
-	resp, body := e.DoBearerRequest(t, http.MethodGet, "/oidc/userinfo", loginResult.Data.AccessToken, nil)
+	resp, body := e.DoBearerRequest(t, http.MethodGet, "/oidc/userinfo", accessToken, nil)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var userInfo map[string]any
@@ -598,11 +591,11 @@ func TestHTTP_FrontChannelLogout(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _ = e.SeedOAuth2Client(t, ctx, accountID, SeedClientOptions{
-		Confidential:          true,
-		RedirectURIs:          []string{"https://app.example.com/callback"},
-		GrantTypes:            []string{"authorization_code"},
-		Scopes:                []string{"openid"},
-		FrontchannelLogoutURI: "https://app.example.com/frontchannel-logout",
+		Confidential:                      true,
+		RedirectURIs:                      []string{"https://app.example.com/callback"},
+		GrantTypes:                        []string{"authorization_code"},
+		Scopes:                            []string{"openid"},
+		FrontchannelLogoutURI:             "https://app.example.com/frontchannel-logout",
 		FrontchannelLogoutSessionRequired: true,
 	})
 
@@ -660,11 +653,11 @@ func TestHTTP_BackChannelLogout(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _ = e.SeedOAuth2Client(t, ctx, accountID, SeedClientOptions{
-		Confidential:         true,
-		RedirectURIs:         []string{"https://app.example.com/callback"},
-		GrantTypes:           []string{"authorization_code"},
-		Scopes:               []string{"openid"},
-		BackchannelLogoutURI: receiverServer.URL,
+		Confidential:                     true,
+		RedirectURIs:                     []string{"https://app.example.com/callback"},
+		GrantTypes:                       []string{"authorization_code"},
+		Scopes:                           []string{"openid"},
+		BackchannelLogoutURI:             receiverServer.URL,
 		BackchannelLogoutSessionRequired: true,
 	})
 
