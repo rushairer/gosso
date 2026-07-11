@@ -108,6 +108,20 @@ jobs:
       - name: Run architecture invariant checks
         run: bash script/check-architecture.sh
 
+  helm-chart:
+    name: Helm Chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+
+      - name: Lint and package chart
+        run: |
+          helm lint deploy/helm/gosso
+          helm package deploy/helm/gosso --destination /tmp
+
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
