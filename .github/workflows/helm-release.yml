@@ -1,0 +1,40 @@
+name: Publish Helm Chart
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version to publish without the v prefix
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Publish Helm Chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+
+      - name: Validate version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          test "$VERSION" = "$(awk '$1 == "version:" { print $2; exit }' deploy/helm/gosso/Chart.yaml)"
+          test "$VERSION" = "$(awk '$1 == "appVersion:" { gsub(/\"/, "", $2); print $2; exit }' deploy/helm/gosso/Chart.yaml)"
+          grep -Fq "## [$VERSION]" CHANGELOG.md
+
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      - name: Lint, package, and publish
+        run: |
+          helm lint deploy/helm/gosso
+          helm package deploy/helm/gosso --destination /tmp
+          helm push "/tmp/gosso-${{ inputs.version }}.tgz" oci://ghcr.io/${{ github.repository_owner }}/gosso/charts
