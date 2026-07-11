@@ -102,6 +102,7 @@ auth:
     enable_cookie_auth: true
     auth_cookie_name: "access_token"
     include_user_roles: true
+    include_user_permissions: true
 cors:
     allowed_origins:
         - "http://localhost:3000"
