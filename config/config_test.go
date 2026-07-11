@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
@@ -119,6 +120,15 @@ func TestConfigManager_ProductionConfigLoadsFromEnv(t *testing.T) {
 	assert.Equal(t, "redis://:strong@redis:6379/0", cfg.RedisConfig.DSN)
 	assert.Equal(t, "host=postgres user=gosso password=strong dbname=gosso port=5432 sslmode=require", cfg.DatabaseConfig.GetDefaultDriver().DSN)
 	assert.Equal(t, []string{"https://sso.example.com"}, cfg.CORSConfig.AllowedOrigins)
+}
+
+func TestConfigManager_TestConfigIsValid(t *testing.T) {
+	cm, err := NewConfigManager(nil, "../config", "test")
+	require.NoError(t, err)
+
+	key, err := hex.DecodeString(cm.Config().AuthConfig.TOTPEncryptionKey)
+	require.NoError(t, err)
+	assert.Len(t, key, 32)
 }
 
 // ──────────────────────────────────────────────

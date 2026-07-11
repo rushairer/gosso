@@ -34,18 +34,18 @@ import (
 // ──────────────────────────────────────────────
 
 type mockAuthOrchestrator struct {
-	loginFn           func() (*service.LoginResult, error)
-	mfaVerifyFn       func() (*service.LoginResult, error)
-	logoutFn          func() error
-	refreshFn         func() (*service.RefreshResult, error)
-	validateSessionFn func() (*sessionDomain.Session, error)
-	listSessionsFn    func() ([]*sessionDomain.Session, error)
-	revokeSessionFn   func() error
-	verifyPasswordFn  func() error
-	mfaSvc            *service.MFAService
-	changePasswordFn  func(oldPassword, newPassword string) error
-	updateProfileFn   func(accountID, displayName string) (*accountDomain.Account, error)
-	updateEmailFn     func(accountID, newEmail string) error
+	loginFn            func() (*service.LoginResult, error)
+	mfaVerifyFn        func() (*service.LoginResult, error)
+	logoutFn           func() error
+	refreshFn          func() (*service.RefreshResult, error)
+	validateSessionFn  func() (*sessionDomain.Session, error)
+	listSessionsFn     func() ([]*sessionDomain.Session, error)
+	revokeSessionFn    func() error
+	verifyPasswordFn   func() error
+	mfaSvc             *service.MFAService
+	changePasswordFn   func(oldPassword, newPassword string) error
+	updateProfileFn    func(accountID, displayName string) (*accountDomain.Account, error)
+	updateEmailFn      func(accountID, newEmail string) error
 	isEmailAvailableFn func(email string) (bool, error)
 }
 

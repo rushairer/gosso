@@ -11,7 +11,7 @@ info:
     - Social login (Google, GitHub, WeChat)
     - Admin account management
     - Email verification and password reset (phone verification reserved until SMS gateway is configured)
-  version: 1.1.0
+  version: 1.2.0
   contact:
     name: rushairer
     url: https://github.com/rushairer/gosso
@@ -1234,6 +1234,12 @@ paths:
             type: string
             enum: [active, suspended, deleted]
           description: Filter by account status
+        - name: include
+          in: query
+          schema:
+            type: string
+            enum: [roles]
+          description: Include role summaries using one bounded aggregate query. Lockout state remains a per-account endpoint.
       responses:
         "200":
           description: Paginated account list
@@ -2407,6 +2413,11 @@ components:
           type: string
           format: date-time
           nullable: true
+        roles:
+          type: array
+          description: Present when the list request uses `include=roles`.
+          items:
+            $ref: "#/components/schemas/Role"
 
     Role:
       type: object

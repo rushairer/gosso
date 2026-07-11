@@ -357,9 +357,9 @@ func TestPasskey_DeleteCredential_OwnershipMismatch(t *testing.T) {
 
 func TestPasskey_DeleteCredential_Success(t *testing.T) {
 	credRepo := &mockWebAuthnCredRepo{
-		findByCredentialIDResult: &authDomain.WebAuthnCredential{
-			ID: "cred-001", AccountID: "account-001", Name: "My Laptop",
-		},
+		findByAccountIDResults: []*authDomain.WebAuthnCredential{{
+			ID: "00000000-0000-0000-0000-000000000001", AccountID: "account-001", Name: "My Laptop",
+		}},
 	}
 	sqlDB, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -391,9 +391,9 @@ func TestPasskey_DeleteCredential_Success(t *testing.T) {
 
 func TestPasskey_DeleteCredential_TxError(t *testing.T) {
 	credRepo := &mockWebAuthnCredRepo{
-		findByCredentialIDResult: &authDomain.WebAuthnCredential{
-			ID: "cred-001", AccountID: "account-001", Name: "My Laptop",
-		},
+		findByAccountIDResults: []*authDomain.WebAuthnCredential{{
+			ID: "00000000-0000-0000-0000-000000000001", AccountID: "account-001", Name: "My Laptop",
+		}},
 		softDeleteCredentialErr: fmt.Errorf("delete failed"),
 	}
 	sqlDB, mock, err := sqlmock.New()

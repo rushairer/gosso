@@ -187,14 +187,13 @@ func (s *AuthService) withRefreshTokenLock(ctx context.Context, refreshToken str
 			return nil, err
 		}
 		if acquired {
-			defer func() {
-				if err := s.redis.Del(context.Background(), lockKey); err != nil {
-					s.logger.Warn("Failed to release refresh token lock",
-						zap.Error(err),
-						zap.String("refresh_token_hash", refreshTokenHashPrefix(refreshToken)))
-				}
-			}()
-			return fn()
+			result, fnErr := fn()
+			if deleteErr := s.redis.Del(context.Background(), lockKey); deleteErr != nil {
+				s.logger.Warn("Failed to release refresh token lock",
+					zap.Error(deleteErr),
+					zap.String("refresh_token_hash", refreshTokenHashPrefix(refreshToken)))
+			}
+			return result, fnErr
 		}
 
 		if time.Now().After(deadline) {

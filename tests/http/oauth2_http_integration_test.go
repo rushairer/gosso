@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -18,23 +17,13 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
-
-var env *HTTPTestEnv
-
-func TestMain(m *testing.M) {
-	// TestMain is called before any test in the package.
-	// We can't use SetupHTTPTestEnv here because it requires *testing.T.
-	// Instead, each test function will set up its own env.
-	os.Exit(m.Run())
-}
 
 func setupTest(t *testing.T) *HTTPTestEnv {
 	t.Helper()
-	if env == nil {
-		env = SetupHTTPTestEnv(t)
-	}
-	return env
+	return SetupHTTPTestEnv(t)
 }
 
 // ──────────────────────────────────────────────
@@ -167,14 +156,14 @@ func TestHTTP_AuthorizationCodeFlow(t *testing.T) {
 	require.NoError(t, err)
 
 	clientID, clientSecret := e.SeedOAuth2Client(t, ctx, accountID, SeedClientOptions{
-		Confidential:   true,
-		RedirectURIs:   []string{"https://app.example.com/callback"},
-		GrantTypes:     []string{"authorization_code", "refresh_token"},
-		Scopes:         []string{"openid", "profile", "email"},
+		Confidential: true,
+		RedirectURIs: []string{"https://app.example.com/callback"},
+		GrantTypes:   []string{"authorization_code", "refresh_token"},
+		Scopes:       []string{"openid", "profile", "email"},
 	})
 
 	// Step 1: Login to get an access token (we'll use this to authorize)
-	loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/auth/login", map[string]string{
+	loginResp, loginBody := e.DoJSONRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"username": "authcode-user",
 		"password": "password123",
 	}, nil)
@@ -193,10 +182,11 @@ func TestHTTP_AuthorizationCodeFlow(t *testing.T) {
 	// Step 2: GET /oauth2/authorize (with Bearer auth)
 	authorizeURL := fmt.Sprintf("/oauth2/authorize?response_type=code&client_id=%s&redirect_uri=%s&scope=openid%%20profile%%20email&state=test-state",
 		clientID, "https://app.example.com/callback")
-	resp, _ := e.DoBearerRequest(t, http.MethodGet, authorizeURL, loginResult.Data.AccessToken, nil)
+	resp, authorizeBody := e.DoBearerRequest(t, http.MethodGet, authorizeURL, loginResult.Data.AccessToken, nil)
 	// With Bearer auth, the authorize endpoint may return 200 (consent page) or 302 (if consent already granted)
-	assert.True(t, resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusFound,
-		"expected 200 or 302, got %d", resp.StatusCode)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	consentID := extractHiddenInput(string(authorizeBody), "consent_id")
+	require.NotEmpty(t, consentID)
 
 	// Step 3: POST consent
 	consentResp, consentBody := e.DoFormRequest(t, http.MethodPost, "/oauth2/authorize", map[string]string{
@@ -204,8 +194,9 @@ func TestHTTP_AuthorizationCodeFlow(t *testing.T) {
 		"redirect_uri":  "https://app.example.com/callback",
 		"scope":         "openid profile email",
 		"state":         "test-state",
-		"consent":       "approve",
+		"approved":      "true",
 		"response_type": "code",
+		"consent_id":    consentID,
 	}, map[string]string{
 		"Authorization": "Bearer " + loginResult.Data.AccessToken,
 		"Content-Type":  "application/x-www-form-urlencoded",
@@ -274,7 +265,7 @@ func TestHTTP_AuthorizationCodeFlow_PKCE(t *testing.T) {
 	codeChallenge := base64.RawURLEncoding.EncodeToString(h[:])
 
 	// Login
-	loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/auth/login", map[string]string{
+	loginResp, loginBody := e.DoJSONRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"username": "pkce-user",
 		"password": "password123",
 	}, nil)
@@ -290,8 +281,10 @@ func TestHTTP_AuthorizationCodeFlow_PKCE(t *testing.T) {
 	// Authorize with PKCE
 	authorizeURL := fmt.Sprintf("/oauth2/authorize?response_type=code&client_id=%s&redirect_uri=%s&scope=openid&code_challenge=%s&code_challenge_method=S256&state=pkce-state",
 		clientID, "https://app.example.com/callback", codeChallenge)
-	resp, _ := e.DoBearerRequest(t, http.MethodGet, authorizeURL, loginResult.Data.AccessToken, nil)
-	assert.True(t, resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusFound)
+	resp, authorizeBody := e.DoBearerRequest(t, http.MethodGet, authorizeURL, loginResult.Data.AccessToken, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	consentID := extractHiddenInput(string(authorizeBody), "consent_id")
+	require.NotEmpty(t, consentID)
 
 	// POST consent
 	consentResp, _ := e.DoFormRequest(t, http.MethodPost, "/oauth2/authorize", map[string]string{
@@ -299,10 +292,11 @@ func TestHTTP_AuthorizationCodeFlow_PKCE(t *testing.T) {
 		"redirect_uri":          "https://app.example.com/callback",
 		"scope":                 "openid",
 		"state":                 "pkce-state",
-		"consent":               "approve",
+		"approved":              "true",
 		"response_type":         "code",
 		"code_challenge":        codeChallenge,
 		"code_challenge_method": "S256",
+		"consent_id":            consentID,
 	}, map[string]string{
 		"Authorization": "Bearer " + loginResult.Data.AccessToken,
 		"Content-Type":  "application/x-www-form-urlencoded",
@@ -346,7 +340,7 @@ func TestHTTP_AuthorizationCodeFlow_PKCE(t *testing.T) {
 // Refresh Token Flow
 // ──────────────────────────────────────────────
 
-func TestHTTP_RefreshTokenFlow(t *testing.T) {
+func TestHTTP_ClientCredentialsOmitsRefreshToken(t *testing.T) {
 	e := setupTest(t)
 	ctx := context.Background()
 
@@ -356,31 +350,11 @@ func TestHTTP_RefreshTokenFlow(t *testing.T) {
 	clientID, clientSecret := e.SeedOAuth2Client(t, ctx, accountID, SeedClientOptions{
 		Confidential: true,
 		RedirectURIs: []string{"https://app.example.com/callback"},
-		GrantTypes:   []string{"authorization_code", "refresh_token"},
+		GrantTypes:   []string{"client_credentials"},
 		Scopes:       []string{"openid", "profile"},
 	})
 
-	// Login
-	loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/auth/login", map[string]string{
-		"username": "refresh-user",
-		"password": "password123",
-	}, nil)
-	require.Equal(t, http.StatusOK, loginResp.StatusCode)
-
-	var loginResult struct {
-		Data struct {
-			AccessToken string `json:"access_token"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(loginBody, &loginResult))
-
-	// Get tokens via authorization code flow (simplified: use client_credentials for now,
-	// but for a proper test we'd go through the full authorize flow)
-	// For simplicity, we'll test the token endpoint directly with a refresh token obtained
-	// from the auth service. Since the test above covers the full flow, here we test
-	// the refresh token rotation mechanism.
-
-	// Use client_credentials to get an initial access token, then test refresh
+	// Client credentials tokens must never include refresh tokens (RFC 6749 §4.4.3).
 	tokenResp, tokenBody := e.DoFormRequest(t, http.MethodPost, "/oauth2/token", map[string]string{
 		"grant_type":    "client_credentials",
 		"client_id":     clientID,
@@ -440,10 +414,10 @@ func TestHTTP_TokenIntrospection(t *testing.T) {
 	assert.Equal(t, http.StatusOK, introResp.StatusCode)
 
 	var introResult struct {
-		Active   bool   `json:"active"`
-		Sub      string `json:"sub"`
-		ClientID string `json:"client_id"`
-		Scope    string `json:"scope"`
+		Active    bool   `json:"active"`
+		Sub       string `json:"sub"`
+		ClientID  string `json:"client_id"`
+		Scope     string `json:"scope"`
 		TokenType string `json:"token_type"`
 	}
 	require.NoError(t, json.Unmarshal(introBody, &introResult))
@@ -451,7 +425,7 @@ func TestHTTP_TokenIntrospection(t *testing.T) {
 	assert.Equal(t, accountID, introResult.Sub)
 	assert.Equal(t, clientID, introResult.ClientID)
 	assert.Equal(t, "openid", introResult.Scope)
-	assert.Equal(t, "access_token", introResult.TokenType)
+	assert.Equal(t, "Bearer", introResult.TokenType)
 
 	// Introspect with wrong credentials (different client)
 	wrongResp, wrongBody := e.DoFormRequest(t, http.MethodPost, "/oauth2/introspect", map[string]string{
@@ -526,26 +500,17 @@ func TestHTTP_OIDCUserInfo(t *testing.T) {
 	e := setupTest(t)
 	ctx := context.Background()
 
-	_, err := e.SeedAccount(ctx, "userinfo-user", "userinfo@example.com", "password123")
+	accountID, err := e.SeedAccount(ctx, "userinfo-user", "userinfo@example.com", "password123")
 	require.NoError(t, err)
 
-	// Login to get an access token
-	loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/auth/login", map[string]string{
-		"username": "userinfo-user",
-		"password": "password123",
-	}, nil)
-	require.Equal(t, http.StatusOK, loginResp.StatusCode)
-
-	var loginResult struct {
-		Data struct {
-			AccessToken string `json:"access_token"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(loginBody, &loginResult))
-	require.NotEmpty(t, loginResult.Data.AccessToken)
+	accessToken, err := e.TokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
+		AccountID: accountID,
+		Scope:     "openid",
+	})
+	require.NoError(t, err)
 
 	// GET /oidc/userinfo
-	resp, body := e.DoBearerRequest(t, http.MethodGet, "/oidc/userinfo", loginResult.Data.AccessToken, nil)
+	resp, body := e.DoBearerRequest(t, http.MethodGet, "/oidc/userinfo", accessToken, nil)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var userInfo map[string]any
@@ -572,7 +537,7 @@ func TestHTTP_OIDCLogout(t *testing.T) {
 	})
 
 	// Login
-	loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/auth/login", map[string]string{
+	loginResp, loginBody := e.DoJSONRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"username": "logout-user",
 		"password": "password123",
 	}, nil)
@@ -611,22 +576,22 @@ func TestHTTP_FrontChannelLogout(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _ = e.SeedOAuth2Client(t, ctx, accountID, SeedClientOptions{
-		Confidential:          true,
-		RedirectURIs:          []string{"https://app.example.com/callback"},
-		GrantTypes:            []string{"authorization_code"},
-		Scopes:                []string{"openid"},
-		FrontchannelLogoutURI: "https://app.example.com/frontchannel-logout",
+		Confidential:                      true,
+		RedirectURIs:                      []string{"https://app.example.com/callback"},
+		GrantTypes:                        []string{"authorization_code"},
+		Scopes:                            []string{"openid"},
+		FrontchannelLogoutURI:             "https://app.example.com/frontchannel-logout",
 		FrontchannelLogoutSessionRequired: true,
 	})
 
 	// Seed a consent record so the client appears in front-channel logout query
 	_, err = e.DB.ExecContext(ctx,
-		`INSERT INTO oauth2_consents (account_id, client_id, scopes) VALUES ($1, (SELECT client_id FROM oauth2_clients WHERE account_id = $1 LIMIT 1), '["openid"]')`,
+		`INSERT INTO oauth2_consents (account_id, client_id, scopes) VALUES ($1, (SELECT id FROM oauth2_clients WHERE account_id = $1 LIMIT 1), '["openid"]')`,
 		accountID)
 	require.NoError(t, err)
 
 	// Login
-	loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/auth/login", map[string]string{
+	loginResp, loginBody := e.DoJSONRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"username": "fc-logout-user",
 		"password": "password123",
 	}, nil)
@@ -673,22 +638,22 @@ func TestHTTP_BackChannelLogout(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _ = e.SeedOAuth2Client(t, ctx, accountID, SeedClientOptions{
-		Confidential:         true,
-		RedirectURIs:         []string{"https://app.example.com/callback"},
-		GrantTypes:           []string{"authorization_code"},
-		Scopes:               []string{"openid"},
-		BackchannelLogoutURI: receiverServer.URL,
+		Confidential:                     true,
+		RedirectURIs:                     []string{"https://app.example.com/callback"},
+		GrantTypes:                       []string{"authorization_code"},
+		Scopes:                           []string{"openid"},
+		BackchannelLogoutURI:             receiverServer.URL,
 		BackchannelLogoutSessionRequired: true,
 	})
 
 	// Seed consent
 	_, err = e.DB.ExecContext(ctx,
-		`INSERT INTO oauth2_consents (account_id, client_id, scopes) VALUES ($1, (SELECT client_id FROM oauth2_clients WHERE account_id = $1 LIMIT 1), '["openid"]')`,
+		`INSERT INTO oauth2_consents (account_id, client_id, scopes) VALUES ($1, (SELECT id FROM oauth2_clients WHERE account_id = $1 LIMIT 1), '["openid"]')`,
 		accountID)
 	require.NoError(t, err)
 
 	// Login
-	loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/auth/login", map[string]string{
+	loginResp, loginBody := e.DoJSONRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"username": "bc-logout-user",
 		"password": "password123",
 	}, nil)
@@ -776,12 +741,12 @@ func TestHTTP_ErrorCases(t *testing.T) {
 		}, map[string]string{
 			"Content-Type": "application/json",
 		})
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Equal(t, http.StatusUnsupportedMediaType, resp.StatusCode)
 		assert.Contains(t, string(body), "error")
 	})
 
 	t.Run("InvalidRedirectURI", func(t *testing.T) {
-		loginResp, loginBody := e.DoFormRequest(t, http.MethodPost, "/api/auth/login", map[string]string{
+		loginResp, loginBody := e.DoJSONRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
 			"username": "error-user",
 			"password": "password123",
 		}, nil)
@@ -816,4 +781,18 @@ func extractQueryParam(rawURL, key string) string {
 		return rawURL[start:]
 	}
 	return rawURL[start : start+end]
+}
+
+func extractHiddenInput(body, name string) string {
+	marker := `name="` + name + `" value="`
+	start := strings.Index(body, marker)
+	if start == -1 {
+		return ""
+	}
+	start += len(marker)
+	end := strings.IndexByte(body[start:], '"')
+	if end == -1 {
+		return ""
+	}
+	return body[start : start+end]
 }

@@ -13,16 +13,16 @@ import (
 
 // LockoutStatus represents the current lockout state for an account.
 type LockoutStatus struct {
-	AccountID  string        `json:"account_id"`
-	Username   string        `json:"username"`
-	LockedOut  bool          `json:"locked_out"`
-	Counters   []LockoutCounter `json:"counters,omitempty"`
+	AccountID string           `json:"account_id"`
+	Username  string           `json:"username"`
+	LockedOut bool             `json:"locked_out"`
+	Counters  []LockoutCounter `json:"counters,omitempty"`
 }
 
 // LockoutCounter represents a single per-IP rate limit counter for an account.
 type LockoutCounter struct {
-	Key       string `json:"key"`
-	Attempts  int64  `json:"attempts"`
+	Key      string `json:"key"`
+	Attempts int64  `json:"attempts"`
 }
 
 // GetLockoutStatus returns the current lockout state for an account by scanning
@@ -52,12 +52,12 @@ func (s *AuthService) GetLockoutStatus(ctx context.Context, accountID string) (*
 	var cursor uint64
 	const maxIterations = 1000
 	for i := 0; i < maxIterations; i++ {
-		if ctx.Err() != nil {
-			break
+		if contextErr := ctx.Err(); contextErr != nil {
+			return status, contextErr
 		}
-		keys, nextCursor, err := s.redis.ScanKeys(ctx, cursor, pattern, 100)
-		if err != nil {
-			s.logger.Warn("Failed to scan lockout keys", zap.Error(err))
+		keys, nextCursor, scanErr := s.redis.ScanKeys(ctx, cursor, pattern, 100)
+		if scanErr != nil {
+			s.logger.Warn("Failed to scan lockout keys", zap.Error(scanErr))
 			break
 		}
 		for _, key := range keys {

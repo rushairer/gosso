@@ -169,8 +169,8 @@ func (s *PasskeyService) CompleteRegistration(ctx context.Context, requestID, ac
 	if err != nil {
 		return nil, fmt.Errorf("finish registration: %w", err)
 	}
-	if err := s.ensureCredentialNotRegistered(ctx, accountID, credential.ID); err != nil {
-		return nil, err
+	if registrationErr := s.ensureCredentialNotRegistered(ctx, accountID, credential.ID); registrationErr != nil {
+		return nil, registrationErr
 	}
 
 	// Save credential to database

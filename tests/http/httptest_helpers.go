@@ -11,21 +11,23 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/rushairer/gosso/internal/account"
-	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	adminController "github.com/rushairer/gosso/internal/admin/controller"
-	"github.com/rushairer/gosso/internal/audit/service"
 	auditRepository "github.com/rushairer/gosso/internal/audit/repository"
+	"github.com/rushairer/gosso/internal/audit/service"
 	"github.com/rushairer/gosso/internal/auth"
 	authController "github.com/rushairer/gosso/internal/auth/controller"
 	authServicePkg "github.com/rushairer/gosso/internal/auth/service"
@@ -82,6 +84,7 @@ func SetupHTTPTestEnv(t *testing.T) *HTTPTestEnv {
 
 	env := testutil.SetupTestEnvT(t)
 	ctx := context.Background()
+	require.NoError(t, env.TruncateAll(ctx))
 	logger := zap.NewNop()
 
 	auditor := service.NewAuditor(ctx, env.DB, nil, logger)
@@ -255,7 +258,7 @@ func SetupHTTPTestEnv(t *testing.T) *HTTPTestEnv {
 		AccountModule: accountMod,
 		AuthModule:    authMod,
 		OAuth2Module:  oauth2Mod,
-		Issuer:        server.URL,
+		Issuer:        env.Config.AuthConfig.Issuer,
 	}
 }
 
@@ -288,9 +291,9 @@ func (e *HTTPTestEnv) SeedOAuth2Client(t *testing.T, ctx context.Context, accoun
 	secret := ""
 	if opts.Confidential {
 		secret = generateTestClientSecret()
-		hashedSecret, hashErr := accountDomain.HashPassword(secret)
+		hashedSecret, hashErr := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
 		require.NoError(t, hashErr)
-		client.ClientSecretHash = hashedSecret
+		client.ClientSecretHash = string(hashedSecret)
 	}
 
 	_, err = e.DB.ExecContext(ctx,
@@ -312,6 +315,14 @@ func (e *HTTPTestEnv) SeedOAuth2Client(t *testing.T, ctx context.Context, accoun
 // DoRequest makes an HTTP request to the test server.
 func (e *HTTPTestEnv) DoRequest(t *testing.T, method, path string, body io.Reader, headers map[string]string) (*http.Response, []byte) {
 	t.Helper()
+	if method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions {
+		if headers == nil {
+			headers = make(map[string]string)
+		}
+		if headers["X-CSRF-Token"] == "" {
+			headers["X-CSRF-Token"] = e.csrfToken(t)
+		}
+	}
 
 	req, err := http.NewRequest(method, e.Server.URL+path, body)
 	require.NoError(t, err)
@@ -328,6 +339,31 @@ func (e *HTTPTestEnv) DoRequest(t *testing.T, method, path string, body io.Reade
 	_ = resp.Body.Close()
 
 	return resp, respBody
+}
+
+func (e *HTTPTestEnv) csrfToken(t *testing.T) string {
+	t.Helper()
+	serverURL, err := url.Parse(e.Server.URL)
+	require.NoError(t, err)
+
+	findToken := func() string {
+		for _, cookie := range e.Client.Jar.Cookies(serverURL) {
+			if cookie.Name == "csrf_token" {
+				return cookie.Value
+			}
+		}
+		return ""
+	}
+	if token := findToken(); token != "" {
+		return token
+	}
+
+	resp, err := e.Client.Get(e.Server.URL + "/health")
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	token := findToken()
+	require.NotEmpty(t, token)
+	return token
 }
 
 // DoFormRequest makes a form-encoded POST request.
@@ -348,6 +384,17 @@ func (e *HTTPTestEnv) DoFormRequest(t *testing.T, method, path string, formData 
 	}
 
 	return e.DoRequest(t, method, path, body, headers)
+}
+
+func (e *HTTPTestEnv) DoJSONRequest(t *testing.T, method, path string, payload any, headers map[string]string) (*http.Response, []byte) {
+	t.Helper()
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+	headers["Content-Type"] = "application/json"
+	return e.DoRequest(t, method, path, strings.NewReader(string(body)), headers)
 }
 
 // DoBearerRequest makes an HTTP request with a Bearer token.
@@ -375,11 +422,7 @@ func (a *oauth2ClientDeleterAdapter) SoftDeleteOAuth2ClientsByAccount(ctx contex
 }
 
 func generateTestClientID() string {
-	b := make([]byte, 16)
-	for i := range b {
-		b[i] = byte(i + 1)
-	}
-	return "test-" + hex.EncodeToString(b)
+	return "test-" + uuid.NewString()
 }
 
 func generateTestClientSecret() string {

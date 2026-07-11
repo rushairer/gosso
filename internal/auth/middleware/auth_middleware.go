@@ -193,6 +193,38 @@ func AdminRequiredMiddleware() gin.HandlerFunc {
 	}
 }
 
+// RequirePermission enforces one fine-grained admin permission after
+// AdminRequiredMiddleware. The admin:* wildcard is reserved for break-glass and
+// initial administrator roles.
+func RequirePermission(required string) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		claimsRaw, exists := ctx.Get(middleware.ContextKeyClaims)
+		if !exists {
+			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "missing authorization"))
+			return
+		}
+		claims, ok := claimsRaw.(*tokenDomain.AccessTokenClaims)
+		if !ok {
+			ctx.AbortWithStatusJSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "invalid claims type"))
+			return
+		}
+		if !hasPermission(claims.Permissions, required) {
+			ctx.AbortWithStatusJSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "insufficient admin permission"))
+			return
+		}
+		ctx.Next()
+	}
+}
+
+func hasPermission(permissions []string, required string) bool {
+	for _, permission := range permissions {
+		if permission == "admin:*" || permission == required {
+			return true
+		}
+	}
+	return false
+}
+
 func hasRole(roles []string, required string) bool {
 	for _, role := range roles {
 		if role == required {

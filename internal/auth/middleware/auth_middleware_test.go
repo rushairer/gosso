@@ -619,3 +619,29 @@ func TestAuditMetadataMiddleware(t *testing.T) {
 	engine.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
 }
+
+func TestRequirePermission(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		permissions []string
+		wantStatus  int
+	}{
+		{name: "exact permission", permissions: []string{"admin:users:read"}, wantStatus: http.StatusOK},
+		{name: "admin wildcard", permissions: []string{"admin:*"}, wantStatus: http.StatusOK},
+		{name: "missing permission", permissions: []string{"admin:audit:read"}, wantStatus: http.StatusForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := setupGin()
+			engine.Use(func(ctx *gin.Context) {
+				ctx.Set(gm.ContextKeyClaims, &tokenDomain.AccessTokenClaims{Permissions: tc.permissions})
+				ctx.Next()
+			})
+			engine.GET("/admin", RequirePermission("admin:users:read"), func(ctx *gin.Context) {
+				ctx.Status(http.StatusOK)
+			})
+			w := httptest.NewRecorder()
+			engine.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/admin", nil))
+			assert.Equal(t, tc.wantStatus, w.Code)
+		})
+	}
+}

@@ -137,3 +137,7 @@ DROP TABLE IF EXISTS users;
 | 0014 | `0014_oauth2_consents_soft_delete` | 为 oauth2_consents 添加 deleted_at 列 |
 | 0015 | `0015_credentials_updated_at` | 为 account_credentials 添加 updated_at 列和触发器 |
 | 0016 | `0016_webauthn_credentials_updated_at` | 为 webauthn_credentials 添加 updated_at 列和触发器 |
+| 0017 | `0017_display_name_length` | 扩展账户显示名称长度约束 |
+| 0018 | `0018_logout_uris` | 添加 OIDC 前端和后端登出 URI |
+| 0019 | `0019_webauthn_credential_flags` | 持久化 WebAuthn 凭证标志 |
+| 0020 | `0020_admin_permissions` | 为内置管理员角色授予显式 `admin:*` 权限 |

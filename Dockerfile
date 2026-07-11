@@ -1,5 +1,5 @@
 # Build stage
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine AS builder
 
 ARG VERSION=dev
 ARG COMMIT=none
@@ -22,9 +22,9 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     ./cmd
 
 # Runtime stage
-FROM alpine:3.22.0
+FROM alpine:3.22.5
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates tzdata
 
 RUN addgroup -S gosso && adduser -S gosso -G gosso
 

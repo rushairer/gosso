@@ -17,6 +17,7 @@ import (
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
 	auditRepository "github.com/rushairer/gosso/internal/audit/repository"
+	authMiddleware "github.com/rushairer/gosso/internal/auth/middleware"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/controllerutil"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
@@ -70,6 +71,10 @@ type AdminLockoutManager interface {
 	ClearLockout(ctx context.Context, accountID string) error
 }
 
+type accountSummaryLister interface {
+	ListAccountSummaries(ctx context.Context, page, pageSize int, status string) ([]*accountService.AccountSummary, int, error)
+}
+
 // AdminController handles admin operations
 type AdminController struct {
 	accountSvc    accountService.AccountService
@@ -98,25 +103,30 @@ func NewAdminController(
 
 // RegisterRoutes registers admin routes
 func (c *AdminController) RegisterRoutes(rg *gin.RouterGroup) {
-	rg.GET("/audit-logs", c.ListAuditLogs)
+	rg.GET("/audit-logs", authMiddleware.RequirePermission("admin:audit:read"), c.ListAuditLogs)
 
 	accounts := rg.Group("/accounts")
 	{
-		accounts.GET("", c.ListAccounts)
-		accounts.POST("", c.CreateAccount)
-		accounts.GET("/:account_id", c.GetAccount)
-		accounts.DELETE("/:account_id", c.DeleteAccount)
-		accounts.POST("/:account_id/disable", c.DisableAccount)
-		accounts.POST("/:account_id/enable", c.EnableAccount)
-		accounts.GET("/:account_id/roles", c.GetAccountRoles)
-		accounts.POST("/:account_id/roles", c.AddRole)
-		accounts.DELETE("/:account_id/roles/:role_id", c.RemoveRole)
-		accounts.GET("/:account_id/consents", c.ListConsents)
-		accounts.DELETE("/:account_id/consents/:client_id", c.RevokeConsent)
-		accounts.GET("/:account_id/lockout", c.GetLockoutStatus)
-		accounts.POST("/:account_id/lockout/clear", c.ClearLockout)
-		accounts.POST("/:account_id/password", c.ChangePassword)
-		accounts.POST("/:account_id/mfa/reset", c.ResetMFA)
+		read := accounts.Group("")
+		read.Use(authMiddleware.RequirePermission("admin:users:read"))
+		read.GET("", c.ListAccounts)
+		read.GET("/:account_id", c.GetAccount)
+		read.GET("/:account_id/roles", c.GetAccountRoles)
+		read.GET("/:account_id/consents", c.ListConsents)
+		read.GET("/:account_id/lockout", c.GetLockoutStatus)
+
+		manage := accounts.Group("")
+		manage.Use(authMiddleware.RequirePermission("admin:users:manage"))
+		manage.POST("", c.CreateAccount)
+		manage.DELETE("/:account_id", c.DeleteAccount)
+		manage.POST("/:account_id/disable", c.DisableAccount)
+		manage.POST("/:account_id/enable", c.EnableAccount)
+		manage.POST("/:account_id/roles", c.AddRole)
+		manage.DELETE("/:account_id/roles/:role_id", c.RemoveRole)
+		manage.DELETE("/:account_id/consents/:client_id", c.RevokeConsent)
+		manage.POST("/:account_id/lockout/clear", c.ClearLockout)
+		manage.POST("/:account_id/password", c.ChangePassword)
+		manage.POST("/:account_id/mfa/reset", c.ResetMFA)
 	}
 }
 
@@ -201,15 +211,33 @@ func (c *AdminController) ListAccounts(ctx *gin.Context) {
 		}
 	}
 
-	accounts, total, err := c.accountSvc.ListAccounts(ctx, page, pageSize, status)
-	if err != nil {
-		c.logger.Error("Failed to list accounts", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to list accounts"))
-		return
+	var items any
+	var total int
+	if ctx.Query("include") == "roles" {
+		if lister, ok := c.accountSvc.(accountSummaryLister); ok {
+			summaries, summaryTotal, listErr := lister.ListAccountSummaries(ctx, page, pageSize, status)
+			if listErr != nil {
+				c.logger.Error("Failed to list account summaries", zap.Error(listErr))
+				ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to list account summaries"))
+				return
+			}
+			items = summaries
+			total = summaryTotal
+		}
+	}
+	if items == nil {
+		accounts, accountTotal, listErr := c.accountSvc.ListAccounts(ctx, page, pageSize, status)
+		if listErr != nil {
+			c.logger.Error("Failed to list accounts", zap.Error(listErr))
+			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to list accounts"))
+			return
+		}
+		items = accounts
+		total = accountTotal
 	}
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
-		"items":     accounts,
+		"items":     items,
 		"total":     total,
 		"page":      page,
 		"page_size": pageSize,
@@ -589,4 +617,3 @@ func (c *AdminController) ResetMFA(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("MFA reset successfully"))
 }
-

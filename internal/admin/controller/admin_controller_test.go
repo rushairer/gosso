@@ -22,6 +22,7 @@ import (
 	auditRepository "github.com/rushairer/gosso/internal/audit/repository"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	gm "github.com/rushairer/gosso/middleware"
 )
 
@@ -85,6 +86,7 @@ type mockAccountService struct {
 	registerAccountFn     func(req *accountService.RegisterAccountRequest) (*accountDomain.Account, error)
 	findByIDFn            func() (*accountDomain.Account, error)
 	listAccountsFn        func() ([]*accountDomain.Account, int, error)
+	listSummariesFn       func() ([]*accountService.AccountSummary, int, error)
 	deleteFn              func() error
 	suspendFn             func() error
 	activateFn            func() error
@@ -154,6 +156,13 @@ func (m *mockAccountService) ListAccounts(_ context.Context, _, _ int, _ string)
 	}
 	return nil, 0, nil
 }
+
+func (m *mockAccountService) ListAccountSummaries(_ context.Context, _, _ int, _ string) ([]*accountService.AccountSummary, int, error) {
+	if m.listSummariesFn != nil {
+		return m.listSummariesFn()
+	}
+	return nil, 0, fmt.Errorf("not implemented")
+}
 func (m *mockAccountService) SuspendAccount(_ context.Context, _ string) error {
 	if m.suspendFn != nil {
 		return m.suspendFn()
@@ -193,6 +202,10 @@ const adminUUID = "550e8400-e29b-41d4-a716-446655440099"
 func setupAdminController(accountSvc *mockAccountService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
+	engine.Use(func(ctx *gin.Context) {
+		ctx.Set(gm.ContextKeyClaims, &tokenDomain.AccessTokenClaims{Permissions: []string{"admin:*"}})
+		ctx.Next()
+	})
 
 	ctrl := NewAdminController(accountSvc, &mockConsentManager{}, &mockAuditQueryManager{}, &mockLockoutManager{}, zap.NewNop())
 
@@ -209,6 +222,7 @@ func setupAdminControllerWithAdminID(accountSvc *mockAccountService, adminID str
 	engine := gin.New()
 	engine.Use(func(ctx *gin.Context) {
 		ctx.Set(gm.ContextKeyAccountID, adminID)
+		ctx.Set(gm.ContextKeyClaims, &tokenDomain.AccessTokenClaims{Permissions: []string{"admin:*"}})
 		ctx.Next()
 	})
 
@@ -269,6 +283,37 @@ func TestListAccounts_Pagination(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestListAccounts_IncludeRolesUsesSummaryProjection(t *testing.T) {
+	role := &accountDomain.Role{ID: "660e8400-e29b-41d4-a716-446655440001", Name: "support"}
+	accountSvc := &mockAccountService{
+		listSummariesFn: func() ([]*accountService.AccountSummary, int, error) {
+			return []*accountService.AccountSummary{{Account: newAdminTestAccount(), Roles: []*accountDomain.Role{role}}}, 1, nil
+		},
+		listAccountsFn: func() ([]*accountDomain.Account, int, error) {
+			t.Fatal("plain account query must not run for include=roles")
+			return nil, 0, nil
+		},
+	}
+	engine := setupAdminController(accountSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/accounts?include=roles", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Data struct {
+			Items []struct {
+				Roles []accountDomain.Role `json:"roles"`
+			} `json:"items"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp.Data.Items, 1)
+	require.Len(t, resp.Data.Items[0].Roles, 1)
+	assert.Equal(t, "support", resp.Data.Items[0].Roles[0].Name)
 }
 
 func TestListAccounts_Error(t *testing.T) {

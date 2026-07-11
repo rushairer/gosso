@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepo "github.com/rushairer/gosso/internal/account/repository"
-	"github.com/google/uuid"
 	"github.com/rushairer/gosso/internal/audit"
 	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
 	auditService "github.com/rushairer/gosso/internal/audit/service"

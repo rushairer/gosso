@@ -8,7 +8,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
+
 	"github.com/rushairer/gosso/internal/account/domain"
+	dbPkg "github.com/rushairer/gosso/internal/db"
 )
 
 type roleRepositoryImpl struct {
@@ -272,6 +275,68 @@ func (r *roleRepositoryImpl) FindRolesByAccountID(ctx context.Context, accountID
 	}
 
 	return roles, nil
+}
+
+// FindRolesByAccountIDs returns all active role assignments for a page of
+// accounts in one query. It is intentionally a package function rather than a
+// RoleRepository interface method so existing domain consumers do not need a
+// broader interface merely for the admin list projection.
+func FindRolesByAccountIDs(ctx context.Context, db *sql.DB, accountIDs []string) (map[string][]*domain.Role, error) {
+	result := make(map[string][]*domain.Role, len(accountIDs))
+	if len(accountIDs) == 0 {
+		return result, nil
+	}
+
+	for _, accountID := range accountIDs {
+		result[accountID] = make([]*domain.Role, 0)
+	}
+
+	query := `
+		SELECT ar.account_id, r.id, r.name, r.description, r.permissions, r.metadata,
+		       r.created_at, r.updated_at, r.deleted_at
+		FROM account_roles ar
+		INNER JOIN roles r ON r.id = ar.role_id
+		WHERE ar.account_id = ANY($1::uuid[])
+		  AND ar.deleted_at IS NULL AND r.deleted_at IS NULL
+		ORDER BY ar.account_id, r.name`
+
+	rows, err := db.QueryContext(ctx, query, pq.Array(accountIDs))
+	if err != nil {
+		return nil, fmt.Errorf("query roles for account page: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var accountID string
+		role := &domain.Role{}
+		var permissionsJSON, metadataJSON []byte
+		if err := rows.Scan(
+			&accountID,
+			&role.ID,
+			&role.Name,
+			&role.Description,
+			&permissionsJSON,
+			&metadataJSON,
+			&role.CreatedAt,
+			&role.UpdatedAt,
+			&role.DeletedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan account role projection: %w", err)
+		}
+		role.Permissions = make([]string, 0)
+		if err := dbPkg.UnmarshalJSONField(permissionsJSON, &role.Permissions, "permissions"); err != nil {
+			return nil, err
+		}
+		role.Metadata = make(map[string]any)
+		if err := dbPkg.UnmarshalJSONField(metadataJSON, &role.Metadata, "metadata"); err != nil {
+			return nil, err
+		}
+		result[accountID] = append(result[accountID], role)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate account role projection: %w", err)
+	}
+	return result, nil
 }
 
 // SoftDeleteRolesByAccountID soft deletes all role associations for an account.

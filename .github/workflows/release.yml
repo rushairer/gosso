@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: "1.26"
+  GO_VERSION: "1.26.5"
 
 jobs:
   release:
@@ -62,6 +62,13 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
+      - name: Validate release metadata
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          test "$VERSION" = "$(awk '$1 == "version:" { print $2; exit }' deploy/helm/gosso/Chart.yaml)"
+          grep -Fq "## [$VERSION]" CHANGELOG.md
+
       - name: Build and push Docker image (multi-arch)
         id: docker-build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
@@ -76,6 +83,8 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/gosso:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
 
       # --- Supply Chain Security: SBOM + Cosign ---
 
@@ -94,6 +103,13 @@ jobs:
           format: cyclonedx-json
           output-file: gosso-sbom.cdx.json
 
+      - name: Generate SBOM (SPDX)
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ghcr.io/${{ github.repository_owner }}/gosso@${{ steps.docker-build.outputs.digest }}
+          format: spdx-json
+          output-file: gosso-sbom.spdx.json
+
       - name: Attest SBOM to image
         run: |
           cosign attest --yes \
@@ -108,6 +124,7 @@ jobs:
           files: |
             CHANGELOG.md
             gosso-sbom.cdx.json
+            gosso-sbom.spdx.json
 
       # --- Helm Chart OCI Publish ---
 

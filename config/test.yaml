@@ -58,7 +58,8 @@ log:
     level: -1 #日志级别, -1: debug, 0: info, 1: warn, 2: error, 3: dpanic, 4: panic, 5: fatal
 auth:
     issuer: "http://localhost:8080"
-    totp_encryption_key: "test-totp-encryption-key-32bytes!!"
+    # Deterministic test-only 32-byte key encoded as the required 64 hex characters.
+    totp_encryption_key: "a9fd7106e9647479494fddf8a850b6d9a09114c0afa81e77385686f5455e7270"
     access_token_expiry: 15m
     refresh_token_expiry: 24h
     authorization_code_expiry: 10m

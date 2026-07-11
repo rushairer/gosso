@@ -198,35 +198,14 @@ func IsPlausibleJWT(token string) bool {
 	return true
 }
 
-// hasSessionCookie checks whether the request contains a cookie that looks like
-// a session cookie. This prevents the Bearer-token CSRF bypass from being
-// exploited when a session cookie is also present (the attacker could use the
-// session cookie for CSRF while the JWT satisfies the bypass check).
-//
-// The function checks for the application-specific CSRF cookie names and common
-// session cookie patterns. Using a fixed set avoids false positives from
-// unrelated cookies (e.g., analytics_session_id) that could incorrectly force
-// CSRF validation on a pure Bearer-token request.
+// sessionCookieNames is the fixed allowlist used when deciding whether a
+// request mixes a session cookie with Bearer authentication. A fixed set avoids
+// false positives from unrelated cookies such as analytics_session_id.
 var sessionCookieNames = []string{
 	"session",
 	"session_id",
 	"gosso_session",
 	"gosso_session_id",
-}
-
-func hasSessionCookie(ctx *gin.Context) bool {
-	for _, c := range ctx.Request.Cookies() {
-		name := strings.ToLower(c.Name)
-		for _, sn := range sessionCookieNames {
-			if name == sn {
-				return true
-			}
-		}
-		if strings.HasSuffix(name, "_session_id") || strings.HasSuffix(name, "-session-id") {
-			return true
-		}
-	}
-	return false
 }
 
 func hasOnlyAccessTokenCookie(ctx *gin.Context, bearerToken string) bool {

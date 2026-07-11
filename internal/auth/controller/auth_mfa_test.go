@@ -173,7 +173,7 @@ func TestMFAActivate_InvalidCode(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestMFAActivate_NoPendingEnrollment(t *testing.T) {
+func TestMFAActivate_AlreadyActivatedIsIdempotent(t *testing.T) {
 	key, err := totp.Generate(totp.GenerateOpts{Issuer: "test-issuer", AccountName: "account-001"})
 	require.NoError(t, err)
 	secret := key.Secret()
@@ -208,7 +208,7 @@ func TestMFAActivate_NoPendingEnrollment(t *testing.T) {
 	w := httptest.NewRecorder()
 	env.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
@@ -187,6 +188,106 @@ func TestListAccounts_Empty(t *testing.T) {
 	assert.Equal(t, 0, total)
 	assert.Len(t, accounts, 0)
 
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestListAccountSummaries(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+
+	now := time.Now()
+	mock.ExpectQuery("SELECT COUNT").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	mock.ExpectQuery("SELECT (.+) FROM accounts").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "username", "display_name", "avatar_url", "status",
+			"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+		}).AddRow(
+			"account-001", "testuser", "Test User", nil, domain.AccountStatusActive,
+			"en", "UTC", []byte("{}"), now, now, nil,
+		))
+	mock.ExpectQuery("SELECT ar.account_id, r.id").
+		WithArgs(`{"account-001"}`).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"account_id", "id", "name", "description", "permissions", "metadata",
+			"created_at", "updated_at", "deleted_at",
+		}).AddRow(
+			"account-001", "role-001", "support", "Support", []byte(`["account:read"]`),
+			[]byte("{}"), now, now, nil,
+		))
+
+	summaries, total, err := accountService.ListAccountSummaries(context.Background(), 1, 20, "")
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, total)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, "account-001", summaries[0].ID)
+	require.Len(t, summaries[0].Roles, 1)
+	assert.Equal(t, "support", summaries[0].Roles[0].Name)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestListAccountSummaries_Empty(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+
+	mock.ExpectQuery("SELECT COUNT").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	summaries, total, err := accountService.ListAccountSummaries(context.Background(), 1, 20, "")
+
+	require.NoError(t, err)
+	assert.Zero(t, total)
+	assert.Empty(t, summaries)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestListAccountSummaries_RoleQueryFailure(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	accountRepo := repository.NewAccountRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	federatedIdentityRepo := repository.NewFederatedIdentityRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+	accountService := NewAccountService(db, accountRepo, credentialRepo, federatedIdentityRepo, roleRepo, nil, nil, nil)
+
+	now := time.Now()
+	mock.ExpectQuery("SELECT COUNT").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	mock.ExpectQuery("SELECT (.+) FROM accounts").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "username", "display_name", "avatar_url", "status",
+			"locale", "timezone", "metadata", "created_at", "updated_at", "deleted_at",
+		}).AddRow(
+			"account-001", "testuser", "Test User", nil, domain.AccountStatusActive,
+			"en", "UTC", []byte("{}"), now, now, nil,
+		))
+	queryErr := errors.New("role query failed")
+	mock.ExpectQuery("SELECT ar.account_id, r.id").
+		WithArgs(`{"account-001"}`).
+		WillReturnError(queryErr)
+
+	summaries, total, err := accountService.ListAccountSummaries(context.Background(), 1, 20, "")
+
+	assert.ErrorIs(t, err, queryErr)
+	assert.Nil(t, summaries)
+	assert.Zero(t, total)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
