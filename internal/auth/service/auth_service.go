@@ -43,6 +43,9 @@ const (
 	// roleCacheTTL is the TTL for cached roles in Redis.
 	// Short-lived to balance performance gain against stale-role risk.
 	roleCacheTTL = 5 * time.Minute
+	// roleCacheVersion invalidates serialized entries when the claims schema
+	// changes. Version 2 adds fine-grained permissions to access tokens.
+	roleCacheVersion = 2
 )
 
 // LoginCommand represents a username+password login request from the controller layer.
@@ -351,6 +354,7 @@ func roleCacheKey(accountID string) string {
 
 // roleCacheEntry is the JSON-serializable form of cached role data.
 type roleCacheEntry struct {
+	Version     int      `json:"version"`
 	Roles       []string `json:"roles"`
 	Permissions []string `json:"permissions"`
 }
@@ -388,12 +392,12 @@ func (s *AuthService) fetchRolesCached(ctx context.Context, accountID string) (r
 	if cacheErr == nil {
 		var entry roleCacheEntry
 		jsonErr := json.Unmarshal([]byte(cached), &entry)
-		if jsonErr == nil {
+		if jsonErr == nil && entry.Version == roleCacheVersion {
 			return entry.Roles, entry.Permissions, nil
 		}
-		// Cache corruption — fall through to DB.
-		s.logger.Debug("Role cache deserialization failed; falling back to DB",
-			zap.String("account_id", accountID), zap.Error(jsonErr))
+		// Cache corruption or an older claims schema — fall through to DB.
+		s.logger.Debug("Role cache is invalid or stale; falling back to DB",
+			zap.String("account_id", accountID), zap.Int("cache_version", entry.Version), zap.Error(jsonErr))
 	}
 
 	// Cache miss or error — fetch from DB.
@@ -418,7 +422,7 @@ func (s *AuthService) fetchRolesCached(ctx context.Context, accountID string) (r
 	}
 
 	// Populate cache. Failure is non-fatal — we already have the data.
-	entry := roleCacheEntry{Roles: roleNames, Permissions: permissions}
+	entry := roleCacheEntry{Version: roleCacheVersion, Roles: roleNames, Permissions: permissions}
 	if data, jsonErr := json.Marshal(entry); jsonErr == nil {
 		if setErr := s.redis.Set(ctx, key, string(data), roleCacheTTL); setErr != nil {
 			s.logger.Debug("Failed to cache roles", zap.String("account_id", accountID), zap.Error(setErr))
