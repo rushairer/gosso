@@ -22,9 +22,9 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     ./cmd
 
 # Runtime stage
-FROM alpine:3.22.0
+FROM alpine:3.22.5
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates tzdata
 
 RUN addgroup -S gosso && adduser -S gosso -G gosso
 
