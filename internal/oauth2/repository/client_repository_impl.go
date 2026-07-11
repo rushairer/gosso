@@ -235,7 +235,7 @@ func (r *oauth2ClientRepositoryImpl) FindFrontchannelLogoutClientsByAccountID(ct
 		       c.backchannel_logout_uri, c.backchannel_logout_session_required,
 		       c.created_at, c.updated_at, c.deleted_at
 		FROM oauth2_clients c
-		INNER JOIN oauth2_consents oc ON oc.client_id = c.client_id AND oc.account_id = $1 AND oc.deleted_at IS NULL
+		INNER JOIN oauth2_consents oc ON oc.client_id = c.id AND oc.account_id = $1 AND oc.deleted_at IS NULL
 		WHERE c.frontchannel_logout_uri != '' AND c.deleted_at IS NULL`
 
 	rows, err := r.db.QueryContext(ctx, query, accountID)
@@ -258,7 +258,7 @@ func (r *oauth2ClientRepositoryImpl) FindBackchannelLogoutClientsByAccountID(ctx
 		       c.backchannel_logout_uri, c.backchannel_logout_session_required,
 		       c.created_at, c.updated_at, c.deleted_at
 		FROM oauth2_clients c
-		INNER JOIN oauth2_consents oc ON oc.client_id = c.client_id AND oc.account_id = $1 AND oc.deleted_at IS NULL
+		INNER JOIN oauth2_consents oc ON oc.client_id = c.id AND oc.account_id = $1 AND oc.deleted_at IS NULL
 		WHERE c.backchannel_logout_uri != '' AND c.deleted_at IS NULL`
 
 	rows, err := r.db.QueryContext(ctx, query, accountID)

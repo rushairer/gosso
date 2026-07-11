@@ -258,7 +258,7 @@ func SetupHTTPTestEnv(t *testing.T) *HTTPTestEnv {
 		AccountModule: accountMod,
 		AuthModule:    authMod,
 		OAuth2Module:  oauth2Mod,
-		Issuer:        server.URL,
+		Issuer:        env.Config.AuthConfig.Issuer,
 	}
 }
 

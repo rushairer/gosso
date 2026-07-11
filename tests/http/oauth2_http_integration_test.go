@@ -182,10 +182,11 @@ func TestHTTP_AuthorizationCodeFlow(t *testing.T) {
 	// Step 2: GET /oauth2/authorize (with Bearer auth)
 	authorizeURL := fmt.Sprintf("/oauth2/authorize?response_type=code&client_id=%s&redirect_uri=%s&scope=openid%%20profile%%20email&state=test-state",
 		clientID, "https://app.example.com/callback")
-	resp, _ := e.DoBearerRequest(t, http.MethodGet, authorizeURL, loginResult.Data.AccessToken, nil)
+	resp, authorizeBody := e.DoBearerRequest(t, http.MethodGet, authorizeURL, loginResult.Data.AccessToken, nil)
 	// With Bearer auth, the authorize endpoint may return 200 (consent page) or 302 (if consent already granted)
-	assert.True(t, resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusFound,
-		"expected 200 or 302, got %d", resp.StatusCode)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	consentID := extractHiddenInput(string(authorizeBody), "consent_id")
+	require.NotEmpty(t, consentID)
 
 	// Step 3: POST consent
 	consentResp, consentBody := e.DoFormRequest(t, http.MethodPost, "/oauth2/authorize", map[string]string{
@@ -193,8 +194,9 @@ func TestHTTP_AuthorizationCodeFlow(t *testing.T) {
 		"redirect_uri":  "https://app.example.com/callback",
 		"scope":         "openid profile email",
 		"state":         "test-state",
-		"consent":       "approve",
+		"approved":      "true",
 		"response_type": "code",
+		"consent_id":    consentID,
 	}, map[string]string{
 		"Authorization": "Bearer " + loginResult.Data.AccessToken,
 		"Content-Type":  "application/x-www-form-urlencoded",
@@ -279,8 +281,10 @@ func TestHTTP_AuthorizationCodeFlow_PKCE(t *testing.T) {
 	// Authorize with PKCE
 	authorizeURL := fmt.Sprintf("/oauth2/authorize?response_type=code&client_id=%s&redirect_uri=%s&scope=openid&code_challenge=%s&code_challenge_method=S256&state=pkce-state",
 		clientID, "https://app.example.com/callback", codeChallenge)
-	resp, _ := e.DoBearerRequest(t, http.MethodGet, authorizeURL, loginResult.Data.AccessToken, nil)
-	assert.True(t, resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusFound)
+	resp, authorizeBody := e.DoBearerRequest(t, http.MethodGet, authorizeURL, loginResult.Data.AccessToken, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	consentID := extractHiddenInput(string(authorizeBody), "consent_id")
+	require.NotEmpty(t, consentID)
 
 	// POST consent
 	consentResp, _ := e.DoFormRequest(t, http.MethodPost, "/oauth2/authorize", map[string]string{
@@ -288,10 +292,11 @@ func TestHTTP_AuthorizationCodeFlow_PKCE(t *testing.T) {
 		"redirect_uri":          "https://app.example.com/callback",
 		"scope":                 "openid",
 		"state":                 "pkce-state",
-		"consent":               "approve",
+		"approved":              "true",
 		"response_type":         "code",
 		"code_challenge":        codeChallenge,
 		"code_challenge_method": "S256",
+		"consent_id":            consentID,
 	}, map[string]string{
 		"Authorization": "Bearer " + loginResult.Data.AccessToken,
 		"Content-Type":  "application/x-www-form-urlencoded",
@@ -335,7 +340,7 @@ func TestHTTP_AuthorizationCodeFlow_PKCE(t *testing.T) {
 // Refresh Token Flow
 // ──────────────────────────────────────────────
 
-func TestHTTP_RefreshTokenFlow(t *testing.T) {
+func TestHTTP_ClientCredentialsOmitsRefreshToken(t *testing.T) {
 	e := setupTest(t)
 	ctx := context.Background()
 
@@ -345,31 +350,11 @@ func TestHTTP_RefreshTokenFlow(t *testing.T) {
 	clientID, clientSecret := e.SeedOAuth2Client(t, ctx, accountID, SeedClientOptions{
 		Confidential: true,
 		RedirectURIs: []string{"https://app.example.com/callback"},
-		GrantTypes:   []string{"authorization_code", "refresh_token"},
+		GrantTypes:   []string{"client_credentials"},
 		Scopes:       []string{"openid", "profile"},
 	})
 
-	// Login
-	loginResp, loginBody := e.DoJSONRequest(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
-		"username": "refresh-user",
-		"password": "password123",
-	}, nil)
-	require.Equal(t, http.StatusOK, loginResp.StatusCode)
-
-	var loginResult struct {
-		Data struct {
-			AccessToken string `json:"access_token"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(loginBody, &loginResult))
-
-	// Get tokens via authorization code flow (simplified: use client_credentials for now,
-	// but for a proper test we'd go through the full authorize flow)
-	// For simplicity, we'll test the token endpoint directly with a refresh token obtained
-	// from the auth service. Since the test above covers the full flow, here we test
-	// the refresh token rotation mechanism.
-
-	// Use client_credentials to get an initial access token, then test refresh
+	// Client credentials tokens must never include refresh tokens (RFC 6749 §4.4.3).
 	tokenResp, tokenBody := e.DoFormRequest(t, http.MethodPost, "/oauth2/token", map[string]string{
 		"grant_type":    "client_credentials",
 		"client_id":     clientID,
@@ -796,4 +781,18 @@ func extractQueryParam(rawURL, key string) string {
 		return rawURL[start:]
 	}
 	return rawURL[start : start+end]
+}
+
+func extractHiddenInput(body, name string) string {
+	marker := `name="` + name + `" value="`
+	start := strings.Index(body, marker)
+	if start == -1 {
+		return ""
+	}
+	start += len(marker)
+	end := strings.IndexByte(body[start:], '"')
+	if end == -1 {
+		return ""
+	}
+	return body[start : start+end]
 }
