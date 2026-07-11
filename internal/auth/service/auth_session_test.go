@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -223,6 +224,32 @@ func TestBuildTokenClaims_DedupPermissions(t *testing.T) {
 	assert.ElementsMatch(t, []string{"editor", "admin"}, claims.Roles)
 	// "read" appears in both roles but should be deduplicated.
 	assert.ElementsMatch(t, []string{"read", "write", "delete"}, claims.Permissions)
+}
+
+func TestBuildTokenClaims_RefreshesLegacyRoleCacheWithoutPermissions(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.roleRepo.roles["account-001"] = []*accountDomain.Role{{
+		ID:          "role-admin",
+		Name:        RoleAdmin,
+		Permissions: []string{"admin:*"},
+	}}
+	// Versions before fine-grained permissions wrote this schema.
+	require.NoError(t, fixture.redis.Set(context.Background(), roleCacheKey("account-001"), `{"roles":["admin"]}`, roleCacheTTL))
+
+	claims, err := fixture.svc.buildTokenClaims(context.Background(), "account-001", "session-001")
+	require.NoError(t, err)
+	assert.Equal(t, []string{RoleAdmin}, claims.Roles)
+	assert.Equal(t, []string{"admin:*"}, claims.Permissions)
+
+	var cached roleCacheEntry
+	cachedJSON, err := fixture.redis.Get(context.Background(), roleCacheKey("account-001"))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal([]byte(cachedJSON), &cached))
+	assert.Equal(t, roleCacheVersion, cached.Version)
+	assert.Equal(t, []string{"admin:*"}, cached.Permissions)
 }
 
 func TestRefreshTokens_PreservesClientIDAndScope(t *testing.T) {

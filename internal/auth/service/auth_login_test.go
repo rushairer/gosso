@@ -130,6 +130,34 @@ func TestLoginByUsernamePassword_Success(t *testing.T) {
 	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
 }
 
+func TestLoginByUsernamePassword_RefreshesLegacyRoleCache(t *testing.T) {
+	fixture := setupTestAuthService(t)
+	defer fixture.mr.Close()
+	defer fixture.sqlDB.Close()
+
+	fixture.seedTestAccount("account-001", "testuser", "password123")
+	fixture.roleRepo.roles["account-001"] = []*accountDomain.Role{{
+		ID:          "role-admin",
+		Name:        RoleAdmin,
+		Permissions: []string{"admin:*"},
+	}}
+	require.NoError(t, fixture.redis.Set(context.Background(), roleCacheKey("account-001"), `{"roles":["admin"]}`, roleCacheTTL))
+	fixture.sqlMock.ExpectExec("UPDATE account_credentials").
+		WithArgs(sqlmock.AnyArg(), "cred-account-001").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	result, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
+		Username: "testuser", Password: "password123", IP: "127.0.0.1", UserAgent: "test-agent",
+	})
+	require.NoError(t, err)
+
+	claims, err := fixture.tokenSvc.ValidateAccessTokenWithContext(context.Background(), result.AccessToken)
+	require.NoError(t, err)
+	assert.Contains(t, claims.Roles, RoleAdmin)
+	assert.Contains(t, claims.Permissions, "admin:*")
+	require.NoError(t, fixture.sqlMock.ExpectationsWereMet())
+}
+
 func TestLoginByUsernamePassword_AccountNotFound(t *testing.T) {
 	fixture := setupTestAuthService(t)
 	defer fixture.mr.Close()
