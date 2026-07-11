@@ -328,11 +328,23 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		}
 	}
 
+	var permissions []string
+	if c.includeUserPermissions && c.permissionFetcher != nil {
+		var permErr error
+		permissions, permErr = c.permissionFetcher.GetAccountPermissions(ctx, dc.AccountID)
+		if permErr != nil {
+			c.logger.Error("Failed to fetch permissions for account", zap.Error(permErr), zap.String("account_id", dc.AccountID))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+	}
+
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
-		AccountID: dc.AccountID,
-		Scope:     strings.Join(dc.Scopes, " "),
-		ClientID:  dc.ClientID,
-		Roles:     roles,
+		AccountID:   dc.AccountID,
+		Scope:       strings.Join(dc.Scopes, " "),
+		ClientID:    dc.ClientID,
+		Roles:       roles,
+		Permissions: permissions,
 	})
 	if err != nil {
 		c.logger.Error("Failed to generate access token for device code", zap.Error(err), zap.String("client_id", dc.ClientID))

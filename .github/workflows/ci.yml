@@ -319,6 +319,9 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Set up QEMU (for ARM64 emulation)
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
@@ -330,28 +333,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify Docker build context
-        run: |
-          docker build \
-            --target builder \
-            --build-arg VERSION=${{ github.sha }} \
-            -t gosso-builder:${{ github.sha }} \
-            .
-
-      - name: Build Docker image
-        run: |
-          docker build \
-            --build-arg VERSION=${{ github.sha }} \
-            -t gosso:${{ github.sha }} \
-            -t gosso:latest \
-            ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && format('-t ghcr.io/{0}/gosso:sha-{1} -t ghcr.io/{0}/gosso:main', github.repository_owner, github.sha) || '' }} \
-            .
-
-      - name: Push Docker image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          docker push ghcr.io/${{ github.repository_owner }}/gosso:sha-${{ github.sha }}
-          docker push ghcr.io/${{ github.repository_owner }}/gosso:main
+      - name: Build and push Docker image (multi-arch)
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          build-args: VERSION=${{ github.sha }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/gosso:sha-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/gosso:main
 
   security-scan:
     name: Security Scan

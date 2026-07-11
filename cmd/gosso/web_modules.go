@@ -144,7 +144,9 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		EnforcePKCEForConfidential: cfg.AuthConfig.EnforcePKCEForConfidential,
 		Logger:                     logger,
 		RoleFetcher:                &accountRoleFetcherAdapter{accountSvc: accountMod.Service},
+		PermissionFetcher:          &accountRoleFetcherAdapter{accountSvc: accountMod.Service},
 		IncludeUserRoles:           cfg.AuthConfig.IncludeUserRoles,
+		IncludeUserPermissions:     cfg.AuthConfig.IncludeUserPermissions,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OAuth2 controller: %w", err)
@@ -350,4 +352,22 @@ func (a *accountRoleFetcherAdapter) GetAccountRoles(ctx context.Context, account
 		roleNames[i] = r.Name
 	}
 	return roleNames, nil
+}
+
+func (a *accountRoleFetcherAdapter) GetAccountPermissions(ctx context.Context, accountID string) ([]string, error) {
+	roles, err := a.accountSvc.GetAccountRoles(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	permSet := make(map[string]struct{})
+	var permissions []string
+	for _, role := range roles {
+		for _, p := range role.Permissions {
+			if _, exists := permSet[p]; !exists {
+				permSet[p] = struct{}{}
+				permissions = append(permissions, p)
+			}
+		}
+	}
+	return permissions, nil
 }

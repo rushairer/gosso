@@ -157,12 +157,24 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		}
 	}
 
+	var permissions []string
+	if c.includeUserPermissions && c.permissionFetcher != nil {
+		var permErr error
+		permissions, permErr = c.permissionFetcher.GetAccountPermissions(ctx, authCode.AccountID)
+		if permErr != nil {
+			c.logger.Error("Failed to fetch permissions for account", zap.Error(permErr), zap.String("account_id", authCode.AccountID))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+	}
+
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
-		AccountID: authCode.AccountID,
-		Scope:     strings.Join(authCode.Scopes, " "),
-		ClientID:  authCode.ClientID,
-		SessionID: authCode.SessionID,
-		Roles:     roles,
+		AccountID:   authCode.AccountID,
+		Scope:       strings.Join(authCode.Scopes, " "),
+		ClientID:    authCode.ClientID,
+		SessionID:   authCode.SessionID,
+		Roles:       roles,
+		Permissions: permissions,
 	})
 	if err != nil {
 		c.logger.Error("Failed to generate access token for authorization code", zap.Error(err), zap.String("client_id", req.ClientID))
@@ -296,12 +308,24 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		}
 	}
 
+	var permissions []string
+	if c.includeUserPermissions && c.permissionFetcher != nil {
+		var permErr error
+		permissions, permErr = c.permissionFetcher.GetAccountPermissions(ctx, newRefreshToken.AccountID)
+		if permErr != nil {
+			c.logger.Error("Failed to fetch permissions for account", zap.Error(permErr), zap.String("account_id", newRefreshToken.AccountID))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+	}
+
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
-		AccountID: newRefreshToken.AccountID,
-		Scope:     accessTokenScope,
-		ClientID:  newRefreshToken.ClientID,
-		SessionID: newRefreshToken.SessionID,
-		Roles:     roles,
+		AccountID:   newRefreshToken.AccountID,
+		Scope:       accessTokenScope,
+		ClientID:    newRefreshToken.ClientID,
+		SessionID:   newRefreshToken.SessionID,
+		Roles:       roles,
+		Permissions: permissions,
 	})
 	if err != nil {
 		c.logger.Error("Failed to generate access token for refresh", zap.Error(err), zap.String("client_id", newRefreshToken.ClientID))
