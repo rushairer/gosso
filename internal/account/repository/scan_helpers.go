@@ -114,13 +114,14 @@ func scanRoles(rows *sql.Rows) ([]*domain.Role, error) {
 func scanCredential(s dbPkg.Scannable) (*domain.Credential, error) {
 	cred := &domain.Credential{}
 	var metadataJSON []byte
+	var credentialValue sql.NullString
 
 	err := s.Scan(
 		&cred.ID,
 		&cred.AccountID,
 		&cred.Type,
 		&cred.Identifier,
-		&cred.Value,
+		&credentialValue,
 		&cred.Verified,
 		&cred.PrimaryCredential,
 		&metadataJSON,
@@ -131,6 +132,9 @@ func scanCredential(s dbPkg.Scannable) (*domain.Credential, error) {
 	)
 	if err != nil {
 		return nil, err
+	}
+	if credentialValue.Valid {
+		cred.Value = credentialValue.String
 	}
 
 	cred.Metadata = make(map[string]any)

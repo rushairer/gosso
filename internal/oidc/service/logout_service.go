@@ -202,6 +202,10 @@ func (s *LogoutService) LogoutBySessionID(ctx context.Context, accountID, sessio
 
 	s.logger.Info("Session logout successful",
 		zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.String("session_id", utility.MaskOpaqueID(sessionID)))
+
+	// Notify relying parties after the local session and its tokens have been
+	// revoked. The session ID is included only for clients that require it.
+	s.triggerBackChannelLogout(ctx, accountID, sessionID)
 	return nil
 }
 

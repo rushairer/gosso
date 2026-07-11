@@ -198,6 +198,34 @@ func TestScanCredential(t *testing.T) {
 	assert.Nil(t, cred.DeletedAt)
 }
 
+func TestScanCredential_NullValue(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	now := time.Now()
+	rows := sqlmock.NewRows([]string{
+		"id", "account_id", "credential_type", "identifier", "value",
+		"verified", "primary_credential", "metadata",
+		"created_at", "updated_at", "verified_at", "last_used_at",
+	}).AddRow(
+		"cred-email", "account-001", "email", "user@example.com", nil,
+		true, false, `{}`, now, now, now, nil,
+	)
+	mock.ExpectQuery("SELECT").WillReturnRows(rows)
+
+	sqlRows, err := db.Query("SELECT 1")
+	require.NoError(t, err)
+	defer sqlRows.Close()
+	require.True(t, sqlRows.Next())
+
+	cred, err := scanCredential(sqlRows)
+	require.NoError(t, err)
+	assert.Empty(t, cred.Value)
+	assert.Equal(t, domain.CredentialTypeEmail, cred.Type)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 // ──────────────────────────────────────────────
 // scanFederatedIdentity
 // ──────────────────────────────────────────────
