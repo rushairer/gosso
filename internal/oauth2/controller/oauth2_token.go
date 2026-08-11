@@ -35,6 +35,21 @@ func setSSOAuthCookie(ctx *gin.Context, accessToken string, maxAgeSeconds int) {
 	})
 }
 
+func setSSORefreshCookie(ctx *gin.Context, refreshToken string, maxAgeSeconds int) {
+	if refreshToken == "" {
+		return
+	}
+	http.SetCookie(ctx.Writer, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		Path:     "/api/v1/auth/refresh",
+		MaxAge:   maxAgeSeconds,
+		HttpOnly: true,
+		Secure:   ctx.Request.TLS != nil || ctx.GetHeader("X-Forwarded-Proto") == "https",
+		SameSite: http.SameSiteStrictMode,
+	})
+}
+
 // TokenRequest is the token exchange request body.
 type TokenRequest struct {
 	GrantType    string `json:"grant_type" form:"grant_type" binding:"required"`
@@ -212,6 +227,9 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 
 	controllerutil.SetNoCacheHeaders(ctx)
 	setSSOAuthCookie(ctx, accessToken, int(c.tokenSvc.AccessExpiry().Seconds()))
+	if refreshToken != nil {
+		setSSORefreshCookie(ctx, refreshToken.Token, int((7 * 24 * time.Hour).Seconds()))
+	}
 	ctx.JSON(http.StatusOK, response)
 }
 
@@ -335,6 +353,7 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 
 	controllerutil.SetNoCacheHeaders(ctx)
 	setSSOAuthCookie(ctx, accessToken, int(c.tokenSvc.AccessExpiry().Seconds()))
+	setSSORefreshCookie(ctx, newRefreshToken.Token, int((7 * 24 * time.Hour).Seconds()))
 	ctx.JSON(http.StatusOK, gin.H{
 		"access_token":  accessToken,
 		"refresh_token": newRefreshToken.Token,

@@ -12,6 +12,8 @@ import (
 )
 
 const authCookieName = "access_token"
+const refreshCookieName = "refresh_token"
+const refreshCookieMaxAgeSeconds = 7 * 24 * 60 * 60
 
 // getClaimsFromContext extracts and validates JWT claims from gin.Context
 func getClaimsFromContext(ctx *gin.Context) (*tokenDomain.AccessTokenClaims, bool) {
@@ -61,6 +63,31 @@ func clearSSOAuthCookie(ctx *gin.Context, secure bool) {
 		HttpOnly: true,
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func setRefreshTokenCookie(ctx *gin.Context, refreshToken string, maxAgeSeconds int, secure bool) {
+	http.SetCookie(ctx.Writer, &http.Cookie{
+		Name:     refreshCookieName,
+		Value:    refreshToken,
+		Path:     "/api/v1/auth/refresh",
+		MaxAge:   maxAgeSeconds,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteStrictMode,
+	})
+}
+
+func clearRefreshTokenCookie(ctx *gin.Context, secure bool) {
+	http.SetCookie(ctx.Writer, &http.Cookie{
+		Name:     refreshCookieName,
+		Value:    "",
+		Path:     "/api/v1/auth/refresh",
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteStrictMode,
 	})
 }
 

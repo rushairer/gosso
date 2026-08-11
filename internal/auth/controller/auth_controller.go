@@ -187,6 +187,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 	// Prevent caching of responses containing tokens
 	controllerutil.SetNoCacheHeaders(ctx)
 	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
+	setRefreshTokenCookie(ctx, result.RefreshToken, refreshCookieMaxAgeSeconds, c.secureCookie)
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
 		result.AccessToken, result.RefreshToken, result.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),
@@ -195,14 +196,21 @@ func (c *AuthController) Login(ctx *gin.Context) {
 
 // RefreshTokenRequest refresh token request body
 type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required,max=128"`
+	RefreshToken string `json:"refresh_token" binding:"max=128"`
 }
 
 // Refresh POST /api/auth/refresh
 func (c *AuthController) Refresh(ctx *gin.Context) {
 	var req RefreshTokenRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
+	if err := ctx.ShouldBindJSON(&req); err != nil && ctx.Request.ContentLength > 0 {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+	if req.RefreshToken == "" {
+		req.RefreshToken, _ = ctx.Cookie(refreshCookieName)
+	}
+	if req.RefreshToken == "" {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "refresh token is required"))
 		return
 	}
 
@@ -216,6 +224,7 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 	// Prevent caching of responses containing tokens
 	controllerutil.SetNoCacheHeaders(ctx)
 	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
+	setRefreshTokenCookie(ctx, result.RefreshToken, refreshCookieMaxAgeSeconds, c.secureCookie)
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
 		result.AccessToken, result.RefreshToken, result.SessionID, int(c.tokenMgr.AccessExpiry().Seconds()),
@@ -261,6 +270,7 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 	// Prevent caching of responses containing tokens
 	controllerutil.SetNoCacheHeaders(ctx)
 	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
+	setRefreshTokenCookie(ctx, result.RefreshToken, refreshCookieMaxAgeSeconds, c.secureCookie)
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
 		result.AccessToken, result.RefreshToken, result.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),

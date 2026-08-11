@@ -142,6 +142,7 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 	}
 
 	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
+	setRefreshTokenCookie(ctx, result.RefreshToken, refreshCookieMaxAgeSeconds, c.secureCookie)
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
 		result.AccessToken, result.RefreshToken, result.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),
 	)))

@@ -683,10 +683,11 @@ func TestToken_RefreshToken_Success(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, "mock-access-token", resp["access_token"])
 	assert.Equal(t, "rotated-refresh", resp["refresh_token"])
-	require.Len(t, w.Result().Cookies(), 1)
+	require.Len(t, w.Result().Cookies(), 2)
 	assert.Equal(t, "access_token", w.Result().Cookies()[0].Name)
 	assert.Equal(t, "mock-access-token", w.Result().Cookies()[0].Value)
 	assert.True(t, w.Result().Cookies()[0].HttpOnly)
+	assert.Equal(t, "refresh_token", w.Result().Cookies()[1].Name)
 }
 
 func TestToken_RefreshToken_Invalid(t *testing.T) {
@@ -2055,10 +2056,11 @@ func TestToken_AuthCode_Success(t *testing.T) {
 	require.NotNil(t, tokenMgr.lastAccessClaims)
 	assert.Equal(t, "session-001", tokenMgr.lastAccessClaims.SessionID)
 	assert.Equal(t, "session-001", tokenMgr.lastRefreshArgs.sessionID)
-	require.Len(t, w.Result().Cookies(), 1)
+	require.Len(t, w.Result().Cookies(), 2)
 	assert.Equal(t, "access_token", w.Result().Cookies()[0].Name)
 	assert.Equal(t, "mock-access-token", w.Result().Cookies()[0].Value)
 	assert.True(t, w.Result().Cookies()[0].HttpOnly)
+	assert.Equal(t, "refresh_token", w.Result().Cookies()[1].Name)
 }
 
 func TestToken_AuthCode_SuccessWithOpenID(t *testing.T) {

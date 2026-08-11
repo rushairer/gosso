@@ -111,6 +111,11 @@ func (c *OIDCController) UserInfo(ctx *gin.Context) {
 			http.StatusInternalServerError, "Failed to get user info")
 		return
 	}
+	// These are Gosso-specific claims used by same-origin management clients.
+	// They are copied from the validated access token rather than re-derived
+	// from untrusted browser state.
+	info["roles"] = claims.Roles
+	info["scope"] = claims.Scope
 
 	ctx.JSON(http.StatusOK, info)
 }
