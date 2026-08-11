@@ -292,6 +292,16 @@ type argon2idParams struct {
 	threads uint8
 }
 
+const (
+	maxArgon2MemoryKiB uint32 = 256 * 1024
+	maxArgon2Time      uint32 = 10
+	maxArgon2Threads   uint8  = 16
+	minArgon2SaltLen          = 16
+	maxArgon2SaltLen          = 64
+	minArgon2HashLen          = 16
+	maxArgon2HashLen          = 64
+)
+
 // parseArgon2idHash decodes a PHC-formatted argon2id hash string.
 func parseArgon2idHash(encodedHash string) (*argon2idParams, []byte, []byte, error) {
 	parts := strings.Split(encodedHash, "$")
@@ -319,15 +329,24 @@ func parseArgon2idHash(encodedHash string) (*argon2idParams, []byte, []byte, err
 	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &p.memory, &p.time, &p.threads); err != nil {
 		return nil, nil, nil, fmt.Errorf("invalid argon2id params: %w", err)
 	}
+	if p.memory == 0 || p.memory > maxArgon2MemoryKiB || p.time == 0 || p.time > maxArgon2Time || p.threads == 0 || p.threads > maxArgon2Threads {
+		return nil, nil, nil, errors.New("argon2id parameters out of bounds")
+	}
 
 	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("invalid salt encoding: %w", err)
 	}
+	if len(salt) < minArgon2SaltLen || len(salt) > maxArgon2SaltLen {
+		return nil, nil, nil, errors.New("argon2id salt length out of bounds")
+	}
 
 	hash, err := base64.RawStdEncoding.DecodeString(parts[5])
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("invalid hash encoding: %w", err)
+	}
+	if len(hash) < minArgon2HashLen || len(hash) > maxArgon2HashLen {
+		return nil, nil, nil, errors.New("argon2id hash length out of bounds")
 	}
 
 	return p, salt, hash, nil

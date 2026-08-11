@@ -2637,6 +2637,9 @@ func TestSubmitConsent_Success(t *testing.T) {
 	// Store consent state in Redis so the PKCE validation passes
 	consentID := "test-consent"
 	stateData, _ := json.Marshal(map[string]string{
+		"account_id":            "account-001",
+		"client_id":             "cid-test",
+		"redirect_uri":          "https://app.example.com/callback",
 		"code_challenge":        "",
 		"code_challenge_method": "",
 		"nonce":                 "",
@@ -2685,6 +2688,9 @@ func TestSubmitConsent_ClientNotFound(t *testing.T) {
 	// Store consent state in Redis so the PKCE validation passes
 	consentID := "test-consent"
 	stateData, _ := json.Marshal(map[string]string{
+		"account_id":            "account-001",
+		"client_id":             "bad",
+		"redirect_uri":          "https://app.example.com/callback",
 		"code_challenge":        "",
 		"code_challenge_method": "",
 		"nonce":                 "",
@@ -2732,6 +2738,9 @@ func TestSubmitConsent_InvalidRedirectURI(t *testing.T) {
 	// Store consent state in Redis so the PKCE validation passes
 	consentID := "test-consent"
 	stateData, _ := json.Marshal(map[string]string{
+		"account_id":            "account-001",
+		"client_id":             "cid-test",
+		"redirect_uri":          "https://evil.com/callback",
 		"code_challenge":        "",
 		"code_challenge_method": "",
 		"nonce":                 "",
@@ -2780,6 +2789,9 @@ func TestSubmitConsent_InvalidScope(t *testing.T) {
 	// Store consent state in Redis so the PKCE validation passes
 	consentID := "test-consent"
 	stateData, _ := json.Marshal(map[string]string{
+		"account_id":            "account-001",
+		"client_id":             "cid-test",
+		"redirect_uri":          "https://app.example.com/callback",
 		"code_challenge":        "",
 		"code_challenge_method": "",
 		"nonce":                 "",
@@ -2829,6 +2841,9 @@ func TestSubmitConsent_SaveConsentError(t *testing.T) {
 	// Store consent state in Redis so the PKCE validation passes
 	consentID := "test-consent"
 	stateData, _ := json.Marshal(map[string]string{
+		"account_id":            "account-001",
+		"client_id":             "cid-test",
+		"redirect_uri":          "https://app.example.com/callback",
 		"code_challenge":        "",
 		"code_challenge_method": "",
 		"nonce":                 "",
@@ -2880,6 +2895,9 @@ func TestSubmitConsent_GenerateCodeError(t *testing.T) {
 	// Store consent state in Redis so the PKCE validation passes
 	consentID := "test-consent-id"
 	stateData, _ := json.Marshal(map[string]string{
+		"account_id":            "account-001",
+		"client_id":             "cid-test",
+		"redirect_uri":          "https://app.example.com/callback",
 		"code_challenge":        "",
 		"code_challenge_method": "",
 		"nonce":                 "",

@@ -39,6 +39,10 @@ func sessionIDFromContext(ctx *gin.Context) string {
 // consentState stores the PKCE and authorization parameters from the GET /authorize request.
 // It is persisted in Redis to prevent tampering between the consent page render and the POST.
 type consentState struct {
+	AccountID           string `json:"account_id"`
+	SessionID           string `json:"session_id"`
+	ClientID            string `json:"client_id"`
+	RedirectURI         string `json:"redirect_uri"`
 	CodeChallenge       string `json:"code_challenge"`
 	CodeChallengeMethod string `json:"code_challenge_method"`
 	Nonce               string `json:"nonce"`
@@ -133,6 +137,10 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 	stateData, err := json.Marshal(consentState{
+		AccountID:           accountIDStr,
+		SessionID:           sessionID,
+		ClientID:            clientID,
+		RedirectURI:         redirectURI,
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: codeChallengeMethod,
 		Nonce:               nonce,
@@ -303,7 +311,11 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid consent session data"})
 		return
 	}
-	if req.CodeChallenge != stored.CodeChallenge ||
+	if req.ClientID != stored.ClientID ||
+		req.RedirectURI != stored.RedirectURI ||
+		accountIDStr != stored.AccountID ||
+		sessionIDFromContext(ctx) != stored.SessionID ||
+		req.CodeChallenge != stored.CodeChallenge ||
 		req.CodeChallengeMethod != stored.CodeChallengeMethod ||
 		req.Nonce != stored.Nonce ||
 		req.State != stored.State ||
