@@ -111,13 +111,24 @@ func (c *OIDCController) UserInfo(ctx *gin.Context) {
 			http.StatusInternalServerError, "Failed to get user info")
 		return
 	}
-	// These are Gosso-specific claims used by same-origin management clients.
-	// They are copied from the validated access token rather than re-derived
-	// from untrusted browser state.
-	info["roles"] = claims.Roles
-	info["scope"] = claims.Scope
+	// Roles are an authorization attribute, not a standard OIDC profile claim.
+	// Expose them only to clients that were explicitly granted the trusted admin
+	// scope; ordinary OIDC relying parties must not learn internal role data.
+	if hasScope(claims.Scope, "admin") {
+		info["roles"] = claims.Roles
+		info["scope"] = claims.Scope
+	}
 
 	ctx.JSON(http.StatusOK, info)
+}
+
+func hasScope(scopeClaim, required string) bool {
+	for _, scope := range strings.Fields(scopeClaim) {
+		if scope == required {
+			return true
+		}
+	}
+	return false
 }
 
 // logoutRequest holds the parameters for OIDC RP-Initiated Logout.

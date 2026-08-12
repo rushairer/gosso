@@ -134,7 +134,8 @@ func (m *mockTokenMgr) IntrospectToken(_ context.Context, _ string) (map[string]
 	return map[string]any{"active": true}, nil
 }
 
-func (m *mockTokenMgr) AccessExpiry() time.Duration { return 15 * time.Minute }
+func (m *mockTokenMgr) AccessExpiry() time.Duration  { return 15 * time.Minute }
+func (m *mockTokenMgr) RefreshExpiry() time.Duration { return 7 * 24 * time.Hour }
 
 func (m *mockTokenMgr) ValidateRefreshToken(_ context.Context, _ string) (*tokenDomain.RefreshToken, error) {
 	if m.validateRefreshFn != nil {
@@ -389,6 +390,7 @@ func TestToken_MissingGrantType(t *testing.T) {
 	body := "code=abc"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set(cookieSessionHeader, "1")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -674,6 +676,7 @@ func TestToken_RefreshToken_Success(t *testing.T) {
 	body := "grant_type=refresh_token&refresh_token=valid-refresh&client_id=cid-test"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set(cookieSessionHeader, "1")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -681,13 +684,13 @@ func TestToken_RefreshToken_Success(t *testing.T) {
 
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.Equal(t, "mock-access-token", resp["access_token"])
-	assert.Equal(t, "rotated-refresh", resp["refresh_token"])
+	assert.Nil(t, resp["access_token"])
+	assert.Nil(t, resp["refresh_token"])
 	require.Len(t, w.Result().Cookies(), 2)
-	assert.Equal(t, "access_token", w.Result().Cookies()[0].Name)
+	assert.Equal(t, "__Host-access_token", w.Result().Cookies()[0].Name)
 	assert.Equal(t, "mock-access-token", w.Result().Cookies()[0].Value)
 	assert.True(t, w.Result().Cookies()[0].HttpOnly)
-	assert.Equal(t, "refresh_token", w.Result().Cookies()[1].Name)
+	assert.Equal(t, "__Host-refresh_token", w.Result().Cookies()[1].Name)
 }
 
 func TestToken_RefreshToken_Invalid(t *testing.T) {
@@ -704,6 +707,7 @@ func TestToken_RefreshToken_Invalid(t *testing.T) {
 	body := "grant_type=refresh_token&refresh_token=bad-token"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set(cookieSessionHeader, "1")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2041,6 +2045,7 @@ func TestToken_AuthCode_Success(t *testing.T) {
 	body := "grant_type=authorization_code&client_id=cid-test&client_secret=test-secret&code=auth-code-123&redirect_uri=https://app.example.com/callback"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set(cookieSessionHeader, "1")
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
@@ -2048,19 +2053,19 @@ func TestToken_AuthCode_Success(t *testing.T) {
 
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.Equal(t, "mock-access-token", resp["access_token"])
-	assert.Equal(t, "mock-refresh", resp["refresh_token"])
-	assert.Equal(t, "Bearer", resp["token_type"])
+	assert.Nil(t, resp["access_token"])
+	assert.Nil(t, resp["refresh_token"])
+	assert.Nil(t, resp["token_type"])
 	assert.Equal(t, float64(900), resp["expires_in"])
 	assert.Nil(t, resp["id_token"], "should not include id_token without openid scope")
 	require.NotNil(t, tokenMgr.lastAccessClaims)
 	assert.Equal(t, "session-001", tokenMgr.lastAccessClaims.SessionID)
 	assert.Equal(t, "session-001", tokenMgr.lastRefreshArgs.sessionID)
 	require.Len(t, w.Result().Cookies(), 2)
-	assert.Equal(t, "access_token", w.Result().Cookies()[0].Name)
+	assert.Equal(t, "__Host-access_token", w.Result().Cookies()[0].Name)
 	assert.Equal(t, "mock-access-token", w.Result().Cookies()[0].Value)
 	assert.True(t, w.Result().Cookies()[0].HttpOnly)
-	assert.Equal(t, "refresh_token", w.Result().Cookies()[1].Name)
+	assert.Equal(t, "__Host-refresh_token", w.Result().Cookies()[1].Name)
 }
 
 func TestToken_AuthCode_SuccessWithOpenID(t *testing.T) {

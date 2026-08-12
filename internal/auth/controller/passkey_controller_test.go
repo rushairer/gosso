@@ -90,7 +90,8 @@ func (m *mockTokenMgrForPasskey) RevokeAccessToken(_ context.Context, _ string, 
 func (m *mockTokenMgrForPasskey) IntrospectToken(_ context.Context, _ string) (map[string]any, error) {
 	return map[string]any{"active": true}, nil
 }
-func (m *mockTokenMgrForPasskey) AccessExpiry() time.Duration { return 15 * time.Minute }
+func (m *mockTokenMgrForPasskey) AccessExpiry() time.Duration  { return 15 * time.Minute }
+func (m *mockTokenMgrForPasskey) RefreshExpiry() time.Duration { return 7 * 24 * time.Hour }
 
 type mockAccountLookupForPasskey struct {
 	err error

@@ -11,9 +11,9 @@ import (
 	"github.com/rushairer/gosso/middleware"
 )
 
-const authCookieName = "access_token"
-const refreshCookieName = "refresh_token"
-const refreshCookieMaxAgeSeconds = 7 * 24 * 60 * 60
+const authCookieName = "__Host-access_token"
+const refreshCookieName = "__Host-refresh_token"
+const cookieSessionHeader = "X-Gosso-Cookie-Session"
 
 // getClaimsFromContext extracts and validates JWT claims from gin.Context
 func getClaimsFromContext(ctx *gin.Context) (*tokenDomain.AccessTokenClaims, bool) {
@@ -39,6 +39,24 @@ func tokenResponse(accessToken, refreshToken, sessionID string, expiresIn int) g
 		"expires_in":    expiresIn,
 		"session_id":    sessionID,
 	}
+}
+
+// cookieSessionResponse deliberately excludes bearer tokens. It is only used by
+// same-origin browser clients that opt in with cookieSessionHeader.
+func cookieSessionResponse(sessionID string, expiresIn int) gin.H {
+	return gin.H{"expires_in": expiresIn, "session_id": sessionID}
+}
+
+func isCookieSessionRequest(ctx *gin.Context) bool {
+	return ctx.GetHeader(cookieSessionHeader) == "1"
+}
+
+func refreshCookieMaxAge(tokenExpiry time.Time) int {
+	seconds := int(time.Until(tokenExpiry).Seconds())
+	if seconds < 1 {
+		return 1
+	}
+	return seconds
 }
 
 func setSSOAuthCookie(ctx *gin.Context, accessToken string, maxAgeSeconds int, secure bool) {
@@ -70,7 +88,7 @@ func setRefreshTokenCookie(ctx *gin.Context, refreshToken string, maxAgeSeconds 
 	http.SetCookie(ctx.Writer, &http.Cookie{
 		Name:     refreshCookieName,
 		Value:    refreshToken,
-		Path:     "/api/v1/auth/refresh",
+		Path:     "/",
 		MaxAge:   maxAgeSeconds,
 		HttpOnly: true,
 		Secure:   secure,
@@ -82,7 +100,7 @@ func clearRefreshTokenCookie(ctx *gin.Context, secure bool) {
 	http.SetCookie(ctx.Writer, &http.Cookie{
 		Name:     refreshCookieName,
 		Value:    "",
-		Path:     "/api/v1/auth/refresh",
+		Path:     "/",
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0),
 		HttpOnly: true,

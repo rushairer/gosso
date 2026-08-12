@@ -44,7 +44,7 @@ type AuthConfigOptions struct {
 func ValidateBearerToken(ctx *gin.Context, tokenSvc TokenValidator, sessionValidator sessionDomain.SessionValidator) (*tokenDomain.AccessTokenClaims, error) {
 	return ValidateBearerTokenWithConfig(ctx, tokenSvc, sessionValidator, AuthConfigOptions{
 		EnableCookieAuth: true,
-		AuthCookieName:   "access_token",
+		AuthCookieName:   "__Host-access_token",
 	})
 }
 
@@ -93,7 +93,7 @@ func JWTAuthMiddleware(tokenSvc TokenValidator, sessionValidator sessionDomain.S
 	return JWTAuthMiddlewareWithConfig(tokenSvc, sessionValidator, AuthConfigOptions{
 		LoginURL:         "/login",
 		EnableCookieAuth: true,
-		AuthCookieName:   "access_token",
+		AuthCookieName:   "__Host-access_token",
 	})
 }
 
@@ -139,7 +139,7 @@ func JWTAuthMiddlewareWithConfig(tokenSvc TokenValidator, sessionValidator sessi
 }
 
 func extractBearerToken(ctx *gin.Context) string {
-	return extractBearerTokenWithConfig(ctx, true, "access_token")
+	return extractBearerTokenWithConfig(ctx, true, "__Host-access_token")
 }
 
 func extractBearerTokenWithConfig(ctx *gin.Context, enableCookieAuth bool, authCookieName string) string {
@@ -155,7 +155,7 @@ func extractBearerTokenWithConfig(ctx *gin.Context, enableCookieAuth bool, authC
 		if cookie, err := ctx.Cookie(authCookieName); err == nil {
 			return cookie
 		}
-		if !strings.HasPrefix(authCookieName, "__Secure-") {
+		if !strings.HasPrefix(authCookieName, "__Secure-") && !strings.HasPrefix(authCookieName, "__Host-") {
 			if cookie, err := ctx.Cookie("__Secure-" + authCookieName); err == nil {
 				return cookie
 			}

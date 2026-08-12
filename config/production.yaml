@@ -98,7 +98,7 @@ auth:
     # SPA integration
     login_url: "/login"
     enable_cookie_auth: true
-    auth_cookie_name: "access_token"
+    auth_cookie_name: "__Host-access_token"
     include_user_roles: true
     include_user_permissions: true
     # WebAuthn / Passkey configuration (REQUIRED for passkey support)

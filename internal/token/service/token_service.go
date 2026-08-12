@@ -102,6 +102,11 @@ func NewTokenService(
 	}, nil
 }
 
+// RefreshExpiry returns the configured lifetime for refresh tokens.
+func (s *TokenService) RefreshExpiry() time.Duration {
+	return s.refreshExpiry
+}
+
 // GenerateAccessToken generates a JWT access token (RS256).
 // Note: this always overrides ExpiresAt with the configured accessExpiry,
 // regardless of any value the caller may have set on claims.

@@ -187,11 +187,8 @@ func (c *AuthController) Login(ctx *gin.Context) {
 	// Prevent caching of responses containing tokens
 	controllerutil.SetNoCacheHeaders(ctx)
 	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
-	setRefreshTokenCookie(ctx, result.RefreshToken, refreshCookieMaxAgeSeconds, c.secureCookie)
-
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
-		result.AccessToken, result.RefreshToken, result.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),
-	)))
+	setRefreshTokenCookie(ctx, result.RefreshToken, int(c.tokenMgr.RefreshExpiry().Seconds()), c.secureCookie)
+	respondTokenSet(ctx, c.tokenMgr, result.AccessToken, result.RefreshToken, result.Session.ID)
 }
 
 // RefreshTokenRequest refresh token request body
@@ -224,11 +221,8 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 	// Prevent caching of responses containing tokens
 	controllerutil.SetNoCacheHeaders(ctx)
 	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
-	setRefreshTokenCookie(ctx, result.RefreshToken, refreshCookieMaxAgeSeconds, c.secureCookie)
-
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
-		result.AccessToken, result.RefreshToken, result.SessionID, int(c.tokenMgr.AccessExpiry().Seconds()),
-	)))
+	setRefreshTokenCookie(ctx, result.RefreshToken, int(c.tokenMgr.RefreshExpiry().Seconds()), c.secureCookie)
+	respondTokenSet(ctx, c.tokenMgr, result.AccessToken, result.RefreshToken, result.SessionID)
 }
 
 // MFAVerifyRequest MFA verification request body
@@ -270,9 +264,15 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 	// Prevent caching of responses containing tokens
 	controllerutil.SetNoCacheHeaders(ctx)
 	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
-	setRefreshTokenCookie(ctx, result.RefreshToken, refreshCookieMaxAgeSeconds, c.secureCookie)
+	setRefreshTokenCookie(ctx, result.RefreshToken, int(c.tokenMgr.RefreshExpiry().Seconds()), c.secureCookie)
+	respondTokenSet(ctx, c.tokenMgr, result.AccessToken, result.RefreshToken, result.Session.ID)
+}
 
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
-		result.AccessToken, result.RefreshToken, result.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),
-	)))
+func respondTokenSet(ctx *gin.Context, tokenMgr authService.TokenManager, accessToken, refreshToken, sessionID string) {
+	expiresIn := int(tokenMgr.AccessExpiry().Seconds())
+	if isCookieSessionRequest(ctx) {
+		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(cookieSessionResponse(sessionID, expiresIn)))
+		return
+	}
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(accessToken, refreshToken, sessionID, expiresIn)))
 }

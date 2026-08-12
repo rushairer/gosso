@@ -134,7 +134,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("auth.enforce_pkce_for_confidential", false)
 	v.SetDefault("auth.login_url", "/login")
 	v.SetDefault("auth.enable_cookie_auth", false)
-	v.SetDefault("auth.auth_cookie_name", "access_token")
+	v.SetDefault("auth.auth_cookie_name", "__Host-access_token")
 	v.SetDefault("auth.include_user_roles", false)
 	v.SetDefault("auth.include_user_permissions", false)
 	v.SetDefault("auth.verify_hash_pepper", "")

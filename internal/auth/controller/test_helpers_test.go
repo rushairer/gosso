@@ -184,6 +184,8 @@ func (m *mockTokenManager) AccessExpiry() time.Duration {
 	return 15 * time.Minute
 }
 
+func (m *mockTokenManager) RefreshExpiry() time.Duration { return 7 * 24 * time.Hour }
+
 // ──────────────────────────────────────────────
 // Mock credential repository for MFA tests
 // ──────────────────────────────────────────────

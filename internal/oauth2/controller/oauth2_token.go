@@ -21,7 +21,13 @@ import (
 // for clients that include optional fields (e.g., long redirect_uri values) while still
 // preventing abuse via excessively large form bodies.
 const oauth2MaxFormBodySize = 8 * 1024
-const authCookieName = "access_token"
+const authCookieName = "__Host-access_token"
+const refreshCookieName = "__Host-refresh_token"
+const cookieSessionHeader = "X-Gosso-Cookie-Session"
+
+func isCookieSessionRequest(ctx *gin.Context) bool {
+	return ctx.GetHeader(cookieSessionHeader) == "1"
+}
 
 func setSSOAuthCookie(ctx *gin.Context, accessToken string, maxAgeSeconds int) {
 	http.SetCookie(ctx.Writer, &http.Cookie{
@@ -40,9 +46,9 @@ func setSSORefreshCookie(ctx *gin.Context, refreshToken string, maxAgeSeconds in
 		return
 	}
 	http.SetCookie(ctx.Writer, &http.Cookie{
-		Name:     "refresh_token",
+		Name:     refreshCookieName,
 		Value:    refreshToken,
-		Path:     "/api/v1/auth/refresh",
+		Path:     "/",
 		MaxAge:   maxAgeSeconds,
 		HttpOnly: true,
 		Secure:   ctx.Request.TLS != nil || ctx.GetHeader("X-Forwarded-Proto") == "https",
@@ -226,9 +232,13 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 	}
 
 	controllerutil.SetNoCacheHeaders(ctx)
-	setSSOAuthCookie(ctx, accessToken, int(c.tokenSvc.AccessExpiry().Seconds()))
-	if refreshToken != nil {
-		setSSORefreshCookie(ctx, refreshToken.Token, int((7 * 24 * time.Hour).Seconds()))
+	if isCookieSessionRequest(ctx) {
+		setSSOAuthCookie(ctx, accessToken, int(c.tokenSvc.AccessExpiry().Seconds()))
+		if refreshToken != nil {
+			setSSORefreshCookie(ctx, refreshToken.Token, maxAgeUntil(refreshToken.ExpiresAt))
+		}
+		ctx.JSON(http.StatusOK, gin.H{"expires_in": int(c.tokenSvc.AccessExpiry().Seconds()), "scope": strings.Join(authCode.Scopes, " ")})
+		return
 	}
 	ctx.JSON(http.StatusOK, response)
 }
@@ -352,8 +362,12 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 	}
 
 	controllerutil.SetNoCacheHeaders(ctx)
-	setSSOAuthCookie(ctx, accessToken, int(c.tokenSvc.AccessExpiry().Seconds()))
-	setSSORefreshCookie(ctx, newRefreshToken.Token, int((7 * 24 * time.Hour).Seconds()))
+	if isCookieSessionRequest(ctx) {
+		setSSOAuthCookie(ctx, accessToken, int(c.tokenSvc.AccessExpiry().Seconds()))
+		setSSORefreshCookie(ctx, newRefreshToken.Token, maxAgeUntil(newRefreshToken.ExpiresAt))
+		ctx.JSON(http.StatusOK, gin.H{"expires_in": int(c.tokenSvc.AccessExpiry().Seconds()), "scope": accessTokenScope})
+		return
+	}
 	ctx.JSON(http.StatusOK, gin.H{
 		"access_token":  accessToken,
 		"refresh_token": newRefreshToken.Token,
@@ -361,6 +375,14 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		"expires_in":    int(c.tokenSvc.AccessExpiry().Seconds()),
 		"scope":         accessTokenScope,
 	})
+}
+
+func maxAgeUntil(expiry time.Time) int {
+	seconds := int(time.Until(expiry).Seconds())
+	if seconds < 1 {
+		return 1
+	}
+	return seconds
 }
 
 func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *TokenRequest) {

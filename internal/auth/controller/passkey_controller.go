@@ -275,10 +275,8 @@ func (c *PasskeyController) LoginComplete(ctx *gin.Context) {
 
 	controllerutil.SetNoCacheHeaders(ctx)
 	setSSOAuthCookie(ctx, loginResult.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), isSecureRequest(ctx))
-	setRefreshTokenCookie(ctx, loginResult.RefreshToken, refreshCookieMaxAgeSeconds, isSecureRequest(ctx))
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
-		loginResult.AccessToken, loginResult.RefreshToken, loginResult.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),
-	)))
+	setRefreshTokenCookie(ctx, loginResult.RefreshToken, int(c.tokenMgr.RefreshExpiry().Seconds()), isSecureRequest(ctx))
+	respondTokenSet(ctx, c.tokenMgr, loginResult.AccessToken, loginResult.RefreshToken, loginResult.Session.ID)
 }
 
 // MFABeginRequest is the passkey MFA begin request body.
@@ -370,11 +368,8 @@ func (c *PasskeyController) MFAComplete(ctx *gin.Context) {
 
 	controllerutil.SetNoCacheHeaders(ctx)
 	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), isSecureRequest(ctx))
-	setRefreshTokenCookie(ctx, result.RefreshToken, refreshCookieMaxAgeSeconds, isSecureRequest(ctx))
-
-	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(
-		result.AccessToken, result.RefreshToken, result.Session.ID, int(c.tokenMgr.AccessExpiry().Seconds()),
-	)))
+	setRefreshTokenCookie(ctx, result.RefreshToken, int(c.tokenMgr.RefreshExpiry().Seconds()), isSecureRequest(ctx))
+	respondTokenSet(ctx, c.tokenMgr, result.AccessToken, result.RefreshToken, result.Session.ID)
 }
 
 // ListCredentials GET /api/auth/passkeys

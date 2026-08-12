@@ -43,6 +43,7 @@ type TokenManager interface {
 	RevokeAccessToken(ctx context.Context, jti string, expiresAt time.Time) error
 	IntrospectToken(ctx context.Context, tokenString string) (map[string]any, error)
 	AccessExpiry() time.Duration
+	RefreshExpiry() time.Duration
 }
 
 // SessionTokenCreator creates sessions and tokens for authenticated accounts.
