@@ -42,6 +42,7 @@ type WebServerConfig struct {
 	TrustedProxies    []string         `mapstructure:"trusted_proxies"`
 	RateLimits        RateLimitsConfig `mapstructure:"rate_limits"`
 	CSRFSkipPaths     []string         `mapstructure:"csrf_skip_paths"`
+	CSRFCookieSecure  bool             `mapstructure:"csrf_cookie_secure"`
 }
 
 type RateLimitsConfig struct {

@@ -131,6 +131,17 @@ func TestConfigManager_TestConfigIsValid(t *testing.T) {
 	assert.Len(t, key, 32)
 }
 
+func TestConfigManager_CSRFCookieSecureCanBeEnabledForLocalHTTPS(t *testing.T) {
+	t.Setenv("GOUNO_WEB_SERVER_CSRF_COOKIE_SECURE", "true")
+	t.Setenv("GOUNO_AUTH_TOTP_ENCRYPTION_KEY", "0000000000000000000000000000000000000000000000000000000000000000")
+
+	cm, err := NewConfigManager(nil, "../config", "development")
+	require.NoError(t, err)
+
+	assert.True(t, cm.Config().WebServerConfig.CSRFCookieSecure)
+	assert.False(t, cm.Config().WebServerConfig.Production)
+}
+
 // ──────────────────────────────────────────────
 // Validate — table-driven error cases
 // ──────────────────────────────────────────────

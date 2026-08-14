@@ -98,6 +98,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("web_server.shutdown_timeout", "30s")
 	v.SetDefault("web_server.max_body_size", 10*1024*1024) // 10MB
 	v.SetDefault("web_server.csrf_skip_paths", []string{})
+	v.SetDefault("web_server.csrf_cookie_secure", false)
 	v.SetDefault("web_server.rate_limits.login", 5)
 	v.SetDefault("web_server.rate_limits.token", 10)
 	v.SetDefault("web_server.rate_limits.passkey", 10)

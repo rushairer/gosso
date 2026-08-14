@@ -54,7 +54,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		middleware.SecurityHeadersMiddleware(cfg.WebServerConfig.Production),
 		middleware.MaxBodySizeMiddleware(cfg.WebServerConfig.MaxBodySize),
 		middleware.TimeoutMiddleware(cfg.WebServerConfig.RequestTimeout),
-		middleware.CSRFMiddleware(cfg.WebServerConfig.Production, logger, cfg.AuthConfig.CSRFCookieMaxAge, csrfSkipPaths...),
+		middleware.CSRFMiddleware(cfg.WebServerConfig.Production || cfg.WebServerConfig.CSRFCookieSecure, logger, cfg.AuthConfig.CSRFCookieMaxAge, csrfSkipPaths...),
 	)
 
 	// Prometheus metrics middleware (after CSRF, before routes)
