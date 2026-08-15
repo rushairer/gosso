@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-15
+
+### Changed
+- CSRF token generation, cookie handling, constant-time comparison, and the
+  static security response headers now delegate to the shared
+  `github.com/rushairer/gouno` middleware primitives (dependency bumped to
+  v1.0.3), keeping gosso-specific policy (Bearer bypass, skip paths,
+  form-field fallback, token rotation, CSP nonce) local.
+
 ## [1.1.0] - 2026-07-10
 
 ### Added
