@@ -1,8 +1,6 @@
 package middleware
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"net/http"
 	"runtime/debug"
@@ -11,6 +9,7 @@ import (
 	"github.com/gin-contrib/timeout"
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
+	gounoMiddleware "github.com/rushairer/gouno/middleware"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/utility"
@@ -49,38 +48,32 @@ func RecoveryMiddleware(logger *zap.Logger) gin.HandlerFunc {
 // SecurityHeadersMiddleware sets common security response headers.
 // HSTS is only set when isProduction is true (meaningless over plain HTTP).
 // A per-request CSP nonce is generated and stored in the Gin context for use in templates.
+// The shared static headers are delegated to the gouno framework.
 func SecurityHeadersMiddleware(isProduction bool) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		nonce, err := generateCSPNonce()
+		nonce, err := gounoMiddleware.GenerateCSPNonce()
 		if err != nil {
 			ctx.AbortWithStatusJSON(http.StatusInternalServerError, gouno.NewInternalServerErrorResponse())
 			return
 		}
 		ctx.Set(cspNonceKey, nonce)
 
-		ctx.Header("X-Content-Type-Options", "nosniff")
-		ctx.Header("X-Frame-Options", "DENY")
-		ctx.Header("X-XSS-Protection", "0")
-		ctx.Header("Referrer-Policy", "strict-origin-when-cross-origin")
-		if isProduction {
-			ctx.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
-		}
-		ctx.Header("Permissions-Policy", "geolocation=(), camera=(), microphone=(), payment=(), usb=(), midi=(), autoplay=(), fullscreen=()")
 		csp := "default-src 'self'; script-src 'self' 'nonce-" + nonce + "'; style-src 'self' 'nonce-" + nonce + "'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		if isProduction {
 			csp += "; upgrade-insecure-requests"
 		}
-		ctx.Header("Content-Security-Policy", csp)
-		ctx.Header("Cross-Origin-Opener-Policy", "same-origin")
-		ctx.Header("Cross-Origin-Resource-Policy", "same-origin")
-		ctx.Next()
+
+		gounoMiddleware.SecurityHeaders(gounoMiddleware.SecurityHeadersOptions{
+			IsProduction:              isProduction,
+			CSP:                       csp,
+			PermissionsPolicy:         "geolocation=(), camera=(), microphone=(), payment=(), usb=(), midi=(), autoplay=(), fullscreen=()",
+			CrossOriginOpenerPolicy:   "same-origin",
+			CrossOriginResourcePolicy: "same-origin",
+		})(ctx)
 	}
 }
 
-const (
-	cspNonceKey  = "csp_nonce"
-	cspNonceSize = 16
-)
+const cspNonceKey = "csp_nonce"
 
 // GetCSPNonce returns the CSP nonce for the current request, or an empty string if not set.
 func GetCSPNonce(ctx *gin.Context) string {
@@ -90,14 +83,6 @@ func GetCSPNonce(ctx *gin.Context) string {
 		}
 	}
 	return ""
-}
-
-func generateCSPNonce() (string, error) {
-	b := make([]byte, cspNonceSize)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 // MaxBodySizeMiddleware limits the request body to the given number of bytes.

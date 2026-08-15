@@ -1,18 +1,15 @@
 package middleware
 
 import (
-	"crypto/rand"
-	"crypto/subtle"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
+	gounoMiddleware "github.com/rushairer/gouno/middleware"
 	"go.uber.org/zap"
 )
 
@@ -20,7 +17,6 @@ const (
 	csrfCookieName       = "csrf_token"
 	csrfSecureCookieName = "__Host-csrf_token"
 	csrfHeaderName       = "X-CSRF-Token"
-	csrfTokenLen         = 32
 	defaultCSRFMaxAge    = 4 * time.Hour
 	maxCSRFMaxAge        = 24 * time.Hour
 )
@@ -55,7 +51,7 @@ func CSRFMiddleware(secure bool, logger *zap.Logger, maxAge time.Duration, skipP
 		// Skip idempotent methods
 		method := ctx.Request.Method
 		if method == "GET" || method == "HEAD" || method == "OPTIONS" {
-			setCSRFCookie(ctx, cookieName, secure, maxAge)
+			ensureCSRFCookie(ctx, cookieName, secure, maxAge)
 			ctx.Next()
 			return
 		}
@@ -79,7 +75,7 @@ func CSRFMiddleware(secure bool, logger *zap.Logger, maxAge time.Duration, skipP
 		path := ctx.Request.URL.Path
 		for _, sp := range skipPaths {
 			if path == sp || strings.HasPrefix(path, sp+"/") {
-				setCSRFCookie(ctx, cookieName, secure, maxAge)
+				ensureCSRFCookie(ctx, cookieName, secure, maxAge)
 				ctx.Next()
 				return
 			}
@@ -98,7 +94,7 @@ func CSRFMiddleware(secure bool, logger *zap.Logger, maxAge time.Duration, skipP
 		if header == "" {
 			header = ctx.PostForm("csrf_token")
 		}
-		if header == "" || subtle.ConstantTimeCompare([]byte(header), []byte(cookie)) != 1 {
+		if !gounoMiddleware.CSRFMatches(cookie, header) {
 			ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "CSRF token mismatch"))
 			ctx.Abort()
 			return
@@ -109,67 +105,26 @@ func CSRFMiddleware(secure bool, logger *zap.Logger, maxAge time.Duration, skipP
 	}
 }
 
-// setCSRFCookie sets the CSRF token cookie (generates one if absent).
-func setCSRFCookie(ctx *gin.Context, cookieName string, secure bool, maxAge time.Duration) {
-	cookie, _ := ctx.Cookie(cookieName)
-	if cookie == "" {
-		var err error
-		cookie, err = generateCSRFToken()
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
-			ctx.Abort()
-			return
-		}
+// ensureCSRFCookie sets the double-submit CSRF cookie, generating a fresh token
+// when none is present. Cookie attributes (HttpOnly=false, SameSite=Lax) are
+// delegated to the shared gouno primitive.
+func ensureCSRFCookie(ctx *gin.Context, cookieName string, secure bool, maxAge time.Duration) {
+	if err := gounoMiddleware.EnsureCSRFCookie(ctx, cookieName, secure, maxAge); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "internal server error"))
+		ctx.Abort()
 	}
-
-	http.SetCookie(ctx.Writer, &http.Cookie{
-		Name:     cookieName,
-		Value:    cookie,
-		Path:     "/",
-		MaxAge:   int(maxAge.Seconds()),
-		HttpOnly: false, // JS needs to read it (required for double-submit cookie pattern)
-		Secure:   secure,
-		// SameSiteLaxMode is required for OAuth2 redirect callbacks (top-level
-		// navigations from external identity providers). Strict would block the
-		// CSRF cookie on those cross-site redirects, breaking the OAuth flow.
-		// Bearer-token API calls skip CSRF entirely (see CSRFMiddleware), so
-		// Lax provides sufficient protection for cookie-based form submissions.
-		SameSite: http.SameSiteLaxMode,
-	})
-
-	// Do NOT return the CSRF token in a response header. SPAs should read it
-	// directly from the cookie (HttpOnly=false is required for double-submit cookie).
 }
 
 // rotateCSRFCookie generates a new CSRF token and replaces the existing cookie.
 // Called after successful validation to prevent token fixation attacks.
 // Falls back to keeping the old token if generation fails.
 func rotateCSRFCookie(ctx *gin.Context, cookieName string, secure bool, logger *zap.Logger, maxAge time.Duration) {
-	newToken, err := generateCSRFToken()
+	newToken, err := gounoMiddleware.GenerateCSRFToken()
 	if err != nil {
 		logger.Warn("CSRF token rotation failed, keeping old token", zap.Error(err))
 		return
 	}
-
-	http.SetCookie(ctx.Writer, &http.Cookie{
-		Name:     cookieName,
-		Value:    newToken,
-		Path:     "/",
-		MaxAge:   int(maxAge.Seconds()),
-		HttpOnly: false,
-		Secure:   secure,
-		SameSite: http.SameSiteLaxMode, // See setCSRFCookie for rationale
-	})
-	// Do NOT return the rotated token in a response header — SPAs read from cookie.
-}
-
-// generateCSRFToken generates a cryptographically secure random CSRF token.
-func generateCSRFToken() (string, error) {
-	b := make([]byte, csrfTokenLen)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("generate csrf token: %w", err)
-	}
-	return hex.EncodeToString(b), nil
+	gounoMiddleware.SetCSRFCookie(ctx, cookieName, newToken, secure, maxAge)
 }
 
 // IsPlausibleJWT checks if a token has the basic JWT format (three non-empty dot-separated segments),

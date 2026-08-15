@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	gounoMiddleware "github.com/rushairer/gouno/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -139,15 +140,15 @@ func TestZapLogger_WarnStatus(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestGenerateCSRFToken_Length(t *testing.T) {
-	token, err := generateCSRFToken()
+	token, err := gounoMiddleware.GenerateCSRFToken()
 	require.NoError(t, err)
 	require.Len(t, token, 64) // 32 bytes = 64 hex chars
 }
 
 func TestGenerateCSRFToken_Unique(t *testing.T) {
-	t1, err := generateCSRFToken()
+	t1, err := gounoMiddleware.GenerateCSRFToken()
 	require.NoError(t, err)
-	t2, err := generateCSRFToken()
+	t2, err := gounoMiddleware.GenerateCSRFToken()
 	require.NoError(t, err)
 	assert.NotEqual(t, t1, t2)
 }
@@ -326,9 +327,9 @@ func TestGetCSPNonce_NotSet(t *testing.T) {
 }
 
 func TestGenerateCSPNonce_Unique(t *testing.T) {
-	n1, err := generateCSPNonce()
+	n1, err := gounoMiddleware.GenerateCSPNonce()
 	require.NoError(t, err)
-	n2, err := generateCSPNonce()
+	n2, err := gounoMiddleware.GenerateCSPNonce()
 	require.NoError(t, err)
 	assert.NotEqual(t, n1, n2)
 	assert.NotEmpty(t, n1)
