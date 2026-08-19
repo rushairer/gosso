@@ -35,7 +35,7 @@ type AuthCodeService struct {
 func NewAuthCodeService(redis *cache.RedisClient, logger *zap.Logger, expiry time.Duration) (*AuthCodeService, error) {
 	logger = utility.EnsureLogger(logger)
 	if redis == nil {
-		return nil, errors.New("auth code service: redis client is required")
+		return nil, ErrRedisClientRequired
 	}
 	if expiry <= 0 {
 		return nil, fmt.Errorf("auth code service: expiry must be positive (got %s)", expiry)

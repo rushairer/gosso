@@ -1,18 +1,9 @@
 package service
 
 import (
-	"errors"
-
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/rushairer/gosso/internal/oauth2/domain"
-)
-
-var (
-	// ErrClientSecretRequired is returned when a confidential client omits the client_secret.
-	ErrClientSecretRequired = errors.New("client_secret required")
-	// ErrInvalidClientSecret is returned when the client_secret does not match the stored hash.
-	ErrInvalidClientSecret = errors.New("invalid client_secret")
 )
 
 // dummyBcryptHash is a pre-computed bcrypt hash of "dummy" used for timing normalization.

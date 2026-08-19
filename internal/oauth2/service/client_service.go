@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -398,8 +397,6 @@ func validateRedirectURIs(uris []string) error {
 	}
 	return nil
 }
-
-var ErrClientAccessDenied = errors.New("access denied: client does not belong to this account")
 
 func (s *oauth2ClientServiceImpl) DeleteClient(ctx context.Context, accountID, clientID string) error {
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
