@@ -20,6 +20,7 @@ import (
 	authMiddleware "github.com/rushairer/gosso/internal/auth/middleware"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/controllerutil"
+	"github.com/rushairer/gosso/internal/utility"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	"github.com/rushairer/gosso/middleware"
 )
@@ -171,7 +172,16 @@ func (c *AdminController) CreateAccount(ctx *gin.Context) {
 				http.StatusConflict, "failed to create account")
 			return
 		}
-		if strings.Contains(err.Error(), "validation failed") ||
+		if errors.Is(err, accountService.ErrUsernameEmpty) ||
+			errors.Is(err, accountService.ErrUsernameTooShort) ||
+			errors.Is(err, accountService.ErrUsernameTooLong) ||
+			errors.Is(err, accountService.ErrUsernameInvalidChars) ||
+			errors.Is(err, accountService.ErrPasswordRequired) ||
+			errors.Is(err, accountService.ErrEmailOrPhoneRequired) ||
+			errors.Is(err, utility.ErrPasswordTooLong) ||
+			errors.Is(err, utility.ErrPasswordTooShort) ||
+			errors.Is(err, utility.ErrPasswordComplexity) ||
+			strings.Contains(err.Error(), "validation failed") ||
 			strings.Contains(err.Error(), "password") ||
 			strings.Contains(err.Error(), "username") ||
 			strings.Contains(err.Error(), "credential:") ||
@@ -582,7 +592,12 @@ func (c *AdminController) ChangePassword(ctx *gin.Context) {
 			ctx.JSON(http.StatusConflict, gouno.NewErrorResponse(http.StatusConflict, err.Error()))
 			return
 		}
-		if strings.Contains(err.Error(), "password") && !strings.Contains(err.Error(), "hash") {
+		if errors.Is(err, utility.ErrPasswordTooLong) ||
+			errors.Is(err, utility.ErrPasswordTooShort) ||
+			errors.Is(err, utility.ErrPasswordComplexity) ||
+			errors.Is(err, accountService.ErrPasswordRequired) ||
+			errors.Is(err, accountService.ErrSamePassword) ||
+			(strings.Contains(err.Error(), "password") && !strings.Contains(err.Error(), "hash")) {
 			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
 			return
 		}

@@ -102,7 +102,10 @@ func (c *AuthController) ChangePassword(ctx *gin.Context) {
 			ctx.JSON(http.StatusConflict, gouno.NewErrorResponse(http.StatusConflict, err.Error()))
 			return
 		}
-		if strings.Contains(err.Error(), "password") && !strings.Contains(err.Error(), "hash") {
+		if errors.Is(err, utility.ErrPasswordTooLong) ||
+			errors.Is(err, utility.ErrPasswordTooShort) ||
+			errors.Is(err, utility.ErrPasswordComplexity) ||
+			(strings.Contains(err.Error(), "password") && !strings.Contains(err.Error(), "hash")) {
 			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
 			return
 		}

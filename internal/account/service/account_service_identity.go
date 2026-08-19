@@ -231,7 +231,7 @@ func (s *accountServiceImpl) RemoveRole(ctx context.Context, accountID, roleID s
 // validateRegistration validates the registration request.
 func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) error {
 	if req.Password == "" {
-		return errors.New("password is required")
+		return ErrPasswordRequired
 	}
 
 	if err := utility.ValidatePasswordStrength(req.Password); err != nil {
@@ -239,7 +239,7 @@ func (s *accountServiceImpl) validateRegistration(req *RegisterAccountRequest) e
 	}
 
 	if req.Email == "" && req.Phone == "" {
-		return errors.New("at least one of email or phone is required")
+		return ErrEmailOrPhoneRequired
 	}
 
 	if req.DisplayName == "" {
