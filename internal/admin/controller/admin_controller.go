@@ -190,8 +190,7 @@ func (c *AdminController) CreateAccount(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
 			return
 		}
-		c.logger.Error("Failed to create account", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to create account"))
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, nil, http.StatusInternalServerError, "failed to create account")
 		return
 	}
 
@@ -227,8 +226,7 @@ func (c *AdminController) ListAccounts(ctx *gin.Context) {
 		if lister, ok := c.accountSvc.(accountSummaryLister); ok {
 			summaries, summaryTotal, listErr := lister.ListAccountSummaries(ctx, page, pageSize, status)
 			if listErr != nil {
-				c.logger.Error("Failed to list account summaries", zap.Error(listErr))
-				ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to list account summaries"))
+				controllerutil.AbortWithServiceError(ctx, c.logger, listErr, nil, http.StatusInternalServerError, "failed to list account summaries")
 				return
 			}
 			items = summaries
@@ -238,8 +236,7 @@ func (c *AdminController) ListAccounts(ctx *gin.Context) {
 	if items == nil {
 		accounts, accountTotal, listErr := c.accountSvc.ListAccounts(ctx, page, pageSize, status)
 		if listErr != nil {
-			c.logger.Error("Failed to list accounts", zap.Error(listErr))
-			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to list accounts"))
+			controllerutil.AbortWithServiceError(ctx, c.logger, listErr, nil, http.StatusInternalServerError, "failed to list accounts")
 			return
 		}
 		items = accounts
@@ -512,8 +509,7 @@ func (c *AdminController) ListAuditLogs(ctx *gin.Context) {
 
 	records, total, err := c.auditQueryMgr.Query(ctx, filter)
 	if err != nil {
-		c.logger.Error("Failed to query audit logs", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to query audit logs"))
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, nil, http.StatusInternalServerError, "failed to query audit logs")
 		return
 	}
 
@@ -534,8 +530,7 @@ func (c *AdminController) GetLockoutStatus(ctx *gin.Context) {
 
 	status, err := c.lockoutMgr.GetLockoutStatus(ctx, accountID)
 	if err != nil {
-		c.logger.Error("Failed to get lockout status", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to get lockout status"))
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, nil, http.StatusInternalServerError, "failed to get lockout status")
 		return
 	}
 
@@ -555,8 +550,7 @@ func (c *AdminController) ClearLockout(ctx *gin.Context) {
 	}
 
 	if err := c.lockoutMgr.ClearLockout(ctx, accountID); err != nil {
-		c.logger.Error("Failed to clear lockout", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to clear lockout"))
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, nil, http.StatusInternalServerError, "failed to clear lockout")
 		return
 	}
 
@@ -587,7 +581,6 @@ func (c *AdminController) ChangePassword(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.AdminChangePassword(ctx, accountID, req.NewPassword); err != nil {
-		c.logger.Error("Failed to change user password", zap.String("account_id", accountID), zap.Error(err))
 		if errors.Is(err, accountService.ErrAccountNotActive) {
 			ctx.JSON(http.StatusConflict, gouno.NewErrorResponse(http.StatusConflict, err.Error()))
 			return
@@ -601,7 +594,7 @@ func (c *AdminController) ChangePassword(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to change password"))
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, nil, http.StatusInternalServerError, "failed to change password")
 		return
 	}
 
@@ -621,12 +614,11 @@ func (c *AdminController) ResetMFA(ctx *gin.Context) {
 	}
 
 	if err := c.accountSvc.ResetMFA(ctx, accountID); err != nil {
-		c.logger.Error("Failed to reset MFA", zap.String("account_id", accountID), zap.Error(err))
 		if errors.Is(err, accountRepository.ErrAccountNotFound) {
 			ctx.JSON(http.StatusNotFound, gouno.NewErrorResponse(http.StatusNotFound, "account not found"))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to reset MFA"))
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, nil, http.StatusInternalServerError, "failed to reset MFA")
 		return
 	}
 
