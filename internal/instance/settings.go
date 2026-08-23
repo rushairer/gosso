@@ -28,7 +28,10 @@ type Settings struct {
 }
 
 func DefaultSettings() Settings {
-	return Settings{ProductName: "GOSSO"}
+	return Settings{
+		ProductName: "GOSSO", FaviconURL: "/favicon.svg", LoginTitle: "GOSSO",
+		LoginDescription: "Identity & Access Provider Console",
+	}
 }
 
 // PublicBranding excludes secret and operational configuration metadata.
