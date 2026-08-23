@@ -10,9 +10,8 @@ func TestDefaultSettingsAreValid(t *testing.T) {
 
 func TestValidateRejectsUnsafeSettings(t *testing.T) {
 	cases := []Settings{
-		{ProductName: "GOSSO", PrimaryColor: "blue", DefaultLocale: "en"},
-		{ProductName: "GOSSO", PrimaryColor: "#3b82f6", DefaultLocale: "fr"},
-		{ProductName: "GOSSO", PrimaryColor: "#3b82f6", DefaultLocale: "en", SupportURL: "javascript:alert(1)"},
+		{ProductName: ""},
+		{ProductName: "GOSSO", LogoURL: "javascript:alert(1)"},
 	}
 	for _, settings := range cases {
 		if err := validate(settings); err == nil {

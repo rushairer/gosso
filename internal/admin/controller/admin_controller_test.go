@@ -280,13 +280,11 @@ func TestGetPublicInstanceBrandingFallsBackToDefaults(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	var response struct {
 		Data struct {
-			ProductName  string `json:"product_name"`
-			PrimaryColor string `json:"primary_color"`
+			ProductName string `json:"product_name"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
 	assert.Equal(t, "GOSSO", response.Data.ProductName)
-	assert.Equal(t, "#3b82f6", response.Data.PrimaryColor)
 }
 
 func TestUpdateInstanceSettingsIsUnavailableWithoutPersistence(t *testing.T) {
