@@ -236,7 +236,7 @@ func setupAdminControllerWithAdminID(accountSvc *mockAccountService, adminID str
 	return engine
 }
 
-func setupInstanceSettingsController(authConfig config.AuthConfig) *gin.Engine {
+func setupSiteSettingsController(authConfig config.AuthConfig) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	engine.Use(func(ctx *gin.Context) {
@@ -250,9 +250,9 @@ func setupInstanceSettingsController(authConfig config.AuthConfig) *gin.Engine {
 		&mockAuditQueryManager{},
 		&mockLockoutManager{},
 		zap.NewNop(),
-		WithInstanceSettings(nil, authConfig),
+		WithSiteSettings(nil, authConfig),
 	)
-	engine.GET("/api/public/instance-branding", ctrl.GetPublicInstanceBranding)
+	engine.GET("/api/public/site-branding", ctrl.GetPublicSiteBranding)
 	ctrl.RegisterRoutes(engine.Group("/api/admin"))
 	return engine
 }
@@ -267,12 +267,12 @@ func newAdminTestAccount() *accountDomain.Account {
 }
 
 // ──────────────────────────────────────────────
-// Instance Settings Tests
+// Site Settings Tests
 // ──────────────────────────────────────────────
 
-func TestGetPublicInstanceBrandingFallsBackToDefaults(t *testing.T) {
-	engine := setupInstanceSettingsController(config.AuthConfig{})
-	req := httptest.NewRequest(http.MethodGet, "/api/public/instance-branding", nil)
+func TestGetPublicSiteBrandingFallsBackToDefaults(t *testing.T) {
+	engine := setupSiteSettingsController(config.AuthConfig{})
+	req := httptest.NewRequest(http.MethodGet, "/api/public/site-branding", nil)
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
@@ -287,9 +287,9 @@ func TestGetPublicInstanceBrandingFallsBackToDefaults(t *testing.T) {
 	assert.Equal(t, "GOSSO", response.Data.ProductName)
 }
 
-func TestUpdateInstanceSettingsIsUnavailableWithoutPersistence(t *testing.T) {
-	engine := setupInstanceSettingsController(config.AuthConfig{})
-	req := httptest.NewRequest(http.MethodPut, "/api/admin/instance-settings", strings.NewReader(`{"product_name":"Acme"}`))
+func TestUpdateSiteSettingsIsUnavailableWithoutPersistence(t *testing.T) {
+	engine := setupSiteSettingsController(config.AuthConfig{})
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/site-settings", strings.NewReader(`{"product_name":"Acme"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -299,7 +299,7 @@ func TestUpdateInstanceSettingsIsUnavailableWithoutPersistence(t *testing.T) {
 }
 
 func TestGetSecurityPolicyExposesConfiguredRuntimeValues(t *testing.T) {
-	engine := setupInstanceSettingsController(config.AuthConfig{
+	engine := setupSiteSettingsController(config.AuthConfig{
 		SessionTTL:                 24 * time.Hour,
 		MaxSessions:                4,
 		AccessTokenExpiry:          15 * time.Minute,

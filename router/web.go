@@ -113,7 +113,7 @@ func RegisterWebRouter(deps RouterDeps) error {
 
 	api := deps.Server.Group("/api/v1")
 	{
-		api.GET("/public/instance-branding", deps.AdminCtrl.GetPublicInstanceBranding)
+		api.GET("/public/site-branding", deps.AdminCtrl.GetPublicSiteBranding)
 
 		// Auth routes (audit middleware injects IP/UserAgent)
 		api.Use(authMiddleware.AuditMetadataMiddleware())

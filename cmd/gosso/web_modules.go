@@ -22,7 +22,6 @@ import (
 	authController "github.com/rushairer/gosso/internal/auth/controller"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/cache"
-	"github.com/rushairer/gosso/internal/instance"
 	notificationService "github.com/rushairer/gosso/internal/notification/service"
 	"github.com/rushairer/gosso/internal/oauth2"
 	oauth2Controller "github.com/rushairer/gosso/internal/oauth2/controller"
@@ -31,6 +30,7 @@ import (
 	"github.com/rushairer/gosso/internal/oidc"
 	oidcController "github.com/rushairer/gosso/internal/oidc/controller"
 	sessionService "github.com/rushairer/gosso/internal/session/service"
+	"github.com/rushairer/gosso/internal/site"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 	"github.com/rushairer/gosso/internal/utility"
 )
@@ -159,14 +159,14 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	if !ok {
 		logger.Warn("AuthService is not *AuthService; lockout management will be unavailable")
 	}
-	instanceSvc := instance.NewService(db, auditor, logger)
+	siteSettingsSvc := site.NewService(db, auditor, logger)
 	adminCtrl := adminController.NewAdminController(
 		accountMod.Service,
 		oauth2Mod.ConsentService,
 		auditQueryRepo,
 		authSvcConcrete,
 		logger,
-		adminController.WithInstanceSettings(instanceSvc, cfg.AuthConfig),
+		adminController.WithSiteSettings(siteSettingsSvc, cfg.AuthConfig),
 	)
 
 	var passkeyCtrl *authController.PasskeyController

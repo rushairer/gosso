@@ -21,8 +21,8 @@ import (
 	authMiddleware "github.com/rushairer/gosso/internal/auth/middleware"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/controllerutil"
-	"github.com/rushairer/gosso/internal/instance"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
+	"github.com/rushairer/gosso/internal/site"
 	"github.com/rushairer/gosso/internal/utility"
 	"github.com/rushairer/gosso/middleware"
 )
@@ -80,20 +80,20 @@ type accountSummaryLister interface {
 
 // AdminController handles admin operations
 type AdminController struct {
-	accountSvc    accountService.AccountService
-	consentMgr    AdminConsentManager
-	auditQueryMgr AdminAuditQueryManager
-	lockoutMgr    AdminLockoutManager
-	logger        *zap.Logger
-	instanceSvc   *instance.Service
-	authConfig    config.AuthConfig
+	accountSvc      accountService.AccountService
+	consentMgr      AdminConsentManager
+	auditQueryMgr   AdminAuditQueryManager
+	lockoutMgr      AdminLockoutManager
+	logger          *zap.Logger
+	siteSettingsSvc *site.Service
+	authConfig      config.AuthConfig
 }
 
 type AdminControllerOption func(*AdminController)
 
-func WithInstanceSettings(svc *instance.Service, authConfig config.AuthConfig) AdminControllerOption {
+func WithSiteSettings(svc *site.Service, authConfig config.AuthConfig) AdminControllerOption {
 	return func(controller *AdminController) {
-		controller.instanceSvc = svc
+		controller.siteSettingsSvc = svc
 		controller.authConfig = authConfig
 	}
 }
@@ -123,9 +123,9 @@ func NewAdminController(
 // RegisterRoutes registers admin routes
 func (c *AdminController) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/audit-logs", authMiddleware.RequirePermission("admin:audit:read"), c.ListAuditLogs)
-	rg.GET("/instance-settings", authMiddleware.RequirePermission("admin:instance:read"), c.GetInstanceSettings)
-	rg.PUT("/instance-settings", authMiddleware.RequirePermission("admin:instance:manage"), c.UpdateInstanceSettings)
-	rg.GET("/security-policy", authMiddleware.RequirePermission("admin:instance:read"), c.GetSecurityPolicy)
+	rg.GET("/site-settings", authMiddleware.RequirePermission("admin:site:read"), c.GetSiteSettings)
+	rg.PUT("/site-settings", authMiddleware.RequirePermission("admin:site:manage"), c.UpdateSiteSettings)
+	rg.GET("/security-policy", authMiddleware.RequirePermission("admin:site:read"), c.GetSecurityPolicy)
 
 	accounts := rg.Group("/accounts")
 	{

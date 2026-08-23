@@ -1,5 +1,5 @@
-// Package instance owns runtime, non-secret configuration for one GOSSO instance.
-package instance
+// Package site owns runtime, non-secret configuration for the GOSSO site.
+package site
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	auditService "github.com/rushairer/gosso/internal/audit/service"
 )
 
-var ErrInvalidSettings = errors.New("invalid instance settings")
+var ErrInvalidSettings = errors.New("invalid site settings")
 
 type Settings struct {
 	ProductName        string `json:"product_name"`
@@ -66,7 +66,7 @@ func (s *Service) Get(ctx context.Context) (Settings, error) {
 		return DefaultSettings(), nil
 	}
 	settings := DefaultSettings()
-	err := s.db.QueryRowContext(ctx, `SELECT product_name, logo_url, favicon_url, login_title, login_description, login_background_url FROM instance_settings WHERE id = 1`).Scan(
+	err := s.db.QueryRowContext(ctx, `SELECT product_name, logo_url, favicon_url, login_title, login_description, login_background_url FROM site_settings WHERE id = 1`).Scan(
 		&settings.ProductName, &settings.LogoURL, &settings.FaviconURL, &settings.LoginTitle,
 		&settings.LoginDescription, &settings.LoginBackgroundURL,
 	)
@@ -74,14 +74,14 @@ func (s *Service) Get(ctx context.Context) (Settings, error) {
 		return settings, nil
 	}
 	if err != nil {
-		return Settings{}, fmt.Errorf("get instance settings: %w", err)
+		return Settings{}, fmt.Errorf("get site settings: %w", err)
 	}
 	return settings, nil
 }
 
 func (s *Service) Update(ctx context.Context, next Settings, actor string) (Settings, error) {
 	if s == nil || s.db == nil {
-		return Settings{}, fmt.Errorf("update instance settings: database unavailable")
+		return Settings{}, fmt.Errorf("update site settings: database unavailable")
 	}
 	next = normalize(next)
 	if err := validate(next); err != nil {
@@ -91,17 +91,17 @@ func (s *Service) Update(ctx context.Context, next Settings, actor string) (Sett
 	if err != nil {
 		return Settings{}, err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO instance_settings (id, product_name, logo_url, favicon_url, login_title, login_description, login_background_url, updated_by_account_id, updated_at)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO site_settings (id, product_name, logo_url, favicon_url, login_title, login_description, login_background_url, updated_by_account_id, updated_at)
 		VALUES (1, $1,$2,$3,$4,$5,$6, NULLIF($7, '')::uuid, NOW())
 		ON CONFLICT (id) DO UPDATE SET product_name=EXCLUDED.product_name, logo_url=EXCLUDED.logo_url, favicon_url=EXCLUDED.favicon_url, login_title=EXCLUDED.login_title, login_description=EXCLUDED.login_description, login_background_url=EXCLUDED.login_background_url, updated_by_account_id=EXCLUDED.updated_by_account_id, updated_at=NOW()`,
 		next.ProductName, next.LogoURL, next.FaviconURL, next.LoginTitle, next.LoginDescription, next.LoginBackgroundURL, actor)
 	if err != nil {
-		return Settings{}, fmt.Errorf("update instance settings: %w", err)
+		return Settings{}, fmt.Errorf("update site settings: %w", err)
 	}
 	if s.auditor != nil {
 		oldJSON, _ := json.Marshal(previous)
 		newJSON, _ := json.Marshal(next)
-		auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord("instance.settings.update", actor, nil, json.RawMessage(`{"type":"instance_settings"}`), nil).WithOld(oldJSON).WithNew(newJSON))
+		auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord("site.settings.update", actor, nil, json.RawMessage(`{"type":"site_settings"}`), nil).WithOld(oldJSON).WithNew(newJSON))
 	}
 	return next, nil
 }

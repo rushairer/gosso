@@ -7,46 +7,46 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
 
-	"github.com/rushairer/gosso/internal/instance"
+	"github.com/rushairer/gosso/internal/site"
 	"github.com/rushairer/gosso/middleware"
 )
 
-// GetPublicInstanceBranding is deliberately unauthenticated: the SPA needs it before login.
-func (c *AdminController) GetPublicInstanceBranding(ctx *gin.Context) {
-	settings, err := c.getInstanceSettings(ctx)
+// GetPublicSiteBranding is deliberately unauthenticated: the SPA needs it before login.
+func (c *AdminController) GetPublicSiteBranding(ctx *gin.Context) {
+	settings, err := c.getSiteSettings(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to load instance branding"))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to load site branding"))
 		return
 	}
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(settings.PublicBranding()))
 }
 
-func (c *AdminController) GetInstanceSettings(ctx *gin.Context) {
-	settings, err := c.getInstanceSettings(ctx)
+func (c *AdminController) GetSiteSettings(ctx *gin.Context) {
+	settings, err := c.getSiteSettings(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to load instance settings"))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to load site settings"))
 		return
 	}
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(settings))
 }
 
-func (c *AdminController) UpdateInstanceSettings(ctx *gin.Context) {
-	if c.instanceSvc == nil {
-		ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "instance settings unavailable"))
+func (c *AdminController) UpdateSiteSettings(ctx *gin.Context) {
+	if c.siteSettingsSvc == nil {
+		ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "site settings unavailable"))
 		return
 	}
-	var request instance.Settings
+	var request site.Settings
 	if err := ctx.ShouldBindJSON(&request); err != nil {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
 		return
 	}
-	updated, err := c.instanceSvc.Update(ctx, request, ctx.GetString(middleware.ContextKeyAccountID))
+	updated, err := c.siteSettingsSvc.Update(ctx, request, ctx.GetString(middleware.ContextKeyAccountID))
 	if err != nil {
-		if errors.Is(err, instance.ErrInvalidSettings) {
+		if errors.Is(err, site.ErrInvalidSettings) {
 			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to update instance settings"))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to update site settings"))
 		return
 	}
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(updated))
@@ -71,9 +71,9 @@ func (c *AdminController) GetSecurityPolicy(ctx *gin.Context) {
 	}))
 }
 
-func (c *AdminController) getInstanceSettings(ctx *gin.Context) (instance.Settings, error) {
-	if c.instanceSvc == nil {
-		return instance.DefaultSettings(), nil
+func (c *AdminController) getSiteSettings(ctx *gin.Context) (site.Settings, error) {
+	if c.siteSettingsSvc == nil {
+		return site.DefaultSettings(), nil
 	}
-	return c.instanceSvc.Get(ctx)
+	return c.siteSettingsSvc.Get(ctx)
 }
