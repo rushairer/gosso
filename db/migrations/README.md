@@ -141,3 +141,4 @@ DROP TABLE IF EXISTS users;
 | 0018 | `0018_logout_uris` | 添加 OIDC 前端和后端登出 URI |
 | 0019 | `0019_webauthn_credential_flags` | 持久化 WebAuthn 凭证标志 |
 | 0020 | `0020_admin_permissions` | 为内置管理员角色授予显式 `admin:*` 权限 |
+| 0021 | `0021_instance_settings` | 创建实例品牌与登录页配置表（instance_settings） |

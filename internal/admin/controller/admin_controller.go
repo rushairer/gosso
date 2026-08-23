@@ -13,6 +13,7 @@ import (
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
+	"github.com/rushairer/gosso/config"
 	accountRepository "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
@@ -20,8 +21,9 @@ import (
 	authMiddleware "github.com/rushairer/gosso/internal/auth/middleware"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/controllerutil"
-	"github.com/rushairer/gosso/internal/utility"
+	"github.com/rushairer/gosso/internal/instance"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
+	"github.com/rushairer/gosso/internal/utility"
 	"github.com/rushairer/gosso/middleware"
 )
 
@@ -83,6 +85,17 @@ type AdminController struct {
 	auditQueryMgr AdminAuditQueryManager
 	lockoutMgr    AdminLockoutManager
 	logger        *zap.Logger
+	instanceSvc   *instance.Service
+	authConfig    config.AuthConfig
+}
+
+type AdminControllerOption func(*AdminController)
+
+func WithInstanceSettings(svc *instance.Service, authConfig config.AuthConfig) AdminControllerOption {
+	return func(controller *AdminController) {
+		controller.instanceSvc = svc
+		controller.authConfig = authConfig
+	}
 }
 
 // NewAdminController creates a new admin controller instance
@@ -92,19 +105,27 @@ func NewAdminController(
 	auditQueryMgr AdminAuditQueryManager,
 	lockoutMgr AdminLockoutManager,
 	logger *zap.Logger,
+	options ...AdminControllerOption,
 ) *AdminController {
-	return &AdminController{
+	controller := &AdminController{
 		accountSvc:    accountSvc,
 		consentMgr:    consentMgr,
 		auditQueryMgr: auditQueryMgr,
 		lockoutMgr:    lockoutMgr,
 		logger:        logger,
 	}
+	for _, option := range options {
+		option(controller)
+	}
+	return controller
 }
 
 // RegisterRoutes registers admin routes
 func (c *AdminController) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/audit-logs", authMiddleware.RequirePermission("admin:audit:read"), c.ListAuditLogs)
+	rg.GET("/instance-settings", authMiddleware.RequirePermission("admin:instance:read"), c.GetInstanceSettings)
+	rg.PUT("/instance-settings", authMiddleware.RequirePermission("admin:instance:manage"), c.UpdateInstanceSettings)
+	rg.GET("/security-policy", authMiddleware.RequirePermission("admin:instance:read"), c.GetSecurityPolicy)
 
 	accounts := rg.Group("/accounts")
 	{

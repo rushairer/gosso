@@ -9,12 +9,14 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/rushairer/gosso/config"
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountRepository "github.com/rushairer/gosso/internal/account/repository"
 	accountService "github.com/rushairer/gosso/internal/account/service"
@@ -234,6 +236,27 @@ func setupAdminControllerWithAdminID(accountSvc *mockAccountService, adminID str
 	return engine
 }
 
+func setupInstanceSettingsController(authConfig config.AuthConfig) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.Use(func(ctx *gin.Context) {
+		ctx.Set(gm.ContextKeyClaims, &tokenDomain.AccessTokenClaims{Permissions: []string{"admin:*"}})
+		ctx.Next()
+	})
+
+	ctrl := NewAdminController(
+		&mockAccountService{},
+		&mockConsentManager{},
+		&mockAuditQueryManager{},
+		&mockLockoutManager{},
+		zap.NewNop(),
+		WithInstanceSettings(nil, authConfig),
+	)
+	engine.GET("/api/public/instance-branding", ctrl.GetPublicInstanceBranding)
+	ctrl.RegisterRoutes(engine.Group("/api/admin"))
+	return engine
+}
+
 func newAdminTestAccount() *accountDomain.Account {
 	return &accountDomain.Account{
 		ID:          validUUID,
@@ -241,6 +264,77 @@ func newAdminTestAccount() *accountDomain.Account {
 		Status:      accountDomain.AccountStatusActive,
 		Locale:      "en",
 	}
+}
+
+// ──────────────────────────────────────────────
+// Instance Settings Tests
+// ──────────────────────────────────────────────
+
+func TestGetPublicInstanceBrandingFallsBackToDefaults(t *testing.T) {
+	engine := setupInstanceSettingsController(config.AuthConfig{})
+	req := httptest.NewRequest(http.MethodGet, "/api/public/instance-branding", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var response struct {
+		Data struct {
+			ProductName  string `json:"product_name"`
+			PrimaryColor string `json:"primary_color"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.Equal(t, "GOSSO", response.Data.ProductName)
+	assert.Equal(t, "#3b82f6", response.Data.PrimaryColor)
+}
+
+func TestUpdateInstanceSettingsIsUnavailableWithoutPersistence(t *testing.T) {
+	engine := setupInstanceSettingsController(config.AuthConfig{})
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/instance-settings", strings.NewReader(`{"product_name":"Acme"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+}
+
+func TestGetSecurityPolicyExposesConfiguredRuntimeValues(t *testing.T) {
+	engine := setupInstanceSettingsController(config.AuthConfig{
+		SessionTTL:                 24 * time.Hour,
+		MaxSessions:                4,
+		AccessTokenExpiry:          15 * time.Minute,
+		RefreshTokenExpiry:         7 * 24 * time.Hour,
+		IDTokenExpiry:              15 * time.Minute,
+		EnforcePKCEForConfidential: true,
+		LoginMaxAttempts:           10,
+		LoginRateLimitWindow:       15 * time.Minute,
+		MFAAccountMaxAttempts:      5,
+		MFAAccountRateLimitWindow:  5 * time.Minute,
+		PasswordResetTokenTTL:      time.Hour,
+		WebAuthnRPID:               "sso.example.test",
+		WebAuthnRPOrigin:           "https://sso.example.test",
+	})
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/security-policy", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var response struct {
+		Data struct {
+			SessionTTL       string `json:"session_ttl"`
+			MaxSessions      int    `json:"max_sessions"`
+			WebAuthnEnabled  bool   `json:"webauthn_enabled"`
+			LoginMaxAttempts int    `json:"login_max_attempts"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.Equal(t, "24h0m0s", response.Data.SessionTTL)
+	assert.Equal(t, 4, response.Data.MaxSessions)
+	assert.True(t, response.Data.WebAuthnEnabled)
+	assert.Equal(t, 10, response.Data.LoginMaxAttempts)
 }
 
 // ──────────────────────────────────────────────
