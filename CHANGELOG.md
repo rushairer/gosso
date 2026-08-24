@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-08-24
+
 ### Fixed
 - Apply the dedicated login rate limit to the canonical `/api/v1/auth/login` route and align public API documentation with versioned routes.
 
@@ -2102,5 +2104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Device code user code validation now enforces exact 8-character length (`internal/oauth2/service/device_code_service.go`).
 - Migrate command `--env` default changed to `production`; migration driver uses configured driver name instead of hardcoded `"pgx"` (`cmd/gouno/migrate.go`).
 
-[Unreleased]: https://github.com/rushairer/gosso/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/rushairer/gosso/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/rushairer/gosso/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/rushairer/gosso/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/rushairer/gosso/compare/v0.0.1...v1.1.0
