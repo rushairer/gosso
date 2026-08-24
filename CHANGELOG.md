@@ -11,7 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Apply the dedicated login rate limit to the canonical `/api/v1/auth/login` route and align public API documentation with versioned routes.
 
 ### Security
-- Require Go 1.26.6 or newer in the 1.26 series and upgrade gRPC to 1.82.1 and `golang.org/x/text` to 0.39.0 to resolve reachable advisories.
+- Require Go 1.26.6 or newer in the 1.26 series and upgrade gRPC to 1.82.1,
+  `golang.org/x/text` to 0.39.0, and `golang.org/x/net` to 0.56.0 to resolve
+  current reachable and container-scan advisories.
 
 ## [1.2.0] - 2026-08-15
 
