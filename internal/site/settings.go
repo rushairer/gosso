@@ -45,10 +45,7 @@ type PublicBranding struct {
 }
 
 func (s Settings) PublicBranding() PublicBranding {
-	return PublicBranding{
-		ProductName: s.ProductName, LogoURL: s.LogoURL, FaviconURL: s.FaviconURL,
-		LoginTitle: s.LoginTitle, LoginDescription: s.LoginDescription, LoginBackgroundURL: s.LoginBackgroundURL,
-	}
+	return PublicBranding(s)
 }
 
 type Service struct {
