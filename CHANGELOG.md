@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Require Go 1.26.6 or newer in the 1.26 series and upgrade gRPC to 1.82.1,
   `golang.org/x/text` to 0.39.0, and `golang.org/x/net` to 0.56.0 to resolve
   current reachable and container-scan advisories.
+- Validate the server against `github.com/rushairer/gouno` v1.2.0-rc.1 before
+  promoting the framework dependency to the stable v1.2.0 release.
 
 ## [1.2.0] - 2026-08-15
 
