@@ -49,11 +49,11 @@ gosso provides a complete SSO server with OAuth 2.0 authorization, OIDC discover
 - Docker and docker-compose for dev, test, and production
 - [Helm chart](deploy/helm/gosso/) for Kubernetes deployment
 - [Operator Guide](doc/OPERATOR_GUIDE.md) with deployment, monitoring, and troubleshooting docs
-- GitHub Actions CI (lint, unit tests with 75% coverage threshold, govulncheck, integration tests, Trivy security scan, cosign image signing, SBOM generation)
+- GitHub Actions CI (lint, unit tests with 70% coverage threshold, govulncheck, integration tests, Trivy security scan, cosign image signing, SBOM generation)
 
 ## Prerequisites
 
-- Go 1.26.5+
+- Go 1.26.6+
 - PostgreSQL 15+
 - Redis 7+
 
@@ -116,7 +116,7 @@ auth:
   device_code_interval: 5s
   private_key_path: "./keys/private.pem"
   key_id: "gosso-key-1"
-  totp_encryption_key: "00000000000000000000000000000000"  # 32 bytes hex -- use a real key
+  totp_encryption_key: "0000000000000000000000000000000000000000000000000000000000000000"  # 32 bytes as 64 hex characters -- use a real key
   default_scopes:
     - openid
     - profile
@@ -159,7 +159,7 @@ make docker-test-up
 make docker-prod-up
 ```
 
-The repository root includes a local admin stack (`../docker-compose.yml`). After startup, open `http://localhost:8080` and sign in with the seeded admin account `admin` / `admin123`. In the admin console, go to **User Accounts** and use **Add User** to create normal users; grant the `admin` role separately through **Roles** when needed.
+The repository root includes the local stack in `docker-compose.yml`. After startup, open `http://localhost:8080`. Development credentials are local-only and must never be reused in production. In the admin console, go to **User Accounts** and use **Add User** to create normal users; grant the `admin` role separately through **Roles** when needed.
 
 User self-service security flows stay under the auth endpoints: change your own password via `/api/v1/auth/password/change`, manage TOTP MFA via `/api/v1/auth/mfa/*`, and manage passkeys via `/api/v1/passkey/*`. Admin-mediated account creation, enable/disable, deletion, password reset, and role assignment remain under `/api/v1/admin/*`.
 
@@ -205,13 +205,13 @@ Stop with the corresponding `make docker-*-down` commands.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/auth/login` | Username/password login |
-| POST | `/api/auth/refresh` | Refresh access token |
-| POST | `/api/auth/logout` | Logout (authenticated) |
-| GET | `/api/auth/session` | Current session info (authenticated) |
-| GET | `/api/auth/sessions` | List sessions (authenticated) |
-| DELETE | `/api/auth/sessions/:id` | Revoke a session (authenticated) |
-| POST | `/api/auth/password/change` | Change your own password (authenticated) |
+| POST | `/api/v1/auth/login` | Username/password login |
+| POST | `/api/v1/auth/refresh` | Refresh access token |
+| POST | `/api/v1/auth/logout` | Logout (authenticated) |
+| GET | `/api/v1/auth/session` | Current session info (authenticated) |
+| GET | `/api/v1/auth/sessions` | List sessions (authenticated) |
+| DELETE | `/api/v1/auth/sessions/:id` | Revoke a session (authenticated) |
+| POST | `/api/v1/auth/password/change` | Change your own password (authenticated) |
 
 ### Admin API
 
@@ -229,11 +229,11 @@ Stop with the corresponding `make docker-*-down` commands.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/auth/mfa/verify` | Verify MFA challenge |
-| POST | `/api/auth/mfa/enroll` | Enroll TOTP (authenticated) |
-| POST | `/api/auth/mfa/activate` | Activate TOTP (authenticated) |
-| DELETE | `/api/auth/mfa` | Disable MFA (authenticated) |
-| POST | `/api/auth/mfa/backup-codes` | Generate backup codes (authenticated) |
+| POST | `/api/v1/auth/mfa/verify` | Verify MFA challenge |
+| POST | `/api/v1/auth/mfa/enroll` | Enroll TOTP (authenticated) |
+| POST | `/api/v1/auth/mfa/activate` | Activate TOTP (authenticated) |
+| DELETE | `/api/v1/auth/mfa` | Disable MFA (authenticated) |
+| POST | `/api/v1/auth/mfa/backup-codes` | Generate backup codes (authenticated) |
 | POST | `/api/passkey/mfa/begin` | Begin MFA passkey challenge |
 | POST | `/api/passkey/mfa/complete` | Complete MFA passkey challenge |
 
@@ -252,17 +252,17 @@ Stop with the corresponding `make docker-*-down` commands.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/auth/social/:provider` | Redirect to social provider |
-| GET | `/api/auth/social/:provider/callback` | Social provider callback |
+| GET | `/api/v1/auth/social/:provider` | Redirect to social provider |
+| GET | `/api/v1/auth/social/:provider/callback` | Social provider callback |
 
 ### Verification and Password Reset
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/auth/verify/send` | Send email verification code (phone returns 501 until SMS is configured) |
-| POST | `/api/auth/verify/confirm` | Confirm verification code |
-| POST | `/api/auth/password/forgot` | Request password reset |
-| POST | `/api/auth/password/reset` | Complete password reset |
+| POST | `/api/v1/auth/verify/send` | Send email verification code (phone returns 501 until SMS is configured) |
+| POST | `/api/v1/auth/verify/confirm` | Confirm verification code |
+| POST | `/api/v1/auth/password/forgot` | Request password reset |
+| POST | `/api/v1/auth/password/reset` | Complete password reset |
 
 ### Client Management
 
@@ -353,7 +353,7 @@ make docker-test-up
 make test-integration
 ```
 
-Unit tests use `testify/assert`, `go-sqlmock`, and `miniredis`. The CI pipeline requires a minimum of 75% test coverage across the coverage-gate package set and package-level coverage floors for critical auth, OAuth2, OIDC, token, and session services.
+Unit tests use `testify/assert`, `go-sqlmock`, and `miniredis`. The CI pipeline requires a minimum of 70% test coverage across the coverage-gate package set and package-level coverage floors for critical auth, OAuth2, OIDC, token, and session services.
 
 ## Configuration Reference
 
@@ -466,7 +466,7 @@ gosso 提供完整的 SSO 服务器，包含 OAuth 2.0 授权、OIDC 发现、JW
 
 ## 前置条件
 
-- Go 1.26.5+
+- Go 1.26.6+
 - PostgreSQL 15+
 - Redis 7+
 
@@ -541,11 +541,11 @@ make docker-prod-up
 - **OIDC**：`/.well-known/openid-configuration`、`/.well-known/jwks.json`
 - **OAuth 2.0**：`/oauth2/authorize`、`/oauth2/token`、`/oauth2/revoke`、`/oauth2/introspect`、`/oauth2/device/code`
 - **OIDC 用户**：`/oidc/userinfo`、`/oidc/logout`
-- **认证**：`/api/auth/login`、`/api/auth/refresh`、`/api/auth/logout`、`/api/auth/session`、`/api/auth/sessions`
-- **MFA**：`/api/auth/mfa/verify`、`/api/auth/mfa/enroll`、`/api/auth/mfa/activate`、`/api/auth/mfa/backup-codes`
+- **认证**：`/api/v1/auth/login`、`/api/v1/auth/refresh`、`/api/v1/auth/logout`、`/api/v1/auth/session`、`/api/v1/auth/sessions`
+- **MFA**：`/api/v1/auth/mfa/verify`、`/api/v1/auth/mfa/enroll`、`/api/v1/auth/mfa/activate`、`/api/v1/auth/mfa/backup-codes`
 - **Passkeys**：`/api/passkey/register/*`、`/api/passkey/login/*`、`/api/passkey/mfa/*`、`/api/passkeys`
-- **社交登录**：`/api/auth/social/:provider`、`/api/auth/social/:provider/callback`
-- **验证和密码重置**：`/api/auth/verify/send`（当前发送邮箱验证码，手机号验证码在接入 SMS 后启用）、`/api/auth/verify/confirm`、`/api/auth/password/forgot`、`/api/auth/password/reset`
+- **社交登录**：`/api/v1/auth/social/:provider`、`/api/v1/auth/social/:provider/callback`
+- **验证和密码重置**：`/api/v1/auth/verify/send`（当前发送邮箱验证码，手机号验证码在接入 SMS 后启用）、`/api/v1/auth/verify/confirm`、`/api/v1/auth/password/forgot`、`/api/v1/auth/password/reset`
 - **客户端管理**：`/api/oauth2/clients/*`
 - **管理后台**：`/api/admin/accounts/*`
 - **健康检查**：`/health`、`/readiness`
@@ -578,7 +578,7 @@ make docker-test-up
 make test-integration
 ```
 
-单元测试使用 `testify/assert`、`go-sqlmock` 和 `miniredis`。CI 管线对覆盖率门禁包集合要求最低 75% 测试覆盖率，并对 auth、OAuth2、OIDC、token、session 等关键服务包设置单包覆盖率门禁。
+单元测试使用 `testify/assert`、`go-sqlmock` 和 `miniredis`。CI 管线对覆盖率门禁包集合要求最低 70% 测试覆盖率，并对 auth、OAuth2、OIDC、token、session 等关键服务包设置单包覆盖率门禁。
 
 ## 贡献
 

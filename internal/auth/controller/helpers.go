@@ -51,14 +51,6 @@ func isCookieSessionRequest(ctx *gin.Context) bool {
 	return ctx.GetHeader(cookieSessionHeader) == "1"
 }
 
-func refreshCookieMaxAge(tokenExpiry time.Time) int {
-	seconds := int(time.Until(tokenExpiry).Seconds())
-	if seconds < 1 {
-		return 1
-	}
-	return seconds
-}
-
 func setSSOAuthCookie(ctx *gin.Context, accessToken string, maxAgeSeconds int, secure bool) {
 	http.SetCookie(ctx.Writer, &http.Cookie{
 		Name:     authCookieName,
