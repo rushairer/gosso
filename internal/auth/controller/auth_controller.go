@@ -148,6 +148,7 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, cfg AuthRouteConfig
 			protected.POST("/mfa/activate", withOptionalLimit(cfg.MFALimit, c.MFAActivate)...)
 			protected.DELETE("/mfa", withOptionalLimit(cfg.MFALimit, c.MFADisable)...)
 			protected.POST("/mfa/backup-codes", withOptionalLimit(cfg.MFALimit, c.MFAGenerateBackupCodes)...)
+			protected.POST("/mfa/step-up", withOptionalLimit(cfg.MFALimit, c.MFAStepUp)...)
 		}
 	}
 }

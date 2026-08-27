@@ -429,3 +429,78 @@ func TestMFAGenerateBackupCodes_ServiceError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
+
+// ──────────────────────────────────────────────
+// MFA Step-Up tests
+// ──────────────────────────────────────────────
+
+func TestMFAStepUp_Success(t *testing.T) {
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      "gosso",
+		AccountName: "account-001",
+	})
+	require.NoError(t, err)
+
+	code, err := totp.GenerateCode(key.Secret(), time.Now())
+	require.NoError(t, err)
+
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
+			accountDomain.CredentialTypeTOTP: {
+				{
+					ID:        "cred-001",
+					AccountID: "account-001",
+					Type:      accountDomain.CredentialTypeTOTP,
+					Value:     encryptControllerTestTOTPSecret(t, key.Secret()),
+					Verified:  true,
+				},
+			},
+		},
+	}
+	mfaSvc, _ := newTestMFAService(t, credRepo)
+
+	claims := &tokenDomain.AccessTokenClaims{AccountID: "account-001", SessionID: "session-001"}
+	engine := setupAuthControllerWithMFA(claims, mfaSvc)
+
+	body, _ := json.Marshal(map[string]string{"code": code})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/step-up", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.NotEmpty(t, data["access_token"])
+	assert.NotNil(t, data["auth_time"])
+}
+
+func TestMFAStepUp_InvalidCode(t *testing.T) {
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
+			accountDomain.CredentialTypeTOTP: {
+				{
+					ID:        "cred-001",
+					AccountID: "account-001",
+					Type:      accountDomain.CredentialTypeTOTP,
+					Value:     encryptControllerTestTOTPSecret(t, "JBSWY3DPEHPK3PXP"),
+					Verified:  true,
+				},
+			},
+		},
+	}
+	mfaSvc, _ := newTestMFAService(t, credRepo)
+
+	claims := &tokenDomain.AccessTokenClaims{AccountID: "account-001", SessionID: "session-001"}
+	engine := setupAuthControllerWithMFA(claims, mfaSvc)
+
+	body, _ := json.Marshal(map[string]string{"code": "000000"})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/step-up", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}

@@ -20,6 +20,8 @@ type AccessTokenClaims struct {
 	Scope       string   `json:"scope,omitempty"`
 	ClientID    string   `json:"client_id,omitempty"`
 	SessionID   string   `json:"sid,omitempty"`
+	AuthTime    *int64   `json:"auth_time,omitempty"`
+	AMR         []string `json:"amr,omitempty"`
 }
 
 // RefreshToken refresh token

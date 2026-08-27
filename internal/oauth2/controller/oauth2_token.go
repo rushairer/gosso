@@ -189,6 +189,10 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		}
 	}
 
+	var authTime *int64
+	if !authCode.AuthTime.IsZero() {
+		authTime = utility.Ptr(authCode.AuthTime.Unix())
+	}
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		AccountID:   authCode.AccountID,
 		Scope:       strings.Join(authCode.Scopes, " "),
@@ -196,6 +200,8 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		SessionID:   authCode.SessionID,
 		Roles:       roles,
 		Permissions: permissions,
+		AuthTime:    authTime,
+		AMR:         authCode.AuthMethods,
 	})
 	if err != nil {
 		c.logger.Error("Failed to generate access token for authorization code", zap.Error(err), zap.String("client_id", req.ClientID))

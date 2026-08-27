@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
@@ -10,6 +11,7 @@ import (
 
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/controllerutil"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
 )
 
@@ -167,4 +169,84 @@ func (c *AuthController) MFAStatus(ctx *gin.Context) {
 
 	controllerutil.SetNoCacheHeaders(ctx)
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(status))
+}
+
+// MFAStepUpRequest step-up MFA verification request body
+type MFAStepUpRequest struct {
+	Code string `json:"code" binding:"required,max=16"`
+	Type string `json:"type"` // "totp" (default) or "backup_code"
+}
+
+// MFAStepUp POST /api/auth/mfa/step-up
+func (c *AuthController) MFAStepUp(ctx *gin.Context) {
+	var req MFAStepUpRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+
+	tc, ok := getClaimsFromContext(ctx)
+	if !ok {
+		return
+	}
+
+	mfaSvc := c.authSvc.MFAService()
+	if mfaSvc == nil {
+		ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "MFA service not available"))
+		return
+	}
+
+	if req.Type == "backup_code" {
+		valid, err := mfaSvc.VerifyBackupCode(ctx, tc.AccountID, req.Code)
+		if err != nil {
+			c.logger.Error("Step-up backup code verification error", zap.Error(err))
+			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to verify backup code"))
+			return
+		}
+		if !valid {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid backup code"))
+			return
+		}
+	} else {
+		valid, err := mfaSvc.VerifyTOTP(ctx, tc.AccountID, req.Code)
+		if err != nil {
+			c.logger.Error("Step-up TOTP verification error", zap.Error(err))
+			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to verify code"))
+			return
+		}
+		if !valid {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid verification code"))
+			return
+		}
+	}
+
+	now := time.Now().Unix()
+	newClaims := &tokenDomain.AccessTokenClaims{
+		AccountID:   tc.AccountID,
+		Username:    tc.Username,
+		Email:       tc.Email,
+		Roles:       tc.Roles,
+		Permissions: tc.Permissions,
+		Scope:       tc.Scope,
+		ClientID:    tc.ClientID,
+		SessionID:   tc.SessionID,
+		AuthTime:    &now,
+		AMR:         []string{"pwd", "otp"},
+	}
+
+	newToken, err := c.tokenMgr.GenerateAccessToken(newClaims)
+	if err != nil {
+		c.logger.Error("Failed to generate step-up access token", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to generate token"))
+		return
+	}
+
+	setSSOAuthCookie(ctx, newToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
+	controllerutil.SetNoCacheHeaders(ctx)
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
+		"access_token": newToken,
+		"auth_time":    now,
+		"amr":          []string{"pwd", "otp"},
+		"expires_in":   int(c.tokenMgr.AccessExpiry().Seconds()),
+	}))
 }
