@@ -504,3 +504,65 @@ func TestMFAStepUp_InvalidCode(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
+
+func TestMFAStepUp_CookieSession_NoTokenInBody(t *testing.T) {
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      "gosso",
+		AccountName: "account-001",
+	})
+	require.NoError(t, err)
+
+	code, err := totp.GenerateCode(key.Secret(), time.Now())
+	require.NoError(t, err)
+
+	credRepo := &mockCredentialRepoForController{
+		findByAccountAndTypeResults: map[accountDomain.CredentialType][]*accountDomain.Credential{
+			accountDomain.CredentialTypeTOTP: {
+				{
+					ID:        "cred-001",
+					AccountID: "account-001",
+					Type:      accountDomain.CredentialTypeTOTP,
+					Value:     encryptControllerTestTOTPSecret(t, key.Secret()),
+					Verified:  true,
+				},
+			},
+		},
+	}
+	mfaSvc, _ := newTestMFAService(t, credRepo)
+
+	claims := &tokenDomain.AccessTokenClaims{AccountID: "account-001", SessionID: "session-001"}
+	engine := setupAuthControllerWithMFA(claims, mfaSvc)
+
+	body, _ := json.Marshal(map[string]string{"code": code})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/step-up", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Gosso-Cookie-Session", "1")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+
+	// Access token MUST NOT be present in JSON response body for cookie sessions
+	assert.Nil(t, data["access_token"], "access_token should not be returned in cookie session mode")
+	assert.NotNil(t, data["auth_time"])
+	assert.NotNil(t, data["expires_in"])
+	assert.Equal(t, []any{"pwd", "otp"}, data["amr"])
+
+	// Cookie must be set in response headers
+	cookies := w.Result().Cookies()
+	var authCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == "__Host-access_token" {
+			authCookie = c
+			break
+		}
+	}
+	require.NotNil(t, authCookie, "__Host-access_token cookie must be set")
+	assert.NotEmpty(t, authCookie.Value)
+	assert.True(t, authCookie.HttpOnly)
+	assert.Equal(t, "/", authCookie.Path)
+}
