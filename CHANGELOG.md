@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-28
+
+### Added
+- Add an authenticated Step-up MFA endpoint that verifies TOTP or backup codes and issues access-token claims with fresh `auth_time` and `amr` values for sensitive operations.
+
+### Changed
+- Upgrade `github.com/rushairer/gouno` to v1.2.1 for stricter RS256 and client-identifier verification and faster JWKS key rotation.
+
+### Security
+- Keep refreshed access tokens out of JSON responses when Step-up MFA is used through HttpOnly Cookie Session mode.
+
 ## [1.2.1] - 2026-08-24
 
 ### Fixed
@@ -2104,7 +2115,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Device code user code validation now enforces exact 8-character length (`internal/oauth2/service/device_code_service.go`).
 - Migrate command `--env` default changed to `production`; migration driver uses configured driver name instead of hardcoded `"pgx"` (`cmd/gouno/migrate.go`).
 
-[Unreleased]: https://github.com/rushairer/gosso/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/rushairer/gosso/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/rushairer/gosso/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/rushairer/gosso/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/rushairer/gosso/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/rushairer/gosso/compare/v0.0.1...v1.1.0
