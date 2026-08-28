@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"mime"
 	"net/http"
 	"slices"
@@ -219,7 +220,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		}
 	}
 
-	idToken, ok := c.maybeGenerateIDToken(ctx, authCode.AccountID, authCode.ClientID, authCode.Scopes, authCode.Nonce, authCode.AuthTime, accessToken, authCode.AuthMethods)
+	idToken, ok := c.maybeGenerateIDToken(ctx, authCode.AccountID, authCode.ClientID, authCode.Scopes, authCode.Nonce, authCode.AuthTime, accessToken, authCode.AuthMethods, authCode.SessionID)
 	if !ok {
 		return
 	}
@@ -457,13 +458,21 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 // maybeGenerateIDToken generates an ID token if the "openid" scope is present.
 // Returns the ID token string (or empty string if openid scope is not requested).
 // On error, writes an HTTP error response and returns ("", false).
-func (c *OAuth2Controller) maybeGenerateIDToken(ctx *gin.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time, accessToken string, authMethods []string) (string, bool) {
+func (c *OAuth2Controller) maybeGenerateIDToken(ctx *gin.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time, accessToken string, authMethods []string, sessionID string) (string, bool) {
 	if c.idTokenSvc == nil {
 		return "", true
 	}
 	for _, s := range scopes {
 		if s == "openid" {
-			idToken, err := c.idTokenSvc.GenerateIDToken(ctx, accountID, clientID, scopes, nonce, authTime, accessToken, authMethods)
+			var idToken string
+			var err error
+			if idTokenWithSess, ok := c.idTokenSvc.(interface {
+				GenerateIDTokenWithSession(ctx context.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time, accessToken string, authMethods []string, sessionID string) (string, error)
+			}); ok && sessionID != "" {
+				idToken, err = idTokenWithSess.GenerateIDTokenWithSession(ctx, accountID, clientID, scopes, nonce, authTime, accessToken, authMethods, sessionID)
+			} else {
+				idToken, err = c.idTokenSvc.GenerateIDToken(ctx, accountID, clientID, scopes, nonce, authTime, accessToken, authMethods)
+			}
 			if err != nil {
 				c.logger.Error("Failed to generate ID token", zap.Error(err))
 				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "error_description": "failed to generate id_token"})

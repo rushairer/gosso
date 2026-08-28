@@ -34,6 +34,7 @@ type IDTokenClaims struct {
 	AuthTime          *int64   `json:"auth_time,omitempty"`
 	AMR               []string `json:"amr,omitempty"` // Authentication Methods References (e.g. ["pwd"], ["pwd","otp"], ["swk"])
 	ATHash            string   `json:"at_hash,omitempty"`
+	SID               string   `json:"sid,omitempty"`
 }
 
 // IDTokenService OIDC ID Token service
@@ -71,10 +72,13 @@ func NewIDTokenService(
 	}
 }
 
-// GenerateIDToken generates an OIDC ID Token.
-// authMethods contains AMR values per RFC 8176 (e.g. "pwd", "otp", "swk").
-// Pass nil to omit the amr claim.
+// GenerateIDToken generates an OIDC ID Token without a session ID.
 func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time, accessToken string, authMethods []string) (string, error) {
+	return s.GenerateIDTokenWithSession(ctx, accountID, clientID, scopes, nonce, authTime, accessToken, authMethods, "")
+}
+
+// GenerateIDTokenWithSession generates an OIDC ID Token with an optional session ID (sid).
+func (s *IDTokenService) GenerateIDTokenWithSession(ctx context.Context, accountID, clientID string, scopes []string, nonce string, authTime time.Time, accessToken string, authMethods []string, sessionID string) (string, error) {
 	account, err := s.accountSvc.FindAccountByID(ctx, accountID)
 	if err != nil {
 		return "", fmt.Errorf("find account: %w", err)
@@ -94,6 +98,7 @@ func (s *IDTokenService) GenerateIDToken(ctx context.Context, accountID, clientI
 		Nonce:    nonce,
 		AuthTime: utility.Ptr[int64](authTime.Unix()),
 		AMR:      authMethods,
+		SID:      sessionID,
 	}
 
 	// Add claims based on scope

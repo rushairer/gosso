@@ -364,7 +364,7 @@ func (c *OAuth2Controller) handleDeviceCodeGrant(ctx *gin.Context, req *TokenReq
 		refreshTokenStr = refreshToken.Token
 	}
 
-	idToken, ok := c.maybeGenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", dc.AuthorizedAt, accessToken, nil)
+	idToken, ok := c.maybeGenerateIDToken(ctx, dc.AccountID, dc.ClientID, dc.Scopes, "", dc.AuthorizedAt, accessToken, nil, "")
 	if !ok {
 		return
 	}
