@@ -39,6 +39,10 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 		return
 	}
 
+	if c.backchannelNotifier != nil {
+		c.backchannelNotifier.TriggerBackChannelLogout(ctx, tc.AccountID, tc.SessionID)
+	}
+
 	clearSSOAuthCookie(ctx, c.secureCookie)
 	clearRefreshTokenCookie(ctx, c.secureCookie)
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("logged out"))
@@ -104,6 +108,10 @@ func (c *AuthController) RevokeSession(ctx *gin.Context) {
 		controllerutil.AbortWithServiceError(ctx, c.logger, err, revokeSessionErrorMap,
 			http.StatusInternalServerError, "Failed to revoke session")
 		return
+	}
+
+	if c.backchannelNotifier != nil {
+		c.backchannelNotifier.TriggerBackChannelLogout(ctx, tc.AccountID, sessionID)
 	}
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{"revoked": true}))

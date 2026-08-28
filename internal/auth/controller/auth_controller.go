@@ -53,15 +53,26 @@ type authServiceDeps interface {
 	PasskeyService() *authService.PasskeyService
 }
 
+// BackchannelLogoutNotifier notifies registered OIDC clients of session termination.
+type BackchannelLogoutNotifier interface {
+	TriggerBackChannelLogout(ctx context.Context, accountID, sessionID string)
+}
+
 // AuthController authentication controller
 type AuthController struct {
-	authSvc          authServiceDeps
-	tokenMgr         authService.TokenManager
-	socialSvc        *authService.SocialLoginService
-	verificationSvc  *authService.VerificationService
-	passwordResetSvc *authService.PasswordResetService
-	secureCookie     bool
-	logger           *zap.Logger
+	authSvc             authServiceDeps
+	tokenMgr            authService.TokenManager
+	socialSvc           *authService.SocialLoginService
+	verificationSvc     *authService.VerificationService
+	passwordResetSvc    *authService.PasswordResetService
+	backchannelNotifier BackchannelLogoutNotifier
+	secureCookie        bool
+	logger              *zap.Logger
+}
+
+// SetBackchannelLogoutNotifier injects the backchannel logout notifier.
+func (c *AuthController) SetBackchannelLogoutNotifier(notifier BackchannelLogoutNotifier) {
+	c.backchannelNotifier = notifier
 }
 
 // NewAuthController creates a new instance of AuthController

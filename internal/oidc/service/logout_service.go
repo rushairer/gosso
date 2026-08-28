@@ -178,7 +178,7 @@ func (s *LogoutService) LogoutByAccountID(ctx context.Context, accountID string)
 	s.logger.Info("Account logout successful", zap.String("account_id", utility.MaskOpaqueID(accountID)))
 
 	// Trigger back-channel logout notifications to all registered clients.
-	s.triggerBackChannelLogout(ctx, accountID, "")
+	s.TriggerBackChannelLogout(ctx, accountID, "")
 
 	return nil
 }
@@ -205,7 +205,7 @@ func (s *LogoutService) LogoutBySessionID(ctx context.Context, accountID, sessio
 
 	// Notify relying parties after the local session and its tokens have been
 	// revoked. The session ID is included only for clients that require it.
-	s.triggerBackChannelLogout(ctx, accountID, sessionID)
+	s.TriggerBackChannelLogout(ctx, accountID, sessionID)
 	return nil
 }
 
@@ -333,9 +333,9 @@ func (s *LogoutService) generateLogoutToken(clientID, accountID, sessionID strin
 	return token.SignedString(privateKey)
 }
 
-// triggerBackChannelLogout sends back-channel logout notifications to all clients
+// TriggerBackChannelLogout sends back-channel logout notifications to all clients
 // that have a non-empty backchannel_logout_uri and a consent record for the account.
-func (s *LogoutService) triggerBackChannelLogout(ctx context.Context, accountID, sessionID string) {
+func (s *LogoutService) TriggerBackChannelLogout(ctx context.Context, accountID, sessionID string) {
 	if s.clientRepo == nil {
 		return
 	}

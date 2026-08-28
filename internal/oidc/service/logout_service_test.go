@@ -368,5 +368,5 @@ func TestTriggerBackChannelLogout_NilClientRepo(t *testing.T) {
 	svc, _ := setupTestLogoutService(t) // clientRepo is nil
 
 	// Should not panic
-	svc.triggerBackChannelLogout(context.Background(), "account-001", "session-001")
+	svc.TriggerBackChannelLogout(context.Background(), "account-001", "session-001")
 }

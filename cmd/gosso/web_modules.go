@@ -154,6 +154,9 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	}
 	clientCtrl := oauth2Controller.NewClientController(oauth2Mod.ClientService, logger)
 	oidcCtrl := oidcController.NewOIDCController(oidcMod.DiscoveryService, oidcMod.JWKSService, oidcMod.UserInfoService, oidcMod.LogoutService, oauth2Mod.ClientRepo, tokenSvc, authMod.SessionService, cfg.AuthConfig.Issuer, logger)
+	if oidcMod.LogoutService != nil {
+		authCtrl.SetBackchannelLogoutNotifier(oidcMod.LogoutService)
+	}
 	auditQueryRepo := auditRepository.NewAuditQueryRepository(db)
 	authSvcConcrete, ok := authMod.AuthService.(*authService.AuthService)
 	if !ok {
