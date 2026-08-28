@@ -65,13 +65,10 @@ func NewOIDCController(
 	}
 }
 
-// RegisterRoutes registers OIDC routes (UserInfo + Logout + Front-Channel Logout).
-// .well-known routes are registered at the router layer for independent rate limiting.
-// GET /logout is intentionally omitted to prevent CSRF via image tags or link prefetching.
-// Clients must use POST or redirect with id_token_hint (handled in Logout).
 func (c *OIDCController) RegisterRoutes(server *gin.RouterGroup, authMiddleware gin.HandlerFunc) {
 	server.GET("/userinfo", authMiddleware, c.UserInfo)
 	server.POST("/userinfo", authMiddleware, c.UserInfo)
+	server.GET("/logout", c.Logout)
 	server.POST("/logout", c.Logout)
 	server.GET("/frontchannel_logout", c.FrontChannelLogout)
 }
@@ -188,6 +185,13 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 			return
 		}
 	}
+
+	ctx.SetCookie("__Host-access_token", "", -1, "/", "", true, true)
+	ctx.SetCookie("__Host-refresh_token", "", -1, "/", "", true, true)
+	ctx.SetCookie("__Host-csrf_token", "", -1, "/", "", true, false)
+	ctx.SetCookie("access_token", "", -1, "/", "", false, true)
+	ctx.SetCookie("refresh_token", "", -1, "/", "", false, true)
+	ctx.SetCookie("csrf_token", "", -1, "/", "", false, false)
 
 	// Post-logout redirect
 	if req.PostLogoutRedirectURI != "" && clientID != "" {
