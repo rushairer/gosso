@@ -552,17 +552,11 @@ func TestMFAStepUp_CookieSession_NoTokenInBody(t *testing.T) {
 	assert.NotNil(t, data["expires_in"])
 	assert.Equal(t, []any{"pwd", "otp"}, data["amr"])
 
-	// Cookie must be set in response headers
+	// Cookie must NOT be set in response headers — MFA step-up no longer
+	// sets the access_token cookie; the existing SSO session cookie
+	// remains valid and the session's MFAVerified flag is updated server-side.
 	cookies := w.Result().Cookies()
-	var authCookie *http.Cookie
 	for _, c := range cookies {
-		if c.Name == "__Host-access_token" {
-			authCookie = c
-			break
-		}
+		assert.NotEqual(t, "__Host-access_token", c.Name, "access_token cookie should not be set for MFA step-up")
 	}
-	require.NotNil(t, authCookie, "__Host-access_token cookie must be set")
-	assert.NotEmpty(t, authCookie.Value)
-	assert.True(t, authCookie.HttpOnly)
-	assert.Equal(t, "/", authCookie.Path)
 }

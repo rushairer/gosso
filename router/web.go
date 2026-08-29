@@ -41,6 +41,7 @@ type RouterDeps struct {
 	AuthConfig       config.AuthConfig
 	Debug            bool
 	SessionValidator sessionDomain.SessionValidator
+	AccountInfoFetcher authMiddleware.AccountInfoFetcher
 	Logger           *zap.Logger
 	MetricsEnabled   bool
 }
@@ -68,9 +69,11 @@ func RegisterWebRouter(deps RouterDeps) error {
 
 	// JWT auth middleware
 	jwtAuth, err := authMiddleware.JWTAuthMiddlewareWithConfig(deps.TokenSvc, deps.SessionValidator, authMiddleware.AuthConfigOptions{
-		LoginURL:         deps.AuthConfig.LoginURL,
-		EnableCookieAuth: deps.AuthConfig.EnableCookieAuth,
-		AuthCookieName:   deps.AuthConfig.AuthCookieName,
+		LoginURL:            deps.AuthConfig.LoginURL,
+		EnableCookieAuth:    deps.AuthConfig.EnableCookieAuth,
+		AuthCookieName:      deps.AuthConfig.AuthCookieName,
+		SessionCookieName:   "__Host-gosso-session",
+		AccountInfoFetcher:  deps.AccountInfoFetcher,
 	})
 	if err != nil {
 		return err

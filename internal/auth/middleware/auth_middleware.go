@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
@@ -33,9 +34,27 @@ var errUnauthorized = errors.New("unauthorized")
 
 // AuthConfigOptions holds configuration options for the JWT auth middleware.
 type AuthConfigOptions struct {
-	LoginURL         string
-	EnableCookieAuth bool
-	AuthCookieName   string
+	LoginURL           string
+	EnableCookieAuth   bool
+	AuthCookieName     string
+	SessionCookieName   string
+	AccountInfoFetcher AccountInfoFetcher
+}
+
+// AccountInfoFetcher retrieves account information (roles, permissions, etc.)
+// from a session's account ID. This is used by the opaque session cookie
+// authentication path to reconstruct claims without a bearer token.
+type AccountInfoFetcher interface {
+	FetchAccountInfo(ctx context.Context, accountID string) (*AccountInfo, error)
+}
+
+// AccountInfo holds the data needed to reconstruct claims from a session.
+type AccountInfo struct {
+	AccountID   string
+	Username    string
+	Email       string
+	Roles       []string
+	Permissions []string
 }
 
 // ValidateBearerToken extracts and validates the Bearer token from the request.
@@ -43,46 +62,85 @@ type AuthConfigOptions struct {
 // This is the shared logic used by both JWTAuthMiddleware and inline authentication in handlers.
 func ValidateBearerToken(ctx *gin.Context, tokenSvc TokenValidator, sessionValidator sessionDomain.SessionValidator) (*tokenDomain.AccessTokenClaims, error) {
 	return ValidateBearerTokenWithConfig(ctx, tokenSvc, sessionValidator, AuthConfigOptions{
-		EnableCookieAuth: true,
-		AuthCookieName:   "__Host-access_token",
+		EnableCookieAuth:  true,
+		AuthCookieName:     "__Host-access_token",
+		SessionCookieName:  "__Host-gosso-session",
 	})
 }
 
 // ValidateBearerTokenWithConfig validates token with specific config options.
 func ValidateBearerTokenWithConfig(ctx *gin.Context, tokenSvc TokenValidator, sessionValidator sessionDomain.SessionValidator, cfg AuthConfigOptions) (*tokenDomain.AccessTokenClaims, error) {
+	// First try: Bearer token or legacy token cookie (for non-browser API clients)
 	tokenString := extractBearerTokenWithConfig(ctx, cfg.EnableCookieAuth, cfg.AuthCookieName)
-	if tokenString == "" {
-		return nil, errUnauthorized
-	}
-
-	claims, err := tokenSvc.ValidateAccessTokenWithContext(ctx.Request.Context(), tokenString)
-	if err != nil {
-		return nil, errUnauthorized
-	}
-
-	// Reject internal MFA tokens from accessing general endpoints. OAuth/OIDC
-	// access tokens use normal scope strings such as "openid profile" and must
-	// remain valid for resource endpoints like /oidc/userinfo.
-	if claims.Scope == authService.ScopeMFA {
-		return nil, ErrTokenScopeNotAllowed
-	}
-
-	// Verify the session still exists (invalidates tokens after account deletion/suspension).
-	// If sessionValidator is nil but the token has a SessionID, reject to prevent bypass.
-	if claims.SessionID != "" {
-		if sessionValidator == nil {
-			return nil, errUnauthorized
-		}
-		session, err := sessionValidator.ValidateSession(ctx.Request.Context(), claims.SessionID)
+	if tokenString != "" {
+		claims, err := tokenSvc.ValidateAccessTokenWithContext(ctx.Request.Context(), tokenString)
 		if err != nil {
 			return nil, errUnauthorized
 		}
-		// Store session in context so downstream handlers (e.g. GetSession) can
-		// reuse it without a second Redis round-trip.
-		ctx.Set(middleware.ContextKeySession, session)
+
+		// Reject internal MFA tokens from accessing general endpoints.
+		if claims.Scope == authService.ScopeMFA {
+			return nil, ErrTokenScopeNotAllowed
+		}
+
+		// Verify the session still exists.
+		if claims.SessionID != "" {
+			if sessionValidator == nil {
+				return nil, errUnauthorized
+			}
+			session, err := sessionValidator.ValidateSession(ctx.Request.Context(), claims.SessionID)
+			if err != nil {
+				return nil, errUnauthorized
+			}
+			ctx.Set(middleware.ContextKeySession, session)
+		}
+
+		return claims, nil
 	}
 
-	return claims, nil
+	// Second try: opaque SSO session cookie (browser SPA path).
+	// This replaces the old token-cookie fallback for browser requests.
+	// The cookie value is an opaque session ID, NOT a bearer token.
+	if cfg.SessionCookieName != "" && sessionValidator != nil {
+		cookieSID := ""
+		if cookie, err := ctx.Cookie(cfg.SessionCookieName); err == nil && cookie != "" {
+			cookieSID = cookie
+		}
+		if cookieSID != "" {
+			session, err := sessionValidator.ValidateSession(ctx.Request.Context(), cookieSID)
+			if err != nil {
+				return nil, errUnauthorized
+			}
+			ctx.Set(middleware.ContextKeySession, session)
+
+			// Reconstruct claims from the session + account info.
+			// No JWT is issued; the claims are server-side only.
+			claims := &tokenDomain.AccessTokenClaims{
+				AccountID: session.AccountID,
+				Username:  session.Username,
+				SessionID: session.ID,
+				Scope:     "openid profile email",
+			}
+			if session.MFAVerified {
+				now := time.Now().Unix()
+				claims.AuthTime = &now
+				claims.AMR = []string{"pwd", "otp"}
+			}
+			// Fetch roles/permissions from the account service if available.
+			if cfg.AccountInfoFetcher != nil {
+				if info, err := cfg.AccountInfoFetcher.FetchAccountInfo(ctx.Request.Context(), session.AccountID); err == nil && info != nil {
+					claims.Roles = info.Roles
+					claims.Permissions = info.Permissions
+					if info.Email != "" {
+						claims.Email = info.Email
+					}
+				}
+			}
+			return claims, nil
+		}
+	}
+
+	return nil, errUnauthorized
 }
 
 // JWTAuthMiddleware is the JWT authentication middleware.
@@ -91,9 +149,10 @@ func ValidateBearerTokenWithConfig(ctx *gin.Context, tokenSvc TokenValidator, se
 // Returns an error if sessionValidator is nil.
 func JWTAuthMiddleware(tokenSvc TokenValidator, sessionValidator sessionDomain.SessionValidator) (gin.HandlerFunc, error) {
 	return JWTAuthMiddlewareWithConfig(tokenSvc, sessionValidator, AuthConfigOptions{
-		LoginURL:         "/login",
-		EnableCookieAuth: true,
-		AuthCookieName:   "__Host-access_token",
+		LoginURL:           "/login",
+		EnableCookieAuth:   true,
+		AuthCookieName:     "__Host-access_token",
+		SessionCookieName:  "__Host-gosso-session",
 	})
 }
 

@@ -141,8 +141,7 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 		return
 	}
 
-	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
-	setRefreshTokenCookie(ctx, result.RefreshToken, int(c.tokenMgr.RefreshExpiry().Seconds()), c.secureCookie)
+	setSSOSessionCookie(ctx, result.Session.ID, int(c.tokenMgr.RefreshExpiry().Seconds()), c.secureCookie)
 	respondTokenSet(ctx, c.tokenMgr, result.AccessToken, result.RefreshToken, result.Session.ID)
 }
 

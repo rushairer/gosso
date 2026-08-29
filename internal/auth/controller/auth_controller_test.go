@@ -52,14 +52,11 @@ func TestLogin_Success(t *testing.T) {
 	assert.Equal(t, "Bearer", data["token_type"])
 	assert.Equal(t, float64(900), data["expires_in"])
 	assert.Equal(t, session.ID, data["session_id"])
-	require.Len(t, w.Result().Cookies(), 2)
-	assert.Equal(t, "__Host-access_token", w.Result().Cookies()[0].Name)
-	assert.Equal(t, "access-123", w.Result().Cookies()[0].Value)
+	require.Len(t, w.Result().Cookies(), 1)
+	assert.Equal(t, "__Host-gosso-session", w.Result().Cookies()[0].Name)
+	assert.Equal(t, session.ID, w.Result().Cookies()[0].Value)
 	assert.True(t, w.Result().Cookies()[0].HttpOnly)
 	assert.Equal(t, http.SameSiteLaxMode, w.Result().Cookies()[0].SameSite)
-	assert.Equal(t, "__Host-refresh_token", w.Result().Cookies()[1].Name)
-	assert.True(t, w.Result().Cookies()[1].HttpOnly)
-	assert.Equal(t, http.SameSiteStrictMode, w.Result().Cookies()[1].SameSite)
 }
 
 func TestLogin_MFARequired(t *testing.T) {
@@ -136,6 +133,7 @@ func TestRefresh_Success(t *testing.T) {
 			return &service.RefreshResult{
 				AccessToken:  "new-access",
 				RefreshToken: "new-refresh",
+				SessionID:    "test-session-id",
 			}, nil
 		},
 	}
@@ -156,11 +154,10 @@ func TestRefresh_Success(t *testing.T) {
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, "new-access", data["access_token"])
 	assert.Equal(t, "new-refresh", data["refresh_token"])
-	require.Len(t, w.Result().Cookies(), 2)
-	assert.Equal(t, "__Host-access_token", w.Result().Cookies()[0].Name)
-	assert.Equal(t, "new-access", w.Result().Cookies()[0].Value)
+	require.Len(t, w.Result().Cookies(), 1)
+	assert.Equal(t, "__Host-gosso-session", w.Result().Cookies()[0].Name)
+	assert.Equal(t, "test-session-id", w.Result().Cookies()[0].Value)
 	assert.True(t, w.Result().Cookies()[0].HttpOnly)
-	assert.Equal(t, "__Host-refresh_token", w.Result().Cookies()[1].Name)
 }
 
 func TestRefresh_InvalidToken(t *testing.T) {
@@ -217,11 +214,10 @@ func TestMFAVerify_Success(t *testing.T) {
 	assert.Equal(t, "Bearer", data["token_type"])
 	assert.Equal(t, float64(900), data["expires_in"])
 	assert.Equal(t, session.ID, data["session_id"])
-	require.Len(t, w.Result().Cookies(), 2)
-	assert.Equal(t, "__Host-access_token", w.Result().Cookies()[0].Name)
-	assert.Equal(t, "mfa-access-123", w.Result().Cookies()[0].Value)
+	require.Len(t, w.Result().Cookies(), 1)
+	assert.Equal(t, "__Host-gosso-session", w.Result().Cookies()[0].Name)
+	assert.Equal(t, session.ID, w.Result().Cookies()[0].Value)
 	assert.True(t, w.Result().Cookies()[0].HttpOnly)
-	assert.Equal(t, "__Host-refresh_token", w.Result().Cookies()[1].Name)
 }
 
 func TestMFAVerify_MissingCode(t *testing.T) {

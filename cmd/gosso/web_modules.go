@@ -45,6 +45,7 @@ type appModules struct {
 	passkeyCtrl      *authController.PasskeyController
 	tokenSvc         *tokenService.TokenService
 	sessionSvc       *sessionService.SessionService
+	accountSvc       accountService.AccountService
 	passwordResetSvc *authService.PasswordResetService
 	emailSvc         *notificationService.EmailService
 }
@@ -186,6 +187,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		passkeyCtrl:      passkeyCtrl,
 		tokenSvc:         tokenSvc,
 		sessionSvc:       authMod.SessionService,
+		accountSvc:       accountMod.Service,
 		passwordResetSvc: authMod.PasswordResetService,
 		emailSvc:         authMod.EmailService,
 	}, nil

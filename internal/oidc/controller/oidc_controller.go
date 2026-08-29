@@ -194,6 +194,7 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 		}
 	}
 
+	ctx.SetCookie("__Host-gosso-session", "", -1, "/", "", true, true)
 	ctx.SetCookie("__Host-access_token", "", -1, "/", "", true, true)
 	ctx.SetCookie("__Host-refresh_token", "", -1, "/", "", true, true)
 	ctx.SetCookie("__Host-csrf_token", "", -1, "/", "", true, false)
@@ -273,6 +274,7 @@ func (c *OIDCController) LogoutConfirm(ctx *gin.Context) {
 <h1>Confirm Logout</h1>
 <p>You are about to log out from the identity provider.</p>
 <form method="POST" action="/oidc/logout">` +
+		hiddenInput("client_id", req.ClientID) +
 		hiddenInput("post_logout_redirect_uri", req.PostLogoutRedirectURI) +
 		hiddenInput("state", req.State) +
 		`<button type="submit">Confirm Logout</button>
@@ -303,7 +305,22 @@ func (c *OIDCController) validateBearerToken(ctx *gin.Context) *tokenDomain.Acce
 }
 
 // tryLogoutByCookieSession attempts logout using the OP cookie session.
+// It first checks for the opaque SSO session cookie, falling back to
+// legacy token cookies for backward compatibility.
 func (c *OIDCController) tryLogoutByCookieSession(ctx *gin.Context, req logoutRequest) (string, bool) {
+	// Primary path: opaque SSO session cookie (new approach).
+	if sid, err := ctx.Cookie("__Host-gosso-session"); err == nil && sid != "" {
+		if c.sessionValidator != nil {
+			session, valErr := c.sessionValidator.ValidateSession(ctx.Request.Context(), sid)
+			if valErr != nil {
+				return "", false
+			}
+			_ = c.logoutSvc.LogoutBySessionID(ctx.Request.Context(), session.AccountID, sid)
+			return req.ClientID, true
+		}
+	}
+
+	// Legacy fallback: token cookie (for clients still using old cookies).
 	cookieToken := ""
 	if cookie, err := ctx.Cookie("__Host-access_token"); err == nil && cookie != "" {
 		cookieToken = cookie
@@ -325,9 +342,6 @@ func (c *OIDCController) tryLogoutByCookieSession(ctx *gin.Context, req logoutRe
 	if claims.SessionID != "" {
 		_ = c.logoutSvc.LogoutBySessionID(ctx.Request.Context(), claims.AccountID, claims.SessionID)
 	} else {
-		// Legacy token without sid: try to find the current session from the
-		// access token and logout only it. Do NOT call LogoutByAccountID which
-		// would revoke all sessions for the account.
 		c.logger.Debug("Cookie session has no sid, skipping server-side session logout",
 			zap.String("account_id", utility.MaskOpaqueID(claims.AccountID)))
 	}

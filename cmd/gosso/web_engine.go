@@ -12,7 +12,9 @@ import (
 
 	"github.com/rushairer/gosso/config"
 	"github.com/rushairer/gosso/internal/cache"
+	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	"github.com/rushairer/gosso/internal/observability"
+	authMiddleware "github.com/rushairer/gosso/internal/auth/middleware"
 	"github.com/rushairer/gosso/middleware"
 	"github.com/rushairer/gosso/router"
 )
@@ -63,22 +65,23 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 	}
 
 	if err := router.RegisterWebRouter(router.RouterDeps{
-		Server:           engine,
-		DB:               db,
-		AuthCtrl:         m.authCtrl,
-		OAuth2Ctrl:       m.oauth2Ctrl,
-		ClientCtrl:       m.clientCtrl,
-		OIDCCtrl:         m.oidcCtrl,
-		AdminCtrl:        m.adminCtrl,
-		TokenSvc:         m.tokenSvc,
-		PasskeyCtrl:      m.passkeyCtrl,
-		Redis:            redis,
-		RateLimits:       cfg.WebServerConfig.RateLimits,
-		AuthConfig:       cfg.AuthConfig,
-		Debug:            cfg.WebServerConfig.Debug,
-		SessionValidator: m.sessionSvc,
-		Logger:           logger,
-		MetricsEnabled:   cfg.Observability.MetricsEnabled,
+		Server:             engine,
+		DB:                 db,
+		AuthCtrl:           m.authCtrl,
+		OAuth2Ctrl:         m.oauth2Ctrl,
+		ClientCtrl:         m.clientCtrl,
+		OIDCCtrl:           m.oidcCtrl,
+		AdminCtrl:          m.adminCtrl,
+		TokenSvc:           m.tokenSvc,
+		PasskeyCtrl:        m.passkeyCtrl,
+		Redis:              redis,
+		RateLimits:         cfg.WebServerConfig.RateLimits,
+		AuthConfig:         cfg.AuthConfig,
+		Debug:              cfg.WebServerConfig.Debug,
+		SessionValidator:   m.sessionSvc,
+		AccountInfoFetcher: &accountInfoFetcherAdapter{accountSvc: m.accountSvc, logger: logger},
+		Logger:             logger,
+		MetricsEnabled:     cfg.Observability.MetricsEnabled,
 	}); err != nil {
 		return nil, err
 	}
@@ -118,4 +121,40 @@ func buildCORSConfig(cfg config.GoUnoConfig, logger *zap.Logger) (cors.Config, e
 		corsConfig.ExposeHeaders = []string{"X-Request-ID"}
 	}
 	return corsConfig, nil
+}
+
+// accountInfoFetcherAdapter implements authMiddleware.AccountInfoFetcher
+// by querying the account service for account + roles/permissions.
+// This is used by the opaque session cookie auth path to reconstruct
+// claims without issuing a JWT.
+type accountInfoFetcherAdapter struct {
+	accountSvc interface {
+		FindAccountByID(ctx context.Context, accountID string) (*accountDomain.Account, error)
+		GetAccountRoles(ctx context.Context, accountID string) ([]*accountDomain.Role, error)
+	}
+	logger *zap.Logger
+}
+
+func (a *accountInfoFetcherAdapter) FetchAccountInfo(ctx context.Context, accountID string) (*authMiddleware.AccountInfo, error) {
+	account, err := a.accountSvc.FindAccountByID(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	info := &authMiddleware.AccountInfo{
+		AccountID: account.ID,
+	}
+	if account.Username != nil {
+		info.Username = *account.Username
+	}
+	roles, err := a.accountSvc.GetAccountRoles(ctx, accountID)
+	if err != nil {
+		a.logger.Warn("Failed to fetch roles for session cookie auth",
+			zap.String("account_id", accountID), zap.Error(err))
+	} else {
+		for _, r := range roles {
+			info.Roles = append(info.Roles, r.Name)
+			info.Permissions = append(info.Permissions, r.Permissions...)
+		}
+	}
+	return info, nil
 }

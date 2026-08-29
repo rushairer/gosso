@@ -241,9 +241,8 @@ func (c *AuthController) MFAStepUp(ctx *gin.Context) {
 		return
 	}
 
-	setSSOAuthCookie(ctx, newToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
 	controllerutil.SetNoCacheHeaders(ctx)
-	if isCookieSessionRequest(ctx) {
+	if isCookieSessionRequest(ctx) || isBrowserRequest(ctx) {
 		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
 			"auth_time":  now,
 			"amr":        []string{"pwd", "otp"},

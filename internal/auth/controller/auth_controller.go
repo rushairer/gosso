@@ -198,8 +198,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 
 	// Prevent caching of responses containing tokens
 	controllerutil.SetNoCacheHeaders(ctx)
-	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
-	setRefreshTokenCookie(ctx, result.RefreshToken, int(c.tokenMgr.RefreshExpiry().Seconds()), c.secureCookie)
+	setSSOSessionCookie(ctx, result.Session.ID, int(c.tokenMgr.RefreshExpiry().Seconds()), c.secureCookie)
 	respondTokenSet(ctx, c.tokenMgr, result.AccessToken, result.RefreshToken, result.Session.ID)
 }
 
@@ -232,8 +231,7 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 
 	// Prevent caching of responses containing tokens
 	controllerutil.SetNoCacheHeaders(ctx)
-	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
-	setRefreshTokenCookie(ctx, result.RefreshToken, int(c.tokenMgr.RefreshExpiry().Seconds()), c.secureCookie)
+	setSSOSessionCookie(ctx, result.SessionID, int(c.tokenMgr.RefreshExpiry().Seconds()), c.secureCookie)
 	respondTokenSet(ctx, c.tokenMgr, result.AccessToken, result.RefreshToken, result.SessionID)
 }
 
@@ -275,8 +273,7 @@ func (c *AuthController) MFAVerify(ctx *gin.Context) {
 
 	// Prevent caching of responses containing tokens
 	controllerutil.SetNoCacheHeaders(ctx)
-	setSSOAuthCookie(ctx, result.AccessToken, int(c.tokenMgr.AccessExpiry().Seconds()), c.secureCookie)
-	setRefreshTokenCookie(ctx, result.RefreshToken, int(c.tokenMgr.RefreshExpiry().Seconds()), c.secureCookie)
+	setSSOSessionCookie(ctx, result.Session.ID, int(c.tokenMgr.RefreshExpiry().Seconds()), c.secureCookie)
 	respondTokenSet(ctx, c.tokenMgr, result.AccessToken, result.RefreshToken, result.Session.ID)
 }
 
@@ -286,5 +283,19 @@ func respondTokenSet(ctx *gin.Context, tokenMgr authService.TokenManager, access
 		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(cookieSessionResponse(sessionID, expiresIn)))
 		return
 	}
+	// SPA browser requests (with Origin header but without the explicit
+	// cookie-session header) must not receive bearer tokens in the response
+	// body. Only programmatic API clients (no Origin) get the full token set.
+	if isBrowserRequest(ctx) {
+		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(cookieSessionResponse(sessionID, expiresIn)))
+		return
+	}
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(tokenResponse(accessToken, refreshToken, sessionID, expiresIn)))
+}
+
+// isBrowserRequest detects whether the request originates from a browser
+// (indicated by the presence of an Origin or Sec-Fetch-Mode: cors header).
+// Such requests must not receive bearer tokens in response bodies.
+func isBrowserRequest(ctx *gin.Context) bool {
+	return ctx.GetHeader("Origin") != "" || ctx.GetHeader("Sec-Fetch-Mode") == "cors"
 }

@@ -13,6 +13,7 @@ import (
 
 const authCookieName = "__Host-access_token"
 const refreshCookieName = "__Host-refresh_token"
+const ssoSessionCookieName = "__Host-gosso-session"
 const cookieSessionHeader = "X-Gosso-Cookie-Session"
 
 // getClaimsFromContext extracts and validates JWT claims from gin.Context
@@ -103,6 +104,46 @@ func clearRefreshTokenCookie(ctx *gin.Context, secure bool) {
 
 func isSecureRequest(ctx *gin.Context) bool {
 	return ctx.Request.TLS != nil || ctx.GetHeader("X-Forwarded-Proto") == "https"
+}
+
+// setSSOSessionCookie sets an opaque, high-entropy session ID as a browser
+// cookie. The cookie value is NOT a bearer token — it is an opaque handle
+// that the auth middleware resolves to a server-side session in Redis.
+// This replaces the previous approach of putting access/refresh tokens
+// directly into browser cookies.
+func setSSOSessionCookie(ctx *gin.Context, sessionID string, maxAgeSeconds int, secure bool) {
+	http.SetCookie(ctx.Writer, &http.Cookie{
+		Name:     ssoSessionCookieName,
+		Value:    sessionID,
+		Path:     "/",
+		MaxAge:   maxAgeSeconds,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// clearSSOSessionCookie expires the opaque SSO session cookie.
+func clearSSOSessionCookie(ctx *gin.Context, secure bool) {
+	http.SetCookie(ctx.Writer, &http.Cookie{
+		Name:     ssoSessionCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// getSSOSessionIDFromCookie reads the opaque session ID from the SSO session
+// cookie. Returns empty string if the cookie is absent.
+func getSSOSessionIDFromCookie(ctx *gin.Context) string {
+	if cookie, err := ctx.Cookie(ssoSessionCookieName); err == nil && cookie != "" {
+		return cookie
+	}
+	return ""
 }
 
 // mfaRequiredResponse constructs the MFA-required response body.
