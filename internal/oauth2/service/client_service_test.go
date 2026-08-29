@@ -24,6 +24,7 @@ func clientTestColumns() []string {
 		"is_confidential", "metadata",
 		"frontchannel_logout_uri", "frontchannel_logout_session_required",
 		"backchannel_logout_uri", "backchannel_logout_session_required",
+		"allowed_resources",
 		"created_at", "updated_at", "deleted_at",
 	}
 }
@@ -54,7 +55,7 @@ func TestFindByAccountID(t *testing.T) {
 	rows := sqlmock.NewRows(clientTestColumns()).AddRow(
 		"uuid-001", "account-001", "abc123", "$2a$10$hash",
 		"Test App", "desc", redirectURIs, postLogoutURIs, grantTypes, scopes,
-		true, nil, "", false, "", false, now, now, nil,
+		true, nil, "", false, "", false, []byte("[]"), now, now, nil,
 	)
 
 	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").
@@ -104,7 +105,7 @@ func TestUpdateClient(t *testing.T) {
 	clientRows := sqlmock.NewRows(clientTestColumns()).AddRow(
 		"uuid-001", "account-001", "cid-abc", "$2a$10$hash", "Old Name", "",
 		[]byte(`["http://localhost/callback"]`), []byte("null"), []byte(`["authorization_code"]`), []byte(`["openid"]`),
-		true, []byte("{}"), "", false, "", false, now, updatedAt, nil,
+		true, []byte("{}"), "", false, "", false, []byte("[]"), now, updatedAt, nil,
 	)
 	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").
 		WithArgs("cid-abc").
@@ -112,7 +113,7 @@ func TestUpdateClient(t *testing.T) {
 
 	// Update with optimistic locking
 	mock.ExpectQuery("UPDATE oauth2_clients").
-		WithArgs("Updated App", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "uuid-001", updatedAt).
+		WithArgs("Updated App", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "uuid-001", updatedAt).
 		WillReturnRows(sqlmock.NewRows([]string{"updated_at"}).AddRow(now))
 	mock.ExpectCommit()
 
@@ -177,7 +178,7 @@ func TestDeleteClient(t *testing.T) {
 	rows := sqlmock.NewRows(clientTestColumns()).AddRow(
 		"uuid-001", "account-001", "abc123", "$2a$10$hash",
 		"Test App", "desc", redirectURIs, postLogoutURIs, grantTypes, scopes,
-		true, nil, "", false, "", false, now, now, nil,
+		true, nil, "", false, "", false, []byte("[]"), now, now, nil,
 	)
 
 	// FindByClientID and SoftDelete now both run inside the same transaction
@@ -232,7 +233,7 @@ func TestDeleteClient_AccessDenied(t *testing.T) {
 	rows := sqlmock.NewRows(clientTestColumns()).AddRow(
 		"uuid-001", "account-001", "abc123", "$2a$10$hash",
 		"Test App", "desc", redirectURIs, postLogoutURIs, grantTypes, scopes,
-		true, nil, "", false, "", false, now, now, nil,
+		true, nil, "", false, "", false, []byte("[]"), now, now, nil,
 	)
 
 	// FindByClientID now runs inside the transaction; access denied triggers rollback
@@ -381,7 +382,7 @@ func TestFindByClientID(t *testing.T) {
 	rows := sqlmock.NewRows(clientTestColumns()).AddRow(
 		"uuid-001", "account-001", "abc123", "$2a$10$hash",
 		"Test App", "desc", redirectURIs, postLogoutURIs, grantTypes, scopes,
-		true, nil, "", false, "", false, now, now, nil,
+		true, nil, "", false, "", false, []byte("[]"), now, now, nil,
 	)
 
 	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").

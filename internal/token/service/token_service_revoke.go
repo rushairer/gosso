@@ -23,7 +23,7 @@ import (
 
 const (
 	refreshTokenReplayKeyPrefix = "refresh_token_replay:"
-	refreshTokenReplayTTL       = 30 * time.Second
+	refreshTokenReplayTTL       = 5 * time.Second
 )
 
 type refreshTokenReplay struct {

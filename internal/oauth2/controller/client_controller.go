@@ -49,13 +49,18 @@ func (c *ClientController) RegisterRoutes(rg *gin.RouterGroup, authMiddleware gi
 
 // RegisterClientRequest is the request body for registering a client
 type RegisterClientRequest struct {
-	Name                   string   `json:"name" binding:"required,max=255"`
-	Description            string   `json:"description" binding:"max=2000"`
-	RedirectURIs           []string `json:"redirect_uris" binding:"required,min=1"`
-	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
-	GrantTypes             []string `json:"grant_types"`
-	Scopes                 []string `json:"scopes"`
-	IsConfidential         bool     `json:"is_confidential"`
+	Name                               string   `json:"name" binding:"required,max=255"`
+	Description                        string   `json:"description" binding:"max=2000"`
+	RedirectURIs                       []string `json:"redirect_uris" binding:"required,min=1"`
+	PostLogoutRedirectURIs             []string `json:"post_logout_redirect_uris"`
+	GrantTypes                         []string `json:"grant_types"`
+	Scopes                             []string `json:"scopes"`
+	IsConfidential                     bool     `json:"is_confidential"`
+	AllowedResources                   []string `json:"allowed_resources"`
+	FrontchannelLogoutURI              string   `json:"frontchannel_logout_uri"`
+	FrontchannelLogoutSessionRequired  bool     `json:"frontchannel_logout_session_required"`
+	BackchannelLogoutURI               string   `json:"backchannel_logout_uri"`
+	BackchannelLogoutSessionRequired   bool     `json:"backchannel_logout_session_required"`
 }
 
 // RegisterClientResponse is the response body for registering a client
@@ -79,15 +84,20 @@ func (c *ClientController) RegisterClient(ctx *gin.Context) {
 	}
 
 	client, secret, err := c.clientSvc.RegisterClient(ctx, &oauth2Service.RegisterClientRequest{
-		AccountID:              accountID,
-		Name:                   req.Name,
-		Description:            req.Description,
-		RedirectURIs:           req.RedirectURIs,
-		PostLogoutRedirectURIs: req.PostLogoutRedirectURIs,
-		GrantTypes:             req.GrantTypes,
-		Scopes:                 req.Scopes,
-		IsConfidential:         req.IsConfidential,
-		AllowReservedScopes:    canManageReservedClientScopes(ctx),
+		AccountID:                          accountID,
+		Name:                               req.Name,
+		Description:                        req.Description,
+		RedirectURIs:                       req.RedirectURIs,
+		PostLogoutRedirectURIs:             req.PostLogoutRedirectURIs,
+		GrantTypes:                         req.GrantTypes,
+		Scopes:                             req.Scopes,
+		IsConfidential:                     req.IsConfidential,
+		AllowReservedScopes:                canManageReservedClientScopes(ctx),
+		AllowedResources:                   req.AllowedResources,
+		FrontchannelLogoutURI:              req.FrontchannelLogoutURI,
+		FrontchannelLogoutSessionRequired:  req.FrontchannelLogoutSessionRequired,
+		BackchannelLogoutURI:               req.BackchannelLogoutURI,
+		BackchannelLogoutSessionRequired:   req.BackchannelLogoutSessionRequired,
 	})
 	if err != nil {
 		if isValidationError(err) {
@@ -154,6 +164,21 @@ func (c *ClientController) GetClient(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(client))
 }
 
+// UpdateClientRequest is the request body for updating a client
+type UpdateClientRequest struct {
+	Name                               *string   `json:"name" binding:"omitempty,max=255"`
+	Description                        *string   `json:"description" binding:"omitempty,max=2000"`
+	RedirectURIs                       []string  `json:"redirect_uris"`
+	PostLogoutRedirectURIs             []string  `json:"post_logout_redirect_uris"`
+	GrantTypes                         []string  `json:"grant_types"`
+	Scopes                             []string  `json:"scopes"`
+	AllowedResources                   *[]string `json:"allowed_resources"`
+	FrontchannelLogoutURI              *string   `json:"frontchannel_logout_uri"`
+	FrontchannelLogoutSessionRequired  *bool     `json:"frontchannel_logout_session_required"`
+	BackchannelLogoutURI               *string   `json:"backchannel_logout_uri"`
+	BackchannelLogoutSessionRequired   *bool     `json:"backchannel_logout_session_required"`
+}
+
 // UpdateClient PUT /api/oauth2/clients/:client_id
 func (c *ClientController) UpdateClient(ctx *gin.Context) {
 	clientID, ok := controllerutil.ValidateUUID(ctx, ctx.Param("client_id"), "client_id")
@@ -173,13 +198,18 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 	}
 
 	svcReq := &oauth2Service.UpdateClientRequest{
-		Name:                   req.Name,
-		Description:            req.Description,
-		RedirectURIs:           req.RedirectURIs,
-		PostLogoutRedirectURIs: req.PostLogoutRedirectURIs,
-		GrantTypes:             req.GrantTypes,
-		Scopes:                 req.Scopes,
-		AllowReservedScopes:    canManageReservedClientScopes(ctx),
+		Name:                               req.Name,
+		Description:                        req.Description,
+		RedirectURIs:                       req.RedirectURIs,
+		PostLogoutRedirectURIs:             req.PostLogoutRedirectURIs,
+		GrantTypes:                         req.GrantTypes,
+		Scopes:                             req.Scopes,
+		AllowedResources:                   req.AllowedResources,
+		FrontchannelLogoutURI:              req.FrontchannelLogoutURI,
+		FrontchannelLogoutSessionRequired:  req.FrontchannelLogoutSessionRequired,
+		BackchannelLogoutURI:               req.BackchannelLogoutURI,
+		BackchannelLogoutSessionRequired:   req.BackchannelLogoutSessionRequired,
+		AllowReservedScopes:                canManageReservedClientScopes(ctx),
 	}
 
 	client, err := c.clientSvc.UpdateClientByAccountID(ctx, accountID, clientID, svcReq)
@@ -194,16 +224,6 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(client))
-}
-
-// UpdateClientRequest is the request body for updating a client
-type UpdateClientRequest struct {
-	Name                   *string  `json:"name"`
-	Description            *string  `json:"description"`
-	RedirectURIs           []string `json:"redirect_uris"`
-	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
-	GrantTypes             []string `json:"grant_types"`
-	Scopes                 []string `json:"scopes"`
 }
 
 // DeleteClient DELETE /api/oauth2/clients/:client_id

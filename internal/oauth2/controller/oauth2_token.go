@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/controllerutil"
@@ -194,7 +195,16 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 	if !authCode.AuthTime.IsZero() {
 		authTime = utility.Ptr(authCode.AuthTime.Unix())
 	}
+	var aud []string
+	if authCode.Resource != "" {
+		aud = []string{authCode.Resource}
+	} else if len(client.AllowedResources) > 0 {
+		aud = client.AllowedResources
+	}
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Audience: aud,
+		},
 		AccountID:   authCode.AccountID,
 		Scope:       strings.Join(authCode.Scopes, " "),
 		ClientID:    authCode.ClientID,
@@ -354,7 +364,14 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		}
 	}
 
+	var aud []string
+	if len(client.AllowedResources) > 0 {
+		aud = client.AllowedResources
+	}
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Audience: aud,
+		},
 		AccountID:   newRefreshToken.AccountID,
 		Scope:       accessTokenScope,
 		ClientID:    newRefreshToken.ClientID,

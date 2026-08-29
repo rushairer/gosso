@@ -48,6 +48,7 @@ type consentState struct {
 	Nonce               string `json:"nonce"`
 	State               string `json:"state"`
 	Scope               string `json:"scope"`
+	Resource            string `json:"resource,omitempty"`
 }
 
 // Authorize GET /oauth2/authorize
@@ -60,6 +61,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 	codeChallenge := ctx.Query("code_challenge")
 	codeChallengeMethod := ctx.Query("code_challenge_method")
 	nonce := ctx.Query("nonce")
+	resource := ctx.Query("resource")
 
 	if codeChallenge != "" && codeChallengeMethod != "S256" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "code_challenge_method must be S256"})
@@ -96,6 +98,14 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
+	// RFC 8707: Validate resource indicator if client has registered allowed resources
+	if resource != "" && len(client.AllowedResources) > 0 {
+		if !client.ValidateResource(resource) {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_target", "error_description": "resource is not allowed for this client"})
+			return
+		}
+	}
+
 	// State parameter is required for public clients (RFC 6749 Section 10.12)
 	if !client.IsConfidential && state == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "state parameter is required for public clients"})
@@ -118,15 +128,16 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 	if !ok {
 		return
 	}
-	sessionID := sessionIDFromContext(ctx)
 
-	// Verify the account is still active — suspended accounts must not generate authorization codes.
+	// Verify account is active before issuing consent/code.
 	if !c.accountValidator.IsAccountActive(ctx, accountIDStr) {
-		ctx.JSON(http.StatusForbidden, gin.H{"error": "access_denied", "error_description": "account is not active"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "account is not active"})
 		return
 	}
 
-	// Store PKCE + nonce parameters server-side to prevent tampering in the consent form.
+	sessionID := sessionIDFromContext(ctx)
+
+	// Persist PKCE and authorization parameters in Redis keyed by consent ID.
 	// Redis is required for consent state storage; reject if unavailable to prevent PKCE bypass.
 	consentID := uuid.New().String()
 	if c.redis == nil {
@@ -146,6 +157,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		Nonce:               nonce,
 		State:               state,
 		Scope:               scope,
+		Resource:            resource,
 	})
 	if err != nil {
 		c.logger.Error("Failed to marshal consent state", zap.Error(err))
@@ -182,7 +194,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 			})
 			return
 		}
-		code, err := c.authCodeSvc.GenerateCode(ctx, clientID, accountIDStr, redirectURI, allowedScopes, codeChallenge, codeChallengeMethod, nonce, sessionID)
+		code, err := c.authCodeSvc.GenerateCode(ctx, clientID, accountIDStr, redirectURI, allowedScopes, codeChallenge, codeChallengeMethod, nonce, sessionID, resource)
 		if err != nil {
 			c.logger.Error("Failed to generate authorization code for existing consent", zap.Error(err))
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -365,7 +377,7 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	}
 
 	sessionID := sessionIDFromContext(ctx)
-	code, err := c.authCodeSvc.GenerateCode(ctx, req.ClientID, accountIDStr, req.RedirectURI, scopes, req.CodeChallenge, req.CodeChallengeMethod, req.Nonce, sessionID)
+	code, err := c.authCodeSvc.GenerateCode(ctx, req.ClientID, accountIDStr, req.RedirectURI, scopes, req.CodeChallenge, req.CodeChallengeMethod, req.Nonce, sessionID, stored.Resource)
 	if err != nil {
 		c.logger.Error("Failed to generate authorization code after consent approval", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})

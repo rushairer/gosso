@@ -132,7 +132,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("auth.device_code_interval", "5s")
 	v.SetDefault("auth.id_token_expiry", "15m")
 	v.SetDefault("auth.max_sessions", 5)
-	v.SetDefault("auth.enforce_pkce_for_confidential", false)
+	v.SetDefault("auth.enforce_pkce_for_confidential", true)
 	v.SetDefault("auth.login_url", "/login")
 	v.SetDefault("auth.enable_cookie_auth", false)
 	v.SetDefault("auth.auth_cookie_name", "__Host-access_token")

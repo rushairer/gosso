@@ -186,6 +186,13 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 		}
 	}
 
+	if clientID == "" && !logoutPerformed {
+		if cid, ok := c.tryLogoutByCookieSession(ctx, req); ok {
+			clientID = cid
+			logoutPerformed = true
+		}
+	}
+
 	ctx.SetCookie("__Host-access_token", "", -1, "/", "", true, true)
 	ctx.SetCookie("__Host-refresh_token", "", -1, "/", "", true, true)
 	ctx.SetCookie("__Host-csrf_token", "", -1, "/", "", true, false)
@@ -200,7 +207,7 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 	}
 
 	if !logoutPerformed {
-		// No id_token_hint, no Bearer token — unable to identify the user.
+		// No id_token_hint, no Bearer token, no session cookie — unable to identify the user.
 		// Per OIDC RP-Initiated Logout, return 401 rather than a misleading 200.
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized,
 			"authentication required"))
@@ -223,6 +230,41 @@ func (c *OIDCController) validateBearerToken(ctx *gin.Context) *tokenDomain.Acce
 		return nil
 	}
 	return claims
+}
+
+// tryLogoutByCookieSession attempts logout using the OP cookie session.
+func (c *OIDCController) tryLogoutByCookieSession(ctx *gin.Context, req logoutRequest) (string, bool) {
+	cookieToken := ""
+	if cookie, err := ctx.Cookie("__Host-access_token"); err == nil && cookie != "" {
+		cookieToken = cookie
+	} else if cookie, err := ctx.Cookie("access_token"); err == nil && cookie != "" {
+		cookieToken = cookie
+	}
+	if cookieToken == "" {
+		return "", false
+	}
+	claims, err := c.tokenSvc.ValidateAccessTokenWithContext(ctx.Request.Context(), cookieToken)
+	if err != nil {
+		return "", false
+	}
+	if c.sessionValidator != nil && claims.SessionID != "" {
+		if _, valErr := c.sessionValidator.ValidateSession(ctx.Request.Context(), claims.SessionID); valErr != nil {
+			return "", false
+		}
+	}
+	if claims.SessionID != "" {
+		_ = c.logoutSvc.LogoutBySessionID(ctx.Request.Context(), claims.AccountID, claims.SessionID)
+	} else {
+		_ = c.logoutSvc.LogoutByAccountID(ctx.Request.Context(), claims.AccountID)
+	}
+	if claims.ExpiresAt != nil {
+		_ = c.tokenSvc.RevokeAccessToken(ctx.Request.Context(), claims.ID, claims.ExpiresAt.Time)
+	}
+	clientID := req.ClientID
+	if clientID == "" {
+		clientID = claims.ClientID
+	}
+	return clientID, true
 }
 
 // tryLogoutByIDTokenHint attempts logout using the id_token_hint parameter.
@@ -250,8 +292,14 @@ func (c *OIDCController) tryLogoutByIDTokenHint(ctx *gin.Context, req logoutRequ
 		return "", true // handled (with error)
 	}
 
-	if err := c.logoutSvc.LogoutByAccountID(ctx, accountID); err != nil {
-		c.logger.Error("Logout by account ID failed", zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(err))
+	var logoutErr error
+	if claims.SID != "" {
+		logoutErr = c.logoutSvc.LogoutBySessionID(ctx, accountID, claims.SID)
+	} else {
+		logoutErr = c.logoutSvc.LogoutByAccountID(ctx, accountID)
+	}
+	if logoutErr != nil {
+		c.logger.Error("Logout by session/account failed", zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(logoutErr))
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "logout failed"))
 		ctx.Abort()
 		return "", true

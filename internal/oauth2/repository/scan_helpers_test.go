@@ -41,6 +41,7 @@ func TestScanOAuth2Client_Success(t *testing.T) {
 		"Test App", "A test app",
 		ruJSON, pluJSON, gtJSON, scJSON,
 		true, mdJSON, "", false, "", false,
+		[]byte("[]"),
 		now, now, nil,
 	)
 	mock.ExpectQuery("SELECT .+ FROM oauth2_clients").WillReturnRows(rows)
@@ -52,7 +53,7 @@ func TestScanOAuth2Client_Success(t *testing.T) {
 	client, err := scanOAuth2Client(result)
 	require.NoError(t, err)
 
-	// 18 columns scanned (15 original + 4 new logout URI columns - 1 for deleted_at which is nil)
+	// 19 columns scanned (15 original + 4 new logout URI columns + 1 allowed_resources - 1 for deleted_at which is nil)
 	assert.Equal(t, "client-uuid-001", client.ID)
 	assert.Equal(t, "account-001", client.AccountID)
 	assert.Equal(t, "cid-abc123", client.ClientID)
@@ -148,11 +149,13 @@ func TestScanOAuth2Clients_MultipleRows(t *testing.T) {
 			mustMarshal(t, c1.RedirectURIs), mustMarshal(t, c1.PostLogoutRedirectURIs),
 			mustMarshal(t, c1.GrantTypes), mustMarshal(t, c1.Scopes),
 			false, nil, "", false, "", false,
+			mustMarshal(t, c1.AllowedResources),
 			now, now, nil).
 		AddRow(c2.ID, c2.AccountID, c2.ClientID, "", c2.Name, "",
 			mustMarshal(t, c2.RedirectURIs), mustMarshal(t, c2.PostLogoutRedirectURIs),
 			mustMarshal(t, c2.GrantTypes), mustMarshal(t, c2.Scopes),
 			false, nil, "", false, "", false,
+			mustMarshal(t, c2.AllowedResources),
 			now, now, nil)
 	mock.ExpectQuery("SELECT .+ FROM oauth2_clients").WillReturnRows(rows)
 

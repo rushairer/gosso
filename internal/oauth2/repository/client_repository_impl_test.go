@@ -36,6 +36,7 @@ func clientColumns() []string {
 		"redirect_uris", "post_logout_redirect_uris", "grant_types", "scopes", "is_confidential", "metadata",
 		"frontchannel_logout_uri", "frontchannel_logout_session_required",
 		"backchannel_logout_uri", "backchannel_logout_session_required",
+		"allowed_resources",
 		"created_at", "updated_at", "deleted_at"}
 }
 
@@ -44,6 +45,7 @@ func clientRowValues(c *domain.OAuth2Client) []driver.Value {
 	plu, _ := json.Marshal(c.PostLogoutRedirectURIs)
 	gt, _ := json.Marshal(c.GrantTypes)
 	sc, _ := json.Marshal(c.Scopes)
+	ar, _ := json.Marshal(c.AllowedResources)
 	var md []byte
 	if c.Metadata != nil {
 		md, _ = json.Marshal(c.Metadata)
@@ -52,6 +54,7 @@ func clientRowValues(c *domain.OAuth2Client) []driver.Value {
 		ru, plu, gt, sc, c.IsConfidential, md,
 		c.FrontchannelLogoutURI, c.FrontchannelLogoutSessionRequired,
 		c.BackchannelLogoutURI, c.BackchannelLogoutSessionRequired,
+		ar,
 		time.Now(), time.Now(), nil}
 }
 
@@ -149,7 +152,8 @@ func TestCreate_Success(t *testing.T) {
 		WithArgs(c.AccountID, c.ClientID, c.ClientSecretHash, c.Name, c.Description,
 			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), c.IsConfidential, sqlmock.AnyArg(),
 			c.FrontchannelLogoutURI, c.FrontchannelLogoutSessionRequired,
-			c.BackchannelLogoutURI, c.BackchannelLogoutSessionRequired).
+			c.BackchannelLogoutURI, c.BackchannelLogoutSessionRequired,
+			sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at"}).AddRow(c.ID, time.Now(), time.Now()))
 
 	repo := NewOAuth2ClientRepository(db)
@@ -178,6 +182,7 @@ func TestUpdate_Success(t *testing.T) {
 		WithArgs(c.Name, c.Description, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
 			c.FrontchannelLogoutURI, c.FrontchannelLogoutSessionRequired,
 			c.BackchannelLogoutURI, c.BackchannelLogoutSessionRequired,
+			sqlmock.AnyArg(),
 			sqlmock.AnyArg(), c.ID, expectedUpdatedAt).
 		WillReturnRows(sqlmock.NewRows([]string{"updated_at"}).AddRow(time.Now()))
 

@@ -53,6 +53,7 @@ func (s *AuthCodeService) GenerateCode(
 	clientID, accountID, redirectURI string,
 	scopes []string,
 	codeChallenge, codeChallengeMethod, nonce, sessionID string,
+	resource ...string,
 ) (*domain.AuthorizationCode, error) {
 	bytes := make([]byte, authCodeLength)
 	if _, err := rand.Read(bytes); err != nil {
@@ -69,6 +70,9 @@ func (s *AuthCodeService) GenerateCode(
 	ac.CodeChallenge = codeChallenge
 	ac.CodeChallengeMethod = codeChallengeMethod
 	ac.Nonce = nonce
+	if len(resource) > 0 {
+		ac.Resource = resource[0]
+	}
 
 	// Clear the plaintext code before storing in Redis — only the hash is used as the key.
 	// The raw code is returned to the caller but never persisted.

@@ -39,7 +39,7 @@ type DeviceCodeManager interface {
 // AuthCodeManager defines authorization code generation and validation operations.
 type AuthCodeManager interface {
 	ValidateCode(ctx context.Context, code, clientID, redirectURI string, codeVerifier *string) (*oauth2Domain.AuthorizationCode, error)
-	GenerateCode(ctx context.Context, clientID, accountID, redirectURI string, scopes []string, codeChallenge, codeChallengeMethod, nonce, sessionID string) (*oauth2Domain.AuthorizationCode, error)
+	GenerateCode(ctx context.Context, clientID, accountID, redirectURI string, scopes []string, codeChallenge, codeChallengeMethod, nonce, sessionID string, resource ...string) (*oauth2Domain.AuthorizationCode, error)
 }
 
 // ConsentManager defines user consent persistence and retrieval operations.

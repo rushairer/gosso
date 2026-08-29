@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-29
+
+### Added
+- **RFC 8707 Resource Indicators**: Added database migration `0024_client_allowed_resources`, client `allowed_resources` storage and validation, resource validation in `/oauth2/authorize`, and access token `aud` claim binding.
+- **Passkey Step-up Authentication**: Passkey registration now enforces `auth_time` verification within the last 5 minutes.
+
+### Changed
+- **OIDC RP-Initiated Logout Session Scope**: Targeted session revocation using `sid` in `id_token_hint` or active OP session cookie to prevent inadvertently invalidating all sessions across all user devices.
+- **PKCE Enforcement**: Enabled `auth.enforce_pkce_for_confidential` by default.
+- **Refresh Token Replay TTL**: Shortened replay window from 30s to 5s.
+
 ## [1.3.0] - 2026-08-28
 
 ### Added

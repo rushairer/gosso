@@ -9,10 +9,10 @@ import (
 	"github.com/rushairer/gosso/internal/oauth2/domain"
 )
 
-// scanOAuth2Client scans a single oauth2_clients row (19 columns) into an OAuth2Client.
+// scanOAuth2Client scans a single oauth2_clients row (20 columns) into an OAuth2Client.
 func scanOAuth2Client(s dbPkg.Scannable) (*domain.OAuth2Client, error) {
 	client := &domain.OAuth2Client{}
-	var redirectURIs, postLogoutURIs, grantTypes, scopes, metadata []byte
+	var redirectURIs, postLogoutURIs, grantTypes, scopes, metadata, allowedResources []byte
 	var clientSecretHash, description sql.NullString
 
 	if err := s.Scan(
@@ -21,6 +21,7 @@ func scanOAuth2Client(s dbPkg.Scannable) (*domain.OAuth2Client, error) {
 		&client.IsConfidential, &metadata,
 		&client.FrontchannelLogoutURI, &client.FrontchannelLogoutSessionRequired,
 		&client.BackchannelLogoutURI, &client.BackchannelLogoutSessionRequired,
+		&allowedResources,
 		&client.CreatedAt, &client.UpdatedAt, &client.DeletedAt,
 	); err != nil {
 		return nil, err
@@ -30,8 +31,12 @@ func scanOAuth2Client(s dbPkg.Scannable) (*domain.OAuth2Client, error) {
 	client.Description = description.String
 
 	if err := unmarshalClientJSONFields(client, &clientJSONFields{
-		redirectURIs: redirectURIs, postLogoutURIs: postLogoutURIs,
-		grantTypes: grantTypes, scopes: scopes, metadata: metadata,
+		redirectURIs:     redirectURIs,
+		postLogoutURIs:   postLogoutURIs,
+		grantTypes:       grantTypes,
+		scopes:           scopes,
+		metadata:         metadata,
+		allowedResources: allowedResources,
 	}); err != nil {
 		return nil, err
 	}

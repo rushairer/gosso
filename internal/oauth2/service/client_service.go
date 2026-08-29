@@ -24,16 +24,21 @@ import (
 
 // RegisterClientRequest represents a request to register an OAuth2 client
 type RegisterClientRequest struct {
-	AccountID              string
-	Name                   string
-	Description            string
-	RedirectURIs           []string
-	PostLogoutRedirectURIs []string
-	GrantTypes             []string
-	Scopes                 []string
-	IsConfidential         bool
-	Metadata               map[string]any
-	AllowReservedScopes    bool
+	AccountID                          string
+	Name                               string
+	Description                        string
+	RedirectURIs                       []string
+	PostLogoutRedirectURIs             []string
+	GrantTypes                         []string
+	Scopes                             []string
+	IsConfidential                     bool
+	Metadata                           map[string]any
+	AllowReservedScopes                bool
+	AllowedResources                   []string
+	FrontchannelLogoutURI              string
+	FrontchannelLogoutSessionRequired  bool
+	BackchannelLogoutURI               string
+	BackchannelLogoutSessionRequired   bool
 }
 
 // OAuth2ClientService is the OAuth2 client service interface
@@ -82,6 +87,11 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 	if validationErr := validateRedirectURIs(req.PostLogoutRedirectURIs); validationErr != nil {
 		return nil, "", fmt.Errorf("post_logout_redirect_uris: %w", validationErr)
 	}
+	if len(req.AllowedResources) > 0 {
+		if validationErr := validateResources(req.AllowedResources); validationErr != nil {
+			return nil, "", validationErr
+		}
+	}
 	if len(req.GrantTypes) > 0 {
 		if validationErr := validateGrantTypes(req.GrantTypes); validationErr != nil {
 			return nil, "", validationErr
@@ -103,10 +113,6 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 		secretHash = string(hash)
 	}
 
-	grantTypes := req.GrantTypes
-	if len(grantTypes) == 0 {
-		grantTypes = []string{domain.GrantTypeAuthorizationCode}
-	}
 	scopes := req.Scopes
 	if len(scopes) == 0 {
 		scopes = []string{"openid"}
@@ -119,14 +125,19 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 			return nil, "", validationErr
 		}
 	}
+
 	metadata := syncAdminCapability(req.Metadata, scopes)
 	if len(metadata) == 0 {
 		metadata = nil
 	}
+	grantTypes := req.GrantTypes
+	if len(grantTypes) == 0 {
+		grantTypes = []string{domain.GrantTypeAuthorizationCode}
+	}
 
 	client, err := domain.NewOAuth2Client(req.AccountID, req.Name, clientID, grantTypes)
 	if err != nil {
-		return nil, "", fmt.Errorf("create oauth2 client: %w", err)
+		return nil, "", fmt.Errorf("create client entity: %w", err)
 	}
 	client.ClientSecretHash = secretHash
 	client.Description = req.Description
@@ -135,6 +146,11 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 	client.Scopes = scopes
 	client.IsConfidential = req.IsConfidential
 	client.Metadata = metadata
+	client.AllowedResources = req.AllowedResources
+	client.FrontchannelLogoutURI = req.FrontchannelLogoutURI
+	client.FrontchannelLogoutSessionRequired = req.FrontchannelLogoutSessionRequired
+	client.BackchannelLogoutURI = req.BackchannelLogoutURI
+	client.BackchannelLogoutSessionRequired = req.BackchannelLogoutSessionRequired
 
 	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		return s.clientRepo.Create(ctx, tx, client)
@@ -176,13 +192,18 @@ func (s *oauth2ClientServiceImpl) UpdateClient(ctx context.Context, client *doma
 
 // UpdateClientRequest contains the fields that can be updated on an OAuth2 client.
 type UpdateClientRequest struct {
-	Name                   *string  `json:"name"`
-	Description            *string  `json:"description"`
-	RedirectURIs           []string `json:"redirect_uris"`
-	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
-	GrantTypes             []string `json:"grant_types"`
-	Scopes                 []string `json:"scopes"`
-	AllowReservedScopes    bool     `json:"-"`
+	Name                               *string   `json:"name"`
+	Description                        *string   `json:"description"`
+	RedirectURIs                       []string  `json:"redirect_uris"`
+	PostLogoutRedirectURIs             []string  `json:"post_logout_redirect_uris"`
+	GrantTypes                         []string  `json:"grant_types"`
+	Scopes                             []string  `json:"scopes"`
+	AllowedResources                   *[]string `json:"allowed_resources"`
+	FrontchannelLogoutURI              *string   `json:"frontchannel_logout_uri"`
+	FrontchannelLogoutSessionRequired  *bool     `json:"frontchannel_logout_session_required"`
+	BackchannelLogoutURI               *string   `json:"backchannel_logout_uri"`
+	BackchannelLogoutSessionRequired   *bool     `json:"backchannel_logout_session_required"`
+	AllowReservedScopes                bool      `json:"-"`
 }
 
 // UpdateClientByAccountID loads a client by ID, verifies ownership, applies partial updates with
@@ -210,6 +231,11 @@ func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, a
 	if req.PostLogoutRedirectURIs != nil {
 		if err := validateRedirectURIs(req.PostLogoutRedirectURIs); err != nil {
 			return nil, fmt.Errorf("post_logout_redirect_uris: %w", err)
+		}
+	}
+	if req.AllowedResources != nil && len(*req.AllowedResources) > 0 {
+		if err := validateResources(*req.AllowedResources); err != nil {
+			return nil, err
 		}
 	}
 	if req.GrantTypes != nil {
@@ -241,6 +267,21 @@ func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, a
 		}
 		if req.PostLogoutRedirectURIs != nil {
 			c.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
+		}
+		if req.AllowedResources != nil {
+			c.AllowedResources = *req.AllowedResources
+		}
+		if req.FrontchannelLogoutURI != nil {
+			c.FrontchannelLogoutURI = *req.FrontchannelLogoutURI
+		}
+		if req.FrontchannelLogoutSessionRequired != nil {
+			c.FrontchannelLogoutSessionRequired = *req.FrontchannelLogoutSessionRequired
+		}
+		if req.BackchannelLogoutURI != nil {
+			c.BackchannelLogoutURI = *req.BackchannelLogoutURI
+		}
+		if req.BackchannelLogoutSessionRequired != nil {
+			c.BackchannelLogoutSessionRequired = *req.BackchannelLogoutSessionRequired
 		}
 		if req.GrantTypes != nil {
 			c.GrantTypes = req.GrantTypes
@@ -393,6 +434,16 @@ func validateRedirectURIs(uris []string) error {
 		// HTTP is only allowed for loopback addresses (native app development).
 		if u.Scheme == "http" && !domain.IsLoopback(u.Hostname()) {
 			return &ValidationError{Message: fmt.Sprintf("redirect_uris must use https for non-loopback hosts: %s", uri)}
+		}
+	}
+	return nil
+}
+
+func validateResources(resources []string) error {
+	for _, res := range resources {
+		u, err := url.Parse(res)
+		if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
+			return &ValidationError{Message: fmt.Sprintf("resource URI must use http or https scheme with valid host: %s", res)}
 		}
 	}
 	return nil

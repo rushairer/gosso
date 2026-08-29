@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-webauthn/webauthn/protocol"
@@ -120,8 +121,36 @@ func (c *PasskeyController) RegisterRoutes(rg *gin.RouterGroup, jwtAuth gin.Hand
 	}
 }
 
+const passkeyStepUpMaxAge = 5 * time.Minute
+
+func (c *PasskeyController) checkStepUp(ctx *gin.Context) bool {
+	claimsRaw, ok := ctx.Get(middleware.ContextKeyClaims)
+	if !ok {
+		return true
+	}
+	claims, ok := claimsRaw.(*tokenDomain.AccessTokenClaims)
+	if !ok || claims == nil {
+		return true
+	}
+	var authTime time.Time
+	if claims.AuthTime != nil && *claims.AuthTime > 0 {
+		authTime = time.Unix(*claims.AuthTime, 0)
+	} else if claims.IssuedAt != nil {
+		authTime = claims.IssuedAt.Time
+	}
+	if !authTime.IsZero() && time.Since(authTime) > passkeyStepUpMaxAge {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "recent authentication required for passkey registration"))
+		return false
+	}
+	return true
+}
+
 // RegisterBegin POST /api/auth/passkey/register/begin
 func (c *PasskeyController) RegisterBegin(ctx *gin.Context) {
+	if !c.checkStepUp(ctx) {
+		return
+	}
+
 	accountID, username, displayName, ok := c.resolveAccountForPasskey(ctx)
 	if !ok {
 		return
@@ -144,6 +173,10 @@ type RegisterCompleteRequest struct {
 
 // RegisterComplete POST /api/auth/passkey/register/complete
 func (c *PasskeyController) RegisterComplete(ctx *gin.Context) {
+	if !c.checkStepUp(ctx) {
+		return
+	}
+
 	requestID, ok := controllerutil.ValidateUUID(ctx, ctx.Query("request_id"), "request_id")
 	if !ok {
 		return

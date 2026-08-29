@@ -271,7 +271,7 @@ func (m *mockAuthCodeMgr) ValidateCode(_ context.Context, _, _, _ string, _ *str
 	}, nil
 }
 
-func (m *mockAuthCodeMgr) GenerateCode(_ context.Context, _, _, _ string, _ []string, _, _, _, _ string) (*oauth2Domain.AuthorizationCode, error) {
+func (m *mockAuthCodeMgr) GenerateCode(_ context.Context, _, _, _ string, _ []string, _, _, _, _ string, _ ...string) (*oauth2Domain.AuthorizationCode, error) {
 	if m.generateCodeFn != nil {
 		return m.generateCodeFn()
 	}

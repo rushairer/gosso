@@ -30,6 +30,7 @@ type OAuth2Client struct {
 	FrontchannelLogoutSessionRequired bool           `json:"frontchannel_logout_session_required,omitempty"`
 	BackchannelLogoutURI              string         `json:"backchannel_logout_uri,omitempty"`
 	BackchannelLogoutSessionRequired  bool           `json:"backchannel_logout_session_required,omitempty"`
+	AllowedResources                  []string       `json:"allowed_resources,omitempty"`
 	CreatedAt                         time.Time      `json:"created_at"`
 	UpdatedAt                         time.Time      `json:"updated_at"`
 	DeletedAt                         *time.Time     `json:"deleted_at,omitempty"`
@@ -41,6 +42,25 @@ const (
 	ScopeAdmin                  = "admin"
 	adminScopePrefix            = "admin:"
 )
+
+// ValidateResource validates that the requested resource URI is in the client's allowed resources list.
+// Uses constant-time comparison throughout to avoid leaking the matched position via timing.
+func (c *OAuth2Client) ValidateResource(resource string) bool {
+	if resource == "" {
+		return true
+	}
+	if c == nil || len(c.AllowedResources) == 0 {
+		return false
+	}
+	resBytes := []byte(resource)
+	found := 0
+	for _, registered := range c.AllowedResources {
+		if subtle.ConstantTimeCompare(resBytes, []byte(registered)) == 1 {
+			found = 1
+		}
+	}
+	return found == 1
+}
 
 // ValidateRedirectURI validates that the redirect URI is in the registered list.
 // Uses constant-time comparison throughout: all registered URIs are checked even
