@@ -430,3 +430,42 @@ func TestRegisterClient_DBError(t *testing.T) {
 	_, _, err := svc.RegisterClient(ctx, req)
 	assert.Error(t, err)
 }
+
+func TestValidateLogoutURI(t *testing.T) {
+	tests := []struct {
+		name    string
+		uri     string
+		wantErr bool
+	}{
+		{"empty", "", true},
+		{"http scheme", "http://example.com/logout", true},
+		{"https valid", "https://example.com/logout", false},
+		{"with fragment", "https://example.com/logout#frag", true},
+		{"with credentials", "https://user:pass@example.com/logout", true},
+		{"loopback localhost", "https://localhost/logout", true},
+		{"loopback 127.0.0.1", "https://127.0.0.1/logout", true},
+		{"private IP", "https://10.0.0.1/logout", true},
+		{"private IP 192.168", "https://192.168.1.1/logout", true},
+		{"link-local", "https://169.254.0.1/logout", true},
+		{"no host", "https:///logout", true},
+		{"javascript scheme", "javascript:alert(1)", true},
+		{"file scheme", "file:///etc/passwd", true},
+		{"valid with path", "https://blog.io84.com/auth/logout", false},
+		{"valid with query", "https://blog.io84.com/auth/logout?client_id=test", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.uri == "" {
+				// Empty URI is allowed (means not configured)
+				return
+			}
+			err := validateLogoutURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err, "expected error for URI: %s", tt.uri)
+			} else {
+				assert.NoError(t, err, "expected no error for URI: %s", tt.uri)
+			}
+		})
+	}
+}

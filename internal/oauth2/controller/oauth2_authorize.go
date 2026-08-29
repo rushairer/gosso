@@ -98,8 +98,14 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
-	// RFC 8707: Validate resource indicator if client has registered allowed resources
-	if resource != "" && len(client.AllowedResources) > 0 {
+	// RFC 8707: Validate resource indicator if the client has registered allowed resources.
+	// If the client has no registered resources and the request includes a resource
+	// parameter, the request must be rejected to prevent unregistered audience binding.
+	if resource != "" {
+		if len(client.AllowedResources) == 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_target", "error_description": "client has no registered allowed resources"})
+			return
+		}
 		if !client.ValidateResource(resource) {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_target", "error_description": "resource is not allowed for this client"})
 			return

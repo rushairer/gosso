@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"html"
 	"net/http"
 	"net/url"
 	"strings"
@@ -68,7 +69,7 @@ func NewOIDCController(
 func (c *OIDCController) RegisterRoutes(server *gin.RouterGroup, authMiddleware gin.HandlerFunc) {
 	server.GET("/userinfo", authMiddleware, c.UserInfo)
 	server.POST("/userinfo", authMiddleware, c.UserInfo)
-	server.GET("/logout", c.Logout)
+	server.GET("/logout", c.LogoutConfirm)
 	server.POST("/logout", c.Logout)
 	server.GET("/frontchannel_logout", c.FrontChannelLogout)
 }
@@ -217,6 +218,75 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{"status": "logged_out"}))
 }
 
+// LogoutConfirm handles GET /oidc/logout — it shows a confirmation page or
+// redirects immediately if a valid id_token_hint with sid is present.
+// GET must NOT perform state-mutating logout to prevent logout CSRF via
+// cross-site top-level navigation. Actual logout is only done via POST.
+func (c *OIDCController) LogoutConfirm(ctx *gin.Context) {
+	var req logoutRequest
+	if err := ctx.ShouldBind(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request"))
+		return
+	}
+
+	// If a valid id_token_hint with sid is provided, we can show the confirmation
+	// page with the user identified. Without sid, we show a generic confirmation.
+	// In either case, the actual logout is NOT performed on GET.
+	if req.IDTokenHint != "" {
+		_, err := c.logoutSvc.ValidateIDTokenHint(req.IDTokenHint, req.ClientID)
+		if err != nil {
+			if errors.Is(err, oidcService.ErrAudienceMismatch) {
+				ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+				return
+			}
+			c.logger.Debug("id_token_hint validation failed on GET logout", zap.Error(err))
+		} else {
+			// Render a confirmation form that POSTs to /oidc/logout with the same parameters.
+			ctx.Header("Content-Type", "text/html; charset=utf-8")
+			ctx.Status(http.StatusOK)
+			_, _ = ctx.Writer.WriteString(`<!DOCTYPE html>
+<html>
+<head><title>Confirm Logout</title></head>
+<body>
+<h1>Confirm Logout</h1>
+<p>You are about to log out from the identity provider.</p>
+<form method="POST" action="/oidc/logout">` +
+				hiddenInput("id_token_hint", req.IDTokenHint) +
+				hiddenInput("client_id", req.ClientID) +
+				hiddenInput("post_logout_redirect_uri", req.PostLogoutRedirectURI) +
+				hiddenInput("state", req.State) +
+				`<button type="submit">Confirm Logout</button>
+</form>
+</body>
+</html>`)
+			return
+		}
+	}
+
+	// No valid id_token_hint — show generic confirmation page.
+	ctx.Header("Content-Type", "text/html; charset=utf-8")
+	ctx.Status(http.StatusOK)
+	_, _ = ctx.Writer.WriteString(`<!DOCTYPE html>
+<html>
+<head><title>Confirm Logout</title></head>
+<body>
+<h1>Confirm Logout</h1>
+<p>You are about to log out from the identity provider.</p>
+<form method="POST" action="/oidc/logout">` +
+		hiddenInput("post_logout_redirect_uri", req.PostLogoutRedirectURI) +
+		hiddenInput("state", req.State) +
+		`<button type="submit">Confirm Logout</button>
+</form>
+</body>
+</html>`)
+}
+
+// hiddenInput renders a hidden <input> element with HTML-escaped value.
+func hiddenInput(name, value string) string {
+	return `<input type="hidden" name="` + html.EscapeString(name) +
+		`" value="` + html.EscapeString(value) + `">`
+}
+
 // validateBearerToken validates the Bearer token from the Authorization header.
 // Returns nil if no Bearer header is present. Aborts the request if the token is invalid.
 func (c *OIDCController) validateBearerToken(ctx *gin.Context) *tokenDomain.AccessTokenClaims {
@@ -255,7 +325,11 @@ func (c *OIDCController) tryLogoutByCookieSession(ctx *gin.Context, req logoutRe
 	if claims.SessionID != "" {
 		_ = c.logoutSvc.LogoutBySessionID(ctx.Request.Context(), claims.AccountID, claims.SessionID)
 	} else {
-		_ = c.logoutSvc.LogoutByAccountID(ctx.Request.Context(), claims.AccountID)
+		// Legacy token without sid: try to find the current session from the
+		// access token and logout only it. Do NOT call LogoutByAccountID which
+		// would revoke all sessions for the account.
+		c.logger.Debug("Cookie session has no sid, skipping server-side session logout",
+			zap.String("account_id", utility.MaskOpaqueID(claims.AccountID)))
 	}
 	if claims.ExpiresAt != nil {
 		_ = c.tokenSvc.RevokeAccessToken(ctx.Request.Context(), claims.ID, claims.ExpiresAt.Time)
@@ -294,9 +368,37 @@ func (c *OIDCController) tryLogoutByIDTokenHint(ctx *gin.Context, req logoutRequ
 
 	var logoutErr error
 	if claims.SID != "" {
+		// New token with sid — logout only this session.
 		logoutErr = c.logoutSvc.LogoutBySessionID(ctx, accountID, claims.SID)
 	} else {
-		logoutErr = c.logoutSvc.LogoutByAccountID(ctx, accountID)
+		// Legacy token without sid — try to identify the current OP session
+		// from the cookie and logout only that session, rather than all
+		// sessions for the account (which is the "logout all devices" feature).
+		cookieToken := ""
+		if cookie, err := ctx.Cookie("__Host-access_token"); err == nil && cookie != "" {
+			cookieToken = cookie
+		} else if cookie, err := ctx.Cookie("access_token"); err == nil && cookie != "" {
+			cookieToken = cookie
+		}
+		if cookieToken != "" {
+			cookieClaims, cookieErr := c.tokenSvc.ValidateAccessTokenWithContext(ctx.Request.Context(), cookieToken)
+			if cookieErr == nil && cookieClaims.AccountID == accountID && cookieClaims.SessionID != "" {
+				// Found a valid current session for the same account — logout only it.
+				logoutErr = c.logoutSvc.LogoutBySessionID(ctx, accountID, cookieClaims.SessionID)
+			} else if cookieErr == nil && cookieClaims.AccountID == accountID && c.sessionValidator != nil {
+				if _, valErr := c.sessionValidator.ValidateSession(ctx.Request.Context(), cookieClaims.SessionID); valErr == nil {
+					logoutErr = c.logoutSvc.LogoutBySessionID(ctx, accountID, cookieClaims.SessionID)
+				}
+			}
+		}
+		if logoutErr == nil && cookieToken == "" {
+			// No OP cookie session available — cannot determine which session
+			// to logout. Do NOT fall back to LogoutByAccountID (which would
+			// revoke all sessions). Instead, proceed without error; the caller
+			// will still clear browser cookies and redirect.
+			c.logger.Debug("id_token_hint without sid: no OP cookie session found, skipping server-side session logout",
+				zap.String("account_id", utility.MaskOpaqueID(accountID)))
+		}
 	}
 	if logoutErr != nil {
 		c.logger.Error("Logout by session/account failed", zap.String("account_id", utility.MaskOpaqueID(accountID)), zap.Error(logoutErr))
@@ -454,8 +556,9 @@ func buildFrontChannelIframes(entries []oidcService.FrontChannelLogoutEntry, iss
 	}
 	var sb strings.Builder
 	for _, e := range entries {
+		// HTML-escape the URI to prevent stored XSS via malicious frontchannel_logout_uri.
 		sb.WriteString(`<iframe src="`)
-		sb.WriteString(e.URI)
+		sb.WriteString(html.EscapeString(e.URI))
 		sb.WriteString(`?iss=`)
 		sb.WriteString(url.QueryEscape(issuer))
 		if e.SessionRequired && sessionID != "" {

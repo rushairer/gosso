@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -90,6 +91,16 @@ func (s *oauth2ClientServiceImpl) RegisterClient(ctx context.Context, req *Regis
 	if len(req.AllowedResources) > 0 {
 		if validationErr := validateResources(req.AllowedResources); validationErr != nil {
 			return nil, "", validationErr
+		}
+	}
+	if req.FrontchannelLogoutURI != "" {
+		if validationErr := validateLogoutURI(req.FrontchannelLogoutURI); validationErr != nil {
+			return nil, "", fmt.Errorf("frontchannel_logout_uri: %w", validationErr)
+		}
+	}
+	if req.BackchannelLogoutURI != "" {
+		if validationErr := validateLogoutURI(req.BackchannelLogoutURI); validationErr != nil {
+			return nil, "", fmt.Errorf("backchannel_logout_uri: %w", validationErr)
 		}
 	}
 	if len(req.GrantTypes) > 0 {
@@ -236,6 +247,16 @@ func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, a
 	if req.AllowedResources != nil && len(*req.AllowedResources) > 0 {
 		if err := validateResources(*req.AllowedResources); err != nil {
 			return nil, err
+		}
+	}
+	if req.FrontchannelLogoutURI != nil && *req.FrontchannelLogoutURI != "" {
+		if err := validateLogoutURI(*req.FrontchannelLogoutURI); err != nil {
+			return nil, fmt.Errorf("frontchannel_logout_uri: %w", err)
+		}
+	}
+	if req.BackchannelLogoutURI != nil && *req.BackchannelLogoutURI != "" {
+		if err := validateLogoutURI(*req.BackchannelLogoutURI); err != nil {
+			return nil, fmt.Errorf("backchannel_logout_uri: %w", err)
 		}
 	}
 	if req.GrantTypes != nil {
@@ -444,6 +465,39 @@ func validateResources(resources []string) error {
 		u, err := url.Parse(res)
 		if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
 			return &ValidationError{Message: fmt.Sprintf("resource URI must use http or https scheme with valid host: %s", res)}
+		}
+	}
+	return nil
+}
+
+// validateLogoutURI validates front-channel and back-channel logout URIs to
+// prevent SSRF and stored XSS attacks. Only HTTPS absolute URIs without
+// fragment, userinfo, or loopback/private/link-local IP hosts are allowed.
+func validateLogoutURI(uri string) error {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return &ValidationError{Message: fmt.Sprintf("invalid URI: %s", uri)}
+	}
+	if u.Scheme != "https" {
+		return &ValidationError{Message: fmt.Sprintf("logout URI must use https scheme: %s", uri)}
+	}
+	if u.Host == "" {
+		return &ValidationError{Message: fmt.Sprintf("logout URI must have a host: %s", uri)}
+	}
+	if u.Fragment != "" {
+		return &ValidationError{Message: fmt.Sprintf("logout URI must not contain a fragment: %s", uri)}
+	}
+	if u.User.String() != "" {
+		return &ValidationError{Message: fmt.Sprintf("logout URI must not contain credentials: %s", uri)}
+	}
+	hostname := u.Hostname()
+	if domain.IsLoopback(hostname) {
+		return &ValidationError{Message: fmt.Sprintf("logout URI must not be a loopback address: %s", uri)}
+	}
+	// Resolve and check for private/link-local IP addresses to prevent SSRF.
+	if ip := net.ParseIP(hostname); ip != nil {
+		if ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+			return &ValidationError{Message: fmt.Sprintf("logout URI must not be a private or link-local IP: %s", uri)}
 		}
 	}
 	return nil
