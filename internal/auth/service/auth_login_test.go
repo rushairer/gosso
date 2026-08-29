@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -330,7 +329,7 @@ func TestRefreshTokens_Success(t *testing.T) {
 	assert.True(t, refreshedSession.LastActiveAt.After(originalLastActiveAt))
 }
 
-func TestRefreshTokens_ReplaysRecentRotation(t *testing.T) {
+func TestRefreshTokens_ReplayDetectsReuseAndFails(t *testing.T) {
 	fixture := setupTestAuthService(t)
 	defer fixture.mr.Close()
 	defer fixture.sqlDB.Close()
@@ -347,52 +346,15 @@ func TestRefreshTokens_ReplaysRecentRotation(t *testing.T) {
 
 	firstRefresh, err := fixture.svc.RefreshTokens(context.Background(), loginResult.RefreshToken)
 	require.NoError(t, err)
+	assert.NotEmpty(t, firstRefresh.AccessToken)
 
-	replayedRefresh, err := fixture.svc.RefreshTokens(context.Background(), loginResult.RefreshToken)
-	require.NoError(t, err)
-	assert.NotEmpty(t, replayedRefresh.AccessToken)
-	assert.Equal(t, firstRefresh.RefreshToken, replayedRefresh.RefreshToken)
-	assert.Equal(t, loginResult.Session.ID, replayedRefresh.SessionID)
-}
+	// Replaying the consumed refresh token must fail
+	_, err = fixture.svc.RefreshTokens(context.Background(), loginResult.RefreshToken)
+	assert.ErrorIs(t, err, ErrInvalidRefreshToken)
 
-func TestRefreshTokens_ConcurrentSameRefreshToken(t *testing.T) {
-	fixture := setupTestAuthService(t)
-	defer fixture.mr.Close()
-	defer fixture.sqlDB.Close()
-
-	fixture.seedTestAccount("account-001", "testuser", "password123")
-
-	loginResult, err := fixture.svc.LoginByUsernamePassword(context.Background(), &LoginCommand{
-		Username:  "testuser",
-		Password:  "password123",
-		IP:        "127.0.0.1",
-		UserAgent: "test-agent",
-	})
-	require.NoError(t, err)
-
-	const workers = 2
-	results := make([]*RefreshResult, workers)
-	errs := make([]error, workers)
-	var wg sync.WaitGroup
-	wg.Add(workers)
-	for i := 0; i < workers; i++ {
-		go func(index int) {
-			defer wg.Done()
-			results[index], errs[index] = fixture.svc.RefreshTokens(context.Background(), loginResult.RefreshToken)
-		}(i)
-	}
-	wg.Wait()
-
-	for _, err := range errs {
-		require.NoError(t, err)
-	}
-	require.NotNil(t, results[0])
-	require.NotNil(t, results[1])
-	assert.NotEmpty(t, results[0].AccessToken)
-	assert.NotEmpty(t, results[1].AccessToken)
-	assert.Equal(t, results[0].RefreshToken, results[1].RefreshToken)
-	assert.Equal(t, loginResult.Session.ID, results[0].SessionID)
-	assert.Equal(t, loginResult.Session.ID, results[1].SessionID)
+	// The session token family has been revoked on reuse, so new token also cannot refresh
+	_, err = fixture.svc.RefreshTokens(context.Background(), firstRefresh.RefreshToken)
+	assert.ErrorIs(t, err, ErrInvalidRefreshToken)
 }
 
 func TestRefreshTokens_InvalidToken(t *testing.T) {

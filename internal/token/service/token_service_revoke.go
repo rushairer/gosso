@@ -22,21 +22,9 @@ import (
 )
 
 const (
-	refreshTokenReplayKeyPrefix = "refresh_token_replay:"
-	refreshTokenReplayTTL       = 5 * time.Second
+	refreshTokenConsumedKeyPrefix = "refresh_token_consumed:"
+	refreshTokenConsumedTTL       = 7 * 24 * time.Hour
 )
-
-type refreshTokenReplay struct {
-	Token     string    `json:"token"`
-	AccountID string    `json:"account_id"`
-	ClientID  string    `json:"client_id,omitempty"`
-	SessionID string    `json:"session_id,omitempty"`
-	Scope     string    `json:"scope,omitempty"`
-	IP        string    `json:"ip,omitempty"`
-	UserAgent string    `json:"user_agent,omitempty"`
-	ExpiresAt time.Time `json:"expires_at"`
-	CreatedAt time.Time `json:"created_at"`
-}
 
 // rotateAndDeleteAndCleanSessionScript atomically retrieves and deletes a refresh token,
 // then removes the token hash from the session index — all in a single Redis round-trip.
@@ -60,27 +48,38 @@ return data
 `)
 
 // rotateTokenScript atomically reads and deletes the old refresh token, stores
-// the new refresh token, records a short replay result, and updates the session
-// index (SREM old hash, SADD new hash) in a single Lua script.
-// The session ID is parsed from the old token JSON inside the script, eliminating
-// the need for a separate pre-read round-trip in Go.
-// Uses string pattern matching instead of cjson so it works across Redis Lua
-// sandboxes and miniredis-backed tests.
+// the new refresh token, updates the session index (SREM old hash, SADD new hash),
+// and marks the old token as consumed to detect replay attacks.
+// If the old token was already consumed, it revokes all tokens for the session (token family revocation)
+// and returns "REUSE_DETECTED".
 // KEYS[1] = old token key
 // KEYS[2] = new token key
-// KEYS[3] = replay key for old token hash
+// KEYS[3] = consumed key for old token hash
 // ARGV[1] = old token hash, ARGV[2] = new token hash, ARGV[3] = session key prefix,
 // ARGV[4] = refresh token expiry seconds, ARGV[5] = new token data,
-// ARGV[6] = replay data, ARGV[7] = replay TTL seconds
-// Returns replay data on fresh rotation or replay hit, nil if old token not found.
+// ARGV[6] = consumed TTL seconds, ARGV[7] = refresh token key prefix
+// Returns "OK" on success, "REUSE_DETECTED" on reuse, nil if old token not found.
 var rotateTokenScript = redis.NewScript(`
 local oldData = redis.call('GET', KEYS[1])
 if not oldData then
-    return redis.call('GET', KEYS[3])
+    local consumed = redis.call('GET', KEYS[3])
+    if consumed then
+        local sessionID = consumed:match('"session_id":"([^"]*)"')
+        if sessionID and sessionID ~= '' then
+            local sessionKey = ARGV[3] .. sessionID
+            local members = redis.call('SMEMBERS', sessionKey)
+            for _, hash in ipairs(members) do
+                redis.call('DEL', ARGV[7] .. hash)
+            end
+            redis.call('DEL', sessionKey)
+        end
+        return "REUSE_DETECTED"
+    end
+    return nil
 end
 redis.call('DEL', KEYS[1])
 redis.call('SET', KEYS[2], ARGV[5], 'EX', ARGV[4])
-redis.call('SET', KEYS[3], ARGV[6], 'EX', ARGV[7])
+redis.call('SET', KEYS[3], oldData, 'EX', ARGV[6])
 local sessionID = oldData:match('"session_id":"([^"]*)"')
 if sessionID and sessionID ~= '' then
     local sessionKey = ARGV[3] .. sessionID
@@ -88,8 +87,8 @@ if sessionID and sessionID ~= '' then
     redis.call('SADD', sessionKey, ARGV[2])
     redis.call('EXPIRE', sessionKey, ARGV[4])
 end
-return ARGV[6]
-	`)
+return "OK"
+`)
 
 // revokeAllSessionScript atomically revokes all refresh tokens under a session:
 // reads all token hashes from the session set, deletes each refresh token key,
@@ -109,9 +108,8 @@ return #members
 
 // RotateRefreshToken rotates refresh tokens atomically.
 // It consumes the old token, stores the new token, updates the session-token
-// index, and writes a short replay record in one Redis script. The replay record
-// lets concurrent browser retries using the just-consumed token receive the same
-// rotated token instead of failing the whole session.
+// index, and marks the consumed token. If a consumed token is presented again,
+// it triggers reuse detection by revoking the entire session and returning an error.
 func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) (*domain.RefreshToken, error) {
 	// 1. Generate new token
 	newBytes := make([]byte, refreshTokenLength)
@@ -120,17 +118,35 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	}
 	newTokenString := hex.EncodeToString(newBytes)
 
-	// 2. Load the old token metadata used to construct the replacement. If the
-	// old token was just consumed by a concurrent refresh, return the replayed
-	// rotated token when it is still inside the short grace window.
+	// 2. Load the old token metadata used to construct the replacement.
 	oldKey := s.buildRefreshTokenKey(oldToken)
 	oldHash := domain.HashToken(oldToken)
-	replayKey := s.buildRefreshTokenReplayKey(oldHash)
+	consumedKey := s.buildRefreshTokenConsumedKey(oldHash)
+
 	oldData, err := s.redis.Get(ctx, oldKey)
 	if errors.Is(err, cache.ErrKeyNotFound) {
-		replay, replayErr := s.getRefreshTokenReplay(ctx, replayKey)
-		if replayErr == nil {
-			return replay, nil
+		consumedData, cErr := s.redis.Get(ctx, consumedKey)
+		if cErr == nil && consumedData != "" {
+			var oldRT domain.RefreshToken
+			if unmarshalErr := json.Unmarshal([]byte(consumedData), &oldRT); unmarshalErr == nil && oldRT.SessionID != "" {
+				_ = s.RevokeAllForSession(ctx, oldRT.SessionID)
+			}
+			s.logger.Warn("Refresh token reuse detected, revoked all session tokens",
+				zap.String("token_hash", oldHash))
+			auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+				auditDomain.ActionTokenRevoke,
+				audit.IPFromContext(ctx),
+				nil,
+				utility.MarshalJSONOrEmpty(map[string]any{
+					"reason":     "refresh_token_reuse_detected",
+					"token_hash": oldHash,
+				}),
+				utility.MarshalJSONOrEmpty(map[string]any{
+					"ip":         audit.IPFromContext(ctx),
+					"user_agent": audit.UserAgentFromContext(ctx),
+				}),
+			))
+			return nil, fmt.Errorf("refresh token reuse detected: %w", cache.ErrKeyNotFound)
 		}
 		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
 	}
@@ -153,64 +169,43 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	newRT.IP = oldRT.IP
 	newRT.UserAgent = oldRT.UserAgent
 
-	// 3. Atomically consume old token, store new token, update indexes, and
-	// publish a short replay result for concurrent retries.
+	// 3. Atomically consume old token, store new token, and mark old token as consumed.
 	newHash := domain.HashToken(newTokenString)
 	newKey := s.buildRefreshTokenKey(newTokenString)
 	expirySeconds := int(math.Ceil(s.refreshExpiry.Seconds()))
-	replaySeconds := int(math.Ceil(refreshTokenReplayTTL.Seconds()))
+	consumedTTLSeconds := int(math.Ceil(refreshTokenConsumedTTL.Seconds()))
 
 	newData, err := json.Marshal(newRT)
 	if err != nil {
 		return nil, fmt.Errorf("marshal new refresh token: %w", err)
 	}
-	replayData, err := json.Marshal(refreshTokenReplay{
-		Token:     newRT.Token,
-		AccountID: newRT.AccountID,
-		ClientID:  newRT.ClientID,
-		SessionID: newRT.SessionID,
-		Scope:     newRT.Scope,
-		IP:        newRT.IP,
-		UserAgent: newRT.UserAgent,
-		ExpiresAt: newRT.ExpiresAt,
-		CreatedAt: newRT.CreatedAt,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal refresh token replay: %w", err)
-	}
 
 	result, err := s.redis.RunScript(ctx, rotateTokenScript,
-		[]string{oldKey, newKey, replayKey},
-		oldHash, newHash, sessionTokensKeyPrefix, expirySeconds, string(newData), string(replayData), replaySeconds,
+		[]string{oldKey, newKey, consumedKey},
+		oldHash, newHash, sessionTokensKeyPrefix, expirySeconds, string(newData), consumedTTLSeconds, refreshTokenKeyPrefix,
 	).Result()
 	if errors.Is(err, redis.Nil) || result == nil {
-		replay, replayErr := s.getRefreshTokenReplay(ctx, replayKey)
-		if replayErr == nil {
-			return replay, nil
-		}
 		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("rotate refresh token: %w", err)
 	}
 
-	resultData, ok := result.(string)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type from rotate script: %T", result)
-	}
-	rotatedRT, err := parseRefreshTokenReplay(resultData)
-	if err != nil {
-		return nil, err
+	resultStr, ok := result.(string)
+	if ok && resultStr == "REUSE_DETECTED" {
+		s.logger.Warn("Refresh token reuse detected in rotation script, session tokens revoked",
+			zap.String("token_hash", oldHash))
+		return nil, fmt.Errorf("refresh token reuse detected: %w", cache.ErrKeyNotFound)
 	}
 
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionTokenRotate,
 		audit.IPFromContext(ctx),
-		utility.Ptr[string](rotatedRT.AccountID),
+		utility.Ptr[string](newRT.AccountID),
 		utility.MarshalJSONOrEmpty(map[string]any{
-			"session_id": rotatedRT.SessionID,
+			"session_id": newRT.SessionID,
 			"old_token":  oldHash,
-			"new_token":  domain.HashToken(rotatedRT.Token),
+			"new_token":  newHash,
 		}),
 		utility.MarshalJSONOrEmpty(map[string]any{
 			"ip":         audit.IPFromContext(ctx),
@@ -218,47 +213,11 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 		}),
 	))
 
-	return rotatedRT, nil
+	return newRT, nil
 }
 
-func (s *TokenService) buildRefreshTokenReplayKey(oldHash string) string {
-	return refreshTokenReplayKeyPrefix + oldHash
-}
-
-func (s *TokenService) getRefreshTokenReplay(ctx context.Context, replayKey string) (*domain.RefreshToken, error) {
-	data, err := s.redis.Get(ctx, replayKey)
-	if err != nil {
-		return nil, err
-	}
-	replay, err := parseRefreshTokenReplay(data)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.ValidateRefreshToken(ctx, replay.Token); err != nil {
-		return nil, err
-	}
-	return replay, nil
-}
-
-func parseRefreshTokenReplay(data string) (*domain.RefreshToken, error) {
-	var replay refreshTokenReplay
-	if err := json.Unmarshal([]byte(data), &replay); err != nil {
-		return nil, fmt.Errorf("unmarshal refresh token replay: %w", err)
-	}
-	if replay.Token == "" || replay.AccountID == "" || replay.ExpiresAt.IsZero() {
-		return nil, fmt.Errorf("invalid refresh token replay")
-	}
-	return &domain.RefreshToken{
-		Token:     replay.Token,
-		AccountID: replay.AccountID,
-		ClientID:  replay.ClientID,
-		SessionID: replay.SessionID,
-		Scope:     replay.Scope,
-		IP:        replay.IP,
-		UserAgent: replay.UserAgent,
-		ExpiresAt: replay.ExpiresAt,
-		CreatedAt: replay.CreatedAt,
-	}, nil
+func (s *TokenService) buildRefreshTokenConsumedKey(oldHash string) string {
+	return refreshTokenConsumedKeyPrefix + oldHash
 }
 
 // RevokeRefreshToken revokes a refresh token and removes it from the session index.

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
 	accountService "github.com/rushairer/gosso/internal/account/service"
 	"github.com/rushairer/gosso/internal/audit"
-	"github.com/rushairer/gosso/internal/cache"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
@@ -34,7 +32,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 
 func (s *AuthService) refreshTokensLocked(ctx context.Context, refreshToken string) (*RefreshResult, error) {
 	// 1. Validate old refresh token (read-only, no rotation)
-	oldRT, replayedRotation, err := s.loadRefreshTokenForRefresh(ctx, refreshToken)
+	oldRT, err := s.loadRefreshTokenForRefresh(ctx, refreshToken)
 	if err != nil {
 		s.logger.Debug("Refresh token validation failed", zap.Error(err))
 		return nil, ErrInvalidRefreshToken
@@ -126,15 +124,11 @@ func (s *AuthService) refreshTokensLocked(ctx context.Context, refreshToken stri
 		}
 	}
 
-	newRefreshToken := oldRT
-	if !replayedRotation {
-		// 7. Rotate refresh token (old token deleted from Redis)
-		var rotateErr error
-		newRefreshToken, rotateErr = s.tokenSvc.RotateRefreshToken(ctx, refreshToken)
-		if rotateErr != nil {
-			s.logger.Debug("Refresh token rotation failed", zap.Error(rotateErr))
-			return nil, ErrInvalidRefreshToken
-		}
+	// 7. Rotate refresh token (old token deleted from Redis)
+	newRefreshToken, rotateErr := s.tokenSvc.RotateRefreshToken(ctx, refreshToken)
+	if rotateErr != nil {
+		s.logger.Debug("Refresh token rotation failed", zap.Error(rotateErr))
+		return nil, ErrInvalidRefreshToken
 	}
 
 	return &RefreshResult{
@@ -144,20 +138,8 @@ func (s *AuthService) refreshTokensLocked(ctx context.Context, refreshToken stri
 	}, nil
 }
 
-func (s *AuthService) loadRefreshTokenForRefresh(ctx context.Context, refreshToken string) (*tokenDomain.RefreshToken, bool, error) {
-	rt, err := s.tokenSvc.ValidateRefreshToken(ctx, refreshToken)
-	if err == nil {
-		return rt, false, nil
-	}
-	if !errors.Is(err, cache.ErrKeyNotFound) {
-		return nil, false, err
-	}
-
-	replayedRT, replayErr := s.tokenSvc.RotateRefreshToken(ctx, refreshToken)
-	if replayErr != nil {
-		return nil, false, err
-	}
-	return replayedRT, true, nil
+func (s *AuthService) loadRefreshTokenForRefresh(ctx context.Context, refreshToken string) (*tokenDomain.RefreshToken, error) {
+	return s.tokenSvc.ValidateRefreshToken(ctx, refreshToken)
 }
 
 func refreshTokenHashPrefix(refreshToken string) string {

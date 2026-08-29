@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-08-29
+
+### Security
+- **Strict Refresh Token Reuse Detection (RFC 6749 / RFC 9700)**: Replaced token replay grace period with strict reuse detection. Presenting an already-consumed refresh token immediately triggers atomic revocation of the entire session token family and terminates authentication without leaking replacement tokens.
+
 ## [1.4.0] - 2026-08-29
 
 ### Added

@@ -11,6 +11,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"go.uber.org/zap"
 
+	"github.com/rushairer/gosso/internal/audit"
+	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
+	auditService "github.com/rushairer/gosso/internal/audit/service"
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
@@ -85,6 +88,31 @@ func (s *TokenService) ValidateRefreshToken(ctx context.Context, token string) (
 	key := s.buildRefreshTokenKey(token)
 	data, err := s.redis.Get(ctx, key)
 	if errors.Is(err, cache.ErrKeyNotFound) {
+		tokenHash := domain.HashToken(token)
+		consumedKey := s.buildRefreshTokenConsumedKey(tokenHash)
+		consumedData, cErr := s.redis.Get(ctx, consumedKey)
+		if cErr == nil && consumedData != "" {
+			var oldRT domain.RefreshToken
+			if unmarshalErr := json.Unmarshal([]byte(consumedData), &oldRT); unmarshalErr == nil && oldRT.SessionID != "" {
+				_ = s.RevokeAllForSession(ctx, oldRT.SessionID)
+			}
+			s.logger.Warn("Refresh token reuse detected during validation, revoked all session tokens",
+				zap.String("token_hash", tokenHash))
+			auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+				auditDomain.ActionTokenRevoke,
+				audit.IPFromContext(ctx),
+				nil,
+				utility.MarshalJSONOrEmpty(map[string]any{
+					"reason":     "refresh_token_reuse_detected",
+					"token_hash": tokenHash,
+				}),
+				utility.MarshalJSONOrEmpty(map[string]any{
+					"ip":         audit.IPFromContext(ctx),
+					"user_agent": audit.UserAgentFromContext(ctx),
+				}),
+			))
+			return nil, ErrTokenRevoked
+		}
 		return nil, fmt.Errorf("refresh token not found or expired: %w", cache.ErrKeyNotFound)
 	}
 	if err != nil {
