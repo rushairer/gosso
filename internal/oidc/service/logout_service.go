@@ -256,49 +256,77 @@ type LogoutTokenClaims struct {
 	SID    string                    `json:"sid,omitempty"`
 }
 
-// sendBackChannelLogoutAsync asynchronously sends a logout_token to the given
-// backchannel_logout_uri for a single client. Fire-and-forget: errors are logged
-// but do not block the caller.
-func (s *LogoutService) sendBackChannelLogoutAsync(clientID, accountID, sessionID, backchannelURI string, sessionRequired bool) {
-	go func() {
-		// 5-second timeout for the HTTP POST
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+const (
+	defaultBackChannelMaxRetries = 3
+	defaultBackChannelRetryDelay = 500 * time.Millisecond
+)
 
-		logoutToken, err := s.generateLogoutToken(clientID, accountID, sessionID, sessionRequired)
-		if err != nil {
-			s.logger.Error("Failed to generate back-channel logout token",
-				zap.String("client_id", clientID), zap.Error(err))
-			return
-		}
+// sendBackChannelLogout sends a logout_token to the given backchannel_logout_uri
+// with exponential backoff retries.
+func (s *LogoutService) sendBackChannelLogout(ctx context.Context, clientID, accountID, sessionID, backchannelURI string, sessionRequired bool) error {
+	logoutToken, err := s.generateLogoutToken(clientID, accountID, sessionID, sessionRequired)
+	if err != nil {
+		s.logger.Error("Failed to generate back-channel logout token",
+			zap.String("client_id", clientID), zap.Error(err))
+		return err
+	}
 
+	delay := defaultBackChannelRetryDelay
+	for attempt := 1; attempt <= defaultBackChannelMaxRetries; attempt++ {
+		reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		form := url.Values{}
 		form.Set("logout_token", logoutToken)
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, backchannelURI, strings.NewReader(form.Encode()))
-		if err != nil {
+		req, reqErr := http.NewRequestWithContext(reqCtx, http.MethodPost, backchannelURI, strings.NewReader(form.Encode()))
+		if reqErr != nil {
+			cancel()
 			s.logger.Error("Failed to create back-channel logout request",
-				zap.String("client_id", clientID), zap.String("uri", backchannelURI), zap.Error(err))
-			return
+				zap.String("client_id", clientID), zap.String("uri", backchannelURI), zap.Int("attempt", attempt), zap.Error(reqErr))
+			return reqErr
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-		resp, err := s.httpClient.Do(req)
-		if err != nil {
+		resp, doErr := s.httpClient.Do(req)
+		if doErr != nil {
+			cancel()
 			s.logger.Warn("Back-channel logout POST failed",
-				zap.String("client_id", clientID), zap.String("uri", backchannelURI), zap.Error(err))
-			return
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode >= 400 {
-			s.logger.Warn("Back-channel logout POST returned error status",
-				zap.String("client_id", clientID), zap.String("uri", backchannelURI),
-				zap.Int("status", resp.StatusCode))
+				zap.String("client_id", clientID), zap.String("uri", backchannelURI), zap.Int("attempt", attempt), zap.Error(doErr))
 		} else {
-			s.logger.Debug("Back-channel logout POST succeeded",
-				zap.String("client_id", clientID), zap.String("uri", backchannelURI))
+			statusCode := resp.StatusCode
+			_ = resp.Body.Close()
+			cancel()
+			if statusCode < 400 {
+				s.logger.Debug("Back-channel logout POST succeeded",
+					zap.String("client_id", clientID), zap.String("uri", backchannelURI), zap.Int("attempt", attempt))
+				return nil
+			}
+			s.logger.Warn("Back-channel logout POST returned error status",
+				zap.String("client_id", clientID), zap.String("uri", backchannelURI), zap.Int("attempt", attempt), zap.Int("status", statusCode))
 		}
+
+		if attempt < defaultBackChannelMaxRetries {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(delay):
+				delay *= 2
+			}
+		}
+	}
+
+	s.logger.Error("Back-channel logout retries exhausted",
+		zap.String("client_id", clientID), zap.String("uri", backchannelURI), zap.Int("max_retries", defaultBackChannelMaxRetries))
+	return fmt.Errorf("back-channel logout failed after %d attempts", defaultBackChannelMaxRetries)
+}
+
+// sendBackChannelLogoutAsync asynchronously sends a logout_token to the given
+// backchannel_logout_uri for a single client with retries.
+func (s *LogoutService) sendBackChannelLogoutAsync(clientID, accountID, sessionID, backchannelURI string, sessionRequired bool) {
+	go func() {
+		// Use a detached background context with sufficient budget for retries
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = s.sendBackChannelLogout(ctx, clientID, accountID, sessionID, backchannelURI, sessionRequired)
 	}()
 }
 

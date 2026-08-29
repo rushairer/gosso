@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -370,3 +372,61 @@ func TestTriggerBackChannelLogout_NilClientRepo(t *testing.T) {
 	// Should not panic
 	svc.TriggerBackChannelLogout(context.Background(), "account-001", "session-001")
 }
+
+func TestSendBackChannelLogout_SuccessImmediate(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
+		require.NoError(t, r.ParseForm())
+		assert.NotEmpty(t, r.Form.Get("logout_token"))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	svc, _ := setupTestLogoutService(t)
+	svc.httpClient = server.Client()
+
+	err := svc.sendBackChannelLogout(context.Background(), "client-001", "account-001", "session-001", server.URL, true)
+	require.NoError(t, err)
+	assert.Equal(t, 1, attempts)
+}
+
+func TestSendBackChannelLogout_RetrySuccess(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 2 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	svc, _ := setupTestLogoutService(t)
+	svc.httpClient = server.Client()
+
+	err := svc.sendBackChannelLogout(context.Background(), "client-001", "account-001", "session-001", server.URL, true)
+	require.NoError(t, err)
+	assert.Equal(t, 2, attempts)
+}
+
+func TestSendBackChannelLogout_ExhaustRetries(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	svc, _ := setupTestLogoutService(t)
+	svc.httpClient = server.Client()
+
+	err := svc.sendBackChannelLogout(context.Background(), "client-001", "account-001", "session-001", server.URL, true)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "back-channel logout failed after")
+	assert.Equal(t, 3, attempts)
+}
+
