@@ -73,6 +73,10 @@ func (m *mockOAuth2ClientSvcForOAuth2) DeleteClient(_ context.Context, _, _ stri
 	return nil
 }
 
+func (m *mockOAuth2ClientSvcForOAuth2) RotateClientSecret(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+
 type mockTokenMgr struct {
 	generateAccessFn  func() (string, error)
 	generateRefreshFn func() (*tokenDomain.RefreshToken, error)

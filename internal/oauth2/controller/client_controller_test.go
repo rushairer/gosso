@@ -33,6 +33,7 @@ type mockOAuth2ClientService struct {
 	updateFn          func() error
 	updateByAccountFn func() (*oauth2Domain.OAuth2Client, error)
 	deleteFn          func() error
+	rotateSecretFn    func() (string, error)
 	lastRegisterReq   *oauth2Service.RegisterClientRequest
 	lastUpdateReq     *oauth2Service.UpdateClientRequest
 }
@@ -79,6 +80,13 @@ func (m *mockOAuth2ClientService) DeleteClient(_ context.Context, _, _ string) e
 		return m.deleteFn()
 	}
 	return nil
+}
+
+func (m *mockOAuth2ClientService) RotateClientSecret(_ context.Context, _, _ string) (string, error) {
+	if m.rotateSecretFn != nil {
+		return m.rotateSecretFn()
+	}
+	return "", fmt.Errorf("not implemented")
 }
 
 // ──────────────────────────────────────────────
@@ -252,6 +260,7 @@ func TestListClients_Empty(t *testing.T) {
 
 func TestGetClient_Success(t *testing.T) {
 	client := newTestClient("account-001")
+	client.ClientID = "blog-bff"
 	clientSvc := &mockOAuth2ClientService{
 		findByIDFn: func() (*oauth2Domain.OAuth2Client, error) {
 			return client, nil
@@ -259,12 +268,24 @@ func TestGetClient_Success(t *testing.T) {
 	}
 	engine := setupClientController(clientSvc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/oauth2/clients/550e8400-e29b-41d4-a716-446655440000", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/oauth2/clients/blog-bff", nil)
 	w := httptest.NewRecorder()
 
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestRotateClientSecret_Success(t *testing.T) {
+	clientSvc := &mockOAuth2ClientService{
+		rotateSecretFn: func() (string, error) { return "replacement-secret", nil },
+	}
+	engine := setupClientController(clientSvc)
+	req := httptest.NewRequest(http.MethodPost, "/api/oauth2/clients/blog-bff/rotate-secret", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "replacement-secret")
 }
 
 func TestGetClient_NotFound(t *testing.T) {

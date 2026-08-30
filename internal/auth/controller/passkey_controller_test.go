@@ -208,7 +208,7 @@ func TestPasskey_RegisterBegin_RequiresRecentStrongAuth(t *testing.T) {
 		claims *tokenDomain.AccessTokenClaims
 	}{
 		{name: "missing auth time", claims: &tokenDomain.AccessTokenClaims{AMR: []string{"otp"}}},
-		{name: "missing strong method", claims: &tokenDomain.AccessTokenClaims{AuthTime: utilityPtrInt64(time.Now().Unix()), AMR: []string{"pwd"}}},
+		{name: "missing strong method", claims: &tokenDomain.AccessTokenClaims{AuthTime: utilityPtrInt64(time.Now().Unix()), AMR: []string{"unknown"}}},
 		{name: "stale strong auth", claims: &tokenDomain.AccessTokenClaims{AuthTime: utilityPtrInt64(time.Now().Add(-passkeyStepUpMaxAge - time.Second).Unix()), AMR: []string{"pwd", "otp"}}},
 	}
 	for _, tc := range cases {

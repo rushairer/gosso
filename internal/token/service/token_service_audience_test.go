@@ -12,7 +12,7 @@ import (
 	"github.com/rushairer/gosso/internal/token/domain"
 )
 
-func TestGenerateAccessToken_SetsClientAudience(t *testing.T) {
+func TestGenerateAccessToken_DoesNotUseClientIDAsResourceAudience(t *testing.T) {
 	svc, cleanup := setupTestTokenService(t)
 	defer cleanup()
 
@@ -25,7 +25,7 @@ func TestGenerateAccessToken_SetsClientAudience(t *testing.T) {
 
 	claims, err := svc.ValidateAccessTokenWithContext(context.Background(), tokenString)
 	require.NoError(t, err)
-	assert.Equal(t, jwt.ClaimStrings{"client-aud"}, claims.Audience)
+	assert.Empty(t, claims.Audience)
 }
 
 func TestGenerateAccessToken_PreservesExplicitAudience(t *testing.T) {
@@ -43,10 +43,10 @@ func TestGenerateAccessToken_PreservesExplicitAudience(t *testing.T) {
 
 	claims, err := svc.ValidateAccessTokenWithContext(context.Background(), tokenString)
 	require.NoError(t, err)
-	assert.ElementsMatch(t, jwt.ClaimStrings{"api://resource", "client-resource-aud"}, claims.Audience)
+	assert.ElementsMatch(t, jwt.ClaimStrings{"api://resource"}, claims.Audience)
 }
 
-func TestGenerateShortLivedToken_SetsClientAudience(t *testing.T) {
+func TestGenerateShortLivedToken_DoesNotUseClientIDAsResourceAudience(t *testing.T) {
 	svc, cleanup := setupTestTokenService(t)
 	defer cleanup()
 
@@ -61,10 +61,10 @@ func TestGenerateShortLivedToken_SetsClientAudience(t *testing.T) {
 
 	claims, err := svc.ValidateAccessTokenWithContext(context.Background(), tokenString)
 	require.NoError(t, err)
-	assert.Equal(t, jwt.ClaimStrings{"client-short-aud"}, claims.Audience)
+	assert.Empty(t, claims.Audience)
 }
 
-func TestValidateAccessTokenWithContext_RejectsClientAudienceMismatch(t *testing.T) {
+func TestValidateAccessTokenWithContext_AllowsIndependentClientAndResourceClaims(t *testing.T) {
 	svc, cleanup := setupTestTokenService(t)
 	defer cleanup()
 
@@ -86,5 +86,5 @@ func TestValidateAccessTokenWithContext_RejectsClientAudienceMismatch(t *testing
 	require.NoError(t, err)
 
 	_, err = svc.ValidateAccessTokenWithContext(context.Background(), tokenString)
-	assert.Error(t, err)
+	assert.NoError(t, err)
 }

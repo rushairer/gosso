@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"slices"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -121,8 +120,6 @@ func (s *TokenService) GenerateAccessToken(claims *domain.AccessTokenClaims) (st
 	clonedClaims.Subject = clonedClaims.AccountID
 	clonedClaims.IssuedAt = jwt.NewNumericDate(now)
 	clonedClaims.ExpiresAt = jwt.NewNumericDate(now.Add(s.accessExpiry))
-	ensureClientAudience(&clonedClaims)
-
 	return s.signToken(&clonedClaims, "access token")
 }
 
@@ -142,8 +139,6 @@ func (s *TokenService) GenerateShortLivedToken(claims *domain.AccessTokenClaims)
 	if clonedClaims.ExpiresAt == nil || clonedClaims.ExpiresAt.IsZero() {
 		clonedClaims.ExpiresAt = jwt.NewNumericDate(now.Add(s.accessExpiry))
 	}
-	ensureClientAudience(&clonedClaims)
-
 	// Enforce maximum TTL for short-lived tokens to prevent callers from
 	// accidentally requesting excessively long-lived tokens.
 	maxExpiry := jwt.NewNumericDate(now.Add(MaxShortLivedExpiry))
@@ -155,16 +150,6 @@ func (s *TokenService) GenerateShortLivedToken(claims *domain.AccessTokenClaims)
 	}
 
 	return s.signToken(&clonedClaims, "short-lived token")
-}
-
-// ensureClientAudience mirrors client_id into aud while preserving any explicit
-// audiences that callers already supplied. This keeps OAuth access tokens
-// client-bound without discarding resource-audience values.
-func ensureClientAudience(claims *domain.AccessTokenClaims) {
-	if claims.ClientID == "" || slices.Contains(claims.Audience, claims.ClientID) {
-		return
-	}
-	claims.Audience = append(claims.Audience, claims.ClientID)
 }
 
 // signToken creates and signs a JWT with RS256, setting the kid header.

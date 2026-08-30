@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-30
+
+### Added
+- Add one-time confidential OAuth client secret rotation. The replacement secret is returned only by the rotation response and invalidates the previous secret immediately.
+
+### Changed
+- Treat OAuth `client_id` values as opaque identifiers in the Client management API.
+- Keep access-token `aud` reserved for RFC 8707 resource servers; client identity remains in the `client_id` claim.
+- Advertise Back-Channel Logout session support in OIDC discovery.
+
+### Security
+- Resolve and validate Back-Channel Logout destinations immediately before dialing, reject non-public addresses, and refuse redirects.
+- Accept a recent server-issued password authentication as a Passkey registration step-up alongside MFA.
+
 ## [1.4.1] - 2026-08-29
 
 ### Security

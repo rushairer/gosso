@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -43,7 +44,7 @@ func NewLogoutService(
 	logger *zap.Logger,
 ) *LogoutService {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 5 * time.Second}
+		httpClient = newBackchannelHTTPClient()
 	}
 	return &LogoutService{
 		tokenSvc:   tokenSvc,
@@ -55,6 +56,47 @@ func NewLogoutService(
 		logger:     logger,
 		parser:     jwt.NewParser(jwt.WithoutClaimsValidation()),
 	}
+}
+
+// newBackchannelHTTPClient prevents registered logout endpoints from becoming
+// an SSRF primitive. Resolution happens immediately before dialing so a DNS
+// answer cannot be changed between registration and the outbound request.
+func newBackchannelHTTPClient() *http.Client {
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
+	transport := &http.Transport{
+		Proxy:               nil,
+		ForceAttemptHTTP2:   true,
+		TLSHandshakeTimeout: 5 * time.Second,
+		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(address)
+			if err != nil {
+				return nil, fmt.Errorf("invalid backchannel address: %w", err)
+			}
+			ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+			if err != nil {
+				return nil, fmt.Errorf("resolve backchannel host: %w", err)
+			}
+			for _, resolved := range ips {
+				if !isPublicBackchannelIP(resolved.IP) {
+					continue
+				}
+				return dialer.DialContext(ctx, network, net.JoinHostPort(resolved.IP.String(), port))
+			}
+			return nil, fmt.Errorf("backchannel host has no public address")
+		},
+	}
+	return &http.Client{
+		Timeout:   5 * time.Second,
+		Transport: transport,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
+func isPublicBackchannelIP(ip net.IP) bool {
+	return ip != nil && !ip.IsLoopback() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast() &&
+		!ip.IsLinkLocalMulticast() && !ip.IsUnspecified() && !ip.IsMulticast()
 }
 
 // ValidateIDTokenHint validates an ID token hint per OIDC RP-Initiated Logout spec.

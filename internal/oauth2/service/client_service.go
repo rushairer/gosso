@@ -25,21 +25,21 @@ import (
 
 // RegisterClientRequest represents a request to register an OAuth2 client
 type RegisterClientRequest struct {
-	AccountID                          string
-	Name                               string
-	Description                        string
-	RedirectURIs                       []string
-	PostLogoutRedirectURIs             []string
-	GrantTypes                         []string
-	Scopes                             []string
-	IsConfidential                     bool
-	Metadata                           map[string]any
-	AllowReservedScopes                bool
-	AllowedResources                   []string
-	FrontchannelLogoutURI              string
-	FrontchannelLogoutSessionRequired  bool
-	BackchannelLogoutURI               string
-	BackchannelLogoutSessionRequired   bool
+	AccountID                         string
+	Name                              string
+	Description                       string
+	RedirectURIs                      []string
+	PostLogoutRedirectURIs            []string
+	GrantTypes                        []string
+	Scopes                            []string
+	IsConfidential                    bool
+	Metadata                          map[string]any
+	AllowReservedScopes               bool
+	AllowedResources                  []string
+	FrontchannelLogoutURI             string
+	FrontchannelLogoutSessionRequired bool
+	BackchannelLogoutURI              string
+	BackchannelLogoutSessionRequired  bool
 }
 
 // OAuth2ClientService is the OAuth2 client service interface
@@ -49,7 +49,46 @@ type OAuth2ClientService interface {
 	FindByAccountID(ctx context.Context, accountID string) ([]*domain.OAuth2Client, error)
 	UpdateClient(ctx context.Context, client *domain.OAuth2Client) error
 	UpdateClientByAccountID(ctx context.Context, accountID, clientID string, req *UpdateClientRequest) (*domain.OAuth2Client, error)
+	RotateClientSecret(ctx context.Context, accountID, clientID string) (string, error)
 	DeleteClient(ctx context.Context, accountID, clientID string) error
+}
+
+// RotateClientSecret replaces a confidential client's secret atomically.
+// The plaintext is returned exactly once and only the bcrypt hash is stored.
+func (s *oauth2ClientServiceImpl) RotateClientSecret(ctx context.Context, accountID, clientID string) (string, error) {
+	secret, err := generateClientSecret()
+	if err != nil {
+		return "", fmt.Errorf("generate client secret: %w", err)
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
+	if err != nil {
+		return "", fmt.Errorf("hash client secret: %w", err)
+	}
+
+	err = dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
+		client, findErr := s.clientRepo.FindByClientIDTx(ctx, tx, clientID)
+		if findErr != nil {
+			return fmt.Errorf("%w: %s", domain.ErrClientNotFound, clientID)
+		}
+		if client.AccountID != accountID {
+			return ErrClientAccessDenied
+		}
+		if !client.IsConfidential {
+			return &ValidationError{Message: "public clients do not have a client secret"}
+		}
+		expectedUpdatedAt := client.UpdatedAt
+		client.ClientSecretHash = string(hash)
+		client.UpdatedAt = time.Now()
+		return s.clientRepo.Update(ctx, tx, client, expectedUpdatedAt)
+	})
+	if err != nil {
+		return "", err
+	}
+	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
+		auditDomain.ActionOAuth2ClientUpdate, audit.IPFromContext(ctx), &accountID,
+		utility.MarshalJSONOrEmpty(map[string]any{"client_id": clientID, "secret_rotated": true}), nil,
+	))
+	return secret, nil
 }
 
 type oauth2ClientServiceImpl struct {
@@ -203,18 +242,18 @@ func (s *oauth2ClientServiceImpl) UpdateClient(ctx context.Context, client *doma
 
 // UpdateClientRequest contains the fields that can be updated on an OAuth2 client.
 type UpdateClientRequest struct {
-	Name                               *string   `json:"name"`
-	Description                        *string   `json:"description"`
-	RedirectURIs                       []string  `json:"redirect_uris"`
-	PostLogoutRedirectURIs             []string  `json:"post_logout_redirect_uris"`
-	GrantTypes                         []string  `json:"grant_types"`
-	Scopes                             []string  `json:"scopes"`
-	AllowedResources                   *[]string `json:"allowed_resources"`
-	FrontchannelLogoutURI              *string   `json:"frontchannel_logout_uri"`
-	FrontchannelLogoutSessionRequired  *bool     `json:"frontchannel_logout_session_required"`
-	BackchannelLogoutURI               *string   `json:"backchannel_logout_uri"`
-	BackchannelLogoutSessionRequired   *bool     `json:"backchannel_logout_session_required"`
-	AllowReservedScopes                bool      `json:"-"`
+	Name                              *string   `json:"name"`
+	Description                       *string   `json:"description"`
+	RedirectURIs                      []string  `json:"redirect_uris"`
+	PostLogoutRedirectURIs            []string  `json:"post_logout_redirect_uris"`
+	GrantTypes                        []string  `json:"grant_types"`
+	Scopes                            []string  `json:"scopes"`
+	AllowedResources                  *[]string `json:"allowed_resources"`
+	FrontchannelLogoutURI             *string   `json:"frontchannel_logout_uri"`
+	FrontchannelLogoutSessionRequired *bool     `json:"frontchannel_logout_session_required"`
+	BackchannelLogoutURI              *string   `json:"backchannel_logout_uri"`
+	BackchannelLogoutSessionRequired  *bool     `json:"backchannel_logout_session_required"`
+	AllowReservedScopes               bool      `json:"-"`
 }
 
 // UpdateClientByAccountID loads a client by ID, verifies ownership, applies partial updates with

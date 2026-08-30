@@ -63,6 +63,7 @@ func NewDiscoveryService(issuer string) *DiscoveryService {
 		"frontchannel_logout_supported":                  true,
 		"frontchannel_logout_session_supported":          true,
 		"backchannel_logout_supported":                   true,
+		"backchannel_logout_session_supported":           true,
 	}
 
 	jsonBytes, err := json.Marshal(doc)

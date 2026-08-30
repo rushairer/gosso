@@ -149,7 +149,7 @@ func (c *PasskeyController) checkStepUp(ctx *gin.Context) bool {
 func hasStrongAuthMethod(amr []string) bool {
 	for _, method := range amr {
 		switch method {
-		case "otp", "mfa", "swk", "hwk", "fpt", "face", "iris", "vbm":
+		case "pwd", "otp", "mfa", "swk", "hwk", "fpt", "face", "iris", "vbm":
 			return true
 		}
 	}

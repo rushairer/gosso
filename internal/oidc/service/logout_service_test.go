@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,6 +18,25 @@ import (
 	"github.com/rushairer/gosso/internal/testutil"
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 )
+
+func TestIsPublicBackchannelIP(t *testing.T) {
+	tests := []struct {
+		address string
+		want    bool
+	}{
+		{address: "8.8.8.8", want: true},
+		{address: "127.0.0.1", want: false},
+		{address: "10.0.0.1", want: false},
+		{address: "169.254.169.254", want: false},
+		{address: "::1", want: false},
+		{address: "fc00::1", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.address, func(t *testing.T) {
+			assert.Equal(t, tt.want, isPublicBackchannelIP(net.ParseIP(tt.address)))
+		})
+	}
+}
 
 func setupTestLogoutService(t *testing.T) (*LogoutService, *tokenService.KeyService) {
 	t.Helper()
@@ -429,4 +449,3 @@ func TestSendBackChannelLogout_ExhaustRetries(t *testing.T) {
 	assert.Contains(t, err.Error(), "back-channel logout failed after")
 	assert.Equal(t, 3, attempts)
 }
-
