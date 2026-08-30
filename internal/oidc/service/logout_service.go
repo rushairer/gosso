@@ -44,7 +44,7 @@ func NewLogoutService(
 	logger *zap.Logger,
 ) *LogoutService {
 	if httpClient == nil {
-		httpClient = newBackchannelHTTPClient()
+		httpClient = NewBackchannelHTTPClient(nil)
 	}
 	return &LogoutService{
 		tokenSvc:   tokenSvc,
@@ -58,10 +58,22 @@ func NewLogoutService(
 	}
 }
 
-// newBackchannelHTTPClient prevents registered logout endpoints from becoming
-// an SSRF primitive. Resolution happens immediately before dialing so a DNS
-// answer cannot be changed between registration and the outbound request.
-func newBackchannelHTTPClient() *http.Client {
+// NewBackchannelHTTPClient creates an HTTP client for back-channel logout requests.
+// By default, it prevents registered logout endpoints from becoming an SSRF primitive
+// by verifying that target IPs are public addresses. When allowedCIDRs is specified,
+// addresses matching the allowed list (e.g. for local development or container internal networks)
+// are also permitted.
+func NewBackchannelHTTPClient(allowedCIDRs []string) *http.Client {
+	var parsedNets []*net.IPNet
+	var parsedIPs []net.IP
+	for _, entry := range allowedCIDRs {
+		if ip := net.ParseIP(entry); ip != nil {
+			parsedIPs = append(parsedIPs, ip)
+		} else if _, ipNet, err := net.ParseCIDR(entry); err == nil {
+			parsedNets = append(parsedNets, ipNet)
+		}
+	}
+
 	dialer := &net.Dialer{Timeout: 5 * time.Second}
 	transport := &http.Transport{
 		Proxy:               nil,
@@ -77,12 +89,12 @@ func newBackchannelHTTPClient() *http.Client {
 				return nil, fmt.Errorf("resolve backchannel host: %w", err)
 			}
 			for _, resolved := range ips {
-				if !isPublicBackchannelIP(resolved.IP) {
+				if !isAllowedBackchannelIP(resolved.IP, parsedIPs, parsedNets) {
 					continue
 				}
 				return dialer.DialContext(ctx, network, net.JoinHostPort(resolved.IP.String(), port))
 			}
-			return nil, fmt.Errorf("backchannel host has no public address")
+			return nil, fmt.Errorf("backchannel host has no allowed address")
 		},
 	}
 	return &http.Client{
@@ -92,6 +104,23 @@ func newBackchannelHTTPClient() *http.Client {
 			return http.ErrUseLastResponse
 		},
 	}
+}
+
+func isAllowedBackchannelIP(ip net.IP, allowedIPs []net.IP, allowedNets []*net.IPNet) bool {
+	if isPublicBackchannelIP(ip) {
+		return true
+	}
+	for _, allowedIP := range allowedIPs {
+		if allowedIP.Equal(ip) {
+			return true
+		}
+	}
+	for _, allowedNet := range allowedNets {
+		if allowedNet.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 func isPublicBackchannelIP(ip net.IP) bool {

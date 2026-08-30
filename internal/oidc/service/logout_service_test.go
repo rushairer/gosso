@@ -38,6 +38,19 @@ func TestIsPublicBackchannelIP(t *testing.T) {
 	}
 }
 
+func TestIsAllowedBackchannelIP(t *testing.T) {
+	allowedIPs := []net.IP{net.ParseIP("127.0.0.1")}
+	_, subnet, err := net.ParseCIDR("10.0.0.0/8")
+	require.NoError(t, err)
+	allowedNets := []*net.IPNet{subnet}
+
+	assert.True(t, isAllowedBackchannelIP(net.ParseIP("8.8.8.8"), allowedIPs, allowedNets))
+	assert.True(t, isAllowedBackchannelIP(net.ParseIP("127.0.0.1"), allowedIPs, allowedNets))
+	assert.True(t, isAllowedBackchannelIP(net.ParseIP("10.1.2.3"), allowedIPs, allowedNets))
+	assert.False(t, isAllowedBackchannelIP(net.ParseIP("192.168.1.1"), allowedIPs, allowedNets))
+	assert.False(t, isAllowedBackchannelIP(net.ParseIP("169.254.169.254"), allowedIPs, allowedNets))
+}
+
 func setupTestLogoutService(t *testing.T) (*LogoutService, *tokenService.KeyService) {
 	t.Helper()
 	logger := zap.NewNop()

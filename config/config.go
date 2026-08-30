@@ -152,6 +152,10 @@ type AuthConfig struct {
 	// Example: ["203.0.113.0/24", "198.51.100.5"]
 	// Note: Per-IP+username counters (login_attempts:{ip}:{user}) still apply.
 	LoginIPAllowlist               []string      `mapstructure:"login_ip_allowlist"`
+	// BackchannelAllowedCIDRs contains IP addresses or CIDR ranges explicitly permitted
+	// for outbound back-channel logout requests (e.g. for local test or internal container networks).
+	// When empty, only public IPs are permitted.
+	BackchannelAllowedCIDRs        []string      `mapstructure:"backchannel_allowed_cidrs"`
 	MFAVerificationTTL             time.Duration `mapstructure:"mfa_verification_ttl"`
 	ChallengeTTL                   time.Duration `mapstructure:"challenge_ttl"`
 	BackupCodeCount                int           `mapstructure:"backup_code_count"`
@@ -523,6 +527,12 @@ func (c *GoUnoConfig) validateAuthDurations() error {
 	for _, entry := range c.AuthConfig.LoginIPAllowlist {
 		if net.ParseIP(entry) == nil && !isValidCIDR(entry) {
 			return fmt.Errorf("auth: login_ip_allowlist entry %q is not a valid IP address or CIDR notation", entry)
+		}
+	}
+	// Validate backchannel_allowed_cidrs entries are valid IP addresses or CIDR ranges.
+	for _, entry := range c.AuthConfig.BackchannelAllowedCIDRs {
+		if net.ParseIP(entry) == nil && !isValidCIDR(entry) {
+			return fmt.Errorf("auth: backchannel_allowed_cidrs entry %q is not a valid IP address or CIDR notation", entry)
 		}
 	}
 	// password_reset_revoke_concurrency must be strictly positive (used as semaphore capacity).

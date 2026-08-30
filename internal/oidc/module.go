@@ -38,6 +38,9 @@ func InitializeOIDCModule(
 	discoverySvc := oidcService.NewDiscoveryService(authConfig.Issuer)
 	jwksSvc := oidcService.NewJWKSService(tokenSvc.KeyService())
 	userInfoSvc := oidcService.NewUserInfoService(accountSvc, credentialRepo, logger)
+	if httpClient == nil {
+		httpClient = oidcService.NewBackchannelHTTPClient(authConfig.BackchannelAllowedCIDRs)
+	}
 	logoutSvc := oidcService.NewLogoutService(tokenSvc, sessionSvc, jwksSvc, authConfig.Issuer, clientRepo, httpClient, logger)
 
 	return &OIDCModule{
