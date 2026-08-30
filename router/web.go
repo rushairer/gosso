@@ -27,23 +27,23 @@ import (
 
 // RouterDeps holds all dependencies for route registration.
 type RouterDeps struct {
-	Server           *gin.Engine
-	DB               *sql.DB
-	AuthCtrl         *authController.AuthController
-	OAuth2Ctrl       *oauth2Controller.OAuth2Controller
-	ClientCtrl       *oauth2Controller.ClientController
-	OIDCCtrl         *oidcController.OIDCController
-	AdminCtrl        *adminController.AdminController
-	TokenSvc         *tokenService.TokenService
-	PasskeyCtrl      *authController.PasskeyController
-	Redis            *cache.RedisClient
-	RateLimits       config.RateLimitsConfig
-	AuthConfig       config.AuthConfig
-	Debug            bool
-	SessionValidator sessionDomain.SessionValidator
+	Server             *gin.Engine
+	DB                 *sql.DB
+	AuthCtrl           *authController.AuthController
+	OAuth2Ctrl         *oauth2Controller.OAuth2Controller
+	ClientCtrl         *oauth2Controller.ClientController
+	OIDCCtrl           *oidcController.OIDCController
+	AdminCtrl          *adminController.AdminController
+	TokenSvc           *tokenService.TokenService
+	PasskeyCtrl        *authController.PasskeyController
+	Redis              *cache.RedisClient
+	RateLimits         config.RateLimitsConfig
+	AuthConfig         config.AuthConfig
+	Debug              bool
+	SessionValidator   sessionDomain.SessionValidator
 	AccountInfoFetcher authMiddleware.AccountInfoFetcher
-	Logger           *zap.Logger
-	MetricsEnabled   bool
+	Logger             *zap.Logger
+	MetricsEnabled     bool
 }
 
 // RegisterWebRouter registers all routes
@@ -69,11 +69,11 @@ func RegisterWebRouter(deps RouterDeps) error {
 
 	// JWT auth middleware
 	jwtAuth, err := authMiddleware.JWTAuthMiddlewareWithConfig(deps.TokenSvc, deps.SessionValidator, authMiddleware.AuthConfigOptions{
-		LoginURL:            deps.AuthConfig.LoginURL,
-		EnableCookieAuth:    deps.AuthConfig.EnableCookieAuth,
-		AuthCookieName:      deps.AuthConfig.AuthCookieName,
-		SessionCookieName:   "__Host-gosso-session",
-		AccountInfoFetcher:  deps.AccountInfoFetcher,
+		LoginURL:           deps.AuthConfig.LoginURL,
+		EnableCookieAuth:   deps.AuthConfig.EnableCookieAuth,
+		AuthCookieName:     deps.AuthConfig.AuthCookieName,
+		SessionCookieName:  "__Host-gosso-session",
+		AccountInfoFetcher: deps.AccountInfoFetcher,
 	})
 	if err != nil {
 		return err

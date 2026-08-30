@@ -44,9 +44,6 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 	}
 
 	clearSSOSessionCookie(ctx, c.secureCookie)
-	// Also clear legacy token cookies for backward compatibility during migration
-	clearSSOAuthCookie(ctx, c.secureCookie)
-	clearRefreshTokenCookie(ctx, c.secureCookie)
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("logged out"))
 }
 

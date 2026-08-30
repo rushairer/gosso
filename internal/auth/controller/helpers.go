@@ -11,8 +11,6 @@ import (
 	"github.com/rushairer/gosso/middleware"
 )
 
-const authCookieName = "__Host-access_token"
-const refreshCookieName = "__Host-refresh_token"
 const ssoSessionCookieName = "__Host-gosso-session"
 const cookieSessionHeader = "X-Gosso-Cookie-Session"
 
@@ -52,56 +50,6 @@ func isCookieSessionRequest(ctx *gin.Context) bool {
 	return ctx.GetHeader(cookieSessionHeader) == "1"
 }
 
-func setSSOAuthCookie(ctx *gin.Context, accessToken string, maxAgeSeconds int, secure bool) {
-	http.SetCookie(ctx.Writer, &http.Cookie{
-		Name:     authCookieName,
-		Value:    accessToken,
-		Path:     "/",
-		MaxAge:   maxAgeSeconds,
-		HttpOnly: true,
-		Secure:   secure,
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
-func clearSSOAuthCookie(ctx *gin.Context, secure bool) {
-	http.SetCookie(ctx.Writer, &http.Cookie{
-		Name:     authCookieName,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		Expires:  time.Unix(0, 0),
-		HttpOnly: true,
-		Secure:   secure,
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
-func setRefreshTokenCookie(ctx *gin.Context, refreshToken string, maxAgeSeconds int, secure bool) {
-	http.SetCookie(ctx.Writer, &http.Cookie{
-		Name:     refreshCookieName,
-		Value:    refreshToken,
-		Path:     "/",
-		MaxAge:   maxAgeSeconds,
-		HttpOnly: true,
-		Secure:   secure,
-		SameSite: http.SameSiteStrictMode,
-	})
-}
-
-func clearRefreshTokenCookie(ctx *gin.Context, secure bool) {
-	http.SetCookie(ctx.Writer, &http.Cookie{
-		Name:     refreshCookieName,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		Expires:  time.Unix(0, 0),
-		HttpOnly: true,
-		Secure:   secure,
-		SameSite: http.SameSiteStrictMode,
-	})
-}
-
 func isSecureRequest(ctx *gin.Context) bool {
 	return ctx.Request.TLS != nil || ctx.GetHeader("X-Forwarded-Proto") == "https"
 }
@@ -135,15 +83,6 @@ func clearSSOSessionCookie(ctx *gin.Context, secure bool) {
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	})
-}
-
-// getSSOSessionIDFromCookie reads the opaque session ID from the SSO session
-// cookie. Returns empty string if the cookie is absent.
-func getSSOSessionIDFromCookie(ctx *gin.Context) string {
-	if cookie, err := ctx.Cookie(ssoSessionCookieName); err == nil && cookie != "" {
-		return cookie
-	}
-	return ""
 }
 
 // mfaRequiredResponse constructs the MFA-required response body.

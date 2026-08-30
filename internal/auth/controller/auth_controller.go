@@ -216,9 +216,6 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 		return
 	}
 	if req.RefreshToken == "" {
-		req.RefreshToken, _ = ctx.Cookie(refreshCookieName)
-	}
-	if req.RefreshToken == "" {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "refresh token is required"))
 		return
 	}

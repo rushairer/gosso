@@ -44,7 +44,7 @@ func unmarshalClientJSONFields(client *domain.OAuth2Client, f *clientJSONFields)
 	if err := json.Unmarshal(f.scopes, &client.Scopes); err != nil {
 		return fmt.Errorf("unmarshal scopes: %w", err)
 	}
-	if f.allowedResources != nil && len(f.allowedResources) > 0 {
+	if len(f.allowedResources) > 0 {
 		if err := json.Unmarshal(f.allowedResources, &client.AllowedResources); err != nil {
 			return fmt.Errorf("unmarshal allowed_resources: %w", err)
 		}

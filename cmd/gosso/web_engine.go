@@ -11,10 +11,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/config"
-	"github.com/rushairer/gosso/internal/cache"
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
-	"github.com/rushairer/gosso/internal/observability"
 	authMiddleware "github.com/rushairer/gosso/internal/auth/middleware"
+	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/observability"
 	"github.com/rushairer/gosso/middleware"
 	"github.com/rushairer/gosso/router"
 )

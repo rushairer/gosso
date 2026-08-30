@@ -23,39 +23,10 @@ import (
 // for clients that include optional fields (e.g., long redirect_uri values) while still
 // preventing abuse via excessively large form bodies.
 const oauth2MaxFormBodySize = 8 * 1024
-const authCookieName = "__Host-access_token"
-const refreshCookieName = "__Host-refresh_token"
 const cookieSessionHeader = "X-Gosso-Cookie-Session"
 
 func isCookieSessionRequest(ctx *gin.Context) bool {
 	return ctx.GetHeader(cookieSessionHeader) == "1"
-}
-
-func setSSOAuthCookie(ctx *gin.Context, accessToken string, maxAgeSeconds int) {
-	http.SetCookie(ctx.Writer, &http.Cookie{
-		Name:     authCookieName,
-		Value:    accessToken,
-		Path:     "/",
-		MaxAge:   maxAgeSeconds,
-		HttpOnly: true,
-		Secure:   ctx.Request.TLS != nil || ctx.GetHeader("X-Forwarded-Proto") == "https",
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
-func setSSORefreshCookie(ctx *gin.Context, refreshToken string, maxAgeSeconds int) {
-	if refreshToken == "" {
-		return
-	}
-	http.SetCookie(ctx.Writer, &http.Cookie{
-		Name:     refreshCookieName,
-		Value:    refreshToken,
-		Path:     "/",
-		MaxAge:   maxAgeSeconds,
-		HttpOnly: true,
-		Secure:   ctx.Request.TLS != nil || ctx.GetHeader("X-Forwarded-Proto") == "https",
-		SameSite: http.SameSiteStrictMode,
-	})
 }
 
 // TokenRequest is the token exchange request body.
@@ -405,14 +376,6 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		"expires_in":    int(c.tokenSvc.AccessExpiry().Seconds()),
 		"scope":         accessTokenScope,
 	})
-}
-
-func maxAgeUntil(expiry time.Time) int {
-	seconds := int(time.Until(expiry).Seconds())
-	if seconds < 1 {
-		return 1
-	}
-	return seconds
 }
 
 func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *TokenRequest) {
