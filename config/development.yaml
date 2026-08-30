@@ -97,12 +97,11 @@ auth:
     #     - "198.51.100.5"
     # Password reset
     password_reset_revoke_concurrency: 5
-    # SPA integration
-    login_url: "/login"
-    enable_cookie_auth: true
-    auth_cookie_name: "__Host-access_token"
-    include_user_roles: true
-    include_user_permissions: true
+    # Back-channel logout SSRF allowed CIDRs for local/container dev
+    backchannel_allowed_cidrs:
+        - "127.0.0.1/32"
+        - "::1/128"
+        - "172.21.0.0/16"
 cors:
     allowed_origins:
         - "http://localhost:3000"
