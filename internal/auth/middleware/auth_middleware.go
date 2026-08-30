@@ -135,6 +135,9 @@ func ValidateBearerTokenWithConfig(ctx *gin.Context, tokenSvc TokenValidator, se
 					if info.Email != "" {
 						claims.Email = info.Email
 					}
+					if hasRole(info.Roles, authService.RoleAdmin) {
+						claims.Scope += " " + authService.ScopeAdmin
+					}
 				}
 			}
 			return claims, nil

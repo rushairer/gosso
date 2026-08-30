@@ -5,6 +5,7 @@ import (
 	"html"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -111,8 +112,8 @@ func (c *OIDCController) UserInfo(ctx *gin.Context) {
 	}
 	// Roles are an authorization attribute, not a standard OIDC profile claim.
 	// Expose them only to clients that were explicitly granted the trusted admin
-	// scope; ordinary OIDC relying parties must not learn internal role data.
-	if hasScope(claims.Scope, "admin") {
+	// scope or sessions with admin role; ordinary OIDC relying parties must not learn internal role data.
+	if hasScope(claims.Scope, "admin") || slices.Contains(claims.Roles, "admin") {
 		info["roles"] = claims.Roles
 		info["scope"] = claims.Scope
 	}
