@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-08-31
+
+### Fixed
+- **OIDC RP-Initiated Logout Direct Redirect & UI Modernization**:
+  - Automatically terminate session and 302-redirect to registered `post_logout_redirect_uri` for verified clients, providing a seamless single-logout user experience without intermediate confirmation hurdles.
+  - Modernize the fallback logout confirmation page with GOSSO card styling, CSP nonce support, cancel action, and fix CSRF token extraction for cross-origin navigations.
+
 ## [1.5.1] - 2026-08-30
 
 ### Fixed

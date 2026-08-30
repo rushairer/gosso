@@ -1295,3 +1295,44 @@ func TestBuildFrontChannelIframes_SessionNotRequired(t *testing.T) {
 	assert.Contains(t, html, "iss=")
 	assert.NotContains(t, html, "sid=") // SessionRequired=false
 }
+
+func TestLogoutConfirm_DirectRedirect(t *testing.T) {
+	clientRepo := &mockClientRepo{
+		findByClientIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return &oauth2Domain.OAuth2Client{
+				ClientID:               "client-001",
+				PostLogoutRedirectURIs: []string{"https://app.example.com/logout-cb"},
+			}, nil
+		},
+	}
+	engine, _ := setupLogoutEngine(t, clientRepo)
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?client_id=client-001&post_logout_redirect_uri=https://app.example.com/logout-cb&state=state-123", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusFound, w.Code)
+	assert.Equal(t, "https://app.example.com/logout-cb?state=state-123", w.Header().Get("Location"))
+}
+
+func TestLogoutConfirm_ShowConfirmation_WithCSRF(t *testing.T) {
+	clientRepo := &mockClientRepo{}
+	engine, _ := setupLogoutEngine(t, clientRepo)
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?client_id=unregistered", nil)
+	req.AddCookie(&http.Cookie{Name: "__Host-csrf_token", Value: "test-csrf-token-123"})
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "Confirm Logout")
+	assert.Contains(t, body, `name="csrf_token" value="test-csrf-token-123"`)
+	assert.Contains(t, body, `name="client_id" value="unregistered"`)
+	assert.Contains(t, body, "Cancel")
+}
+
+
+

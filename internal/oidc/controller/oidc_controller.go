@@ -220,10 +220,12 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{"status": "logged_out"}))
 }
 
-// LogoutConfirm handles GET /oidc/logout — it shows a confirmation page or
-// redirects immediately if a valid id_token_hint with sid is present.
-// GET must NOT perform state-mutating logout to prevent logout CSRF via
-// cross-site top-level navigation. Actual logout is only done via POST.
+// LogoutConfirm handles GET /oidc/logout per OpenID Connect RP-Initiated Logout 1.0.
+// When a registered client triggers logout with a valid post_logout_redirect_uri
+// (matching the client's registered post_logout_redirect_uris whitelist),
+// the OP terminates the session, clears cookies, and redirects immediately to the post-logout URI.
+// If the request does not provide a registered post_logout_redirect_uri, an IdP-branded confirmation
+// prompt is rendered with valid CSRF protection.
 func (c *OIDCController) LogoutConfirm(ctx *gin.Context) {
 	var req logoutRequest
 	if err := ctx.ShouldBind(&req); err != nil {
@@ -231,67 +233,200 @@ func (c *OIDCController) LogoutConfirm(ctx *gin.Context) {
 		return
 	}
 
-	// If a valid id_token_hint with sid is provided, we can show the confirmation
-	// page with the user identified. Without sid, we show a generic confirmation.
-	// In either case, the actual logout is NOT performed on GET.
+	clientID := req.ClientID
 	if req.IDTokenHint != "" {
-		_, err := c.logoutSvc.ValidateIDTokenHint(req.IDTokenHint, req.ClientID)
+		claims, err := c.logoutSvc.ValidateIDTokenHint(req.IDTokenHint, req.ClientID)
 		if err != nil {
 			if errors.Is(err, oidcService.ErrAudienceMismatch) {
 				ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
 				return
 			}
 			c.logger.Debug("id_token_hint validation failed on GET logout", zap.Error(err))
-		} else {
-			// Render a confirmation form that POSTs to /oidc/logout with the same parameters.
-			ctx.Header("Content-Type", "text/html; charset=utf-8")
-			ctx.Status(http.StatusOK)
-			_, _ = ctx.Writer.WriteString(`<!DOCTYPE html>
-<html>
-<head><title>Confirm Logout</title></head>
-<body>
-<h1>Confirm Logout</h1>
-<p>You are about to log out from the identity provider.</p>
-<form method="POST" action="/oidc/logout">` +
-				hiddenInput("csrf_token", logoutCSRFTokenFromCookie(ctx)) +
-				hiddenInput("id_token_hint", req.IDTokenHint) +
-				hiddenInput("client_id", req.ClientID) +
-				hiddenInput("post_logout_redirect_uri", req.PostLogoutRedirectURI) +
-				hiddenInput("state", req.State) +
-				`<button type="submit">Confirm Logout</button>
-</form>
-</body>
-</html>`)
+		} else if clientID == "" && len(claims.Audience) > 0 {
+			clientID = claims.Audience[0]
+		}
+	}
+
+	// Direct logout and redirect for verified client with registered post_logout_redirect_uri
+	if clientID != "" && req.PostLogoutRedirectURI != "" {
+		client, err := c.clientRepo.FindByClientID(ctx, clientID)
+		if err == nil && client != nil && client.ValidatePostLogoutRedirectURI(req.PostLogoutRedirectURI) {
+			if req.IDTokenHint != "" {
+				c.tryLogoutByIDTokenHint(ctx, req, nil)
+			} else {
+				c.tryLogoutByCookieSession(ctx, req)
+			}
+
+			ctx.SetCookie("__Host-gosso-session", "", -1, "/", "", true, true)
+			ctx.SetCookie("__Host-access_token", "", -1, "/", "", true, true)
+			ctx.SetCookie("__Host-refresh_token", "", -1, "/", "", true, true)
+			ctx.SetCookie("__Host-csrf_token", "", -1, "/", "", true, false)
+			ctx.SetCookie("access_token", "", -1, "/", "", false, true)
+			ctx.SetCookie("refresh_token", "", -1, "/", "", false, true)
+			ctx.SetCookie("csrf_token", "", -1, "/", "", false, false)
+
+			c.handlePostLogoutRedirect(ctx, req, clientID)
 			return
 		}
 	}
 
-	// No valid id_token_hint — show generic confirmation page.
+	// Render confirmation page with proper CSRF token and CSP nonce
+	csrfToken := logoutCSRFTokenFromCookie(ctx)
+	cspNonce := middleware.GetCSPNonce(ctx)
+
+	var inputs strings.Builder
+	inputs.WriteString(hiddenInput("csrf_token", csrfToken))
+	if req.IDTokenHint != "" {
+		inputs.WriteString(hiddenInput("id_token_hint", req.IDTokenHint))
+	}
+	if clientID != "" {
+		inputs.WriteString(hiddenInput("client_id", clientID))
+	}
+	if req.PostLogoutRedirectURI != "" {
+		inputs.WriteString(hiddenInput("post_logout_redirect_uri", req.PostLogoutRedirectURI))
+	}
+	if req.State != "" {
+		inputs.WriteString(hiddenInput("state", req.State))
+	}
+
 	ctx.Header("Content-Type", "text/html; charset=utf-8")
 	ctx.Status(http.StatusOK)
-	_, _ = ctx.Writer.WriteString(`<!DOCTYPE html>
-<html>
-<head><title>Confirm Logout</title></head>
-<body>
-<h1>Confirm Logout</h1>
-<p>You are about to log out from the identity provider.</p>
-<form method="POST" action="/oidc/logout">` +
-		hiddenInput("csrf_token", logoutCSRFTokenFromCookie(ctx)) +
-		hiddenInput("client_id", req.ClientID) +
-		hiddenInput("post_logout_redirect_uri", req.PostLogoutRedirectURI) +
-		hiddenInput("state", req.State) +
-		`<button type="submit">Confirm Logout</button>
-</form>
-</body>
-</html>`)
+	_, _ = ctx.Writer.WriteString(renderLogoutConfirmPage(cspNonce, inputs.String()))
 }
 
 func logoutCSRFTokenFromCookie(ctx *gin.Context) string {
+	if val, ok := ctx.Get("csrf_token"); ok {
+		if s, ok := val.(string); ok && s != "" {
+			return s
+		}
+	}
 	cookie, _ := ctx.Cookie("__Host-csrf_token")
 	if cookie == "" {
 		cookie, _ = ctx.Cookie("csrf_token")
 	}
-	return cookie
+	if cookie != "" {
+		return cookie
+	}
+	for _, header := range ctx.Writer.Header()["Set-Cookie"] {
+		if strings.HasPrefix(header, "__Host-csrf_token=") || strings.HasPrefix(header, "csrf_token=") {
+			parts := strings.SplitN(header, ";", 2)
+			kv := strings.SplitN(parts[0], "=", 2)
+			if len(kv) == 2 && kv[1] != "" {
+				return kv[1]
+			}
+		}
+	}
+	return ""
+}
+
+func renderLogoutConfirmPage(cspNonce, hiddenInputs string) string {
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirm Logout - GOSSO</title>
+    <style nonce="` + html.EscapeString(cspNonce) + `">
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: #f3f6fb;
+            color: #172033;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .shell {
+            width: min(100%, 460px);
+            background: #fff;
+            border: 1px solid #d9e2ef;
+            border-radius: 8px;
+            box-shadow: 0 18px 50px rgba(21, 32, 54, 0.14);
+            overflow: hidden;
+        }
+        .header {
+            padding: 28px 32px 20px;
+            border-bottom: 1px solid #e6edf6;
+            background: #fbfcff;
+        }
+        .brand {
+            width: 44px;
+            height: 44px;
+            display: grid;
+            place-items: center;
+            margin-bottom: 16px;
+            border-radius: 8px;
+            background: #0f766e;
+            color: #fff;
+            font-weight: 800;
+            font-size: 18px;
+        }
+        h1 {
+            color: #101828;
+            font-size: 20px;
+            line-height: 1.3;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: #526071;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .content { padding: 24px 32px 28px; }
+        .actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+        .btn {
+            flex: 1;
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            text-align: center;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s ease;
+        }
+        .btn-primary {
+            background: #0f766e;
+            color: #fff;
+        }
+        .btn-primary:hover { background: #0d655e; }
+        .btn-secondary {
+            background: #fff;
+            color: #344054;
+            border-color: #d0d5dd;
+        }
+        .btn-secondary:hover { background: #f9fafb; }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="header">
+            <div class="brand">SSO</div>
+            <h1>Confirm Logout</h1>
+            <p class="subtitle">You are about to log out from the identity provider and active SSO sessions.</p>
+        </div>
+        <div class="content">
+            <form method="POST" action="/oidc/logout">` +
+		hiddenInputs +
+		`<div class="actions">
+                    <button type="button" class="btn btn-secondary" onclick="window.history.length > 1 ? window.history.back() : window.location.href='/'">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Confirm Logout</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>`
 }
 
 // hiddenInput renders a hidden <input> element with HTML-escaped value.
