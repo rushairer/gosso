@@ -166,6 +166,7 @@ func (s *TokenService) RotateRefreshToken(ctx context.Context, oldToken string) 
 	newRT.ClientID = oldRT.ClientID
 	newRT.SessionID = oldRT.SessionID
 	newRT.Scope = oldRT.Scope
+	newRT.Resource = oldRT.Resource
 	newRT.IP = oldRT.IP
 	newRT.UserAgent = oldRT.UserAgent
 

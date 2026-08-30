@@ -23,7 +23,7 @@ type TokenServiceInterface interface {
 	AccessExpiry() time.Duration
 
 	// GenerateRefreshToken generates a random refresh token and stores it in Redis.
-	GenerateRefreshToken(ctx context.Context, accountID, clientID, sessionID, scope string) (*domain.RefreshToken, error)
+	GenerateRefreshToken(ctx context.Context, accountID, clientID, sessionID, scope string, resource ...string) (*domain.RefreshToken, error)
 
 	// ValidateAccessTokenWithContext validates a JWT access token using the request context.
 	ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*domain.AccessTokenClaims, error)

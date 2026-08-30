@@ -41,6 +41,7 @@ type authServiceDeps interface {
 	Logout(ctx context.Context, accountID, sessionID string, accessTokenJTI string, tokenExpiresAt time.Time) error
 	RefreshTokens(ctx context.Context, refreshToken string) (*authService.RefreshResult, error)
 	ValidateSession(ctx context.Context, sessionID string) (*sessionDomain.Session, error)
+	MarkSessionStrongAuth(ctx context.Context, sessionID string, methods []string) (*sessionDomain.Session, error)
 	ListSessions(ctx context.Context, accountID string) ([]*sessionDomain.Session, error)
 	RevokeSession(ctx context.Context, accountID, sessionID string) error
 	ConfirmVerificationCredential(ctx context.Context, credType, identifier, accountID string) error

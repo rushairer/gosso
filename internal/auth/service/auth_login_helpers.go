@@ -245,18 +245,28 @@ func (s *AuthService) clearLoginRateLimits(ctx context.Context, ip string, usern
 
 // completeLogin performs the common post-authentication steps: create session and tokens,
 // clear rate limits, and write a success audit log. Returns the login result.
-// When mfaVerified is true, the session is marked as MFA-verified.
-func (s *AuthService) completeLogin(ctx context.Context, account *accountDomain.Account, ip, userAgent, action string, extraDetail map[string]any, mfaVerified bool) (*LoginResult, error) {
+// When strongAuthMethods is non-empty, the session is marked as freshly strongly authenticated.
+func (s *AuthService) completeLogin(ctx context.Context, account *accountDomain.Account, ip, userAgent, action string, extraDetail map[string]any, strongAuthMethods []string) (*LoginResult, error) {
 	session, accessToken, refreshToken, err := s.createSessionAndTokens(ctx, account, ip, userAgent)
 	if err != nil {
 		return nil, err
 	}
 
-	// Mark session as MFA-verified when login completes after MFA.
-	if mfaVerified {
-		session.MFAVerified = true
+	if len(strongAuthMethods) > 0 {
+		session.MarkStrongAuth(time.Now(), strongAuthMethods)
 		if updateErr := s.sessionSvc.UpdateSession(ctx, session); updateErr != nil {
-			return nil, fmt.Errorf("failed to mark session as MFA-verified: %w", updateErr)
+			return nil, fmt.Errorf("failed to mark session as strongly authenticated: %w", updateErr)
+		}
+		claims, claimsErr := s.buildTokenClaims(ctx, account.ID, session.ID)
+		if claimsErr != nil {
+			return nil, fmt.Errorf("build token claims: %w", claimsErr)
+		}
+		unix := session.StrongAuthAt.Unix()
+		claims.AuthTime = &unix
+		claims.AMR = append([]string(nil), session.AuthMethods...)
+		accessToken, err = s.tokenSvc.GenerateAccessToken(claims)
+		if err != nil {
+			return nil, fmt.Errorf("generate strong-auth access token: %w", err)
 		}
 	}
 

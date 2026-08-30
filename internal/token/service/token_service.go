@@ -184,8 +184,10 @@ func (s *TokenService) AccessExpiry() time.Duration {
 	return s.accessExpiry
 }
 
-// GenerateRefreshToken generates a random refresh token and stores it in Redis
-func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clientID, sessionID, scope string) (*domain.RefreshToken, error) {
+// GenerateRefreshToken generates a random refresh token and stores it in Redis.
+// If resource is provided, it is bound to the refresh-token family and carried
+// across rotations so refresh cannot expand the access-token audience.
+func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clientID, sessionID, scope string, resource ...string) (*domain.RefreshToken, error) {
 	randomBytes := make([]byte, refreshTokenLength)
 	if _, err := rand.Read(randomBytes); err != nil {
 		s.logger.Error("Failed to generate random bytes", zap.Error(err))
@@ -201,6 +203,9 @@ func (s *TokenService) GenerateRefreshToken(ctx context.Context, accountID, clie
 		Scope:     scope,
 		IP:        audit.IPFromContext(ctx),
 		UserAgent: audit.UserAgentFromContext(ctx),
+	}
+	if len(resource) > 0 {
+		rt.Resource = resource[0]
 	}
 	now := time.Now()
 	rt.ExpiresAt = now.Add(s.refreshExpiry)

@@ -221,6 +221,14 @@ func (c *AuthController) MFAStepUp(ctx *gin.Context) {
 	}
 
 	now := time.Now().Unix()
+	amr := []string{"pwd", "otp"}
+	if tc.SessionID != "" {
+		if _, err := c.authSvc.MarkSessionStrongAuth(ctx, tc.SessionID, amr); err != nil {
+			c.logger.Error("Failed to update session strong-auth state", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(tc.SessionID)))
+			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to update session authentication state"))
+			return
+		}
+	}
 	newClaims := &tokenDomain.AccessTokenClaims{
 		AccountID:   tc.AccountID,
 		Username:    tc.Username,
@@ -231,7 +239,7 @@ func (c *AuthController) MFAStepUp(ctx *gin.Context) {
 		ClientID:    tc.ClientID,
 		SessionID:   tc.SessionID,
 		AuthTime:    &now,
-		AMR:         []string{"pwd", "otp"},
+		AMR:         amr,
 	}
 
 	newToken, err := c.tokenMgr.GenerateAccessToken(newClaims)

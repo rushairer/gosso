@@ -71,7 +71,7 @@ type mockTokenMgrForPasskey struct{}
 func (m *mockTokenMgrForPasskey) GenerateAccessToken(_ *tokenDomain.AccessTokenClaims) (string, error) {
 	return "mock-access", nil
 }
-func (m *mockTokenMgrForPasskey) GenerateRefreshToken(_ context.Context, _, _, _, _ string) (*tokenDomain.RefreshToken, error) {
+func (m *mockTokenMgrForPasskey) GenerateRefreshToken(_ context.Context, _, _, _, _ string, _ ...string) (*tokenDomain.RefreshToken, error) {
 	return &tokenDomain.RefreshToken{Token: "mock-refresh"}, nil
 }
 func (m *mockTokenMgrForPasskey) ValidateAccessTokenWithContext(_ context.Context, _ string) (*tokenDomain.AccessTokenClaims, error) {
@@ -188,7 +188,9 @@ func TestPasskey_RegisterBegin_AccountNotFound(t *testing.T) {
 	}
 	api := engine.Group("/api/auth")
 	api.Use(func(ctx *gin.Context) {
+		now := time.Now().Unix()
 		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctx.Set(middleware.ContextKeyClaims, &tokenDomain.AccessTokenClaims{AuthTime: &now, AMR: []string{"pwd", "otp"}})
 		ctx.Next()
 	})
 	api.POST("/passkey/register/begin", ctrl.RegisterBegin)
@@ -198,6 +200,41 @@ func TestPasskey_RegisterBegin_AccountNotFound(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestPasskey_RegisterBegin_RequiresRecentStrongAuth(t *testing.T) {
+	cases := []struct {
+		name   string
+		claims *tokenDomain.AccessTokenClaims
+	}{
+		{name: "missing auth time", claims: &tokenDomain.AccessTokenClaims{AMR: []string{"otp"}}},
+		{name: "missing strong method", claims: &tokenDomain.AccessTokenClaims{AuthTime: utilityPtrInt64(time.Now().Unix()), AMR: []string{"pwd"}}},
+		{name: "stale strong auth", claims: &tokenDomain.AccessTokenClaims{AuthTime: utilityPtrInt64(time.Now().Add(-passkeyStepUpMaxAge - time.Second).Unix()), AMR: []string{"pwd", "otp"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			engine := gin.New()
+			ctrl := &PasskeyController{logger: zap.NewNop()}
+			api := engine.Group("/api/auth")
+			api.Use(func(ctx *gin.Context) {
+				ctx.Set(middleware.ContextKeyAccountID, "account-001")
+				ctx.Set(middleware.ContextKeyClaims, tc.claims)
+				ctx.Next()
+			})
+			api.POST("/passkey/register/begin", ctrl.RegisterBegin)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/auth/passkey/register/begin", nil)
+			w := httptest.NewRecorder()
+			engine.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusForbidden, w.Code)
+		})
+	}
+}
+
+func utilityPtrInt64(v int64) *int64 {
+	return &v
 }
 
 // ──────────────────────────────────────────────

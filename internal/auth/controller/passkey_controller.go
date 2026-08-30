@@ -126,23 +126,34 @@ const passkeyStepUpMaxAge = 5 * time.Minute
 func (c *PasskeyController) checkStepUp(ctx *gin.Context) bool {
 	claimsRaw, ok := ctx.Get(middleware.ContextKeyClaims)
 	if !ok {
-		return true
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "authentication required"))
+		return false
 	}
 	claims, ok := claimsRaw.(*tokenDomain.AccessTokenClaims)
-	if !ok || claims == nil {
-		return true
+	if !ok || claims == nil || claims.AuthTime == nil || *claims.AuthTime <= 0 {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "recent strong authentication required for passkey registration"))
+		return false
 	}
-	var authTime time.Time
-	if claims.AuthTime != nil && *claims.AuthTime > 0 {
-		authTime = time.Unix(*claims.AuthTime, 0)
-	} else if claims.IssuedAt != nil {
-		authTime = claims.IssuedAt.Time
+	if !hasStrongAuthMethod(claims.AMR) {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "recent strong authentication required for passkey registration"))
+		return false
 	}
-	if !authTime.IsZero() && time.Since(authTime) > passkeyStepUpMaxAge {
-		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "recent authentication required for passkey registration"))
+	authTime := time.Unix(*claims.AuthTime, 0)
+	if time.Since(authTime) > passkeyStepUpMaxAge || time.Until(authTime) > time.Minute {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "recent strong authentication required for passkey registration"))
 		return false
 	}
 	return true
+}
+
+func hasStrongAuthMethod(amr []string) bool {
+	for _, method := range amr {
+		switch method {
+		case "otp", "mfa", "swk", "hwk", "fpt", "face", "iris", "vbm":
+			return true
+		}
+	}
+	return false
 }
 
 // RegisterBegin POST /api/auth/passkey/register/begin

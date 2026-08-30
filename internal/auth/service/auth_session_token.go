@@ -48,6 +48,13 @@ func (s *AuthService) createSessionAndTokens(ctx context.Context, account *accou
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("build token claims: %w", err)
 	}
+	if authTime := session.AuthenticationTime(); !authTime.IsZero() {
+		unix := authTime.Unix()
+		claims.AuthTime = &unix
+	}
+	if len(session.AuthMethods) > 0 {
+		claims.AMR = append([]string(nil), session.AuthMethods...)
+	}
 
 	accessToken, err := s.tokenSvc.GenerateAccessToken(claims)
 	if err != nil {

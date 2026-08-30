@@ -18,14 +18,17 @@ var ErrSessionAccountIDRequired = errors.New("session: account_id is required")
 
 // Session is the session entity.
 type Session struct {
-	ID           string    `json:"id"`
-	AccountID    string    `json:"account_id"`
-	Username     string    `json:"username,omitempty"`
-	IP           string    `json:"ip"`
-	UserAgent    string    `json:"user_agent"`
-	MFAVerified  bool      `json:"mfa_verified"`
-	CreatedAt    time.Time `json:"created_at"`
-	LastActiveAt time.Time `json:"last_active_at"`
+	ID              string    `json:"id"`
+	AccountID       string    `json:"account_id"`
+	Username        string    `json:"username,omitempty"`
+	IP              string    `json:"ip"`
+	UserAgent       string    `json:"user_agent"`
+	MFAVerified     bool      `json:"mfa_verified"`
+	AuthenticatedAt time.Time `json:"authenticated_at,omitempty"`
+	StrongAuthAt    time.Time `json:"strong_auth_at,omitempty"`
+	AuthMethods     []string  `json:"auth_methods,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	LastActiveAt    time.Time `json:"last_active_at"`
 	// Metadata stores additional session information (e.g., device type, browser).
 	Metadata map[string]any `json:"metadata"`
 }
@@ -37,17 +40,23 @@ func NewSession(accountID, username, ip, userAgent string, mfaVerified bool) (*S
 		return nil, ErrSessionAccountIDRequired
 	}
 	now := time.Now()
-	return &Session{
-		ID:           uuid.New().String(),
-		AccountID:    accountID,
-		Username:     username,
-		IP:           ip,
-		UserAgent:    userAgent,
-		MFAVerified:  mfaVerified,
-		CreatedAt:    now,
-		LastActiveAt: now,
-		Metadata:     make(map[string]any),
-	}, nil
+	session := &Session{
+		ID:              uuid.New().String(),
+		AccountID:       accountID,
+		Username:        username,
+		IP:              ip,
+		UserAgent:       userAgent,
+		MFAVerified:     mfaVerified,
+		AuthenticatedAt: now,
+		AuthMethods:     []string{"pwd"},
+		CreatedAt:       now,
+		LastActiveAt:    now,
+		Metadata:        make(map[string]any),
+	}
+	if mfaVerified {
+		session.MarkStrongAuth(now, []string{"pwd", "otp"})
+	}
+	return session, nil
 }
 
 // IsExpired reports whether the session has expired.
@@ -64,4 +73,33 @@ func (s *Session) UpdateActivity() {
 		return
 	}
 	s.LastActiveAt = time.Now()
+}
+
+// MarkStrongAuth records a fresh strong-authentication event on the session.
+func (s *Session) MarkStrongAuth(at time.Time, methods []string) {
+	if s == nil {
+		return
+	}
+	if at.IsZero() {
+		at = time.Now()
+	}
+	s.MFAVerified = true
+	s.StrongAuthAt = at
+	if len(methods) > 0 {
+		s.AuthMethods = append([]string(nil), methods...)
+	}
+}
+
+// AuthenticationTime returns the best available real authentication instant.
+func (s *Session) AuthenticationTime() time.Time {
+	if s == nil {
+		return time.Time{}
+	}
+	if !s.StrongAuthAt.IsZero() {
+		return s.StrongAuthAt
+	}
+	if !s.AuthenticatedAt.IsZero() {
+		return s.AuthenticatedAt
+	}
+	return s.CreatedAt
 }

@@ -34,19 +34,20 @@ import (
 // ──────────────────────────────────────────────
 
 type mockAuthOrchestrator struct {
-	loginFn            func() (*service.LoginResult, error)
-	mfaVerifyFn        func() (*service.LoginResult, error)
-	logoutFn           func() error
-	refreshFn          func() (*service.RefreshResult, error)
-	validateSessionFn  func() (*sessionDomain.Session, error)
-	listSessionsFn     func() ([]*sessionDomain.Session, error)
-	revokeSessionFn    func() error
-	verifyPasswordFn   func() error
-	mfaSvc             *service.MFAService
-	changePasswordFn   func(oldPassword, newPassword string) error
-	updateProfileFn    func(accountID, displayName string) (*accountDomain.Account, error)
-	updateEmailFn      func(accountID, newEmail string) error
-	isEmailAvailableFn func(email string) (bool, error)
+	loginFn                 func() (*service.LoginResult, error)
+	mfaVerifyFn             func() (*service.LoginResult, error)
+	logoutFn                func() error
+	refreshFn               func() (*service.RefreshResult, error)
+	validateSessionFn       func() (*sessionDomain.Session, error)
+	markSessionStrongAuthFn func() (*sessionDomain.Session, error)
+	listSessionsFn          func() ([]*sessionDomain.Session, error)
+	revokeSessionFn         func() error
+	verifyPasswordFn        func() error
+	mfaSvc                  *service.MFAService
+	changePasswordFn        func(oldPassword, newPassword string) error
+	updateProfileFn         func(accountID, displayName string) (*accountDomain.Account, error)
+	updateEmailFn           func(accountID, newEmail string) error
+	isEmailAvailableFn      func(email string) (bool, error)
 }
 
 func (m *mockAuthOrchestrator) LoginByUsernamePassword(_ context.Context, _ *service.LoginCommand) (*service.LoginResult, error) {
@@ -82,6 +83,13 @@ func (m *mockAuthOrchestrator) ValidateSession(_ context.Context, _ string) (*se
 		return m.validateSessionFn()
 	}
 	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockAuthOrchestrator) MarkSessionStrongAuth(_ context.Context, _ string, _ []string) (*sessionDomain.Session, error) {
+	if m.markSessionStrongAuthFn != nil {
+		return m.markSessionStrongAuthFn()
+	}
+	return &sessionDomain.Session{ID: "session-001", AccountID: "account-001"}, nil
 }
 
 func (m *mockAuthOrchestrator) ListSessions(_ context.Context, _ string) ([]*sessionDomain.Session, error) {
@@ -148,7 +156,7 @@ func (m *mockTokenManager) GenerateAccessToken(_ *tokenDomain.AccessTokenClaims)
 	return "mock-access-token", nil
 }
 
-func (m *mockTokenManager) GenerateRefreshToken(_ context.Context, _, _, _, _ string) (*tokenDomain.RefreshToken, error) {
+func (m *mockTokenManager) GenerateRefreshToken(_ context.Context, _, _, _, _ string, _ ...string) (*tokenDomain.RefreshToken, error) {
 	return &tokenDomain.RefreshToken{Token: "mock-refresh-token"}, nil
 }
 

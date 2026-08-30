@@ -252,6 +252,7 @@ func (c *OIDCController) LogoutConfirm(ctx *gin.Context) {
 <h1>Confirm Logout</h1>
 <p>You are about to log out from the identity provider.</p>
 <form method="POST" action="/oidc/logout">` +
+				hiddenInput("csrf_token", logoutCSRFTokenFromCookie(ctx)) +
 				hiddenInput("id_token_hint", req.IDTokenHint) +
 				hiddenInput("client_id", req.ClientID) +
 				hiddenInput("post_logout_redirect_uri", req.PostLogoutRedirectURI) +
@@ -274,6 +275,7 @@ func (c *OIDCController) LogoutConfirm(ctx *gin.Context) {
 <h1>Confirm Logout</h1>
 <p>You are about to log out from the identity provider.</p>
 <form method="POST" action="/oidc/logout">` +
+		hiddenInput("csrf_token", logoutCSRFTokenFromCookie(ctx)) +
 		hiddenInput("client_id", req.ClientID) +
 		hiddenInput("post_logout_redirect_uri", req.PostLogoutRedirectURI) +
 		hiddenInput("state", req.State) +
@@ -281,6 +283,14 @@ func (c *OIDCController) LogoutConfirm(ctx *gin.Context) {
 </form>
 </body>
 </html>`)
+}
+
+func logoutCSRFTokenFromCookie(ctx *gin.Context) string {
+	cookie, _ := ctx.Cookie("__Host-csrf_token")
+	if cookie == "" {
+		cookie, _ = ctx.Cookie("csrf_token")
+	}
+	return cookie
 }
 
 // hiddenInput renders a hidden <input> element with HTML-escaped value.

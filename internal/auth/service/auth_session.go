@@ -197,6 +197,19 @@ func (s *AuthService) ValidateSession(ctx context.Context, sessionID string) (*s
 	return s.sessionSvc.ValidateSession(ctx, sessionID)
 }
 
+// MarkSessionStrongAuth records a fresh strong-authentication event on an active session.
+func (s *AuthService) MarkSessionStrongAuth(ctx context.Context, sessionID string, methods []string) (*sessionDomain.Session, error) {
+	session, err := s.sessionSvc.ValidateSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	session.MarkStrongAuth(time.Now(), methods)
+	if err := s.sessionSvc.UpdateSession(ctx, session); err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
 // ListSessions lists all active sessions for the account
 func (s *AuthService) ListSessions(ctx context.Context, accountID string) ([]*sessionDomain.Session, error) {
 	return s.sessionSvc.ListSessionsByAccount(ctx, accountID)

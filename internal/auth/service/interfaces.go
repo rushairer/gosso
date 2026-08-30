@@ -17,6 +17,7 @@ type AuthOrchestrator interface {
 	Logout(ctx context.Context, accountID, sessionID string, accessTokenJTI string, tokenExpiresAt time.Time) error
 	RefreshTokens(ctx context.Context, refreshToken string) (*RefreshResult, error)
 	ValidateSession(ctx context.Context, sessionID string) (*sessionDomain.Session, error)
+	MarkSessionStrongAuth(ctx context.Context, sessionID string, methods []string) (*sessionDomain.Session, error)
 	ListSessions(ctx context.Context, accountID string) ([]*sessionDomain.Session, error)
 	RevokeSession(ctx context.Context, accountID, sessionID string) error
 	ValidateMFAToken(ctx context.Context, mfaToken string) (*tokenDomain.AccessTokenClaims, error)
@@ -35,7 +36,7 @@ type AuthOrchestrator interface {
 // TokenManager defines the interface used by controllers and middleware for token operations.
 type TokenManager interface {
 	GenerateAccessToken(claims *tokenDomain.AccessTokenClaims) (string, error)
-	GenerateRefreshToken(ctx context.Context, accountID, clientID, sessionID, scope string) (*tokenDomain.RefreshToken, error)
+	GenerateRefreshToken(ctx context.Context, accountID, clientID, sessionID, scope string, resource ...string) (*tokenDomain.RefreshToken, error)
 	ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*tokenDomain.AccessTokenClaims, error)
 	ValidateRefreshToken(ctx context.Context, token string) (*tokenDomain.RefreshToken, error)
 	RotateRefreshToken(ctx context.Context, oldToken string) (*tokenDomain.RefreshToken, error)

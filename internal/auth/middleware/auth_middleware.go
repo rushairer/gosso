@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rushairer/gouno"
@@ -37,7 +36,7 @@ type AuthConfigOptions struct {
 	LoginURL           string
 	EnableCookieAuth   bool
 	AuthCookieName     string
-	SessionCookieName   string
+	SessionCookieName  string
 	AccountInfoFetcher AccountInfoFetcher
 }
 
@@ -63,8 +62,8 @@ type AccountInfo struct {
 func ValidateBearerToken(ctx *gin.Context, tokenSvc TokenValidator, sessionValidator sessionDomain.SessionValidator) (*tokenDomain.AccessTokenClaims, error) {
 	return ValidateBearerTokenWithConfig(ctx, tokenSvc, sessionValidator, AuthConfigOptions{
 		EnableCookieAuth:  true,
-		AuthCookieName:     "__Host-access_token",
-		SessionCookieName:  "__Host-gosso-session",
+		AuthCookieName:    "__Host-access_token",
+		SessionCookieName: "__Host-gosso-session",
 	})
 }
 
@@ -121,10 +120,12 @@ func ValidateBearerTokenWithConfig(ctx *gin.Context, tokenSvc TokenValidator, se
 				SessionID: session.ID,
 				Scope:     "openid profile email",
 			}
-			if session.MFAVerified {
-				now := time.Now().Unix()
-				claims.AuthTime = &now
-				claims.AMR = []string{"pwd", "otp"}
+			if authTime := session.AuthenticationTime(); !authTime.IsZero() {
+				unix := authTime.Unix()
+				claims.AuthTime = &unix
+			}
+			if len(session.AuthMethods) > 0 {
+				claims.AMR = append([]string(nil), session.AuthMethods...)
 			}
 			// Fetch roles/permissions from the account service if available.
 			if cfg.AccountInfoFetcher != nil {
@@ -149,10 +150,10 @@ func ValidateBearerTokenWithConfig(ctx *gin.Context, tokenSvc TokenValidator, se
 // Returns an error if sessionValidator is nil.
 func JWTAuthMiddleware(tokenSvc TokenValidator, sessionValidator sessionDomain.SessionValidator) (gin.HandlerFunc, error) {
 	return JWTAuthMiddlewareWithConfig(tokenSvc, sessionValidator, AuthConfigOptions{
-		LoginURL:           "/login",
-		EnableCookieAuth:   true,
-		AuthCookieName:     "__Host-access_token",
-		SessionCookieName:  "__Host-gosso-session",
+		LoginURL:          "/login",
+		EnableCookieAuth:  true,
+		AuthCookieName:    "__Host-access_token",
+		SessionCookieName: "__Host-gosso-session",
 	})
 }
 

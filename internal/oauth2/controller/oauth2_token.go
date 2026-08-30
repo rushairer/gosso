@@ -191,9 +191,19 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		}
 	}
 
+	authEventTime := authCode.AuthTime
+	authMethods := append([]string(nil), authCode.AuthMethods...)
+	if authCode.SessionID != "" && c.sessionValidator != nil {
+		if session, sessionErr := c.sessionValidator.ValidateSession(ctx, authCode.SessionID); sessionErr == nil && session != nil {
+			authEventTime = session.AuthenticationTime()
+			if len(session.AuthMethods) > 0 {
+				authMethods = append([]string(nil), session.AuthMethods...)
+			}
+		}
+	}
 	var authTime *int64
-	if !authCode.AuthTime.IsZero() {
-		authTime = utility.Ptr(authCode.AuthTime.Unix())
+	if !authEventTime.IsZero() {
+		authTime = utility.Ptr(authEventTime.Unix())
 	}
 	var aud []string
 	if authCode.Resource != "" {
@@ -212,7 +222,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		Roles:       roles,
 		Permissions: permissions,
 		AuthTime:    authTime,
-		AMR:         authCode.AuthMethods,
+		AMR:         authMethods,
 	})
 	if err != nil {
 		c.logger.Error("Failed to generate access token for authorization code", zap.Error(err), zap.String("client_id", req.ClientID))
@@ -222,7 +232,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 
 	var refreshToken *tokenDomain.RefreshToken
 	if client.HasGrantType("refresh_token") {
-		refreshToken, err = c.tokenSvc.GenerateRefreshToken(ctx, authCode.AccountID, authCode.ClientID, authCode.SessionID, strings.Join(authCode.Scopes, " "))
+		refreshToken, err = c.tokenSvc.GenerateRefreshToken(ctx, authCode.AccountID, authCode.ClientID, authCode.SessionID, strings.Join(authCode.Scopes, " "), authCode.Resource)
 		if err != nil {
 			c.logger.Error("Failed to generate refresh token for authorization code", zap.Error(err), zap.String("client_id", req.ClientID))
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -230,7 +240,7 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		}
 	}
 
-	idToken, ok := c.maybeGenerateIDToken(ctx, authCode.AccountID, authCode.ClientID, authCode.Scopes, authCode.Nonce, authCode.AuthTime, accessToken, authCode.AuthMethods, authCode.SessionID)
+	idToken, ok := c.maybeGenerateIDToken(ctx, authCode.AccountID, authCode.ClientID, authCode.Scopes, authCode.Nonce, authEventTime, accessToken, authMethods, authCode.SessionID)
 	if !ok {
 		return
 	}
@@ -250,10 +260,6 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 
 	controllerutil.SetNoCacheHeaders(ctx)
 	if isCookieSessionRequest(ctx) {
-		setSSOAuthCookie(ctx, accessToken, int(c.tokenSvc.AccessExpiry().Seconds()))
-		if refreshToken != nil {
-			setSSORefreshCookie(ctx, refreshToken.Token, maxAgeUntil(refreshToken.ExpiresAt))
-		}
 		ctx.JSON(http.StatusOK, gin.H{"expires_in": int(c.tokenSvc.AccessExpiry().Seconds()), "scope": strings.Join(authCode.Scopes, " ")})
 		return
 	}
@@ -365,7 +371,9 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 	}
 
 	var aud []string
-	if len(client.AllowedResources) > 0 {
+	if newRefreshToken.Resource != "" {
+		aud = []string{newRefreshToken.Resource}
+	} else if len(client.AllowedResources) > 0 {
 		aud = client.AllowedResources
 	}
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
@@ -387,8 +395,6 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 
 	controllerutil.SetNoCacheHeaders(ctx)
 	if isCookieSessionRequest(ctx) {
-		setSSOAuthCookie(ctx, accessToken, int(c.tokenSvc.AccessExpiry().Seconds()))
-		setSSORefreshCookie(ctx, newRefreshToken.Token, maxAgeUntil(newRefreshToken.ExpiresAt))
 		ctx.JSON(http.StatusOK, gin.H{"expires_in": int(c.tokenSvc.AccessExpiry().Seconds()), "scope": accessTokenScope})
 		return
 	}

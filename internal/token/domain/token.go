@@ -31,6 +31,7 @@ type RefreshToken struct {
 	ClientID  string    `json:"client_id,omitempty"`
 	SessionID string    `json:"session_id,omitempty"`
 	Scope     string    `json:"scope,omitempty"`
+	Resource  string    `json:"resource,omitempty"`
 	IP        string    `json:"ip,omitempty"`
 	UserAgent string    `json:"user_agent,omitempty"`
 	ExpiresAt time.Time `json:"expires_at"`

@@ -254,7 +254,7 @@ func (s *PasskeyService) beginLoginInternal(ctx context.Context, accountID, keyP
 
 	user := domain.NewWebAuthnUser(accountID, "", "", toCredentialSlice(creds))
 
-	options, sessionData, err := s.web.BeginLogin(user)
+	options, sessionData, err := s.web.BeginLogin(user, wa.WithUserVerification(protocol.VerificationRequired))
 	if err != nil {
 		return nil, "", fmt.Errorf("begin %s login: %w", logAction, err)
 	}
@@ -275,7 +275,7 @@ func (s *PasskeyService) beginLoginInternal(ctx context.Context, accountID, keyP
 
 // BeginDiscoverableLogin starts passwordless login (unknown accountID)
 func (s *PasskeyService) BeginDiscoverableLogin(ctx context.Context) (*protocol.CredentialAssertion, string, error) {
-	options, sessionData, err := s.web.BeginDiscoverableLogin()
+	options, sessionData, err := s.web.BeginDiscoverableLogin(wa.WithUserVerification(protocol.VerificationRequired))
 	if err != nil {
 		return nil, "", fmt.Errorf("begin discoverable login: %w", err)
 	}

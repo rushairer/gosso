@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/go-webauthn/webauthn/protocol"
 	wa "github.com/go-webauthn/webauthn/webauthn"
 	"go.uber.org/zap"
 
@@ -67,9 +68,10 @@ func InitializeAuthModule(cfg AuthModuleConfig) (*AuthModule, error) {
 	var passkeySvc *service.PasskeyService
 	if cfg.AuthConfig.WebAuthnRPID != "" {
 		web, webErr := wa.New(&wa.Config{
-			RPID:          cfg.AuthConfig.WebAuthnRPID,
-			RPDisplayName: cfg.AuthConfig.WebAuthnRPName,
-			RPOrigins:     []string{cfg.AuthConfig.WebAuthnRPOrigin},
+			RPID:                   cfg.AuthConfig.WebAuthnRPID,
+			RPDisplayName:          cfg.AuthConfig.WebAuthnRPName,
+			RPOrigins:              []string{cfg.AuthConfig.WebAuthnRPOrigin},
+			AuthenticatorSelection: protocol.AuthenticatorSelection{UserVerification: protocol.VerificationRequired},
 		})
 		if webErr != nil {
 			cfg.Logger.Error("Failed to initialize WebAuthn", zap.Error(webErr),

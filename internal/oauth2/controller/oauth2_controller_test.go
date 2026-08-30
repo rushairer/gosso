@@ -87,6 +87,7 @@ type mockTokenMgr struct {
 		clientID  string
 		sessionID string
 		scope     string
+		resource  string
 	}
 }
 
@@ -98,11 +99,14 @@ func (m *mockTokenMgr) GenerateAccessToken(claims *tokenDomain.AccessTokenClaims
 	return "mock-access-token", nil
 }
 
-func (m *mockTokenMgr) GenerateRefreshToken(_ context.Context, accountID, clientID, sessionID, scope string) (*tokenDomain.RefreshToken, error) {
+func (m *mockTokenMgr) GenerateRefreshToken(_ context.Context, accountID, clientID, sessionID, scope string, resource ...string) (*tokenDomain.RefreshToken, error) {
 	m.lastRefreshArgs.accountID = accountID
 	m.lastRefreshArgs.clientID = clientID
 	m.lastRefreshArgs.sessionID = sessionID
 	m.lastRefreshArgs.scope = scope
+	if len(resource) > 0 {
+		m.lastRefreshArgs.resource = resource[0]
+	}
 	if m.generateRefreshFn != nil {
 		return m.generateRefreshFn()
 	}
@@ -686,11 +690,7 @@ func TestToken_RefreshToken_Success(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Nil(t, resp["access_token"])
 	assert.Nil(t, resp["refresh_token"])
-	require.Len(t, w.Result().Cookies(), 2)
-	assert.Equal(t, "__Host-access_token", w.Result().Cookies()[0].Name)
-	assert.Equal(t, "mock-access-token", w.Result().Cookies()[0].Value)
-	assert.True(t, w.Result().Cookies()[0].HttpOnly)
-	assert.Equal(t, "__Host-refresh_token", w.Result().Cookies()[1].Name)
+	assert.Empty(t, w.Result().Cookies())
 }
 
 func TestToken_RefreshToken_Invalid(t *testing.T) {
@@ -2061,11 +2061,7 @@ func TestToken_AuthCode_Success(t *testing.T) {
 	require.NotNil(t, tokenMgr.lastAccessClaims)
 	assert.Equal(t, "session-001", tokenMgr.lastAccessClaims.SessionID)
 	assert.Equal(t, "session-001", tokenMgr.lastRefreshArgs.sessionID)
-	require.Len(t, w.Result().Cookies(), 2)
-	assert.Equal(t, "__Host-access_token", w.Result().Cookies()[0].Name)
-	assert.Equal(t, "mock-access-token", w.Result().Cookies()[0].Value)
-	assert.True(t, w.Result().Cookies()[0].HttpOnly)
-	assert.Equal(t, "__Host-refresh_token", w.Result().Cookies()[1].Name)
+	assert.Empty(t, w.Result().Cookies())
 }
 
 func TestToken_AuthCode_SuccessWithOpenID(t *testing.T) {

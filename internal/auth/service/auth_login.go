@@ -194,7 +194,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, mfaToken, mfaCode, mfa
 	}
 
 	// 5. Complete login (session, tokens, rate limit clear, audit)
-	return s.completeLogin(ctx, account, ip, userAgent, auditDomain.ActionMFALoginSuccess, nil, true)
+	return s.completeLogin(ctx, account, ip, userAgent, auditDomain.ActionMFALoginSuccess, nil, []string{"pwd", "otp"})
 }
 
 // CompletePasskeyMFALogin completes MFA login directly after passkey verification,
@@ -248,7 +248,7 @@ func (s *AuthService) CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip,
 	}
 
 	// 6. Complete login (session, tokens, rate limit clear, audit)
-	return s.completeLogin(ctx, account, ip, userAgent, auditDomain.ActionMFALoginSuccess, nil, true)
+	return s.completeLogin(ctx, account, ip, userAgent, auditDomain.ActionMFALoginSuccess, nil, []string{"pwd", "swk"})
 }
 
 // LoginByPasskey login directly after passkey verification (skipping password check).
@@ -283,9 +283,9 @@ func (s *AuthService) LoginByPasskey(ctx context.Context, accountID, ip, userAge
 	}
 
 	// 3. Complete login (session, tokens, rate limit clear, audit).
-	// Passkey provides inherent multi-factor authentication — session is MFA-verified.
+	// Passkey provides user verification through WebAuthn UV.
 	return s.completeLogin(ctx, account, ip, userAgent, auditDomain.ActionLoginSuccess,
-		map[string]any{"method": "passkey"}, true)
+		map[string]any{"method": "passkey"}, []string{"swk"})
 }
 
 // Logout deletes session and revokes tokens
