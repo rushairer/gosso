@@ -141,6 +141,8 @@ type AuthConfig struct {
 	WebAuthnRPID            string        `mapstructure:"webauthn_rp_id"`
 	WebAuthnRPName          string        `mapstructure:"webauthn_rp_name"`
 	WebAuthnRPOrigin        string        `mapstructure:"webauthn_rp_origin"`
+	TOTPEncryptionKeyPath   string        `mapstructure:"totp_encryption_key_path"`
+	VerifyHashPepperPath    string        `mapstructure:"verify_hash_pepper_path"`
 	TOTPEncryptionKey       string        `mapstructure:"totp_encryption_key" json:"-"`
 	VerifyHashPepper        string        `mapstructure:"verify_hash_pepper" json:"-"`
 	LoginRateLimitWindow    time.Duration `mapstructure:"login_rate_limit_window"`
@@ -410,6 +412,20 @@ func (c *GoUnoConfig) validateAuth() error {
 		case "localhost", "127.0.0.1", "::1":
 			return fmt.Errorf("auth: issuer must not point to localhost in production")
 		}
+	}
+	if c.AuthConfig.TOTPEncryptionKey == "" && c.AuthConfig.TOTPEncryptionKeyPath != "" {
+		data, err := os.ReadFile(c.AuthConfig.TOTPEncryptionKeyPath)
+		if err != nil {
+			return fmt.Errorf("auth: read totp_encryption_key_path: %w", err)
+		}
+		c.AuthConfig.TOTPEncryptionKey = strings.TrimSpace(string(data))
+	}
+	if c.AuthConfig.VerifyHashPepper == "" && c.AuthConfig.VerifyHashPepperPath != "" {
+		data, err := os.ReadFile(c.AuthConfig.VerifyHashPepperPath)
+		if err != nil {
+			return fmt.Errorf("auth: read verify_hash_pepper_path: %w", err)
+		}
+		c.AuthConfig.VerifyHashPepper = strings.TrimSpace(string(data))
 	}
 	if err := c.validateTOTPKey(); err != nil {
 		return err

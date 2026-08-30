@@ -685,3 +685,34 @@ func TestSetConfigDefaults(t *testing.T) {
 	assert.Equal(t, "168h", v.GetString("auth.refresh_token_expiry"))
 	assert.Equal(t, 0, v.GetInt("log.level"))
 }
+
+func TestValidate_LoadSecretsFromPath(t *testing.T) {
+	totpFile, err := os.CreateTemp("", "totp_key_*")
+	assert.NoError(t, err)
+	defer os.Remove(totpFile.Name())
+
+	pepperFile, err := os.CreateTemp("", "pepper_*")
+	assert.NoError(t, err)
+	defer os.Remove(pepperFile.Name())
+
+	_, _ = totpFile.WriteString("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n")
+	_ = totpFile.Close()
+
+	_, _ = pepperFile.WriteString("super-secret-pepper-from-file\n")
+	_ = pepperFile.Close()
+
+	cfg := validConfig()
+	cfg.WebServerConfig.Production = true
+	cfg.AuthConfig.Issuer = "https://sso.example.com"
+	cfg.AuthConfig.KeyID = "prod-key-1"
+	cfg.AuthConfig.TOTPEncryptionKey = ""
+	cfg.AuthConfig.TOTPEncryptionKeyPath = totpFile.Name()
+	cfg.AuthConfig.VerifyHashPepper = ""
+	cfg.AuthConfig.VerifyHashPepperPath = pepperFile.Name()
+
+	err = cfg.Validate()
+	assert.NoError(t, err)
+	assert.Equal(t, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", cfg.AuthConfig.TOTPEncryptionKey)
+	assert.Equal(t, "super-secret-pepper-from-file", cfg.AuthConfig.VerifyHashPepper)
+}
+

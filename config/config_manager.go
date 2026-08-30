@@ -138,6 +138,8 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("auth.auth_cookie_name", "__Host-access_token")
 	v.SetDefault("auth.include_user_roles", false)
 	v.SetDefault("auth.include_user_permissions", false)
+	v.SetDefault("auth.totp_encryption_key_path", "")
+	v.SetDefault("auth.verify_hash_pepper_path", "")
 	v.SetDefault("auth.verify_hash_pepper", "")
 	// Redis configuration
 	v.SetDefault("redis.max_active_conns", 10)
