@@ -153,7 +153,7 @@ type AuthConfig struct {
 	// multiple legitimate users share the same public IP.
 	// Example: ["203.0.113.0/24", "198.51.100.5"]
 	// Note: Per-IP+username counters (login_attempts:{ip}:{user}) still apply.
-	LoginIPAllowlist               []string      `mapstructure:"login_ip_allowlist"`
+	LoginIPAllowlist []string `mapstructure:"login_ip_allowlist"`
 	// BackchannelAllowedCIDRs contains IP addresses or CIDR ranges explicitly permitted
 	// for outbound back-channel logout requests (e.g. for local test or internal container networks).
 	// When empty, only public IPs are permitted.

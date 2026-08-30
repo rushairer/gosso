@@ -49,16 +49,16 @@ func TestAudit(t *testing.T) {
 		}
 		resource := json.RawMessage(dataJson)
 		return &domain.AuditRecord{
-			ID:        id.String(),
+			ID:            id.String(),
 			CorrelationID: id.String(),
-			AccountID: &testAccountID,
-			Action:    "test.action",
-			Actor:     "test",
-			Resource:  resource,
-			Old:       json.RawMessage("{}"),
-			New:       json.RawMessage(`{"mhid":"123"}`),
-			Meta:      json.RawMessage(`{"foo":"bar"}`),
-			CreatedAt: time.Now(),
+			AccountID:     &testAccountID,
+			Action:        "test.action",
+			Actor:         "test",
+			Resource:      resource,
+			Old:           json.RawMessage("{}"),
+			New:           json.RawMessage(`{"mhid":"123"}`),
+			Meta:          json.RawMessage(`{"foo":"bar"}`),
+			CreatedAt:     time.Now(),
 		}, nil
 	})
 	require.NoError(t, err)

@@ -715,4 +715,3 @@ func TestValidate_LoadSecretsFromPath(t *testing.T) {
 	assert.Equal(t, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", cfg.AuthConfig.TOTPEncryptionKey)
 	assert.Equal(t, "super-secret-pepper-from-file", cfg.AuthConfig.VerifyHashPepper)
 }
-

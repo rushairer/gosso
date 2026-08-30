@@ -1333,6 +1333,3 @@ func TestLogoutConfirm_ShowConfirmation_WithCSRF(t *testing.T) {
 	assert.Contains(t, body, `name="client_id" value="unregistered"`)
 	assert.Contains(t, body, "Cancel")
 }
-
-
-
