@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- Support authoritative `*_FILE` Docker Secret inputs for PostgreSQL DSN,
+  Redis DSN, and SMTP password configuration; reject unreadable or empty
+  configured files instead of falling back to environment values.
+
 ## [1.5.2] - 2026-08-31
 
 ### Fixed

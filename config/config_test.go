@@ -122,6 +122,16 @@ func TestConfigManager_ProductionConfigLoadsFromEnv(t *testing.T) {
 	assert.Equal(t, []string{"https://sso.example.com"}, cfg.CORSConfig.AllowedOrigins)
 }
 
+func TestLoadEnvironmentSecretFilePrefersConfiguredFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "redis_dsn")
+	require.NoError(t, os.WriteFile(path, []byte(" redis://:from-file@redis:6379/0\n"), 0o600))
+	t.Setenv("GOUNO_REDIS_DSN_FILE", path)
+	t.Setenv("GOUNO_REDIS_DSN", "redis://:from-env@redis:6379/0")
+
+	require.NoError(t, loadEnvironmentSecretFile("GOUNO_REDIS_DSN", "GOUNO_REDIS_DSN_FILE"))
+	assert.Equal(t, "redis://:from-file@redis:6379/0", os.Getenv("GOUNO_REDIS_DSN"))
+}
+
 func TestConfigManager_TestConfigIsValid(t *testing.T) {
 	cm, err := NewConfigManager(nil, "../config", "test")
 	require.NoError(t, err)
