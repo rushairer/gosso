@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -130,6 +131,441 @@ func TestLoadEnvironmentSecretFilePrefersConfiguredFile(t *testing.T) {
 
 	require.NoError(t, loadEnvironmentSecretFile("GOUNO_REDIS_DSN", "GOUNO_REDIS_DSN_FILE"))
 	assert.Equal(t, "redis://:from-file@redis:6379/0", os.Getenv("GOUNO_REDIS_DSN"))
+}
+
+func TestLoadEnvironmentSecretFileFailsClosed(t *testing.T) {
+	t.Run("unset file variable leaves runtime value unchanged", func(t *testing.T) {
+		t.Setenv("TEST_SECRET_FILE", "")
+		t.Setenv("TEST_SECRET", "existing")
+		require.NoError(t, loadEnvironmentSecretFile("TEST_SECRET", "TEST_SECRET_FILE"))
+		assert.Equal(t, "existing", os.Getenv("TEST_SECRET"))
+	})
+
+	t.Run("unreadable configured file is rejected", func(t *testing.T) {
+		t.Setenv("TEST_SECRET_FILE", filepath.Join(t.TempDir(), "missing"))
+		require.ErrorContains(t, loadEnvironmentSecretFile("TEST_SECRET", "TEST_SECRET_FILE"), "read TEST_SECRET_FILE")
+	})
+
+	t.Run("empty configured file is rejected", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "empty")
+		require.NoError(t, os.WriteFile(path, []byte(" \n"), 0o600))
+		t.Setenv("TEST_SECRET_FILE", path)
+		require.ErrorContains(t, loadEnvironmentSecretFile("TEST_SECRET", "TEST_SECRET_FILE"), "TEST_SECRET_FILE is empty")
+	})
+}
+
+func TestConfigManagerBindsSupportedCommandFlags(t *testing.T) {
+	cmd := &cobra.Command{Use: "gosso"}
+	cmd.Flags().String("address", "", "")
+	cmd.Flags().Int("port", 0, "")
+	cmd.Flags().Bool("debug", false, "")
+	cmd.Flags().String("env", "", "")
+	require.NoError(t, cmd.Flags().Set("address", "127.0.0.1"))
+	require.NoError(t, cmd.Flags().Set("port", "9090"))
+
+	cm, err := NewConfigManager(cmd, "../config", "test")
+	require.NoError(t, err)
+	assert.Equal(t, "127.0.0.1", cm.Config().WebServerConfig.Address)
+	assert.Equal(t, 9090, cm.Config().WebServerConfig.Port)
+}
+
+func TestConfigValidationHelperFailures(t *testing.T) {
+	tests := []struct {
+		name     string
+		validate func(*GoUnoConfig) error
+		mutate   func(*GoUnoConfig)
+		wantErr  string
+	}{
+		{
+			name:     "web server rejects invalid trusted proxy",
+			validate: func(c *GoUnoConfig) error { return c.validateWebServer() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.TrustedProxies = []string{"not-a-proxy"} },
+			wantErr:  "trusted_proxies entry",
+		},
+		{
+			name:     "web server rejects invalid port",
+			validate: func(c *GoUnoConfig) error { return c.validateWebServer() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.Port = 0 },
+			wantErr:  "port must be a valid",
+		},
+		{
+			name:     "web server requires positive body limit",
+			validate: func(c *GoUnoConfig) error { return c.validateWebServer() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.MaxBodySize = 0 },
+			wantErr:  "max_body_size",
+		},
+		{
+			name:     "web server requires positive read timeout",
+			validate: func(c *GoUnoConfig) error { return c.validateWebServer() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.ReadTimeout = 0 },
+			wantErr:  "read_timeout",
+		},
+		{
+			name:     "web server requires positive write timeout",
+			validate: func(c *GoUnoConfig) error { return c.validateWebServer() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.WriteTimeout = 0 },
+			wantErr:  "write_timeout",
+		},
+		{
+			name:     "web server requires positive header timeout",
+			validate: func(c *GoUnoConfig) error { return c.validateWebServer() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.ReadHeaderTimeout = 0 },
+			wantErr:  "read_header_timeout",
+		},
+		{
+			name:     "web server requires positive idle timeout",
+			validate: func(c *GoUnoConfig) error { return c.validateWebServer() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.IdleTimeout = 0 },
+			wantErr:  "idle_timeout",
+		},
+		{
+			name:     "web server requires positive request timeout",
+			validate: func(c *GoUnoConfig) error { return c.validateWebServer() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.RequestTimeout = 0 },
+			wantErr:  "request_timeout",
+		},
+		{
+			name:     "web server requires positive shutdown timeout",
+			validate: func(c *GoUnoConfig) error { return c.validateWebServer() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.ShutdownTimeout = 0 },
+			wantErr:  "shutdown_timeout",
+		},
+		{
+			name:     "web server production rejects debug mode",
+			validate: func(c *GoUnoConfig) error { return c.validateWebServer() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.Production, c.WebServerConfig.Debug = true, true },
+			wantErr:  "debug mode must not be enabled",
+		},
+		{
+			name:     "web server production requires trusted proxies",
+			validate: func(c *GoUnoConfig) error { return c.validateWebServer() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.Production, c.WebServerConfig.TrustedProxies = true, nil },
+			wantErr:  "trusted_proxies must not be empty",
+		},
+		{
+			name:     "web server production rejects loopback binding",
+			validate: func(c *GoUnoConfig) error { return c.validateWebServer() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.Production, c.WebServerConfig.Address = true, "127.0.0.1" },
+			wantErr:  "loopback-only",
+		},
+		{
+			name:     "web server enforces timeout ordering",
+			validate: func(c *GoUnoConfig) error { return c.validateWebServer() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.IdleTimeout = c.WebServerConfig.ReadTimeout - time.Second },
+			wantErr:  "idle_timeout",
+		},
+		{
+			name:     "web server enforces header timeout ordering",
+			validate: func(c *GoUnoConfig) error { return c.validateWebServer() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.ReadHeaderTimeout = c.WebServerConfig.ReadTimeout },
+			wantErr:  "read_header_timeout",
+		},
+		{
+			name:     "web server rejects invalid address",
+			validate: func(c *GoUnoConfig) error { return c.validateWebServer() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.Address = "invalid-address" },
+			wantErr:  "address must be a valid IP address",
+		},
+		{
+			name:     "log rejects invalid format",
+			validate: func(c *GoUnoConfig) error { return c.validateLog() },
+			mutate:   func(c *GoUnoConfig) { c.LogConfig.Format = "xml" },
+			wantErr:  "format must be",
+		},
+		{
+			name:     "log rejects invalid level",
+			validate: func(c *GoUnoConfig) error { return c.validateLog() },
+			mutate:   func(c *GoUnoConfig) { c.LogConfig.Level = 6 },
+			wantErr:  "level must be",
+		},
+		{
+			name:     "database rejects negative pool stats interval",
+			validate: func(c *GoUnoConfig) error { return c.validateDatabase() },
+			mutate:   func(c *GoUnoConfig) { c.DatabaseConfig.PoolStatsIntervalSec = -1 },
+			wantErr:  "pool_stats_interval_sec",
+		},
+		{
+			name:     "cors rejects negative max age",
+			validate: func(c *GoUnoConfig) error { return c.validateCORS() },
+			mutate:   func(c *GoUnoConfig) { c.CORSConfig.MaxAge = -1 },
+			wantErr:  "max_age must not be negative",
+		},
+		{
+			name:     "cors rejects wildcard credentials",
+			validate: func(c *GoUnoConfig) error { return c.validateCORS() },
+			mutate: func(c *GoUnoConfig) {
+				c.CORSConfig.AllowCredentials, c.CORSConfig.AllowedOrigins = true, []string{"*"}
+			},
+			wantErr: "allow_credentials cannot be used",
+		},
+		{
+			name:     "cors production requires origins",
+			validate: func(c *GoUnoConfig) error { return c.validateCORS() },
+			mutate: func(c *GoUnoConfig) {
+				c.WebServerConfig.Production, c.CORSConfig.AllowedOrigins = true, nil
+			},
+			wantErr: "allowed_origins is required",
+		},
+		{
+			name:     "private key requires key ID in production",
+			validate: func(c *GoUnoConfig) error { return c.validatePrivateKeyPath() },
+			mutate:   func(c *GoUnoConfig) { c.WebServerConfig.Production = true },
+			wantErr:  "key_id is required",
+		},
+		{
+			name:     "private key rejects a configured directory",
+			validate: func(c *GoUnoConfig) error { return c.validatePrivateKeyPath() },
+			mutate: func(c *GoUnoConfig) {
+				c.AuthConfig.PrivateKeyPath, c.AuthConfig.KeyID = t.TempDir(), "key-id"
+			},
+			wantErr: "is a directory",
+		},
+		{
+			name:     "private key production rejects a missing file",
+			validate: func(c *GoUnoConfig) error { return c.validatePrivateKeyPath() },
+			mutate: func(c *GoUnoConfig) {
+				c.WebServerConfig.Production = true
+				c.AuthConfig.PrivateKeyPath, c.AuthConfig.KeyID = filepath.Join(t.TempDir(), "missing"), "key-id"
+			},
+			wantErr: "file does not exist",
+		},
+		{
+			name:     "smtp requires a port when configured",
+			validate: func(c *GoUnoConfig) error { return c.validateSMTP() },
+			mutate:   func(c *GoUnoConfig) { c.SMTPConfig.Host = "smtp.example.com" },
+			wantErr:  "smtp: port must be positive",
+		},
+		{
+			name:     "smtp requires from address when configured",
+			validate: func(c *GoUnoConfig) error { return c.validateSMTP() },
+			mutate: func(c *GoUnoConfig) {
+				c.SMTPConfig.Host, c.SMTPConfig.Port = "smtp.example.com", 587
+			},
+			wantErr: "smtp: from address is required",
+		},
+		{
+			name:     "smtp rejects invalid TLS policy",
+			validate: func(c *GoUnoConfig) error { return c.validateSMTP() },
+			mutate: func(c *GoUnoConfig) {
+				c.SMTPConfig.Host, c.SMTPConfig.Port, c.SMTPConfig.From, c.SMTPConfig.TLSPolicy = "smtp.example.com", 587, "noreply@example.com", "invalid"
+			},
+			wantErr: "tls_policy must be one of",
+		},
+		{
+			name:     "webauthn requires a name when configured",
+			validate: func(c *GoUnoConfig) error { return c.validateWebAuthn() },
+			mutate:   func(c *GoUnoConfig) { c.AuthConfig.WebAuthnRPID = "sso.example.com" },
+			wantErr:  "webauthn_rp_name is required",
+		},
+		{
+			name:     "webauthn requires an origin when configured",
+			validate: func(c *GoUnoConfig) error { return c.validateWebAuthn() },
+			mutate: func(c *GoUnoConfig) {
+				c.AuthConfig.WebAuthnRPID, c.AuthConfig.WebAuthnRPName = "sso.example.com", "GOSSO"
+			},
+			wantErr: "webauthn_rp_origin is required",
+		},
+		{
+			name:     "webauthn rejects non-local HTTP origins",
+			validate: func(c *GoUnoConfig) error { return c.validateWebAuthn() },
+			mutate: func(c *GoUnoConfig) {
+				c.AuthConfig.WebAuthnRPID, c.AuthConfig.WebAuthnRPName, c.AuthConfig.WebAuthnRPOrigin = "sso.example.com", "GOSSO", "http://sso.example.com"
+			},
+			wantErr: "only allowed for localhost",
+		},
+		{
+			name:     "webauthn rejects path components",
+			validate: func(c *GoUnoConfig) error { return c.validateWebAuthn() },
+			mutate: func(c *GoUnoConfig) {
+				c.AuthConfig.WebAuthnRPID, c.AuthConfig.WebAuthnRPName, c.AuthConfig.WebAuthnRPOrigin = "sso.example.com", "GOSSO", "https://sso.example.com/path"
+			},
+			wantErr: "must not contain a path component",
+		},
+		{
+			name:     "webauthn rejects fragments",
+			validate: func(c *GoUnoConfig) error { return c.validateWebAuthn() },
+			mutate: func(c *GoUnoConfig) {
+				c.AuthConfig.WebAuthnRPID, c.AuthConfig.WebAuthnRPName, c.AuthConfig.WebAuthnRPOrigin = "sso.example.com", "GOSSO", "https://sso.example.com#fragment"
+			},
+			wantErr: "must not contain a fragment",
+		},
+		{
+			name:     "smtp production rejects plaintext policy",
+			validate: func(c *GoUnoConfig) error { return c.validateSMTP() },
+			mutate: func(c *GoUnoConfig) {
+				c.WebServerConfig.Production = true
+				c.SMTPConfig.Host, c.SMTPConfig.Port, c.SMTPConfig.From, c.SMTPConfig.TLSPolicy = "smtp.example.com", 587, "noreply@example.com", "notls"
+			},
+			wantErr: "not allowed in production",
+		},
+		{
+			name:     "auth production requires verification pepper",
+			validate: func(c *GoUnoConfig) error { return c.validateAuth() },
+			mutate: func(c *GoUnoConfig) {
+				c.WebServerConfig.Production = true
+				c.AuthConfig.KeyID = "key-id"
+				c.AuthConfig.VerifyHashPepper = ""
+			},
+			wantErr: "verify_hash_pepper is required",
+		},
+		{
+			name:     "oauth provider requires a matching secret",
+			validate: func(c *GoUnoConfig) error { return c.validateOAuthProviders() },
+			mutate:   func(c *GoUnoConfig) { c.OAuthProviders.Google.ClientID = "client" },
+			wantErr:  "client_secret is required",
+		},
+		{
+			name:     "oauth provider rejects invalid redirect URL",
+			validate: func(c *GoUnoConfig) error { return c.validateOAuthProviders() },
+			mutate: func(c *GoUnoConfig) {
+				c.OAuthProviders.GitHub = OAuthProviderConfig{ClientID: "client", ClientSecret: "secret", RedirectURI: "ftp://example.com"}
+			},
+			wantErr: "redirect_uri must be a valid URL",
+		},
+		{
+			name:     "observability requires endpoint for tracing",
+			validate: func(c *GoUnoConfig) error { return c.validateObservability() },
+			mutate:   func(c *GoUnoConfig) { c.Observability.TracingEnabled = true },
+			wantErr:  "otlp_endpoint is required",
+		},
+		{
+			name:     "observability rejects invalid endpoint",
+			validate: func(c *GoUnoConfig) error { return c.validateObservability() },
+			mutate:   func(c *GoUnoConfig) { c.Observability.OTLPEndpoint = "grpc://collector" },
+			wantErr:  "otlp_endpoint must be a valid URL",
+		},
+		{
+			name:     "redis rejects zero dial timeout",
+			validate: func(c *GoUnoConfig) error { return c.validateRedis() },
+			mutate:   func(c *GoUnoConfig) { c.RedisConfig.DialTimeoutSeconds = 0 },
+			wantErr:  "dial_timeout_seconds",
+		},
+		{
+			name:     "redis rejects zero read timeout",
+			validate: func(c *GoUnoConfig) error { return c.validateRedis() },
+			mutate:   func(c *GoUnoConfig) { c.RedisConfig.ReadTimeoutSeconds = 0 },
+			wantErr:  "read_timeout_seconds",
+		},
+		{
+			name:     "redis rejects zero write timeout",
+			validate: func(c *GoUnoConfig) error { return c.validateRedis() },
+			mutate:   func(c *GoUnoConfig) { c.RedisConfig.WriteTimeoutSeconds = 0 },
+			wantErr:  "write_timeout_seconds",
+		},
+		{
+			name:     "auth durations reject a negative maximum session age",
+			validate: func(c *GoUnoConfig) error { return c.validateAuthDurations() },
+			mutate:   func(c *GoUnoConfig) { c.AuthConfig.MaxSessionAge = -time.Second },
+			wantErr:  "max_session_age must not be negative",
+		},
+		{
+			name:     "auth durations reject maximum session age below session TTL",
+			validate: func(c *GoUnoConfig) error { return c.validateAuthDurations() },
+			mutate:   func(c *GoUnoConfig) { c.AuthConfig.MaxSessionAge = c.AuthConfig.SessionTTL - time.Second },
+			wantErr:  "must not be shorter than session_ttl",
+		},
+		{
+			name:     "auth durations reject excessive backup code count",
+			validate: func(c *GoUnoConfig) error { return c.validateAuthDurations() },
+			mutate:   func(c *GoUnoConfig) { c.AuthConfig.BackupCodeCount = 21 },
+			wantErr:  "backup_code_count must not exceed",
+		},
+		{
+			name:     "auth durations reject invalid login IP allowlist entries",
+			validate: func(c *GoUnoConfig) error { return c.validateAuthDurations() },
+			mutate:   func(c *GoUnoConfig) { c.AuthConfig.LoginIPAllowlist = []string{"invalid-ip"} },
+			wantErr:  "login_ip_allowlist entry",
+		},
+		{
+			name:     "auth durations reject invalid backchannel CIDRs",
+			validate: func(c *GoUnoConfig) error { return c.validateAuthDurations() },
+			mutate:   func(c *GoUnoConfig) { c.AuthConfig.BackchannelAllowedCIDRs = []string{"invalid-cidr"} },
+			wantErr:  "backchannel_allowed_cidrs entry",
+		},
+		{
+			name:     "auth durations require positive revoke concurrency",
+			validate: func(c *GoUnoConfig) error { return c.validateAuthDurations() },
+			mutate:   func(c *GoUnoConfig) { c.AuthConfig.PasswordResetRevokeConcurrency = 0 },
+			wantErr:  "password_reset_revoke_concurrency must be positive",
+		},
+		{
+			name:     "auth rejects a non HTTP issuer",
+			validate: func(c *GoUnoConfig) error { return c.validateAuth() },
+			mutate:   func(c *GoUnoConfig) { c.AuthConfig.Issuer = "ftp://sso.example.com" },
+			wantErr:  "issuer must be a valid URL",
+		},
+		{
+			name:     "auth rejects issuer trailing slash",
+			validate: func(c *GoUnoConfig) error { return c.validateAuth() },
+			mutate:   func(c *GoUnoConfig) { c.AuthConfig.Issuer = "https://sso.example.com/" },
+			wantErr:  "must not have a trailing slash",
+		},
+		{
+			name:     "auth production requires HTTPS issuer",
+			validate: func(c *GoUnoConfig) error { return c.validateAuth() },
+			mutate: func(c *GoUnoConfig) {
+				c.WebServerConfig.Production, c.AuthConfig.Issuer = true, "http://sso.example.com"
+			},
+			wantErr: "issuer must use https",
+		},
+		{
+			name:     "auth production rejects localhost issuer",
+			validate: func(c *GoUnoConfig) error { return c.validateAuth() },
+			mutate: func(c *GoUnoConfig) {
+				c.WebServerConfig.Production, c.AuthConfig.Issuer = true, "https://localhost"
+			},
+			wantErr: "must not point to localhost",
+		},
+		{
+			name:     "auth rejects undersized RSA key",
+			validate: func(c *GoUnoConfig) error { return c.validateAuth() },
+			mutate:   func(c *GoUnoConfig) { c.AuthConfig.RSAKeyBits = 1024 },
+			wantErr:  "rsa_key_bits",
+		},
+		{
+			name:     "auth rejects negative MFA attempts",
+			validate: func(c *GoUnoConfig) error { return c.validateAuth() },
+			mutate:   func(c *GoUnoConfig) { c.AuthConfig.MFAAccountMaxAttempts = -1 },
+			wantErr:  "mfa_account_max_attempts",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validConfig()
+			tt.mutate(&cfg)
+			require.ErrorContains(t, tt.validate(&cfg), tt.wantErr)
+		})
+	}
+}
+
+func TestValidateAuthLoadsConfiguredSecretFiles(t *testing.T) {
+	totpPath := filepath.Join(t.TempDir(), "totp-key")
+	pepperPath := filepath.Join(t.TempDir(), "verify-pepper")
+	require.NoError(t, os.WriteFile(totpPath, []byte("aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899\n"), 0o600))
+	require.NoError(t, os.WriteFile(pepperPath, []byte("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"), 0o600))
+
+	cfg := validConfig()
+	cfg.AuthConfig.TOTPEncryptionKey = ""
+	cfg.AuthConfig.TOTPEncryptionKeyPath = totpPath
+	cfg.AuthConfig.VerifyHashPepper = ""
+	cfg.AuthConfig.VerifyHashPepperPath = pepperPath
+
+	require.NoError(t, cfg.validateAuth())
+	assert.Equal(t, "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899", cfg.AuthConfig.TOTPEncryptionKey)
+	assert.Equal(t, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", cfg.AuthConfig.VerifyHashPepper)
+}
+
+func TestValidateAggregatesIndependentValidationErrors(t *testing.T) {
+	cfg := validConfig()
+	cfg.LogConfig.Level = 6
+	cfg.Observability.TracingEnabled = true
+	cfg.OAuthProviders.Google.ClientID = "client"
+
+	err := cfg.Validate()
+	require.ErrorContains(t, err, "log: level")
+	require.ErrorContains(t, err, "observability: otlp_endpoint")
+	require.ErrorContains(t, err, "oauth_providers.google: client_secret")
 }
 
 func TestConfigManager_TestConfigIsValid(t *testing.T) {
