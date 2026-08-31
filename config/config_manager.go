@@ -95,7 +95,7 @@ func loadEnvironmentSecretFile(valueName, fileName string) error {
 	if path == "" {
 		return nil
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G703 -- deployment-controlled Docker Secret path, never request input.
 	if err != nil {
 		return fmt.Errorf("read %s: %w", fileName, err)
 	}
