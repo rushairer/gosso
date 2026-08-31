@@ -234,3 +234,13 @@ func TestInitTracerProvider_EmptyEndpoint(t *testing.T) {
 		_ = tp.Shutdown(context.Background())
 	}
 }
+
+func TestInitTracerProvider_Success(t *testing.T) {
+	ctx := context.Background()
+	tp, err := InitTracerProvider(ctx, "gosso-test", "v1.0.0", "localhost:4318")
+	require.NoError(t, err)
+	require.NotNil(t, tp)
+
+	err = tp.Shutdown(ctx)
+	assert.NoError(t, err)
+}

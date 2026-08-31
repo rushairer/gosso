@@ -1333,3 +1333,70 @@ func TestLogoutConfirm_ShowConfirmation_WithCSRF(t *testing.T) {
 	assert.Contains(t, body, `name="client_id" value="unregistered"`)
 	assert.Contains(t, body, "Cancel")
 }
+
+func TestLogoutConfirm_IDTokenHint_DirectRedirect(t *testing.T) {
+	clientRepo := &mockClientRepo{
+		findByClientIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return &oauth2Domain.OAuth2Client{
+				ClientID:               "client-001",
+				PostLogoutRedirectURIs: []string{"https://app.example.com/logout-cb"},
+			}, nil
+		},
+	}
+	engine, keySvc := setupLogoutEngine(t, clientRepo)
+
+	idToken := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+idToken+"&post_logout_redirect_uri=https://app.example.com/logout-cb&state=state-abc", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusFound, w.Code)
+	assert.Equal(t, "https://app.example.com/logout-cb?state=state-abc", w.Header().Get("Location"))
+}
+
+func TestLogoutConfirm_IDTokenHint_AudienceMismatch(t *testing.T) {
+	clientRepo := &mockClientRepo{}
+	engine, keySvc := setupLogoutEngine(t, clientRepo)
+
+	idToken := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?id_token_hint="+idToken+"&client_id=client-002", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestLogoutCSRFTokenFromCookie_Branches(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Branch 1: from context
+	w1 := httptest.NewRecorder()
+	c1, _ := gin.CreateTestContext(w1)
+	c1.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	c1.Set("csrf_token", "ctx-token")
+	assert.Equal(t, "ctx-token", logoutCSRFTokenFromCookie(c1))
+
+	// Branch 2: from fallback csrf_token cookie
+	w2 := httptest.NewRecorder()
+	c2, _ := gin.CreateTestContext(w2)
+	c2.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	c2.Request.AddCookie(&http.Cookie{Name: "csrf_token", Value: "legacy-cookie-token"})
+	assert.Equal(t, "legacy-cookie-token", logoutCSRFTokenFromCookie(c2))
+
+	// Branch 3: from response Set-Cookie header
+	w3 := httptest.NewRecorder()
+	c3, _ := gin.CreateTestContext(w3)
+	c3.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	c3.Writer.Header().Add("Set-Cookie", "__Host-csrf_token=header-token; Path=/; Secure")
+	assert.Equal(t, "header-token", logoutCSRFTokenFromCookie(c3))
+
+	// Branch 4: empty
+	w4 := httptest.NewRecorder()
+	c4, _ := gin.CreateTestContext(w4)
+	c4.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	assert.Equal(t, "", logoutCSRFTokenFromCookie(c4))
+}

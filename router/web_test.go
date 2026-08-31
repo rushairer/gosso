@@ -395,3 +395,57 @@ func TestRegisterWebRouter_HealthRoutesNilDB(t *testing.T) {
 		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 	})
 }
+
+func TestHelperRouters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("web test router alive returns pong", func(t *testing.T) {
+		server := gin.New()
+		registerWebTestRouter(server)
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodGet, "/test/alive", nil)
+		server.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Contains(t, w.Body.String(), "pong")
+	})
+
+	t.Run("web index router returns hello", func(t *testing.T) {
+		server := gin.New()
+		registerWebIndexRouter(server)
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodGet, "/", nil)
+		server.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "Hello gouno!", w.Body.String())
+	})
+
+	t.Run("swagger router routes", func(t *testing.T) {
+		server := gin.New()
+		registerSwaggerRouter(server)
+
+		// Redirect /swagger -> /swagger/index.html
+		w1 := httptest.NewRecorder()
+		req1, _ := http.NewRequest(http.MethodGet, "/swagger", nil)
+		server.ServeHTTP(w1, req1)
+		assert.Equal(t, http.StatusTemporaryRedirect, w1.Code)
+		assert.Equal(t, "/swagger/index.html", w1.Header().Get("Location"))
+
+		// Swagger index.html
+		w2 := httptest.NewRecorder()
+		req2, _ := http.NewRequest(http.MethodGet, "/swagger/index.html", nil)
+		server.ServeHTTP(w2, req2)
+		assert.Equal(t, http.StatusOK, w2.Code)
+		assert.Equal(t, "text/html; charset=utf-8", w2.Header().Get("Content-Type"))
+
+		// OpenAPI YAML
+		w3 := httptest.NewRecorder()
+		req3, _ := http.NewRequest(http.MethodGet, "/swagger/openapi.yaml", nil)
+		server.ServeHTTP(w3, req3)
+		assert.Equal(t, http.StatusOK, w3.Code)
+		assert.Equal(t, "application/yaml", w3.Header().Get("Content-Type"))
+	})
+}

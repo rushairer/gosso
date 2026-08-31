@@ -110,3 +110,15 @@ func TestActionConstants_Unique(t *testing.T) {
 	}
 	assert.Len(t, seen, 18)
 }
+
+func TestAuditRecord_WithOldAndNew(t *testing.T) {
+	record := NewRecord(ActionLoginSuccess, "system", nil, nil, nil)
+	oldData := json.RawMessage(`{"status":"old"}`)
+	newData := json.RawMessage(`{"status":"new"}`)
+
+	record.WithOld(oldData)
+	assert.Equal(t, oldData, record.Old)
+
+	record.WithNew(newData)
+	assert.Equal(t, newData, record.New)
+}
