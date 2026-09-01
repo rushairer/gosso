@@ -291,7 +291,7 @@ func (c *OIDCController) LogoutConfirm(ctx *gin.Context) {
 
 	ctx.Header("Content-Type", "text/html; charset=utf-8")
 	ctx.Status(http.StatusOK)
-	_, _ = ctx.Writer.WriteString(renderLogoutConfirmPage(cspNonce, inputs.String()))
+	_, _ = ctx.Writer.WriteString(renderLogoutConfirmPage(cspNonce, inputs.String(), logoutConfirmCopyFor(ctx.GetHeader("Accept-Language"))))
 }
 
 func logoutCSRFTokenFromCookie(ctx *gin.Context) string {
@@ -319,35 +319,71 @@ func logoutCSRFTokenFromCookie(ctx *gin.Context) string {
 	return ""
 }
 
-func renderLogoutConfirmPage(cspNonce, hiddenInputs string) string {
+type logoutConfirmCopy struct {
+	Language    string
+	PageTitle   string
+	Heading     string
+	Description string
+	Cancel      string
+	Confirm     string
+}
+
+// logoutConfirmCopyFor keeps this protocol fallback usable before a user has
+// an application session. Prefer the browser language because account locale
+// is not safely available on an unauthenticated GET request.
+func logoutConfirmCopyFor(acceptLanguage string) logoutConfirmCopy {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(acceptLanguage)), "zh") {
+		return logoutConfirmCopy{
+			Language:    "zh-CN",
+			PageTitle:   "确认退出登录 - GOSSO",
+			Heading:     "确认退出登录",
+			Description: "你将退出身份提供方及当前的单点登录会话。",
+			Cancel:      "取消",
+			Confirm:     "确认退出",
+		}
+	}
+
+	return logoutConfirmCopy{
+		Language:    "en",
+		PageTitle:   "Confirm Logout - GOSSO",
+		Heading:     "Confirm Logout",
+		Description: "You are about to log out from the identity provider and active SSO sessions.",
+		Cancel:      "Cancel",
+		Confirm:     "Confirm Logout",
+	}
+}
+
+func renderLogoutConfirmPage(cspNonce, hiddenInputs string, copy logoutConfirmCopy) string {
 	return `<!DOCTYPE html>
-<html lang="en">
+<html lang="` + html.EscapeString(copy.Language) + `">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Confirm Logout - GOSSO</title>
+    <title>` + html.EscapeString(copy.PageTitle) + `</title>
     <style nonce="` + html.EscapeString(cspNonce) + `">
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root { color-scheme: light; }
+        * { box-sizing: border-box; }
         body {
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 24px;
-            background: #f3f6fb;
+            margin: 0;
+            background: #f5f7fb;
             color: #172033;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
         }
         .shell {
-            width: min(100%, 460px);
+            width: min(100%, 520px);
             background: #fff;
             border: 1px solid #d9e2ef;
-            border-radius: 8px;
-            box-shadow: 0 18px 50px rgba(21, 32, 54, 0.14);
+            border-radius: 12px;
+            box-shadow: 0 20px 48px rgba(21, 32, 54, 0.12);
             overflow: hidden;
         }
         .header {
-            padding: 28px 32px 20px;
+            padding: 32px 32px 24px;
             border-bottom: 1px solid #e6edf6;
             background: #fbfcff;
         }
@@ -356,7 +392,7 @@ func renderLogoutConfirmPage(cspNonce, hiddenInputs string) string {
             height: 44px;
             display: grid;
             place-items: center;
-            margin-bottom: 16px;
+            margin-bottom: 20px;
             border-radius: 8px;
             background: #0f766e;
             color: #fff;
@@ -365,27 +401,29 @@ func renderLogoutConfirmPage(cspNonce, hiddenInputs string) string {
         }
         h1 {
             color: #101828;
-            font-size: 20px;
+            font-size: 24px;
             line-height: 1.3;
-            margin-bottom: 8px;
+            margin: 0 0 8px;
         }
         .subtitle {
             color: #526071;
-            font-size: 14px;
-            line-height: 1.5;
+            font-size: 15px;
+            line-height: 1.55;
+            margin: 0;
         }
         .content { padding: 24px 32px 28px; }
         .actions {
             display: flex;
             gap: 12px;
-            margin-top: 20px;
+            margin: 0;
         }
         .btn {
             flex: 1;
-            padding: 10px 16px;
-            font-size: 14px;
+            min-height: 46px;
+            padding: 11px 16px;
+            font-size: 15px;
             font-weight: 600;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
             border: 1px solid transparent;
             text-align: center;
@@ -393,7 +431,7 @@ func renderLogoutConfirmPage(cspNonce, hiddenInputs string) string {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            transition: background 0.15s ease;
+            transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
         }
         .btn-primary {
             background: #0f766e;
@@ -406,25 +444,32 @@ func renderLogoutConfirmPage(cspNonce, hiddenInputs string) string {
             border-color: #d0d5dd;
         }
         .btn-secondary:hover { background: #f9fafb; }
+        .btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.24); }
+        @media (max-width: 480px) {
+            body { align-items: flex-end; padding: 16px; }
+            .shell { width: 100%; }
+            .header, .content { padding-left: 24px; padding-right: 24px; }
+            .actions { flex-direction: column-reverse; }
+        }
     </style>
 </head>
 <body>
-    <div class="shell">
+    <main class="shell" aria-labelledby="logout-title">
         <div class="header">
-            <div class="brand">SSO</div>
-            <h1>Confirm Logout</h1>
-            <p class="subtitle">You are about to log out from the identity provider and active SSO sessions.</p>
+            <div class="brand" aria-hidden="true">SSO</div>
+            <h1 id="logout-title">` + html.EscapeString(copy.Heading) + `</h1>
+            <p class="subtitle">` + html.EscapeString(copy.Description) + `</p>
         </div>
         <div class="content">
             <form method="POST" action="/oidc/logout">` +
 		hiddenInputs +
 		`<div class="actions">
-                    <button type="button" class="btn btn-secondary" onclick="window.history.length > 1 ? window.history.back() : window.location.href='/'">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Confirm Logout</button>
+                    <a class="btn btn-secondary" href="/">` + html.EscapeString(copy.Cancel) + `</a>
+                    <button type="submit" class="btn btn-primary">` + html.EscapeString(copy.Confirm) + `</button>
                 </div>
             </form>
         </div>
-    </div>
+    </main>
 </body>
 </html>`
 }

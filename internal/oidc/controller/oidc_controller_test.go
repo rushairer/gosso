@@ -1332,6 +1332,27 @@ func TestLogoutConfirm_ShowConfirmation_WithCSRF(t *testing.T) {
 	assert.Contains(t, body, `name="csrf_token" value="test-csrf-token-123"`)
 	assert.Contains(t, body, `name="client_id" value="unregistered"`)
 	assert.Contains(t, body, "Cancel")
+	assert.Contains(t, body, `href="/"`)
+	assert.NotContains(t, body, "onclick=")
+}
+
+func TestLogoutConfirm_UsesChineseCopyForChineseBrowser(t *testing.T) {
+	clientRepo := &mockClientRepo{}
+	engine, _ := setupLogoutEngine(t, clientRepo)
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?client_id=unregistered", nil)
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, `<html lang="zh-CN">`)
+	assert.Contains(t, body, "<title>确认退出登录 - GOSSO</title>")
+	assert.Contains(t, body, "你将退出身份提供方及当前的单点登录会话。")
+	assert.Contains(t, body, ">取消</a>")
+	assert.Contains(t, body, ">确认退出</button>")
 }
 
 func TestLogoutConfirm_IDTokenHint_DirectRedirect(t *testing.T) {

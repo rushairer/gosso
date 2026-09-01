@@ -5,14 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
-
 ## [1.5.4] - 2026-09-01
 
 ### Security
 - Explicitly type Back-Channel Logout tokens as `logout+jwt` and reduce their
   validity window from five minutes to two minutes to limit cross-JWT confusion
   and replay exposure.
+
+### Fixed
+- Localize the OIDC logout confirmation fallback from the browser language,
+  including Simplified Chinese, and replace its CSP-blocked inline cancel
+  handler with a standard accessible link.
 
 ## [1.5.3] - 2026-08-31
 
