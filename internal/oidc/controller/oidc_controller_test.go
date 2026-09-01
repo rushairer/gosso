@@ -1355,6 +1355,77 @@ func TestLogoutConfirm_UsesChineseCopyForChineseBrowser(t *testing.T) {
 	assert.Contains(t, body, ">确认退出</button>")
 }
 
+func TestLogoutConfirm_InvalidPostLogoutRedirect_DoesNotEmbedHiddenInput(t *testing.T) {
+	clientRepo := &mockClientRepo{
+		findByClientIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return &oauth2Domain.OAuth2Client{
+				ClientID:               "client-001",
+				PostLogoutRedirectURIs: []string{"https://app.example.com/logout-cb"},
+			}, nil
+		},
+	}
+	engine, _ := setupLogoutEngine(t, clientRepo)
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?client_id=client-001&post_logout_redirect_uri=https://unregistered.com/cb", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.NotContains(t, body, "https://unregistered.com/cb")
+	assert.NotContains(t, body, `name="post_logout_redirect_uri"`)
+}
+
+func TestLogout_FormPost_InvalidRedirectURI_RedirectsToRoot(t *testing.T) {
+	clientRepo := &mockClientRepo{
+		findByClientIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return &oauth2Domain.OAuth2Client{
+				ClientID:               "client-001",
+				PostLogoutRedirectURIs: []string{"https://app.example.com/logout-cb"},
+			}, nil
+		},
+	}
+	engine, keySvc := setupLogoutEngine(t, clientRepo)
+
+	idToken := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
+
+	form := "client_id=client-001&id_token_hint=" + idToken + "&post_logout_redirect_uri=https://unregistered.com/cb"
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusFound, w.Code)
+	assert.Equal(t, "/", w.Header().Get("Location"))
+}
+
+func TestLogout_FormPost_NoRedirectURI_RedirectsToRoot(t *testing.T) {
+	clientRepo := &mockClientRepo{
+		findByClientIDFn: func() (*oauth2Domain.OAuth2Client, error) {
+			return &oauth2Domain.OAuth2Client{
+				ClientID: "client-001",
+			}, nil
+		},
+	}
+	engine, keySvc := setupLogoutEngine(t, clientRepo)
+
+	idToken := signIDToken(t, keySvc, "https://sso.example.com", "account-001", []string{"client-001"}, false)
+
+	form := "client_id=client-001&id_token_hint=" + idToken
+	req := httptest.NewRequest(http.MethodPost, "/oidc/logout", strings.NewReader(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusFound, w.Code)
+	assert.Equal(t, "/", w.Header().Get("Location"))
+}
+
 func TestLogoutConfirm_IDTokenHint_DirectRedirect(t *testing.T) {
 	clientRepo := &mockClientRepo{
 		findByClientIDFn: func() (*oauth2Domain.OAuth2Client, error) {

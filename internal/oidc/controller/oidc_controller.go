@@ -217,6 +217,11 @@ func (c *OIDCController) Logout(ctx *gin.Context) {
 		return
 	}
 
+	if isHTMLRequest(ctx) {
+		ctx.Redirect(http.StatusFound, "/")
+		return
+	}
+
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{"status": "logged_out"}))
 }
 
@@ -247,6 +252,7 @@ func (c *OIDCController) LogoutConfirm(ctx *gin.Context) {
 		}
 	}
 
+	var validPostLogoutRedirectURI string
 	// Direct logout and redirect for verified client with registered post_logout_redirect_uri
 	if clientID != "" && req.PostLogoutRedirectURI != "" {
 		client, err := c.clientRepo.FindByClientID(ctx, clientID)
@@ -268,6 +274,9 @@ func (c *OIDCController) LogoutConfirm(ctx *gin.Context) {
 			c.handlePostLogoutRedirect(ctx, req, clientID)
 			return
 		}
+		if err == nil && client != nil && client.ValidatePostLogoutRedirectURI(req.PostLogoutRedirectURI) {
+			validPostLogoutRedirectURI = req.PostLogoutRedirectURI
+		}
 	}
 
 	// Render confirmation page with proper CSRF token and CSP nonce
@@ -282,10 +291,10 @@ func (c *OIDCController) LogoutConfirm(ctx *gin.Context) {
 	if clientID != "" {
 		inputs.WriteString(hiddenInput("client_id", clientID))
 	}
-	if req.PostLogoutRedirectURI != "" {
-		inputs.WriteString(hiddenInput("post_logout_redirect_uri", req.PostLogoutRedirectURI))
+	if validPostLogoutRedirectURI != "" {
+		inputs.WriteString(hiddenInput("post_logout_redirect_uri", validPostLogoutRedirectURI))
 	}
-	if req.State != "" {
+	if req.State != "" && validPostLogoutRedirectURI != "" {
 		inputs.WriteString(hiddenInput("state", req.State))
 	}
 
@@ -655,11 +664,20 @@ func (c *OIDCController) handlePostLogoutRedirect(ctx *gin.Context, req logoutRe
 	client, err := c.clientRepo.FindByClientID(ctx, clientID)
 	if err != nil {
 		c.logger.Debug("Client lookup failed for post-logout redirect", zap.String("client_id", clientID), zap.Error(err))
+		if isHTMLRequest(ctx) {
+			ctx.Redirect(http.StatusFound, "/")
+			return
+		}
 		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{"status": "logged_out"}))
 		return
 	}
 
 	if !client.ValidatePostLogoutRedirectURI(req.PostLogoutRedirectURI) {
+		c.logger.Debug("Post-logout redirect URI validation failed", zap.String("client_id", clientID), zap.String("uri", req.PostLogoutRedirectURI))
+		if isHTMLRequest(ctx) {
+			ctx.Redirect(http.StatusFound, "/")
+			return
+		}
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid post_logout_redirect_uri"))
 		return
 	}
@@ -669,12 +687,20 @@ func (c *OIDCController) handlePostLogoutRedirect(ctx *gin.Context, req logoutRe
 		// Validate state parameter length to prevent abuse (e.g., excessively long URLs).
 		const maxStateLength = 256
 		if len(req.State) > maxStateLength {
+			if isHTMLRequest(ctx) {
+				ctx.Redirect(http.StatusFound, "/")
+				return
+			}
 			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "state parameter too long"))
 			return
 		}
 		u, err := url.Parse(redirectURI)
 		if err != nil {
 			c.logger.Warn("Failed to parse post-logout redirect URI", zap.String("redirect_uri", redirectURI), zap.Error(err))
+			if isHTMLRequest(ctx) {
+				ctx.Redirect(http.StatusFound, "/")
+				return
+			}
 			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid post_logout_redirect_uri"))
 			return
 		}
@@ -684,6 +710,13 @@ func (c *OIDCController) handlePostLogoutRedirect(ctx *gin.Context, req logoutRe
 		redirectURI = u.String()
 	}
 	ctx.Redirect(http.StatusFound, redirectURI)
+}
+
+func isHTMLRequest(ctx *gin.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	return strings.Contains(ctx.GetHeader("Accept"), "text/html")
 }
 
 // ──────────────────────────────────────────────
