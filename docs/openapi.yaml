@@ -11,7 +11,7 @@ info:
     - Social login (Google, GitHub, WeChat)
     - Admin account management
     - Email verification and password reset (phone verification reserved until SMS gateway is configured)
-  version: 1.5.1
+  version: 1.5.4
   contact:
     name: rushairer
     url: https://github.com/rushairer/gosso
