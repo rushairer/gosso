@@ -410,7 +410,7 @@ func (s *LogoutService) generateLogoutToken(clientID, accountID, sessionID strin
 			Subject:   accountID,
 			Audience:  jwt.ClaimStrings{clientID},
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(2 * time.Minute)),
 			ID:        uuid.New().String(),
 		},
 		Events: map[string]map[string]any{
@@ -423,6 +423,7 @@ func (s *LogoutService) generateLogoutToken(clientID, accountID, sessionID strin
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = s.tokenSvc.KeyService().KeyID()
+	token.Header["typ"] = "logout+jwt"
 
 	privateKey := s.tokenSvc.KeyService().PrivateKey()
 	if privateKey == nil {

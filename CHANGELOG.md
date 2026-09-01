@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.4] - 2026-09-01
+
+### Security
+- Explicitly type Back-Channel Logout tokens as `logout+jwt` and reduce their
+  validity window from five minutes to two minutes to limit cross-JWT confusion
+  and replay exposure.
+
 ## [1.5.3] - 2026-08-31
 
 ### Security

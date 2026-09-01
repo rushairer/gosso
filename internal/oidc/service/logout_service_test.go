@@ -364,6 +364,12 @@ func TestGenerateLogoutToken_Success(t *testing.T) {
 
 	// Verify kid header
 	assert.Equal(t, keySvc.KeyID(), token.Header["kid"])
+	assert.Equal(t, "logout+jwt", token.Header["typ"])
+	expiresAt, expErr := claims.GetExpirationTime()
+	issuedAt, iatErr := claims.GetIssuedAt()
+	require.NoError(t, expErr)
+	require.NoError(t, iatErr)
+	assert.WithinDuration(t, issuedAt.Add(2*time.Minute), expiresAt.Time, time.Second)
 }
 
 func TestGenerateLogoutToken_WithoutSessionRequired(t *testing.T) {
