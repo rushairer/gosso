@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/cache"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
 )
 
@@ -146,4 +147,32 @@ func RedisRateLimitMiddleware(rds *cache.RedisClient, endpoint string, keyFunc f
 // Normalizes IPv4-mapped IPv6 addresses to prevent rate limit bypass.
 func IPKeyFunc(ctx *gin.Context) string {
 	return utility.NormalizeIP(ctx.ClientIP())
+}
+
+// AccountKeyFunc extracts the authenticated account for per-account throttling.
+// The JWT middleware must run before this key function.
+func AccountKeyFunc(ctx *gin.Context) string {
+	claims, ok := ctx.Get(ContextKeyClaims)
+	if !ok {
+		return "missing-account"
+	}
+	tc, ok := claims.(*tokenDomain.AccessTokenClaims)
+	if !ok || tc.AccountID == "" {
+		return "missing-account"
+	}
+	return tc.AccountID
+}
+
+// SessionKeyFunc extracts the authenticated session for per-session throttling.
+// Tokens without a session deliberately share a fail-safe bucket.
+func SessionKeyFunc(ctx *gin.Context) string {
+	claims, ok := ctx.Get(ContextKeyClaims)
+	if !ok {
+		return "missing-session"
+	}
+	tc, ok := claims.(*tokenDomain.AccessTokenClaims)
+	if !ok || tc.SessionID == "" {
+		return "missing-session"
+	}
+	return tc.SessionID
 }

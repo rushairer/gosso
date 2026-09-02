@@ -3,9 +3,11 @@ package controller
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
@@ -14,6 +16,40 @@ import (
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
 )
+
+const GOSSOAPIResourceAudience = "urn:gouno:gosso-api"
+
+func hasAudience(claims *tokenDomain.AccessTokenClaims, audience string) bool {
+	for _, candidate := range claims.Audience {
+		if candidate == audience {
+			return true
+		}
+	}
+	return false
+}
+
+func validMFACode(kind, code string) bool {
+	if kind == "totp" {
+		if len(code) != 6 {
+			return false
+		}
+		for _, char := range code {
+			if char < '0' || char > '9' {
+				return false
+			}
+		}
+		return true
+	}
+	if len(code) != 16 {
+		return false
+	}
+	for _, char := range strings.ToLower(code) {
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f')) {
+			return false
+		}
+	}
+	return true
+}
 
 // MFAEnroll POST /api/auth/mfa/enroll
 func (c *AuthController) MFAEnroll(ctx *gin.Context) {
@@ -57,7 +93,6 @@ func (c *AuthController) MFAActivate(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
 		return
 	}
-
 	tc, ok := getClaimsFromContext(ctx)
 	if !ok {
 		return
@@ -179,14 +214,34 @@ type MFAStepUpRequest struct {
 
 // MFAStepUp POST /api/auth/mfa/step-up
 func (c *AuthController) MFAStepUp(ctx *gin.Context) {
+	ctx.Header("Deprecation", "true")
+	ctx.Header("Link", "</docs/mfa-api-migration.md>; rel=\"deprecation\"")
+	controllerutil.SetNoCacheHeaders(ctx)
+
 	var req MFAStepUpRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
 		return
 	}
+	if req.Type == "" {
+		req.Type = "totp"
+	}
+	if req.Type != "totp" && req.Type != "backup_code" {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "unsupported MFA verification type"))
+		return
+	}
+	if !validMFACode(req.Type, req.Code) {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid MFA code format"))
+		return
+	}
 
 	tc, ok := getClaimsFromContext(ctx)
 	if !ok {
+		return
+	}
+	if !hasAudience(tc, GOSSOAPIResourceAudience) {
+		c.auditMFAStepUp(ctx, tc.AccountID, "failure", "invalid_audience")
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "token is not valid for the GOSSO API resource"))
 		return
 	}
 
@@ -200,22 +255,26 @@ func (c *AuthController) MFAStepUp(ctx *gin.Context) {
 		valid, err := mfaSvc.VerifyBackupCode(ctx, tc.AccountID, req.Code)
 		if err != nil {
 			c.logger.Error("Step-up backup code verification error", zap.Error(err))
-			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to verify backup code"))
+			c.auditMFAStepUp(ctx, tc.AccountID, "failure", "verification_unavailable")
+			ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "MFA verification unavailable"))
 			return
 		}
 		if !valid {
-			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid backup code"))
+			c.auditMFAStepUp(ctx, tc.AccountID, "failure", "invalid_code")
+			ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid MFA code"))
 			return
 		}
 	} else {
 		valid, err := mfaSvc.VerifyTOTP(ctx, tc.AccountID, req.Code)
 		if err != nil {
 			c.logger.Error("Step-up TOTP verification error", zap.Error(err))
-			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to verify code"))
+			c.auditMFAStepUp(ctx, tc.AccountID, "failure", "verification_unavailable")
+			ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "MFA verification unavailable"))
 			return
 		}
 		if !valid {
-			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid verification code"))
+			c.auditMFAStepUp(ctx, tc.AccountID, "failure", "invalid_code")
+			ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid MFA code"))
 			return
 		}
 	}
@@ -225,31 +284,34 @@ func (c *AuthController) MFAStepUp(ctx *gin.Context) {
 	if tc.SessionID != "" {
 		if _, err := c.authSvc.MarkSessionStrongAuth(ctx, tc.SessionID, amr); err != nil {
 			c.logger.Error("Failed to update session strong-auth state", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(tc.SessionID)))
-			ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to update session authentication state"))
+			c.auditMFAStepUp(ctx, tc.AccountID, "failure", "session_update_unavailable")
+			ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "session authentication state unavailable"))
 			return
 		}
 	}
 	newClaims := &tokenDomain.AccessTokenClaims{
-		AccountID:   tc.AccountID,
-		Username:    tc.Username,
-		Email:       tc.Email,
-		Roles:       tc.Roles,
-		Permissions: tc.Permissions,
-		Scope:       tc.Scope,
-		ClientID:    tc.ClientID,
-		SessionID:   tc.SessionID,
-		AuthTime:    &now,
-		AMR:         amr,
+		RegisteredClaims: jwt.RegisteredClaims{Audience: jwt.ClaimStrings{GOSSOAPIResourceAudience}},
+		AccountID:        tc.AccountID,
+		Username:         tc.Username,
+		Email:            tc.Email,
+		Roles:            tc.Roles,
+		Permissions:      tc.Permissions,
+		Scope:            tc.Scope,
+		ClientID:         tc.ClientID,
+		SessionID:        tc.SessionID,
+		AuthTime:         &now,
+		AMR:              amr,
 	}
 
 	newToken, err := c.tokenMgr.GenerateAccessToken(newClaims)
 	if err != nil {
 		c.logger.Error("Failed to generate step-up access token", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to generate token"))
+		c.auditMFAStepUp(ctx, tc.AccountID, "failure", "token_service_unavailable")
+		ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "token service unavailable"))
 		return
 	}
 
-	controllerutil.SetNoCacheHeaders(ctx)
+	c.auditMFAStepUp(ctx, tc.AccountID, "success", "")
 	if isCookieSessionRequest(ctx) || isBrowserRequest(ctx) {
 		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
 			"auth_time":  now,

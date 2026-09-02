@@ -2,11 +2,13 @@ package domain
 
 const (
 	// Auth actions
-	ActionLoginSuccess    = "auth.login.success"
-	ActionLoginFailure    = "auth.login.failure"
-	ActionMFALoginSuccess = "auth.mfa_login.success"
-	ActionMFALoginFailure = "auth.mfa_login.failure"
-	ActionLogout          = "auth.logout"
+	ActionLoginSuccess     = "auth.login.success"
+	ActionLoginFailure     = "auth.login.failure"
+	ActionMFALoginSuccess  = "auth.mfa_login.success"
+	ActionMFALoginFailure  = "auth.mfa_login.failure"
+	ActionMFAStepUpSuccess = "auth.mfa_step_up.success"
+	ActionMFAStepUpFailure = "auth.mfa_step_up.failure"
+	ActionLogout           = "auth.logout"
 
 	// Account actions
 	ActionAccountRegister  = "account.register"

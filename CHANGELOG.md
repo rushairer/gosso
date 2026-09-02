@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.5] - 2026-09-02
+
+### Changed
+- Complete OIDC `acr_values=urn:gouno:aal2` and `max_age` handling by returning
+  sessions that do not meet the request to GOSSO's interactive authentication UI.
+
+### Deprecated
+- Deprecate `/api/v1/auth/mfa/step-up` for browser and BFF clients; use the OIDC
+  authorization-code flow with AAL2 requests instead.
+
+### Security
+- Restrict the compatibility MFA API to `urn:gouno:gosso-api` access tokens,
+  validate TOTP and backup-code formats, apply fail-closed IP/account/session
+  throttles, distinguish 400/401/429/503 failures, and audit outcomes.
+
 ## [1.5.4] - 2026-09-01
 
 ### Security

@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"mime"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/rushairer/gosso/internal/cache"
+	"github.com/rushairer/gosso/internal/controllerutil"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
@@ -23,6 +26,12 @@ import (
 
 const consentStateTTL = 10 * time.Minute
 const consentStateKeyPrefix = "consent_state:"
+
+var (
+	errReauthenticationRequired = errors.New("reauthentication required")
+	errUnsupportedACR           = errors.New("requested acr is not supported")
+	errInvalidMaxAge            = errors.New("max_age must be a non-negative integer")
+)
 
 func sessionIDFromContext(ctx *gin.Context) string {
 	claimsRaw, ok := ctx.Get(middleware.ContextKeyClaims)
@@ -62,6 +71,8 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 	codeChallengeMethod := ctx.Query("code_challenge_method")
 	nonce := ctx.Query("nonce")
 	resource := ctx.Query("resource")
+	requestedACR := ctx.Query("acr_values")
+	maxAgeRaw := ctx.Query("max_age")
 
 	if codeChallenge != "" && codeChallengeMethod != "S256" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "code_challenge_method must be S256"})
@@ -142,6 +153,23 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 	}
 
 	sessionID := sessionIDFromContext(ctx)
+	if err := c.requireRequestedAuthentication(ctx, sessionID, requestedACR, maxAgeRaw); err != nil {
+		controllerutil.SetNoCacheHeaders(ctx)
+		if errors.Is(err, errReauthenticationRequired) {
+			loginURL := c.loginURL
+			if loginURL == "" {
+				loginURL = "/login"
+			}
+			separator := "?"
+			if strings.Contains(loginURL, "?") {
+				separator = "&"
+			}
+			ctx.Redirect(http.StatusFound, loginURL+separator+"redirect_uri="+url.QueryEscape(ctx.Request.RequestURI)+"&prompt=login&reason=mfa")
+			return
+		}
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": err.Error()})
+		return
+	}
 
 	// Persist PKCE and authorization parameters in Redis keyed by consent ID.
 	// Redis is required for consent state storage; reject if unavailable to prevent PKCE bypass.
@@ -217,6 +245,43 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		CodeChallengeMethod: codeChallengeMethod, Nonce: nonce, ConsentID: consentID,
 		CSRFToken: csrfTokenFromCookie(ctx), CSPNonce: middleware.GetCSPNonce(ctx),
 	})
+}
+
+// requireRequestedAuthentication enforces the subset of OIDC authentication
+// request parameters used by confidential BFF clients.  It never treats a
+// password-only session as AAL2 and therefore cannot silently downgrade a
+// relying party's request.
+func (c *OAuth2Controller) requireRequestedAuthentication(ctx *gin.Context, sessionID, requestedACR, maxAgeRaw string) error {
+	if requestedACR != "" && requestedACR != "urn:gouno:aal2" {
+		return errUnsupportedACR
+	}
+	if requestedACR == "" && maxAgeRaw == "" {
+		return nil
+	}
+	var maxAge time.Duration
+	if maxAgeRaw != "" {
+		seconds, parseErr := strconv.ParseInt(maxAgeRaw, 10, 64)
+		if parseErr != nil || seconds < 0 {
+			return errInvalidMaxAge
+		}
+		maxAge = time.Duration(seconds) * time.Second
+	}
+	if sessionID == "" || c.sessionValidator == nil {
+		return fmt.Errorf("%w: an authenticated session is required", errReauthenticationRequired)
+	}
+	session, err := c.sessionValidator.ValidateSession(ctx, sessionID)
+	if err != nil || session == nil {
+		return fmt.Errorf("%w: session is no longer active", errReauthenticationRequired)
+	}
+	if requestedACR == "urn:gouno:aal2" && session.StrongAuthAt.IsZero() {
+		return fmt.Errorf("%w: multi-factor authentication is required", errReauthenticationRequired)
+	}
+	if maxAgeRaw != "" {
+		if session.AuthenticationTime().IsZero() || time.Since(session.AuthenticationTime()) > maxAge {
+			return fmt.Errorf("%w: recent authentication is required", errReauthenticationRequired)
+		}
+	}
+	return nil
 }
 
 // ConsentRequest is the consent approval request body.

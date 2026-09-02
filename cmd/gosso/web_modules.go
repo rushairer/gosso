@@ -127,6 +127,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 	})
 
 	authCtrl := authController.NewAuthController(authMod.AuthService, tokenSvc, authMod.SocialLoginService, authMod.VerificationService, authMod.PasswordResetService, !cfg.WebServerConfig.Debug, logger)
+	authCtrl.SetAuditor(auditor)
 	accountValidatorCacheTTL := cfg.AuthConfig.AccountValidatorCacheTTL
 	if accountValidatorCacheTTL <= 0 {
 		accountValidatorCacheTTL = 5 * time.Second
@@ -143,6 +144,7 @@ func initModules(ctx context.Context, db *sql.DB, redis *cache.RedisClient, logg
 		SessionValidator:           authMod.SessionService,
 		Redis:                      redis,
 		Issuer:                     cfg.AuthConfig.Issuer,
+		LoginURL:                   cfg.AuthConfig.LoginURL,
 		EnforcePKCEForConfidential: cfg.AuthConfig.EnforcePKCEForConfidential,
 		Logger:                     logger,
 		RoleFetcher:                &accountRoleFetcherAdapter{accountSvc: accountMod.Service},

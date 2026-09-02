@@ -299,12 +299,13 @@ paths:
   /api/v1/auth/mfa/step-up:
     post:
       tags: [Auth]
-      summary: Perform Step-up MFA
+      summary: Perform Step-up MFA (deprecated)
+      deprecated: true
       description: |
-        Verifies a TOTP or backup code for an authenticated account and refreshes
-        the access-token claims with the current `auth_time` and `amr` values.
-        HttpOnly Cookie Session requests receive the refreshed token only as a
-        secure cookie; legacy bearer-token clients also receive `access_token`.
+        Compatibility endpoint for non-browser GOSSO API clients. The Bearer token
+        audience MUST contain `urn:gouno:gosso-api`; Blog/BFF resource tokens are
+        rejected. Browser-based clients must migrate to an OIDC authorization-code
+        request using `acr_values=urn:gouno:aal2` and optional `max_age`.
       operationId: mfaStepUp
       security:
         - BearerAuth: []
@@ -325,8 +326,10 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          description: Account, session, or IP rate limit exceeded; includes `Retry-After`
         "503":
-          description: MFA service unavailable
+          description: MFA or rate-limit service unavailable
 
   /api/v1/auth/mfa/enroll:
     post:
@@ -836,6 +839,18 @@ paths:
           schema:
             type: string
           description: OIDC nonce
+        - name: acr_values
+          in: query
+          schema:
+            type: string
+            enum: [urn:gouno:aal2]
+          description: Requests password plus an accepted strong authentication method
+        - name: max_age
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+          description: Maximum age in seconds of the real authentication event
       responses:
         "302":
           description: Redirect to redirect_uri with authorization code

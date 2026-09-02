@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,7 +47,7 @@ func TestMFAEnroll_Success(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectCommit()
 
-	claims := &tokenDomain.AccessTokenClaims{AccountID: "account-001", SessionID: "session-001"}
+	claims := &tokenDomain.AccessTokenClaims{RegisteredClaims: jwt.RegisteredClaims{Audience: jwt.ClaimStrings{GOSSOAPIResourceAudience}}, AccountID: "account-001", SessionID: "session-001"}
 	engine := setupAuthControllerWithMFA(claims, mfaSvc)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/enroll", nil)
@@ -459,7 +460,7 @@ func TestMFAStepUp_Success(t *testing.T) {
 	}
 	mfaSvc, _ := newTestMFAService(t, credRepo)
 
-	claims := &tokenDomain.AccessTokenClaims{AccountID: "account-001", SessionID: "session-001"}
+	claims := &tokenDomain.AccessTokenClaims{RegisteredClaims: jwt.RegisteredClaims{Audience: jwt.ClaimStrings{GOSSOAPIResourceAudience}}, AccountID: "account-001", SessionID: "session-001"}
 	engine := setupAuthControllerWithMFA(claims, mfaSvc)
 
 	body, _ := json.Marshal(map[string]string{"code": code})
@@ -493,7 +494,7 @@ func TestMFAStepUp_InvalidCode(t *testing.T) {
 	}
 	mfaSvc, _ := newTestMFAService(t, credRepo)
 
-	claims := &tokenDomain.AccessTokenClaims{AccountID: "account-001", SessionID: "session-001"}
+	claims := &tokenDomain.AccessTokenClaims{RegisteredClaims: jwt.RegisteredClaims{Audience: jwt.ClaimStrings{GOSSOAPIResourceAudience}}, AccountID: "account-001", SessionID: "session-001"}
 	engine := setupAuthControllerWithMFA(claims, mfaSvc)
 
 	body, _ := json.Marshal(map[string]string{"code": "000000"})
@@ -502,7 +503,7 @@ func TestMFAStepUp_InvalidCode(t *testing.T) {
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestMFAStepUp_CookieSession_NoTokenInBody(t *testing.T) {
@@ -530,7 +531,7 @@ func TestMFAStepUp_CookieSession_NoTokenInBody(t *testing.T) {
 	}
 	mfaSvc, _ := newTestMFAService(t, credRepo)
 
-	claims := &tokenDomain.AccessTokenClaims{AccountID: "account-001", SessionID: "session-001"}
+	claims := &tokenDomain.AccessTokenClaims{RegisteredClaims: jwt.RegisteredClaims{Audience: jwt.ClaimStrings{GOSSOAPIResourceAudience}}, AccountID: "account-001", SessionID: "session-001"}
 	engine := setupAuthControllerWithMFA(claims, mfaSvc)
 
 	body, _ := json.Marshal(map[string]string{"code": code})
@@ -559,4 +560,29 @@ func TestMFAStepUp_CookieSession_NoTokenInBody(t *testing.T) {
 	for _, c := range cookies {
 		assert.NotEqual(t, "__Host-access_token", c.Name, "access_token cookie should not be set for MFA step-up")
 	}
+}
+
+func TestMFAStepUp_RejectsWrongAudience(t *testing.T) {
+	claims := &tokenDomain.AccessTokenClaims{RegisteredClaims: jwt.RegisteredClaims{Audience: jwt.ClaimStrings{"urn:gouno:blog-api"}}, AccountID: "account-001", SessionID: "session-001"}
+	engine := setupAuthControllerWithMFA(claims, nil)
+	body, _ := json.Marshal(map[string]string{"code": "000000", "type": "totp"})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/step-up", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, "true", w.Header().Get("Deprecation"))
+}
+
+func TestMFAStepUp_RejectsMalformedCode(t *testing.T) {
+	claims := &tokenDomain.AccessTokenClaims{RegisteredClaims: jwt.RegisteredClaims{Audience: jwt.ClaimStrings{GOSSOAPIResourceAudience}}, AccountID: "account-001"}
+	engine := setupAuthControllerWithMFA(claims, nil)
+	body, _ := json.Marshal(map[string]string{"code": "12ab", "type": "totp"})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/step-up", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }

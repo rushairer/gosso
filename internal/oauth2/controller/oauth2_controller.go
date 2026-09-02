@@ -98,6 +98,7 @@ type OAuth2Controller struct {
 	sessionValidator           sessionDomain.SessionValidator
 	redis                      *cache.RedisClient
 	issuer                     string
+	loginURL                   string
 	enforcePKCEForConfidential bool
 	consentTmpl                *template.Template // html/template — never use text/template (would enable XSS)
 	deviceTmpl                 *template.Template
@@ -151,6 +152,7 @@ func NewOAuth2Controller(
 		sessionValidator: sessionValidator,
 		redis:            redis,
 		issuer:           issuer,
+		loginURL:         "/login",
 		consentTmpl:      consentTmpl,
 		deviceTmpl:       deviceTmpl,
 		resultTmpl:       resultTmpl,
@@ -172,6 +174,7 @@ type OAuth2ControllerConfig struct {
 	SessionValidator           sessionDomain.SessionValidator
 	Redis                      *cache.RedisClient
 	Issuer                     string
+	LoginURL                   string
 	EnforcePKCEForConfidential bool
 	Logger                     *zap.Logger
 	RoleFetcher                AccountRoleFetcher
@@ -193,6 +196,9 @@ func NewOAuth2ControllerFromConfig(cfg OAuth2ControllerConfig) (*OAuth2Controlle
 		return nil, err
 	}
 	c.enforcePKCEForConfidential = cfg.EnforcePKCEForConfidential
+	if cfg.LoginURL != "" {
+		c.loginURL = cfg.LoginURL
+	}
 	c.roleFetcher = cfg.RoleFetcher
 	c.permissionFetcher = cfg.PermissionFetcher
 	c.includeUserRoles = cfg.IncludeUserRoles

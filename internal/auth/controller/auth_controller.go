@@ -2,17 +2,23 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	gossoMiddleware "github.com/rushairer/gosso/middleware"
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
 	accountDomain "github.com/rushairer/gosso/internal/account/domain"
+	auditDomain "github.com/rushairer/gosso/internal/audit/domain"
+	auditService "github.com/rushairer/gosso/internal/audit/service"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/controllerutil"
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
+	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
+	"github.com/rushairer/gosso/internal/utility"
 )
 
 // loginErrorMap maps login service errors to HTTP responses.
@@ -69,6 +75,32 @@ type AuthController struct {
 	backchannelNotifier BackchannelLogoutNotifier
 	secureCookie        bool
 	logger              *zap.Logger
+	auditor             *auditService.Auditor
+}
+
+// SetAuditor enables durable security-event auditing for compatibility MFA operations.
+func (c *AuthController) SetAuditor(auditor *auditService.Auditor) { c.auditor = auditor }
+
+func (c *AuthController) auditMFAStepUp(ctx *gin.Context, accountID, result, reason string) {
+	resource, _ := json.Marshal(map[string]string{"session_id": utility.MaskOpaqueID(sessionIDFromClaims(ctx))})
+	meta, _ := json.Marshal(map[string]string{"result": result, "reason": reason, "ip": ctx.ClientIP()})
+	action := auditDomain.ActionMFAStepUpSuccess
+	if result != "success" {
+		action = auditDomain.ActionMFAStepUpFailure
+	}
+	auditService.AuditLogSync(ctx, c.auditor, c.logger, auditDomain.NewRecord(action, "account", &accountID, resource, meta))
+}
+
+func sessionIDFromClaims(ctx *gin.Context) string {
+	claims, ok := ctx.Get(gossoMiddleware.ContextKeyClaims)
+	if !ok {
+		return ""
+	}
+	tc, ok := claims.(*tokenDomain.AccessTokenClaims)
+	if !ok {
+		return ""
+	}
+	return tc.SessionID
 }
 
 // SetBackchannelLogoutNotifier injects the backchannel logout notifier.
@@ -99,14 +131,15 @@ func NewAuthController(
 
 // AuthRouteConfig holds per-endpoint rate limiting middleware for auth routes.
 type AuthRouteConfig struct {
-	JWTAuth       gin.HandlerFunc // JWT authentication middleware for protected endpoints
-	LoginLimit    gin.HandlerFunc // Rate limiter for login
-	MFALimit      gin.HandlerFunc // Rate limiter for MFA operations
-	PasswordLimit gin.HandlerFunc // Rate limiter for password operations
-	RefreshLimit  gin.HandlerFunc // Rate limiter for token refresh
-	VerifyLimit   gin.HandlerFunc // Rate limiter for verification
-	SocialLimit   gin.HandlerFunc // Rate limiter for social login
-	SessionLimit  gin.HandlerFunc // Rate limiter for session management
+	JWTAuth         gin.HandlerFunc   // JWT authentication middleware for protected endpoints
+	LoginLimit      gin.HandlerFunc   // Rate limiter for login
+	MFALimit        gin.HandlerFunc   // Rate limiter for MFA operations
+	MFAStepUpLimits []gin.HandlerFunc // Additional account/session limits for compatibility step-up
+	PasswordLimit   gin.HandlerFunc   // Rate limiter for password operations
+	RefreshLimit    gin.HandlerFunc   // Rate limiter for token refresh
+	VerifyLimit     gin.HandlerFunc   // Rate limiter for verification
+	SocialLimit     gin.HandlerFunc   // Rate limiter for social login
+	SessionLimit    gin.HandlerFunc   // Rate limiter for session management
 }
 
 // RegisterRoutes registers authentication routes.
@@ -160,7 +193,11 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, cfg AuthRouteConfig
 			protected.POST("/mfa/activate", withOptionalLimit(cfg.MFALimit, c.MFAActivate)...)
 			protected.DELETE("/mfa", withOptionalLimit(cfg.MFALimit, c.MFADisable)...)
 			protected.POST("/mfa/backup-codes", withOptionalLimit(cfg.MFALimit, c.MFAGenerateBackupCodes)...)
-			protected.POST("/mfa/step-up", withOptionalLimit(cfg.MFALimit, c.MFAStepUp)...)
+			stepUpHandlers := make([]gin.HandlerFunc, 0, 2+len(cfg.MFAStepUpLimits))
+			stepUpHandlers = append(stepUpHandlers, cfg.MFALimit)
+			stepUpHandlers = append(stepUpHandlers, cfg.MFAStepUpLimits...)
+			stepUpHandlers = append(stepUpHandlers, c.MFAStepUp)
+			protected.POST("/mfa/step-up", stepUpHandlers...)
 		}
 	}
 }

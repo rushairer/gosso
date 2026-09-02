@@ -89,6 +89,8 @@ func RegisterWebRouter(deps RouterDeps) error {
 	// removing either would create a gap in protection.
 	loginLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "login", middleware.IPKeyFunc, deps.RateLimits.Login, time.Minute, false, deps.Logger)
 	mfaLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "mfa", middleware.IPKeyFunc, deps.RateLimits.Token, time.Minute, false, deps.Logger)
+	mfaAccountLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "mfa-account", middleware.AccountKeyFunc, deps.RateLimits.Token, time.Minute, false, deps.Logger)
+	mfaSessionLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "mfa-session", middleware.SessionKeyFunc, deps.RateLimits.Token, time.Minute, false, deps.Logger)
 	passkeyLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "passkey", middleware.IPKeyFunc, deps.RateLimits.Passkey, time.Minute, false, deps.Logger)
 	refreshLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "refresh", middleware.IPKeyFunc, deps.RateLimits.Token, time.Minute, false, deps.Logger)
 	// Security-sensitive endpoints fail-closed (reject if Redis is unavailable)
@@ -121,14 +123,15 @@ func RegisterWebRouter(deps RouterDeps) error {
 		// Auth routes (audit middleware injects IP/UserAgent)
 		api.Use(authMiddleware.AuditMetadataMiddleware())
 		deps.AuthCtrl.RegisterRoutes(api, authController.AuthRouteConfig{
-			JWTAuth:       jwtAuth,
-			LoginLimit:    loginLimit,
-			MFALimit:      mfaLimit,
-			PasswordLimit: passwordLimit,
-			RefreshLimit:  refreshLimit,
-			VerifyLimit:   verifyLimit,
-			SocialLimit:   socialLimit,
-			SessionLimit:  sessionLimit,
+			JWTAuth:         jwtAuth,
+			LoginLimit:      loginLimit,
+			MFALimit:        mfaLimit,
+			MFAStepUpLimits: []gin.HandlerFunc{mfaAccountLimit, mfaSessionLimit},
+			PasswordLimit:   passwordLimit,
+			RefreshLimit:    refreshLimit,
+			VerifyLimit:     verifyLimit,
+			SocialLimit:     socialLimit,
+			SessionLimit:    sessionLimit,
 		})
 
 		// Client management routes (require JWT authentication + fail-closed rate limiting)

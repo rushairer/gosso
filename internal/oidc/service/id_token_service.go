@@ -33,6 +33,7 @@ type IDTokenClaims struct {
 	Nonce             string   `json:"nonce,omitempty"`
 	AuthTime          *int64   `json:"auth_time,omitempty"`
 	AMR               []string `json:"amr,omitempty"` // Authentication Methods References (e.g. ["pwd"], ["pwd","otp"], ["swk"])
+	ACR               string   `json:"acr,omitempty"`
 	ATHash            string   `json:"at_hash,omitempty"`
 	SID               string   `json:"sid,omitempty"`
 }
@@ -98,6 +99,7 @@ func (s *IDTokenService) GenerateIDTokenWithSession(ctx context.Context, account
 		Nonce:    nonce,
 		AuthTime: utility.Ptr[int64](authTime.Unix()),
 		AMR:      authMethods,
+		ACR:      acrForMethods(authMethods),
 		SID:      sessionID,
 	}
 
@@ -138,6 +140,15 @@ func (s *IDTokenService) GenerateIDTokenWithSession(ctx context.Context, account
 	}
 
 	return tokenString, nil
+}
+
+func acrForMethods(methods []string) string {
+	for _, method := range methods {
+		if method == "otp" || method == "swk" || method == "webauthn" {
+			return "urn:gouno:aal2"
+		}
+	}
+	return "urn:gouno:aal1"
 }
 
 // addContactClaims fetches email and/or phone credentials in a single DB query
