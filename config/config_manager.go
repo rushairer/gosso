@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -76,7 +77,11 @@ func NewConfigManager(
 	}
 
 	newConfig := GoUnoConfig{}
-	if err := v.Unmarshal(&newConfig); err != nil {
+	decodeHook := viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+		mapstructure.StringToTimeDurationHookFunc(),
+		mapstructure.StringToSliceHookFunc(","),
+	))
+	if err := v.Unmarshal(&newConfig, decodeHook); err != nil {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
 	if err := newConfig.Validate(); err != nil {
@@ -173,6 +178,7 @@ func (cm *ConfigManager) setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("auth.totp_encryption_key_path", "")
 	v.SetDefault("auth.verify_hash_pepper_path", "")
 	v.SetDefault("auth.verify_hash_pepper", "")
+	v.SetDefault("auth.backchannel_allowed_cidrs", []string{})
 	// Redis configuration
 	v.SetDefault("redis.max_active_conns", 10)
 	v.SetDefault("redis.pool_timeout_seconds", 5)

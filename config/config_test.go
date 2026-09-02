@@ -169,6 +169,13 @@ func TestConfigManagerBindsSupportedCommandFlags(t *testing.T) {
 	assert.Equal(t, 9090, cm.Config().WebServerConfig.Port)
 }
 
+func TestConfigManagerParsesEnvSlice(t *testing.T) {
+	t.Setenv("GOUNO_AUTH_BACKCHANNEL_ALLOWED_CIDRS", "172.21.0.0/16,10.0.0.0/8")
+	cm, err := NewConfigManager(nil, "../config", "test")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"172.21.0.0/16", "10.0.0.0/8"}, cm.Config().AuthConfig.BackchannelAllowedCIDRs)
+}
+
 func TestConfigValidationHelperFailures(t *testing.T) {
 	tests := []struct {
 		name     string
