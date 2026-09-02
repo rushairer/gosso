@@ -88,7 +88,7 @@ func (c *AuthController) auditMFAStepUp(ctx *gin.Context, accountID, result, rea
 	if result != "success" {
 		action = auditDomain.ActionMFAStepUpFailure
 	}
-	auditService.AuditLogSync(ctx, c.auditor, c.logger, auditDomain.NewRecord(action, "account", &accountID, resource, meta))
+	_ = auditService.AuditLogSync(ctx, c.auditor, c.logger, auditDomain.NewRecord(action, "account", &accountID, resource, meta))
 }
 
 func sessionIDFromClaims(ctx *gin.Context) string {

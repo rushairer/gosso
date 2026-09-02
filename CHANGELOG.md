@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.6] - 2026-09-02
+
+### Fixed
+- Fix linter, variable shadowing, and staticcheck issues across auth and oauth2 controllers.
+
 ## [1.5.5] - 2026-09-02
 
 ### Changed

@@ -44,7 +44,7 @@ func validMFACode(kind, code string) bool {
 		return false
 	}
 	for _, char := range strings.ToLower(code) {
-		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f')) {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
 			return false
 		}
 	}

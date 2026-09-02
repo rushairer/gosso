@@ -153,9 +153,9 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 	}
 
 	sessionID := sessionIDFromContext(ctx)
-	if err := c.requireRequestedAuthentication(ctx, sessionID, requestedACR, maxAgeRaw); err != nil {
+	if reqAuthErr := c.requireRequestedAuthentication(ctx, sessionID, requestedACR, maxAgeRaw); reqAuthErr != nil {
 		controllerutil.SetNoCacheHeaders(ctx)
-		if errors.Is(err, errReauthenticationRequired) {
+		if errors.Is(reqAuthErr, errReauthenticationRequired) {
 			loginURL := c.loginURL
 			if loginURL == "" {
 				loginURL = "/login"
@@ -167,7 +167,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 			ctx.Redirect(http.StatusFound, loginURL+separator+"redirect_uri="+url.QueryEscape(ctx.Request.RequestURI)+"&prompt=login&reason=mfa")
 			return
 		}
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": reqAuthErr.Error()})
 		return
 	}
 
