@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	gossoMiddleware "github.com/rushairer/gosso/middleware"
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
 
@@ -19,6 +18,7 @@ import (
 	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
+	gossoMiddleware "github.com/rushairer/gosso/middleware"
 )
 
 // loginErrorMap maps login service errors to HTTP responses.
