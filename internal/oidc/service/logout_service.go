@@ -106,8 +106,30 @@ func NewBackchannelHTTPClient(allowedCIDRs []string) *http.Client {
 	}
 }
 
+// isBlockedBackchannelIP returns true for dangerous target addresses that must NEVER be called:
+// - Loopback (127.0.0.0/8, ::1)
+// - Link-local / Cloud Instance Metadata (169.254.0.0/16, fe80::/10)
+// - Unspecified (0.0.0.0, ::)
+// - Multicast (224.0.0.0/4, ff00::/8)
+func isBlockedBackchannelIP(ip net.IP) bool {
+	if ip == nil {
+		return true
+	}
+	if ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return true
+	}
+	if ip.Equal(net.ParseIP("169.254.169.254")) {
+		return true
+	}
+	return false
+}
+
 func isAllowedBackchannelIP(ip net.IP, allowedIPs []net.IP, allowedNets []*net.IPNet) bool {
-	if isPublicBackchannelIP(ip) {
+	if isBlockedBackchannelIP(ip) {
+		return false
+	}
+	// By default in self-hosted deployments, public IPs and standard RFC 1918 / RFC 4193 private IPs are permitted.
+	if isPublicBackchannelIP(ip) || ip.IsPrivate() {
 		return true
 	}
 	for _, allowedIP := range allowedIPs {

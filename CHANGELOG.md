@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.8] - 2026-09-02
+
+### Changed
+- Default-allow standard RFC 1918 and RFC 4193 private subnets for backchannel logout in self-hosted deployments, while strictly blocking dangerous addresses (Loopback, Link-Local, and Cloud Instance Metadata `169.254.169.254`).
+
 ## [1.5.7] - 2026-09-02
 
 ### Fixed
