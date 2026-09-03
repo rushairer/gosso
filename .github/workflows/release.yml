@@ -80,6 +80,7 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/gosso:${{ github.ref_name }}
             ghcr.io/${{ github.repository_owner }}/gosso:sha-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/gosso:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: mode=max
