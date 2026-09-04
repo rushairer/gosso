@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/rushairer/gouno"
 
 	"github.com/rushairer/gosso/internal/audit"
@@ -115,10 +116,11 @@ func ValidateBearerTokenWithConfig(ctx *gin.Context, tokenSvc TokenValidator, se
 			// Reconstruct claims from the session + account info.
 			// No JWT is issued; the claims are server-side only.
 			claims := &tokenDomain.AccessTokenClaims{
-				AccountID: session.AccountID,
-				Username:  session.Username,
-				SessionID: session.ID,
-				Scope:     "openid profile email",
+				RegisteredClaims: jwt.RegisteredClaims{Audience: jwt.ClaimStrings{"urn:gouno:gosso-api"}},
+				AccountID:        session.AccountID,
+				Username:         session.Username,
+				SessionID:        session.ID,
+				Scope:            "openid profile email",
 			}
 			if authTime := session.AuthenticationTime(); !authTime.IsZero() {
 				unix := authTime.Unix()

@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.9] - 2026-09-04
+
+### Fixed
+- Reconstruct `urn:gouno:gosso-api` audience in cookie-session claims and permit authenticated browser/cookie sessions in `MFAStepUp` to enable in-session MFA step-up verification.
+
 ## [1.5.8] - 2026-09-02
 
 ### Changed

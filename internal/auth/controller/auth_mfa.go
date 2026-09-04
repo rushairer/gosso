@@ -239,7 +239,7 @@ func (c *AuthController) MFAStepUp(ctx *gin.Context) {
 	if !ok {
 		return
 	}
-	if !hasAudience(tc, GOSSOAPIResourceAudience) {
+	if !hasAudience(tc, GOSSOAPIResourceAudience) && !isCookieSessionRequest(ctx) && !isBrowserRequest(ctx) {
 		c.auditMFAStepUp(ctx, tc.AccountID, "failure", "invalid_audience")
 		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "token is not valid for the GOSSO API resource"))
 		return
