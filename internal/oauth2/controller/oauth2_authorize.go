@@ -74,6 +74,7 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 	resource := ctx.Query("resource")
 	requestedACR := ctx.Query("acr_values")
 	maxAgeRaw := ctx.Query("max_age")
+	loginHint := ctx.Query("login_hint")
 
 	if codeChallenge != "" && codeChallengeMethod != "S256" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "code_challenge_method must be S256"})
@@ -153,6 +154,22 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 		return
 	}
 
+	// Verify account matches login_hint if provided (OIDC Core 1.0 §3.1.2.1)
+	if loginHint != "" && !c.accountValidator.MatchesLoginHint(ctx, accountIDStr, loginHint) {
+		controllerutil.SetNoCacheHeaders(ctx)
+		loginURL := c.loginURL
+		if loginURL == "" {
+			loginURL = "/login"
+		}
+		separator := "?"
+		if strings.Contains(loginURL, "?") {
+			separator = "&"
+		}
+		redirectURL := loginURL + separator + "redirect_uri=" + url.QueryEscape(ctx.Request.RequestURI) + "&prompt=login&reason=mfa&login_hint=" + url.QueryEscape(loginHint)
+		ctx.Redirect(http.StatusFound, redirectURL)
+		return
+	}
+
 	sessionID := sessionIDFromContext(ctx)
 	if reqAuthErr := c.requireRequestedAuthentication(ctx, sessionID, requestedACR, maxAgeRaw); reqAuthErr != nil {
 		controllerutil.SetNoCacheHeaders(ctx)
@@ -165,7 +182,11 @@ func (c *OAuth2Controller) Authorize(ctx *gin.Context) {
 			if strings.Contains(loginURL, "?") {
 				separator = "&"
 			}
-			ctx.Redirect(http.StatusFound, loginURL+separator+"redirect_uri="+url.QueryEscape(ctx.Request.RequestURI)+"&prompt=login&reason=mfa")
+			redirectURL := loginURL + separator + "redirect_uri=" + url.QueryEscape(ctx.Request.RequestURI) + "&prompt=login&reason=mfa"
+			if loginHint != "" {
+				redirectURL += "&login_hint=" + url.QueryEscape(loginHint)
+			}
+			ctx.Redirect(http.StatusFound, redirectURL)
 			return
 		}
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": reqAuthErr.Error()})

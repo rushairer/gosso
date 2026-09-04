@@ -412,6 +412,10 @@ func (v *alwaysActiveValidator) IsAccountActive(_ context.Context, _ string) boo
 	return true
 }
 
+func (v *alwaysActiveValidator) MatchesLoginHint(_ context.Context, _, _ string) bool {
+	return true
+}
+
 // oauth2ClientDeleterAdapter wraps clientRepo for account service.
 type oauth2ClientDeleterAdapter struct {
 	clientRepo oauth2Repo.OAuth2ClientRepository

@@ -61,9 +61,10 @@ type ClientAuthManager interface {
 	DummyAuthenticate()
 }
 
-// AccountValidator checks whether an account exists and is active.
+// AccountValidator checks whether an account exists, is active, and matches a login_hint.
 type AccountValidator interface {
 	IsAccountActive(ctx context.Context, accountID string) bool
+	MatchesLoginHint(ctx context.Context, accountID, loginHint string) bool
 }
 
 // AccountRoleFetcher defines operations to get roles for an account.

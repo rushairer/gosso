@@ -182,6 +182,9 @@ func JWTAuthMiddlewareWithConfig(tokenSvc TokenValidator, sessionValidator sessi
 				} else {
 					redirectURL += "?redirect_uri=" + url.QueryEscape(ctx.Request.RequestURI)
 				}
+				if loginHint := ctx.Query("login_hint"); loginHint != "" {
+					redirectURL += "&login_hint=" + url.QueryEscape(loginHint)
+				}
 				ctx.Redirect(http.StatusFound, redirectURL)
 				ctx.Abort()
 				return

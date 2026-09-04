@@ -261,6 +261,10 @@ func (m *mockAccountValidatorAlwaysActive) IsAccountActive(_ context.Context, _ 
 	return true
 }
 
+func (m *mockAccountValidatorAlwaysActive) MatchesLoginHint(_ context.Context, accountID, loginHint string) bool {
+	return loginHint == "" || loginHint == accountID || loginHint == "test-user"
+}
+
 type mockAuthCodeMgr struct {
 	validateCodeFn func() (*oauth2Domain.AuthorizationCode, error)
 	generateCodeFn func() (*oauth2Domain.AuthorizationCode, error)
@@ -324,6 +328,10 @@ func (m *mockIDTokenMgr) GenerateIDToken(_ context.Context, _, _ string, _ []str
 type mockAccountValidatorInactive struct{}
 
 func (m *mockAccountValidatorInactive) IsAccountActive(_ context.Context, _ string) bool {
+	return false
+}
+
+func (m *mockAccountValidatorInactive) MatchesLoginHint(_ context.Context, _, _ string) bool {
 	return false
 }
 
@@ -3052,4 +3060,77 @@ func TestAuthorize_ConsentPageNoScopeOverlap(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
 	assert.Contains(t, w.Body.String(), "Test App")
+}
+
+func TestAuthorize_LoginHintMismatch(t *testing.T) {
+	client := newConfidentialTestClient()
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		nil, nil,
+		&mockTokenMgr{},
+		nil, nil,
+		nil, &mockAccountValidatorAlwaysActive{},
+		nil, nil,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.GET("/oauth2/authorize", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctrl.Authorize(ctx)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/oauth2/authorize?client_id=cid-test&redirect_uri=https://app.example.com/callback&response_type=code&scope=openid&state=my-state&login_hint=different-user", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusFound, w.Code)
+	location := w.Header().Get("Location")
+	assert.Contains(t, location, "/login?")
+	assert.Contains(t, location, "login_hint=different-user")
+	assert.Contains(t, location, "reason=mfa")
+	assert.Contains(t, location, "prompt=login")
+}
+
+func TestAuthorize_LoginHintMatch(t *testing.T) {
+	redisClient := setupTestRedis(t)
+	client := newConfidentialTestClient()
+	ctrl, err := NewOAuth2Controller(
+		&mockOAuth2ClientSvcForOAuth2{
+			findByIDFn: func() (*oauth2Domain.OAuth2Client, error) { return client, nil },
+		},
+		nil,
+		&mockConsentMgr{
+			getConsentFn: func() (*oauth2Domain.Consent, error) {
+				return nil, oauth2Domain.ErrConsentNotFound
+			},
+		},
+		&mockTokenMgr{},
+		nil, nil,
+		nil, &mockAccountValidatorAlwaysActive{},
+		nil, redisClient,
+		"https://sso.example.com",
+		zap.NewNop(),
+	)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.GET("/oauth2/authorize", func(ctx *gin.Context) {
+		ctx.Set(middleware.ContextKeyAccountID, "account-001")
+		ctrl.Authorize(ctx)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/oauth2/authorize?client_id=cid-test&redirect_uri=https://app.example.com/callback&response_type=code&scope=openid&state=my-state&login_hint=account-001", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	// Since login_hint matches and no existing consent, consent HTML is shown (HTTP 200) instead of redirecting to login
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
 }

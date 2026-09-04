@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -343,6 +344,20 @@ func (a *accountValidatorAdapter) IsAccountActive(ctx context.Context, accountID
 		}
 	}
 	return active
+}
+
+func (a *accountValidatorAdapter) MatchesLoginHint(ctx context.Context, accountID, loginHint string) bool {
+	if loginHint == "" || accountID == loginHint {
+		return true
+	}
+	account, err := a.accountSvc.FindAccountByID(ctx, accountID)
+	if err != nil || account == nil {
+		return false
+	}
+	if account.Username != nil && strings.EqualFold(*account.Username, loginHint) {
+		return true
+	}
+	return false
 }
 
 // oauth2ClientDeleterAdapter implements accountService.OAuth2ClientDeleter using the OAuth2 client repository.

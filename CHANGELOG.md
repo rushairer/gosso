@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.11] - 2026-09-04
+
+### Added
+- OpenID Connect `login_hint` support in `/oauth2/authorize`: validates that active session account ID or username matches `login_hint`. If mismatched, enforces reauthentication (`prompt=login&reason=mfa&login_hint=...`) to prevent cross-account step-up errors (`internal/oauth2/controller/oauth2_authorize.go`, `internal/auth/middleware/auth_middleware.go`).
+
 ## [1.5.10] - 2026-09-04
 
 ### Added
