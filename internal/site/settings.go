@@ -2,8 +2,10 @@
 package site
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +19,8 @@ import (
 )
 
 var ErrInvalidSettings = errors.New("invalid site settings")
+
+const maxLoginBackgroundSourceBytes = 8 * 1024 * 1024
 
 type Settings struct {
 	ProductName        string `json:"product_name"`
@@ -96,8 +100,8 @@ func (s *Service) Update(ctx context.Context, next Settings, actor string) (Sett
 		return Settings{}, fmt.Errorf("update site settings: %w", err)
 	}
 	if s.auditor != nil {
-		oldJSON, _ := json.Marshal(previous)
-		newJSON, _ := json.Marshal(next)
+		oldJSON, _ := json.Marshal(auditSnapshot(previous))
+		newJSON, _ := json.Marshal(auditSnapshot(next))
 		auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord("site.settings.update", actor, nil, json.RawMessage(`{"type":"site_settings"}`), nil).WithOld(oldJSON).WithNew(newJSON))
 	}
 	return next, nil
@@ -117,12 +121,85 @@ func validate(s Settings) error {
 	if s.ProductName == "" || len(s.ProductName) > 120 || len(s.LoginTitle) > 160 || len(s.LoginDescription) > 500 {
 		return fmt.Errorf("%w: invalid text length", ErrInvalidSettings)
 	}
-	for _, value := range []string{s.LogoURL, s.FaviconURL, s.LoginBackgroundURL} {
+	for _, value := range []string{s.LogoURL, s.FaviconURL} {
 		if err := validatePublicURL(value); err != nil {
 			return err
 		}
 	}
+	return validateLoginBackgroundSource(s.LoginBackgroundURL)
+}
+
+func validateLoginBackgroundSource(value string) error {
+	if len(value) > maxLoginBackgroundSourceBytes {
+		return fmt.Errorf("%w: login background source exceeds 8 MiB", ErrInvalidSettings)
+	}
+	if strings.HasPrefix(strings.ToLower(value), "data:") {
+		return validateLoginBackgroundDataURL(value)
+	}
+	return validatePublicURL(value)
+}
+
+func validateLoginBackgroundDataURL(value string) error {
+	comma := strings.IndexByte(value, ',')
+	if comma < 0 {
+		return fmt.Errorf("%w: malformed login background data URL", ErrInvalidSettings)
+	}
+
+	metadata := value[len("data:"):comma]
+	parts := strings.Split(metadata, ";")
+	if len(parts) != 2 || !strings.EqualFold(parts[1], "base64") {
+		return fmt.Errorf("%w: login background data URL must use base64 encoding", ErrInvalidSettings)
+	}
+
+	mimeType := strings.ToLower(parts[0])
+	switch mimeType {
+	case "image/png", "image/jpeg", "image/gif", "image/webp":
+	default:
+		return fmt.Errorf("%w: unsupported login background image type", ErrInvalidSettings)
+	}
+
+	payload := value[comma+1:]
+	if payload == "" {
+		return fmt.Errorf("%w: empty login background image", ErrInvalidSettings)
+	}
+
+	decoded, err := base64.StdEncoding.Strict().DecodeString(payload)
+	if err != nil {
+		decoded, err = base64.RawStdEncoding.Strict().DecodeString(payload)
+	}
+	if err != nil {
+		return fmt.Errorf("%w: invalid login background base64 data", ErrInvalidSettings)
+	}
+	if !matchesImageType(mimeType, decoded) {
+		return fmt.Errorf("%w: login background image data does not match its MIME type", ErrInvalidSettings)
+	}
 	return nil
+}
+
+func matchesImageType(mimeType string, data []byte) bool {
+	switch mimeType {
+	case "image/png":
+		return bytes.HasPrefix(data, []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a})
+	case "image/jpeg":
+		return bytes.HasPrefix(data, []byte{0xff, 0xd8, 0xff})
+	case "image/gif":
+		return bytes.HasPrefix(data, []byte("GIF87a")) || bytes.HasPrefix(data, []byte("GIF89a"))
+	case "image/webp":
+		return len(data) >= 12 && bytes.Equal(data[:4], []byte("RIFF")) && bytes.Equal(data[8:12], []byte("WEBP"))
+	default:
+		return false
+	}
+}
+
+func auditSnapshot(settings Settings) Settings {
+	if strings.HasPrefix(strings.ToLower(settings.LoginBackgroundURL), "data:image/") {
+		if comma := strings.IndexByte(settings.LoginBackgroundURL, ','); comma >= 0 {
+			settings.LoginBackgroundURL = settings.LoginBackgroundURL[:comma+1] + "[base64 image omitted]"
+		} else {
+			settings.LoginBackgroundURL = "[base64 image omitted]"
+		}
+	}
+	return settings
 }
 
 func validatePublicURL(value string) error {
