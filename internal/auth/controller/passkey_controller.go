@@ -521,8 +521,8 @@ func (c *PasskeyController) StepUpComplete(ctx *gin.Context) {
 	now := time.Now().Unix()
 	amr := []string{"swk"}
 	if tc.SessionID != "" {
-		if _, err := c.authSvc.MarkSessionStrongAuth(ctx, tc.SessionID, amr); err != nil {
-			c.logger.Error("Failed to update session strong-auth state", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(tc.SessionID)))
+		if _, sessionErr := c.authSvc.MarkSessionStrongAuth(ctx, tc.SessionID, amr); sessionErr != nil {
+			c.logger.Error("Failed to update session strong-auth state", zap.Error(sessionErr), zap.String("session_id", utility.MaskOpaqueID(tc.SessionID)))
 			ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "session authentication state unavailable"))
 			return
 		}
@@ -542,9 +542,9 @@ func (c *PasskeyController) StepUpComplete(ctx *gin.Context) {
 		AMR:              amr,
 	}
 
-	newToken, err := c.tokenMgr.GenerateAccessToken(newClaims)
-	if err != nil {
-		c.logger.Error("Failed to generate step-up access token", zap.Error(err))
+	newToken, tokenErr := c.tokenMgr.GenerateAccessToken(newClaims)
+	if tokenErr != nil {
+		c.logger.Error("Failed to generate step-up access token", zap.Error(tokenErr))
 		ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "token service unavailable"))
 		return
 	}
