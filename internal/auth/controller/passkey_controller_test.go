@@ -66,6 +66,10 @@ func (m *mockAuthOrchForPasskey) CompletePasskeyMFALogin(_ context.Context, _, _
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *mockAuthOrchForPasskey) MarkSessionStrongAuth(_ context.Context, _ string, _ []string) (*sessionDomain.Session, error) {
+	return &sessionDomain.Session{}, nil
+}
+
 type mockTokenMgrForPasskey struct{}
 
 func (m *mockTokenMgrForPasskey) GenerateAccessToken(_ *tokenDomain.AccessTokenClaims) (string, error) {

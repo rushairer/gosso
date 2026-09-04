@@ -2,8 +2,8 @@ apiVersion: v2
 name: gosso
 description: A Helm chart for gosso — Self-hosted OIDC / OAuth 2.0 Identity Provider
 type: application
-version: 1.5.8
-appVersion: "1.5.8"
+version: 1.5.10
+appVersion: "1.5.10"
 keywords:
   - oidc
   - oauth2

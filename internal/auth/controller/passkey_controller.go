@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/rushairer/gouno"
 	"go.uber.org/zap"
@@ -16,6 +17,7 @@ import (
 	accountRepository "github.com/rushairer/gosso/internal/account/repository"
 	authService "github.com/rushairer/gosso/internal/auth/service"
 	"github.com/rushairer/gosso/internal/controllerutil"
+	sessionDomain "github.com/rushairer/gosso/internal/session/domain"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
 	"github.com/rushairer/gosso/middleware"
@@ -67,6 +69,7 @@ type passkeyAuthService interface {
 	ValidateMFAToken(ctx context.Context, mfaToken string) (*tokenDomain.AccessTokenClaims, error)
 	MarkPasskeyMFAVerified(ctx context.Context, mfaTokenJTI string) error
 	CompletePasskeyMFALogin(ctx context.Context, mfaToken, ip, userAgent string) (*authService.LoginResult, error)
+	MarkSessionStrongAuth(ctx context.Context, sessionID string, methods []string) (*sessionDomain.Session, error)
 }
 
 // PasskeyController handles Passkey authentication endpoints.
@@ -103,6 +106,10 @@ func (c *PasskeyController) RegisterRoutes(rg *gin.RouterGroup, jwtAuth gin.Hand
 		// Login (no authentication required, but rate-limited)
 		passkey.POST("/login/begin", passkeyRateLimit, c.LoginBegin)
 		passkey.POST("/login/complete", passkeyRateLimit, c.LoginComplete)
+
+		// Step-up authentication (requires authentication)
+		passkey.POST("/step-up/begin", jwtAuth, c.StepUpBegin)
+		passkey.POST("/step-up/complete", jwtAuth, c.StepUpComplete)
 	}
 
 	// Passkey management (requires authentication)
@@ -455,4 +462,106 @@ func (c *PasskeyController) DeleteCredential(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{"deleted": true}))
+}
+
+// StepUpBegin POST /api/auth/passkey/step-up/begin
+func (c *PasskeyController) StepUpBegin(ctx *gin.Context) {
+	tc, ok := getClaimsFromContext(ctx)
+	if !ok {
+		return
+	}
+
+	if c.passkeySvc == nil {
+		ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "passkey not available"))
+		return
+	}
+
+	options, requestID, err := c.passkeySvc.BeginStepUp(ctx, tc.AccountID)
+	if err != nil {
+		c.logger.Error("Failed to begin passkey step-up", zap.Error(err), zap.String("account_id", utility.MaskOpaqueID(tc.AccountID)))
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, passkeyLoginErrorMap,
+			http.StatusInternalServerError, "failed to begin step-up")
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(passkeyOptionsResponse(options, requestID)))
+}
+
+// StepUpCompleteRequest is the passkey step-up complete request body.
+type StepUpCompleteRequest struct {
+	RequestID string `json:"request_id" binding:"required"`
+}
+
+// StepUpComplete POST /api/auth/passkey/step-up/complete
+func (c *PasskeyController) StepUpComplete(ctx *gin.Context) {
+	tc, ok := getClaimsFromContext(ctx)
+	if !ok {
+		return
+	}
+
+	var req StepUpCompleteRequest
+	bodyBytes, err := io.ReadAll(ctx.Request.Body)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "failed to read request body"))
+		return
+	}
+	ctx.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	if bindErr := ctx.ShouldBindJSON(&req); bindErr != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+	ctx.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+	if err = c.passkeySvc.CompleteStepUp(ctx, req.RequestID, tc.AccountID, ctx.Request); err != nil {
+		c.logger.Error("Failed to complete passkey step-up", zap.Error(err), zap.String("account_id", utility.MaskOpaqueID(tc.AccountID)))
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "passkey verification failed"))
+		return
+	}
+
+	now := time.Now().Unix()
+	amr := []string{"swk"}
+	if tc.SessionID != "" {
+		if _, err := c.authSvc.MarkSessionStrongAuth(ctx, tc.SessionID, amr); err != nil {
+			c.logger.Error("Failed to update session strong-auth state", zap.Error(err), zap.String("session_id", utility.MaskOpaqueID(tc.SessionID)))
+			ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "session authentication state unavailable"))
+			return
+		}
+	}
+
+	newClaims := &tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{Audience: jwt.ClaimStrings{GOSSOAPIResourceAudience}},
+		AccountID:        tc.AccountID,
+		Username:         tc.Username,
+		Email:            tc.Email,
+		Roles:            tc.Roles,
+		Permissions:      tc.Permissions,
+		Scope:            tc.Scope,
+		ClientID:         tc.ClientID,
+		SessionID:        tc.SessionID,
+		AuthTime:         &now,
+		AMR:              amr,
+	}
+
+	newToken, err := c.tokenMgr.GenerateAccessToken(newClaims)
+	if err != nil {
+		c.logger.Error("Failed to generate step-up access token", zap.Error(err))
+		ctx.JSON(http.StatusServiceUnavailable, gouno.NewErrorResponse(http.StatusServiceUnavailable, "token service unavailable"))
+		return
+	}
+
+	controllerutil.SetNoCacheHeaders(ctx)
+	if isCookieSessionRequest(ctx) || isBrowserRequest(ctx) {
+		ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
+			"auth_time":  now,
+			"amr":        amr,
+			"expires_in": int(c.tokenMgr.AccessExpiry().Seconds()),
+		}))
+		return
+	}
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(gin.H{
+		"access_token": newToken,
+		"auth_time":    now,
+		"amr":          amr,
+		"expires_in":   int(c.tokenMgr.AccessExpiry().Seconds()),
+	}))
 }

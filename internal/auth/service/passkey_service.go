@@ -32,10 +32,11 @@ type AccountLookup interface {
 }
 
 const (
-	defaultChallengeTTL    = 5 * time.Minute
-	redisKeyRegChallenge   = "webauthn:reg:%s"
-	redisKeyLoginChallenge = "webauthn:login:%s"
-	redisKeyMFAChallenge   = "webauthn:mfa:%s"
+	defaultChallengeTTL     = 5 * time.Minute
+	redisKeyRegChallenge    = "webauthn:reg:%s"
+	redisKeyLoginChallenge  = "webauthn:login:%s"
+	redisKeyMFAChallenge    = "webauthn:mfa:%s"
+	redisKeyStepUpChallenge = "webauthn:stepup:%s"
 )
 
 // PasskeyCredentialView passkey list view (does not expose sensitive data)
@@ -306,6 +307,17 @@ func (s *PasskeyService) CompleteLogin(ctx context.Context, requestID string, re
 // CompleteMFALogin completes MFA Passkey verification
 func (s *PasskeyService) CompleteMFALogin(ctx context.Context, requestID string, accountID string, request *http.Request) error {
 	_, err := s.completeLoginInternal(ctx, requestID, accountID, redisKeyMFAChallenge, request)
+	return err
+}
+
+// BeginStepUp starts Passkey step-up authentication for an authenticated account
+func (s *PasskeyService) BeginStepUp(ctx context.Context, accountID string) (*protocol.CredentialAssertion, string, error) {
+	return s.beginLoginInternal(ctx, accountID, redisKeyStepUpChallenge, "step-up")
+}
+
+// CompleteStepUp completes Passkey step-up authentication
+func (s *PasskeyService) CompleteStepUp(ctx context.Context, requestID string, accountID string, request *http.Request) error {
+	_, err := s.completeLoginInternal(ctx, requestID, accountID, redisKeyStepUpChallenge, request)
 	return err
 }
 

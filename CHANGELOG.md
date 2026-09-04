@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.10] - 2026-09-04
+
+### Added
+- Add `/api/auth/passkey/step-up/begin` and `/api/auth/passkey/step-up/complete` endpoints to support in-session Sudo Mode step-up authentication using Passkeys without session replacement.
+
 ## [1.5.9] - 2026-09-04
 
 ### Fixed
