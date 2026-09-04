@@ -17,6 +17,15 @@ var (
 
 	// ErrConsentNil is returned when a nil consent object is passed to the consent service.
 	ErrConsentNil = errors.New("consent must not be nil")
+
+	// ErrReauthenticationRequired indicates re-authentication is required.
+	ErrReauthenticationRequired = errors.New("reauthentication required")
+
+	// ErrUnsupportedACR indicates the requested ACR is unsupported.
+	ErrUnsupportedACR = errors.New("requested acr is not supported")
+
+	// ErrInvalidMaxAge indicates max_age parameter is invalid.
+	ErrInvalidMaxAge = errors.New("max_age must be a non-negative integer")
 )
 
 // ValidationError represents an OAuth2 input validation error.

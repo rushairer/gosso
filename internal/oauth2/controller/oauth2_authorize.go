@@ -19,6 +19,7 @@ import (
 	"github.com/rushairer/gosso/internal/cache"
 	"github.com/rushairer/gosso/internal/controllerutil"
 	oauth2Domain "github.com/rushairer/gosso/internal/oauth2/domain"
+	oauth2Service "github.com/rushairer/gosso/internal/oauth2/service"
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 	"github.com/rushairer/gosso/internal/utility"
 	"github.com/rushairer/gosso/middleware"
@@ -28,9 +29,9 @@ const consentStateTTL = 10 * time.Minute
 const consentStateKeyPrefix = "consent_state:"
 
 var (
-	errReauthenticationRequired = errors.New("reauthentication required")
-	errUnsupportedACR           = errors.New("requested acr is not supported")
-	errInvalidMaxAge            = errors.New("max_age must be a non-negative integer")
+	errReauthenticationRequired = oauth2Service.ErrReauthenticationRequired
+	errUnsupportedACR           = oauth2Service.ErrUnsupportedACR
+	errInvalidMaxAge            = oauth2Service.ErrInvalidMaxAge
 )
 
 func sessionIDFromContext(ctx *gin.Context) string {
