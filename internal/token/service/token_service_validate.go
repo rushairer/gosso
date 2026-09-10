@@ -30,10 +30,11 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 		if token.Method.Alg() != "RS256" {
 			return nil, fmt.Errorf("unexpected signing algorithm: %v", token.Method.Alg())
 		}
-		// RFC 9068 uses typ=at+jwt to prevent JWT token substitution. Accept a
-		// missing typ temporarily for access tokens minted before this baseline,
-		// but reject any conflicting explicit type.
-		if typ, ok := token.Header["typ"].(string); ok && typ != "" && typ != "at+jwt" {
+		// RFC 9068 uses typ=at+jwt to prevent JWT token substitution. During the
+		// rolling-upgrade window, also accept the historical library default JWT
+		// type (and a missing type); principal-shape checks below still reject ID
+		// tokens and other JWT classes. Newly issued access tokens use at+jwt.
+		if typ, ok := token.Header["typ"].(string); ok && typ != "" && typ != "at+jwt" && typ != "JWT" {
 			return nil, fmt.Errorf("unexpected token type: %s", typ)
 		}
 		kid, _ := token.Header["kid"].(string)
