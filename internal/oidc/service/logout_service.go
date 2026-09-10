@@ -61,8 +61,9 @@ func NewLogoutService(
 // NewBackchannelHTTPClient creates an HTTP client for back-channel logout requests.
 // By default, it prevents registered logout endpoints from becoming an SSRF primitive
 // by verifying that target IPs are public addresses. When allowedCIDRs is specified,
-// addresses matching the allowed list (e.g. for local development or container internal networks)
-// are also permitted.
+// private addresses matching the allowed list (e.g. for an explicitly approved local
+// development or internal network) are also permitted. Hard-blocked loopback,
+// link-local, metadata, unspecified and multicast targets can never be allowlisted.
 func NewBackchannelHTTPClient(allowedCIDRs []string) *http.Client {
 	var parsedNets []*net.IPNet
 	var parsedIPs []net.IP
@@ -125,13 +126,18 @@ func isBlockedBackchannelIP(ip net.IP) bool {
 }
 
 func isAllowedBackchannelIP(ip net.IP, allowedIPs []net.IP, allowedNets []*net.IPNet) bool {
+	// Hard-deny special ranges before consulting any operator allowlist. This
+	// makes broad entries such as 0.0.0.0/0 unable to expose loopback or cloud
+	// metadata endpoints.
 	if isBlockedBackchannelIP(ip) {
 		return false
 	}
-	// By default in self-hosted deployments, public IPs and standard RFC 1918 / RFC 4193 private IPs are permitted.
-	if isPublicBackchannelIP(ip) || ip.IsPrivate() {
+	// Public Internet targets are permitted by default.
+	if isPublicBackchannelIP(ip) {
 		return true
 	}
+	// Private RFC1918/RFC4193 targets are deny-by-default and require an
+	// explicit exact-IP/CIDR policy entry.
 	for _, allowedIP := range allowedIPs {
 		if allowedIP.Equal(ip) {
 			return true

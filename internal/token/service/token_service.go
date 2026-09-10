@@ -106,21 +106,79 @@ func (s *TokenService) RefreshExpiry() time.Duration {
 	return s.refreshExpiry
 }
 
+// prepareAccessTokenClaims normalizes the principal boundary before signing.
+// It also provides the Gosso API as the conservative default audience for
+// human-session/delegated tokens when no RFC 8707 resource was requested.
+// Machine tokens never receive an implicit audience.
+func (s *TokenService) prepareAccessTokenClaims(claims *domain.AccessTokenClaims) (*domain.AccessTokenClaims, error) {
+	if claims == nil {
+		return nil, errors.New("access token claims are required")
+	}
+	clonedClaims := *claims
+	principalType := clonedClaims.EffectivePrincipalType()
+
+	switch principalType {
+	case domain.PrincipalTypeUserSession:
+		if clonedClaims.AccountID == "" || clonedClaims.ClientID != "" {
+			return nil, errors.New("user-session access token requires account_id and forbids client_id")
+		}
+		clonedClaims.PrincipalType = domain.PrincipalTypeUserSession
+		clonedClaims.Subject = clonedClaims.AccountID
+		if len(clonedClaims.Audience) == 0 {
+			clonedClaims.Audience = jwt.ClaimStrings{domain.GossoAPIResourceAudience}
+		}
+	case domain.PrincipalTypeDelegatedUser:
+		if clonedClaims.AccountID == "" || clonedClaims.ClientID == "" {
+			return nil, errors.New("delegated-user access token requires account_id and client_id")
+		}
+		clonedClaims.PrincipalType = domain.PrincipalTypeDelegatedUser
+		clonedClaims.Subject = clonedClaims.AccountID
+		if len(clonedClaims.Audience) == 0 {
+			clonedClaims.Audience = jwt.ClaimStrings{domain.GossoAPIResourceAudience}
+		}
+	case domain.PrincipalTypeClient:
+		if clonedClaims.ClientID == "" {
+			return nil, errors.New("client access token requires client_id")
+		}
+		if clonedClaims.AccountID != "" || clonedClaims.SessionID != "" {
+			return nil, errors.New("client access token must not contain account_id or sid")
+		}
+		if len(clonedClaims.Audience) == 0 {
+			return nil, errors.New("client access token requires an explicit resource audience")
+		}
+		clonedClaims.PrincipalType = domain.PrincipalTypeClient
+		clonedClaims.Subject = clonedClaims.ClientID
+		// Defense in depth: a machine principal must not inherit user-only claims.
+		clonedClaims.Username = ""
+		clonedClaims.Email = ""
+		clonedClaims.Roles = nil
+		clonedClaims.Permissions = nil
+		clonedClaims.AuthTime = nil
+		clonedClaims.AMR = nil
+	default:
+		return nil, errors.New("access token principal is invalid")
+	}
+
+	return &clonedClaims, nil
+}
+
 // GenerateAccessToken generates a JWT access token (RS256).
 // Note: this always overrides ExpiresAt with the configured accessExpiry,
 // regardless of any value the caller may have set on claims.
 // Use GenerateShortLivedToken if a custom expiry is needed.
 func (s *TokenService) GenerateAccessToken(claims *domain.AccessTokenClaims) (string, error) {
 	now := time.Now()
-	clonedClaims := *claims
+	clonedClaims, err := s.prepareAccessTokenClaims(claims)
+	if err != nil {
+		return "", err
+	}
 	if clonedClaims.ID == "" {
 		clonedClaims.ID = uuid.New().String()
 	}
 	clonedClaims.Issuer = s.issuer
-	clonedClaims.Subject = clonedClaims.AccountID
 	clonedClaims.IssuedAt = jwt.NewNumericDate(now)
 	clonedClaims.ExpiresAt = jwt.NewNumericDate(now.Add(s.accessExpiry))
-	return s.signToken(&clonedClaims, "access token")
+	return s.signToken(clonedClaims, "access token")
 }
 
 // GenerateShortLivedToken generates a JWT access token (RS256) that respects
@@ -129,12 +187,14 @@ func (s *TokenService) GenerateAccessToken(claims *domain.AccessTokenClaims) (st
 // purposes like MFA verification tokens.
 func (s *TokenService) GenerateShortLivedToken(claims *domain.AccessTokenClaims) (string, error) {
 	now := time.Now()
-	clonedClaims := *claims
+	clonedClaims, err := s.prepareAccessTokenClaims(claims)
+	if err != nil {
+		return "", err
+	}
 	if clonedClaims.ID == "" {
 		clonedClaims.ID = uuid.New().String()
 	}
 	clonedClaims.Issuer = s.issuer
-	clonedClaims.Subject = clonedClaims.AccountID
 	clonedClaims.IssuedAt = jwt.NewNumericDate(now)
 	if clonedClaims.ExpiresAt == nil || clonedClaims.ExpiresAt.IsZero() {
 		clonedClaims.ExpiresAt = jwt.NewNumericDate(now.Add(s.accessExpiry))
@@ -149,14 +209,20 @@ func (s *TokenService) GenerateShortLivedToken(claims *domain.AccessTokenClaims)
 		clonedClaims.ExpiresAt = maxExpiry
 	}
 
-	return s.signToken(&clonedClaims, "short-lived token")
+	return s.signToken(clonedClaims, "short-lived token")
 }
 
-// signToken creates and signs a JWT with RS256, setting the kid header.
+// signToken creates and signs an RFC 9068-style JWT access token with RS256,
+// setting both kid and the explicit at+jwt type header.
 func (s *TokenService) signToken(claims *domain.AccessTokenClaims, label string) (string, error) {
+	privateKey, kid := s.keySvc.SigningKey()
+	if privateKey == nil || kid == "" {
+		return "", fmt.Errorf("sign %s: active signing key is unavailable", label)
+	}
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	token.Header["kid"] = s.keySvc.KeyID()
-	tokenString, err := token.SignedString(s.keySvc.PrivateKey())
+	token.Header["kid"] = kid
+	token.Header["typ"] = "at+jwt"
+	tokenString, err := token.SignedString(privateKey)
 	if err != nil {
 		s.logger.Error("Failed to sign "+label, zap.Error(err))
 		return "", fmt.Errorf("sign %s: %w", label, err)

@@ -20,7 +20,7 @@ import (
 
 const accessTokenClockSkew = 30 * time.Second
 
-// ValidateAccessTokenWithContext validates a JWT access token using the request context
+// ValidateAccessTokenWithContext validates a JWT access token using the request context.
 func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, tokenString string) (*domain.AccessTokenClaims, error) {
 	token, err := s.parser.ParseWithClaims(tokenString, &domain.AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
@@ -30,7 +30,14 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 		if token.Method.Alg() != "RS256" {
 			return nil, fmt.Errorf("unexpected signing algorithm: %v", token.Method.Alg())
 		}
-		return s.keySvc.PublicKey(), nil
+		// RFC 9068 uses typ=at+jwt to prevent JWT token substitution. Accept a
+		// missing typ temporarily for access tokens minted before this baseline,
+		// but reject any conflicting explicit type.
+		if typ, ok := token.Header["typ"].(string); ok && typ != "" && typ != "at+jwt" {
+			return nil, fmt.Errorf("unexpected token type: %s", typ)
+		}
+		kid, _ := token.Header["kid"].(string)
+		return s.keySvc.PublicKeyByKID(kid)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parse access token: %w", err)
@@ -38,6 +45,26 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 
 	claims, ok := token.Claims.(*domain.AccessTokenClaims)
 	if !ok || !token.Valid {
+		return nil, ErrInvalidToken
+	}
+
+	// Enforce the principal/subject invariants before authorization middleware
+	// can consume these claims. Legacy tokens without principal_type are inferred
+	// by shape for a short rolling-upgrade window.
+	switch claims.EffectivePrincipalType() {
+	case domain.PrincipalTypeUserSession:
+		if claims.AccountID == "" || claims.ClientID != "" || (claims.Subject != "" && claims.Subject != claims.AccountID) {
+			return nil, ErrInvalidToken
+		}
+	case domain.PrincipalTypeDelegatedUser:
+		if claims.AccountID == "" || claims.ClientID == "" || (claims.Subject != "" && claims.Subject != claims.AccountID) {
+			return nil, ErrInvalidToken
+		}
+	case domain.PrincipalTypeClient:
+		if !claims.IsClientPrincipal() || claims.Subject != claims.ClientID || len(claims.Audience) == 0 {
+			return nil, ErrInvalidToken
+		}
+	default:
 		return nil, ErrInvalidToken
 	}
 
@@ -66,7 +93,7 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 		return nil, ErrInvalidToken
 	}
 
-	// Account-level revocation check — rejects all tokens issued before the
+	// Account-level revocation check — rejects all user tokens issued before the
 	// account's revocation timestamp (e.g., after OIDC logout).
 	if !revocation.AccountRevokedAfter.IsZero() && claims.IssuedAt != nil && claims.IssuedAt.Before(revocation.AccountRevokedAfter) {
 		return nil, ErrTokenRevoked
@@ -75,7 +102,7 @@ func (s *TokenService) ValidateAccessTokenWithContext(ctx context.Context, token
 	return claims, nil
 }
 
-// ValidateRefreshToken validates a refresh token
+// ValidateRefreshToken validates a refresh token.
 func (s *TokenService) ValidateRefreshToken(ctx context.Context, token string) (*domain.RefreshToken, error) {
 	key := s.buildRefreshTokenKey(token)
 	data, err := s.redis.Get(ctx, key)
@@ -153,11 +180,15 @@ func (s *TokenService) IntrospectToken(ctx context.Context, tokenString string) 
 	}
 
 	result := map[string]any{
-		"active":     true,
-		"sub":        claims.AccountID,
-		"client_id":  claims.ClientID,
-		"scope":      claims.Scope,
-		"token_type": "Bearer",
+		"active":         true,
+		"sub":            claims.Subject,
+		"client_id":      claims.ClientID,
+		"scope":          claims.Scope,
+		"token_type":     "Bearer",
+		"principal_type": claims.EffectivePrincipalType(),
+	}
+	if claims.AccountID != "" {
+		result["account_id"] = claims.AccountID
 	}
 	if len(claims.Audience) > 0 {
 		result["aud"] = claims.Audience

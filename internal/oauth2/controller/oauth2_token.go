@@ -39,6 +39,7 @@ type TokenRequest struct {
 	CodeVerifier string `json:"code_verifier" form:"code_verifier" binding:"max=256"`
 	RefreshToken string `json:"refresh_token" form:"refresh_token" binding:"max=2048"`
 	Scope        string `json:"scope" form:"scope" binding:"max=2048"`
+	Resource     string `json:"resource" form:"resource" binding:"max=2048"`
 	DeviceCode   string `json:"device_code" form:"device_code" binding:"max=128"`
 }
 
@@ -134,6 +135,10 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "invalid or expired authorization code"})
 		return
 	}
+	if req.Resource != "" && req.Resource != authCode.Resource {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_target", "error_description": "resource does not match the authorization request"})
+		return
+	}
 
 	if !c.accountValidator.IsAccountActive(ctx, authCode.AccountID) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "account is not active"})
@@ -179,21 +184,20 @@ func (c *OAuth2Controller) handleAuthorizationCodeGrant(ctx *gin.Context, req *T
 	var aud []string
 	if authCode.Resource != "" {
 		aud = []string{authCode.Resource}
-	} else if len(client.AllowedResources) > 0 {
-		aud = client.AllowedResources
 	}
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Audience: aud,
 		},
-		AccountID:   authCode.AccountID,
-		Scope:       strings.Join(authCode.Scopes, " "),
-		ClientID:    authCode.ClientID,
-		SessionID:   authCode.SessionID,
-		Roles:       roles,
-		Permissions: permissions,
-		AuthTime:    authTime,
-		AMR:         authMethods,
+		AccountID:     authCode.AccountID,
+		Scope:         strings.Join(authCode.Scopes, " "),
+		ClientID:      authCode.ClientID,
+		SessionID:     authCode.SessionID,
+		Roles:         roles,
+		Permissions:   permissions,
+		AuthTime:      authTime,
+		AMR:           authMethods,
+		PrincipalType: tokenDomain.PrincipalTypeDelegatedUser,
 	})
 	if err != nil {
 		c.logger.Error("Failed to generate access token for authorization code", zap.Error(err), zap.String("client_id", req.ClientID))
@@ -286,6 +290,12 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant", "error_description": "client_id mismatch"})
 		return
 	}
+	// Resource is bound to the refresh-token family. Refresh may preserve it but
+	// must never expand or substitute the audience.
+	if req.Resource != "" && req.Resource != oldRefreshToken.Resource {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_target", "error_description": "resource does not match the refresh token"})
+		return
+	}
 
 	// Verify account is still active BEFORE consuming the old refresh token.
 	// If the account is inactive, reject early so the client retains the old token.
@@ -344,19 +354,18 @@ func (c *OAuth2Controller) handleRefreshTokenGrant(ctx *gin.Context, req *TokenR
 	var aud []string
 	if newRefreshToken.Resource != "" {
 		aud = []string{newRefreshToken.Resource}
-	} else if len(client.AllowedResources) > 0 {
-		aud = client.AllowedResources
 	}
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Audience: aud,
 		},
-		AccountID:   newRefreshToken.AccountID,
-		Scope:       accessTokenScope,
-		ClientID:    newRefreshToken.ClientID,
-		SessionID:   newRefreshToken.SessionID,
-		Roles:       roles,
-		Permissions: permissions,
+		AccountID:     newRefreshToken.AccountID,
+		Scope:         accessTokenScope,
+		ClientID:      newRefreshToken.ClientID,
+		SessionID:     newRefreshToken.SessionID,
+		Roles:         roles,
+		Permissions:   permissions,
+		PrincipalType: tokenDomain.PrincipalTypeDelegatedUser,
 	})
 	if err != nil {
 		c.logger.Error("Failed to generate access token for refresh", zap.Error(err), zap.String("client_id", newRefreshToken.ClientID))
@@ -415,16 +424,25 @@ func (c *OAuth2Controller) handleClientCredentialsGrant(ctx *gin.Context, req *T
 		return
 	}
 
-	// Verify account is still active (deleted/suspended clients cannot get new tokens)
+	resource := strings.TrimSpace(req.Resource)
+	if resource == "" || !client.ValidateResource(resource) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_target", "error_description": "an allowed resource is required for client_credentials"})
+		return
+	}
+
+	// Verify account is still active (deleted/suspended clients cannot get new tokens).
+	// The owner is an issuance-policy check only and is deliberately not encoded
+	// into the machine token as a user identity.
 	if !c.accountValidator.IsAccountActive(ctx, client.AccountID) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client", "error_description": "account is not active"})
 		return
 	}
 
 	accessToken, err := c.tokenSvc.GenerateAccessToken(&tokenDomain.AccessTokenClaims{
-		Scope:     strings.Join(scopes, " "),
-		ClientID:  req.ClientID,
-		AccountID: client.AccountID,
+		RegisteredClaims: jwt.RegisteredClaims{Audience: jwt.ClaimStrings{resource}},
+		Scope:            strings.Join(scopes, " "),
+		ClientID:         req.ClientID,
+		PrincipalType:    tokenDomain.PrincipalTypeClient,
 	})
 	if err != nil {
 		c.logger.Error("Failed to generate access token for client_credentials", zap.Error(err), zap.String("client_id", req.ClientID))

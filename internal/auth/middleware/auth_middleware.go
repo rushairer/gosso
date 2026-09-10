@@ -83,7 +83,7 @@ func ValidateBearerTokenWithConfig(ctx *gin.Context, tokenSvc TokenValidator, se
 			return nil, ErrTokenScopeNotAllowed
 		}
 
-		// Verify the session still exists.
+		// Verify the session still exists whenever the token is session-bound.
 		if claims.SessionID != "" {
 			if sessionValidator == nil {
 				return nil, errUnauthorized
@@ -116,11 +116,12 @@ func ValidateBearerTokenWithConfig(ctx *gin.Context, tokenSvc TokenValidator, se
 			// Reconstruct claims from the session + account info.
 			// No JWT is issued; the claims are server-side only.
 			claims := &tokenDomain.AccessTokenClaims{
-				RegisteredClaims: jwt.RegisteredClaims{Audience: jwt.ClaimStrings{"urn:gouno:gosso-api"}},
+				RegisteredClaims: jwt.RegisteredClaims{Audience: jwt.ClaimStrings{tokenDomain.GossoAPIResourceAudience}},
 				AccountID:        session.AccountID,
 				Username:         session.Username,
 				SessionID:        session.ID,
 				Scope:            "openid profile email",
+				PrincipalType:    tokenDomain.PrincipalTypeUserSession,
 			}
 			if authTime := session.AuthenticationTime(); !authTime.IsZero() {
 				unix := authTime.Unix()
@@ -200,7 +201,13 @@ func JWTAuthMiddlewareWithConfig(tokenSvc TokenValidator, sessionValidator sessi
 			return
 		}
 
-		ctx.Set(middleware.ContextKeyAccountID, claims.AccountID)
+		// Account-scoped context is intentionally exposed only for a first-party
+		// user-session principal. Audience is not re-required here so short-lived
+		// pre-baseline session tokens without an aud claim survive rolling deploys;
+		// all newly issued user-session tokens carry the Gosso API audience.
+		if claims.IsUserSessionPrincipal() {
+			ctx.Set(middleware.ContextKeyAccountID, claims.AccountID)
+		}
 		ctx.Set(middleware.ContextKeyClaims, claims)
 		ctx.Next()
 	}, nil
@@ -232,7 +239,33 @@ func extractBearerTokenWithConfig(ctx *gin.Context, enableCookieAuth bool, authC
 	return ""
 }
 
-// AdminRequiredMiddleware checks for admin role (must be used after JWTAuthMiddleware)
+// UserSessionRequiredMiddleware constrains an authenticated request to the
+// first-party Gosso user-session principal. It is used by account-security,
+// client-management and other control-plane routes so delegated or machine
+// tokens can never inherit account authority.
+func UserSessionRequiredMiddleware() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		claimsRaw, exists := ctx.Get(middleware.ContextKeyClaims)
+		if !exists {
+			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "missing authorization"))
+			return
+		}
+		claims, ok := claimsRaw.(*tokenDomain.AccessTokenClaims)
+		if !ok || claims == nil {
+			ctx.AbortWithStatusJSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "invalid claims type"))
+			return
+		}
+		if !claims.IsUserSessionPrincipal() {
+			ctx.AbortWithStatusJSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "user session required"))
+			return
+		}
+		ctx.Set(middleware.ContextKeyAccountID, claims.AccountID)
+		ctx.Next()
+	}
+}
+
+// AdminRequiredMiddleware checks for a first-party Gosso user session with
+// admin scope and role (must be used after JWTAuthMiddleware).
 func AdminRequiredMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		claimsRaw, exists := ctx.Get(middleware.ContextKeyClaims)
@@ -244,6 +277,11 @@ func AdminRequiredMiddleware() gin.HandlerFunc {
 		claims, ok := claimsRaw.(*tokenDomain.AccessTokenClaims)
 		if !ok {
 			ctx.AbortWithStatusJSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "invalid claims type"))
+			return
+		}
+
+		if !claims.IsUserSessionPrincipal() {
+			ctx.AbortWithStatusJSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "admin user session required"))
 			return
 		}
 
