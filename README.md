@@ -27,7 +27,7 @@ gosso provides a complete SSO server with OAuth 2.0 authorization, OIDC discover
 - RP-Initiated Logout
 
 **Authentication**
-- Username/email + password login (bcrypt)
+- Username/email + password login (Argon2id)
 - WebAuthn / Passkeys (registration and authentication)
 - TOTP-based MFA with backup codes
 - Social login (Google, GitHub, WeChat)

@@ -231,7 +231,7 @@ func TestCSRF_BearerAuth_WithSessionCookie_NotBypassed(t *testing.T) {
 		c.String(http.StatusOK, "ok")
 	})
 
-	for _, cookieName := range []string{"session", "access_token", "__secure-access_token", "__host-access_token"} {
+	for _, cookieName := range []string{"session", "__host-gosso-session", "access_token", "__secure-access_token", "__host-access_token"} {
 		t.Run(cookieName, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest("POST", "/test", nil)

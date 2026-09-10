@@ -21,7 +21,8 @@ Security-sensitive authorization follows this trust order:
 - [x] Real signing-key rotation with verification/JWKS overlap.
 - [x] Password/security documentation aligned to Argon2id runtime behavior.
 - [ ] Regression and integration CI green on merge candidate.
-- [ ] gosso-client, gosso-admin, and gouno-blog compatibility verified.
-- [ ] Version/changelog/release metadata updated and published.
+- [x] gosso-client, gosso-admin, and gouno-blog compatibility verified.
+- [x] Version/changelog/release metadata updated for v1.6.0.
+- [ ] v1.6.0 release published after the merge candidate passes CI.
 
 Existing pre-baseline user-session tokens remain recognizable for their short remaining lifetime. Machine clients must send `resource=<registered-resource-uri>` when using `client_credentials` after this baseline.

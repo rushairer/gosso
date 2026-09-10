@@ -27,7 +27,7 @@ gosso 提供完整的 SSO 服务器，包含 OAuth 2.0 授权、OIDC 发现、JW
 - RP 发起的登出
 
 **认证**
-- 用户名/邮箱 + 密码登录（bcrypt）
+- 用户名/邮箱 + 密码登录（Argon2id）
 - WebAuthn / Passkeys（注册和认证）
 - 基于 TOTP 的 MFA，支持备份码
 - 社交登录（Google、GitHub、微信）
