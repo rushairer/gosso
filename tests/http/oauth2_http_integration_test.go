@@ -21,6 +21,8 @@ import (
 	tokenDomain "github.com/rushairer/gosso/internal/token/domain"
 )
 
+const testClientCredentialsResource = "https://api.example.test"
+
 func setupTest(t *testing.T) *HTTPTestEnv {
 	t.Helper()
 	return SetupHTTPTestEnv(t)
@@ -118,9 +120,10 @@ func TestHTTP_ClientCredentialsFlow(t *testing.T) {
 	require.NoError(t, err)
 
 	clientID, clientSecret := e.SeedOAuth2Client(t, ctx, accountID, SeedClientOptions{
-		Confidential: true,
-		GrantTypes:   []string{"client_credentials"},
-		Scopes:       []string{"openid", "profile"},
+		Confidential:     true,
+		GrantTypes:       []string{"client_credentials"},
+		Scopes:           []string{"openid", "profile"},
+		AllowedResources: []string{testClientCredentialsResource},
 	})
 
 	// Token request with client_secret_post
@@ -129,6 +132,7 @@ func TestHTTP_ClientCredentialsFlow(t *testing.T) {
 		"client_id":     clientID,
 		"client_secret": clientSecret,
 		"scope":         "openid profile",
+		"resource":      testClientCredentialsResource,
 	}, nil)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -348,10 +352,11 @@ func TestHTTP_ClientCredentialsOmitsRefreshToken(t *testing.T) {
 	require.NoError(t, err)
 
 	clientID, clientSecret := e.SeedOAuth2Client(t, ctx, accountID, SeedClientOptions{
-		Confidential: true,
-		RedirectURIs: []string{"https://app.example.com/callback"},
-		GrantTypes:   []string{"client_credentials"},
-		Scopes:       []string{"openid", "profile"},
+		Confidential:     true,
+		RedirectURIs:     []string{"https://app.example.com/callback"},
+		GrantTypes:       []string{"client_credentials"},
+		Scopes:           []string{"openid", "profile"},
+		AllowedResources: []string{testClientCredentialsResource},
 	})
 
 	// Client credentials tokens must never include refresh tokens (RFC 6749 §4.4.3).
@@ -360,6 +365,7 @@ func TestHTTP_ClientCredentialsOmitsRefreshToken(t *testing.T) {
 		"client_id":     clientID,
 		"client_secret": clientSecret,
 		"scope":         "openid profile",
+		"resource":      testClientCredentialsResource,
 	}, nil)
 	assert.Equal(t, http.StatusOK, tokenResp.StatusCode)
 
@@ -386,9 +392,10 @@ func TestHTTP_TokenIntrospection(t *testing.T) {
 	require.NoError(t, err)
 
 	clientID, clientSecret := e.SeedOAuth2Client(t, ctx, accountID, SeedClientOptions{
-		Confidential: true,
-		GrantTypes:   []string{"client_credentials"},
-		Scopes:       []string{"openid"},
+		Confidential:     true,
+		GrantTypes:       []string{"client_credentials"},
+		Scopes:           []string{"openid"},
+		AllowedResources: []string{testClientCredentialsResource},
 	})
 
 	// Get a token
@@ -397,6 +404,7 @@ func TestHTTP_TokenIntrospection(t *testing.T) {
 		"client_id":     clientID,
 		"client_secret": clientSecret,
 		"scope":         "openid",
+		"resource":      testClientCredentialsResource,
 	}, nil)
 	require.Equal(t, http.StatusOK, tokenResp.StatusCode)
 
@@ -422,7 +430,7 @@ func TestHTTP_TokenIntrospection(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(introBody, &introResult))
 	assert.True(t, introResult.Active)
-	assert.Equal(t, accountID, introResult.Sub)
+	assert.Equal(t, clientID, introResult.Sub)
 	assert.Equal(t, clientID, introResult.ClientID)
 	assert.Equal(t, "openid", introResult.Scope)
 	assert.Equal(t, "Bearer", introResult.TokenType)
@@ -450,9 +458,10 @@ func TestHTTP_TokenRevocation(t *testing.T) {
 	require.NoError(t, err)
 
 	clientID, clientSecret := e.SeedOAuth2Client(t, ctx, accountID, SeedClientOptions{
-		Confidential: true,
-		GrantTypes:   []string{"client_credentials"},
-		Scopes:       []string{"openid"},
+		Confidential:     true,
+		GrantTypes:       []string{"client_credentials"},
+		Scopes:           []string{"openid"},
+		AllowedResources: []string{testClientCredentialsResource},
 	})
 
 	// Get a token
@@ -461,6 +470,7 @@ func TestHTTP_TokenRevocation(t *testing.T) {
 		"client_id":     clientID,
 		"client_secret": clientSecret,
 		"scope":         "openid",
+		"resource":      testClientCredentialsResource,
 	}, nil)
 	require.Equal(t, http.StatusOK, tokenResp.StatusCode)
 
