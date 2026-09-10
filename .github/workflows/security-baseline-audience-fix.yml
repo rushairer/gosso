@@ -26,6 +26,14 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
 
+          validator = Path("internal/token/service/token_service_validate.go")
+          text = validator.read_text()
+          old = '''\t\t// RFC 9068 uses typ=at+jwt to prevent JWT token substitution. Accept a\n\t\t// missing typ temporarily for access tokens minted before this baseline,\n\t\t// but reject any conflicting explicit type.\n\t\tif typ, ok := token.Header["typ"].(string); ok && typ != "" && typ != "at+jwt" {\n\t\t\treturn nil, fmt.Errorf("unexpected token type: %s", typ)\n\t\t}\n'''
+          new = '''\t\t// RFC 9068 uses typ=at+jwt to prevent JWT token substitution. During the\n\t\t// rolling-upgrade window, also accept the historical library default JWT\n\t\t// type (and a missing type); principal-shape checks below still reject ID\n\t\t// tokens and other JWT classes. Newly issued access tokens use at+jwt.\n\t\tif typ, ok := token.Header["typ"].(string); ok && typ != "" && typ != "at+jwt" && typ != "JWT" {\n\t\t\treturn nil, fmt.Errorf("unexpected token type: %s", typ)\n\t\t}\n'''
+          if old not in text:
+              raise SystemExit("access-token typ compatibility anchor not found")
+          validator.write_text(text.replace(old, new, 1))
+
           controller = Path("internal/oidc/controller/oidc_controller.go")
           text = controller.read_text()
           anchor = '''\tclaims, ok := jwtClaims.(*tokenDomain.AccessTokenClaims)\n\tif !ok {\n\t\tctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "invalid token"))\n\t\treturn\n\t}\n\n\t// Parse scope\n'''
@@ -48,8 +56,8 @@ jobs:
               raise SystemExit("UserInfo NoClaims marker not found")
           test.write_text(text.replace(marker, new_test + marker, 1))
           PY
-          gofmt -w internal/oidc/controller/oidc_controller.go internal/oidc/controller/oidc_controller_test.go
-          go test ./internal/oidc/controller
+          gofmt -w internal/token/service/token_service_validate.go internal/oidc/controller/oidc_controller.go internal/oidc/controller/oidc_controller_test.go
+          go test ./internal/oidc/controller ./internal/token/service
           git diff --check
       - name: Commit audience enforcement
         shell: bash
@@ -59,6 +67,6 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add internal/oidc/controller/oidc_controller.go internal/oidc/controller/oidc_controller_test.go
+          git add internal/token/service/token_service_validate.go internal/oidc/controller/oidc_controller.go internal/oidc/controller/oidc_controller_test.go
           git commit -m "fix(security): enforce UserInfo resource audience"
           git push origin HEAD:security/baseline-2026-09
