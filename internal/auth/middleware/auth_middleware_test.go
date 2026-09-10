@@ -115,8 +115,11 @@ func TestAdminRequired_HasAdminRole(t *testing.T) {
 	engine2 := setupGin()
 	engine2.GET("/admin", func(ctx *gin.Context) {
 		ctx.Set(gm.ContextKeyClaims, &tokenDomain.AccessTokenClaims{
-			Roles: []string{"admin", "user"},
-			Scope: "openid admin",
+			AccountID:     "account-admin",
+			SessionID:     "session-admin",
+			PrincipalType: tokenDomain.PrincipalTypeUserSession,
+			Roles:         []string{"admin", "user"},
+			Scope:         "openid admin",
 		})
 		ctx.Next()
 	}, AdminRequiredMiddleware(), func(ctx *gin.Context) {

@@ -130,7 +130,9 @@ func TestMFAActivate_FindByAccountAndTypeError(t *testing.T) {
 	tokenMgr := &mockTokenManager{}
 
 	claims := &tokenDomain.AccessTokenClaims{
-		AccountID: "account-001",
+		AccountID:     "account-001",
+		SessionID:     "session-001",
+		PrincipalType: tokenDomain.PrincipalTypeUserSession,
 	}
 	env := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
 
@@ -161,7 +163,9 @@ func TestMFAActivate_InvalidCode(t *testing.T) {
 	tokenMgr := &mockTokenManager{}
 
 	claims := &tokenDomain.AccessTokenClaims{
-		AccountID: "account-001",
+		AccountID:     "account-001",
+		SessionID:     "session-001",
+		PrincipalType: tokenDomain.PrincipalTypeUserSession,
 	}
 	env := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
 
@@ -196,7 +200,9 @@ func TestMFAActivate_AlreadyActivatedIsIdempotent(t *testing.T) {
 	tokenMgr := &mockTokenManager{}
 
 	claims := &tokenDomain.AccessTokenClaims{
-		AccountID: "account-001",
+		AccountID:     "account-001",
+		SessionID:     "session-001",
+		PrincipalType: tokenDomain.PrincipalTypeUserSession,
 	}
 	env := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
 
@@ -235,7 +241,9 @@ func TestMFAActivate_Success(t *testing.T) {
 	tokenMgr := &mockTokenManager{}
 
 	claims := &tokenDomain.AccessTokenClaims{
-		AccountID: "account-001",
+		AccountID:     "account-001",
+		SessionID:     "session-001",
+		PrincipalType: tokenDomain.PrincipalTypeUserSession,
 	}
 	env := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
 
@@ -274,7 +282,9 @@ func TestMFAActivate_VerifyFirstError(t *testing.T) {
 	tokenMgr := &mockTokenManager{}
 
 	claims := &tokenDomain.AccessTokenClaims{
-		AccountID: "account-001",
+		AccountID:     "account-001",
+		SessionID:     "session-001",
+		PrincipalType: tokenDomain.PrincipalTypeUserSession,
 	}
 	env := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
 
