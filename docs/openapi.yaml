@@ -11,7 +11,7 @@ info:
     - Social login (Google, GitHub, WeChat)
     - Admin account management
     - Email verification and password reset (phone verification reserved until SMS gateway is configured)
-  version: 1.5.8
+  version: 1.6.1
   contact:
     name: rushairer
     url: https://github.com/rushairer/gosso
@@ -953,10 +953,14 @@ paths:
     post:
       tags: [OAuth2 Protocol]
       summary: Revoke a token
-      description: Revokes a refresh token. Requires authentication.
+      description: |
+        Revokes an access or refresh token. Confidential clients authenticate at the
+        OAuth protocol layer with `client_secret_basic` (preferred) or client credentials
+        in the form body. A valid client receives HTTP 200 even when the token is already
+        invalid or unknown, preserving RFC 7009 token-status non-disclosure.
       operationId: oauth2Revoke
       security:
-        - BearerAuth: []
+        - BasicAuth: []
       requestBody:
         required: true
         content:
@@ -979,7 +983,6 @@ paths:
                   status:
                     type: string
                     example: ok
-
   /oauth2/introspect:
     post:
       tags: [OAuth2 Protocol]
