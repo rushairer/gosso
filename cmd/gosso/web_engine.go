@@ -41,6 +41,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		"/api/v1/passkey/mfa/begin",
 		"/api/v1/passkey/mfa/complete",
 		"/oauth2/token",
+		"/oauth2/revoke",
 		"/oauth2/introspect",
 		"/oauth2/device/code",
 		"/.well-known",
@@ -141,7 +142,7 @@ func (a *accountInfoFetcherAdapter) FetchAccountInfo(ctx context.Context, accoun
 		return nil, err
 	}
 	info := &authMiddleware.AccountInfo{
-		AccountID: account.ID,
+		AccountID: AccountID,
 	}
 	if account.Username != nil {
 		info.Username = *account.Username
