@@ -19,7 +19,7 @@ jobs:
           ref: fix/rfc7009-csrf
           fetch-depth: 0
 
-      - name: Apply OpenAPI correction
+      - name: Apply structural OpenAPI correction
         run: |
           set -euo pipefail
           python3 script/openapi_rfc7009_fixup.py
