@@ -142,7 +142,7 @@ func (a *accountInfoFetcherAdapter) FetchAccountInfo(ctx context.Context, accoun
 		return nil, err
 	}
 	info := &authMiddleware.AccountInfo{
-		AccountID: AccountID,
+		AccountID: account.ID,
 	}
 	if account.Username != nil {
 		info.Username = *account.Username
