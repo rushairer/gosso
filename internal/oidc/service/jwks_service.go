@@ -5,143 +5,106 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"math/big"
+	"sort"
 	"sync"
 
 	tokenService "github.com/rushairer/gosso/internal/token/service"
 	"github.com/rushairer/gosso/internal/utility"
 )
 
-// JWKSService OIDC JWKS service
+// JWKSService publishes the active signing key plus all retained public keys
+// from KeyService. The cached document is refreshed lazily when the key-ring
+// revision changes.
 type JWKSService struct {
-	keySvc      *tokenService.KeyService
-	mu          sync.RWMutex
-	jwksJSON    []byte             // pre-marshaled JWKS bytes, rebuilt on Reload/ClearPreviousKey
-	previousKey *map[string]string // previous key for rotation overlap, nil if none
+	keySvc   *tokenService.KeyService
+	mu       sync.RWMutex
+	jwksJSON []byte
+	revision uint64
 }
 
 // NewJWKSService creates a new instance of JWKSService.
-// The JWKS document is pre-marshaled once since the key is stable for the service lifetime.
 func NewJWKSService(keySvc *tokenService.KeyService) *JWKSService {
-	s := &JWKSService{
-		keySvc: keySvc,
-	}
-	s.jwksJSON = s.marshalJWKS()
+	s := &JWKSService{keySvc: keySvc}
+	s.reloadLocked()
 	return s
 }
 
-// GetJWKS returns the pre-marshaled JWKS JSON bytes.
-// The returned slice is safe to send directly to a response writer; no copy is needed
-// because the bytes are only rebuilt on Reload/ClearPreviousKey, never mutated in place.
+// GetJWKS returns the pre-marshaled JWKS JSON bytes, refreshing automatically
+// after a signing-key activation/retirement.
 func (s *JWKSService) GetJWKS() []byte {
+	s.ensureFresh()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.jwksJSON
 }
 
-// GetPublicKeyByKID returns the RSA public key matching the given key ID.
-// Checks the current key first, then the previous key (for rotation overlap).
-// Returns nil and an error if no matching key is found.
-func (s *JWKSService) GetPublicKeyByKID(kid string) (*rsa.PublicKey, error) {
+func (s *JWKSService) ensureFresh() {
+	revision := s.keySvc.Revision()
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	// Check current key
-	if s.keySvc.KeyID() == kid {
-		return s.keySvc.PublicKey(), nil
+	fresh := s.revision == revision
+	s.mu.RUnlock()
+	if fresh {
+		return
 	}
-
-	// Check previous key (rotation overlap)
-	if s.previousKey != nil && (*s.previousKey)["kid"] == kid {
-		return s.reconstructPublicKey(*s.previousKey)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.revision != s.keySvc.Revision() {
+		s.reloadLocked()
 	}
-
-	return nil, fmt.Errorf("no key found for kid %q", kid)
 }
 
-// GetAllPublicKeys returns all RSA public keys currently available for signature
-// verification (current key + previous key during rotation overlap).
-// Used as a fallback when a token has no "kid" header and cannot be matched by ID.
-func (s *JWKSService) GetAllPublicKeys() []*rsa.PublicKey {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+// GetPublicKeyByKID returns the active or retained RSA public key matching kid.
+func (s *JWKSService) GetPublicKeyByKID(kid string) (*rsa.PublicKey, error) {
+	return s.keySvc.PublicKeyByKID(kid)
+}
 
-	keys := []*rsa.PublicKey{s.keySvc.PublicKey()}
-	if s.previousKey != nil {
-		if pubKey, err := s.reconstructPublicKey(*s.previousKey); err == nil {
-			keys = append(keys, pubKey)
-		}
+// GetAllPublicKeys returns all RSA public keys currently available for
+// verification (active + retained historical keys).
+func (s *JWKSService) GetAllPublicKeys() []*rsa.PublicKey {
+	keysByID := s.keySvc.AllPublicKeys()
+	kids := make([]string, 0, len(keysByID))
+	for kid := range keysByID {
+		kids = append(kids, kid)
+	}
+	sort.Strings(kids)
+	keys := make([]*rsa.PublicKey, 0, len(kids))
+	for _, kid := range kids {
+		keys = append(keys, keysByID[kid])
 	}
 	return keys
 }
 
-// reconstructPublicKey rebuilds an RSA public key from JWK parameters (n, e).
-func (s *JWKSService) reconstructPublicKey(jwk map[string]string) (*rsa.PublicKey, error) {
-	nStr, ok := jwk["n"]
-	if !ok {
-		return nil, fmt.Errorf("missing 'n' in JWK")
-	}
-	eStr, ok := jwk["e"]
-	if !ok {
-		return nil, fmt.Errorf("missing 'e' in JWK")
-	}
-
-	nBytes, err := base64.RawURLEncoding.DecodeString(nStr)
-	if err != nil {
-		return nil, fmt.Errorf("decode 'n': %w", err)
-	}
-	eBytes, err := base64.RawURLEncoding.DecodeString(eStr)
-	if err != nil {
-		return nil, fmt.Errorf("decode 'e': %w", err)
-	}
-
-	n := new(big.Int).SetBytes(nBytes)
-	e := 0
-	for _, b := range eBytes {
-		e = e<<8 + int(b)
-	}
-
-	return &rsa.PublicKey{N: n, E: e}, nil
-}
-
-// Reload re-computes the JWKS document from the current RSA key.
-// Call this after a key rotation (e.g., via SIGHUP handler) to update the
-// published key set without restarting the service.
-//
-// The previous key is retained and published alongside the new key during
-// the rotation window. Call ClearPreviousKey() after the old key's
-// longest-lived token has expired to remove it from the JWKS.
+// Reload forces a JWKS cache rebuild from the current KeyService key ring. It
+// does not rotate key material; activation is performed by KeyService.ActivateKey.
 func (s *JWKSService) Reload() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// Save current key as previous before replacing
-	currentKey := s.buildCurrentKeyEntry()
-	s.previousKey = &currentKey
-	s.jwksJSON = s.marshalJWKS()
+	s.reloadLocked()
 }
 
-// ClearPreviousKey removes the previous key from the JWKS document.
-// Call this after the old key's longest-lived token has expired.
+// ClearPreviousKey removes retained historical verification keys and rebuilds
+// the JWKS document. Retire individual keys through KeyService.RetireKey when a
+// targeted retirement is preferred.
 func (s *JWKSService) ClearPreviousKey() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.previousKey = nil
-	s.jwksJSON = s.marshalJWKS()
+	s.keySvc.ClearPreviousKeys()
+	s.Reload()
 }
 
-// buildCurrentKeyEntry builds a single key entry from the current key service.
-func (s *JWKSService) buildCurrentKeyEntry() map[string]string {
-	pubKey := s.keySvc.PublicKey()
+func (s *JWKSService) reloadLocked() {
+	s.jwksJSON = s.marshalJWKS()
+	s.revision = s.keySvc.Revision()
+}
+
+func buildKeyEntry(kid string, pubKey *rsa.PublicKey) map[string]string {
 	n := base64.RawURLEncoding.EncodeToString(pubKey.N.Bytes())
 	eBytes, err := utility.BigEndianBytes(pubKey.E)
 	if err != nil {
-		// RSA exponents are always positive; this should never happen.
 		panic("jwks: unexpected BigEndianBytes error: " + err.Error())
 	}
 	e := base64.RawURLEncoding.EncodeToString(eBytes)
 	return map[string]string{
 		"kty": "RSA",
-		"kid": s.keySvc.KeyID(),
+		"kid": kid,
 		"alg": "RS256",
 		"use": "sig",
 		"n":   n,
@@ -149,21 +112,29 @@ func (s *JWKSService) buildCurrentKeyEntry() map[string]string {
 	}
 }
 
-// marshalJWKS constructs the JWKS document from the current key material,
-// including the previous key if one exists (for rotation overlap),
-// and returns the pre-marshaled JSON bytes.
+// marshalJWKS constructs a deterministic JWKS document from the active and
+// retained public-key ring.
 func (s *JWKSService) marshalJWKS() []byte {
-	keys := []map[string]string{s.buildCurrentKeyEntry()}
-	if s.previousKey != nil {
-		keys = append(keys, *s.previousKey)
+	keysByID := s.keySvc.AllPublicKeys()
+	kids := make([]string, 0, len(keysByID))
+	for kid := range keysByID {
+		kids = append(kids, kid)
 	}
-	jwks := map[string]any{
-		"keys": keys,
+	sort.Strings(kids)
+	keys := make([]map[string]string, 0, len(kids))
+	for _, kid := range kids {
+		pubKey := keysByID[kid]
+		if pubKey == nil {
+			continue
+		}
+		keys = append(keys, buildKeyEntry(kid, pubKey))
 	}
-	b, err := json.Marshal(jwks)
+	if len(keys) == 0 {
+		panic("jwks: signing key ring is empty")
+	}
+	b, err := json.Marshal(map[string]any{"keys": keys})
 	if err != nil {
-		// This should never happen with deterministic types.
-		panic("jwks: marshal error: " + err.Error())
+		panic(fmt.Sprintf("jwks: marshal error: %v", err))
 	}
 	return b
 }

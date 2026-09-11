@@ -9,19 +9,89 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// AccessTokenClaims JWT access token claims
+// GossoAPIResourceAudience is the canonical audience for Gosso's own
+// account-security and administration APIs. OAuth resource tokens for other
+// services must use the explicit RFC 8707 resource URI instead.
+const GossoAPIResourceAudience = "urn:gouno:gosso-api"
+
+// PrincipalType identifies the security principal represented by an access
+// token. Keeping the principal class explicit prevents a client_credentials
+// token from being confused with a human account session.
+type PrincipalType string
+
+const (
+	PrincipalTypeUserSession   PrincipalType = "user_session"
+	PrincipalTypeDelegatedUser PrincipalType = "delegated_user"
+	PrincipalTypeClient        PrincipalType = "client"
+)
+
+// AccessTokenClaims JWT access token claims.
 type AccessTokenClaims struct {
 	jwt.RegisteredClaims
-	AccountID   string   `json:"account_id"`
-	Username    string   `json:"username,omitempty"`
-	Email       string   `json:"email,omitempty"`
-	Roles       []string `json:"roles,omitempty"`
-	Permissions []string `json:"permissions,omitempty"`
-	Scope       string   `json:"scope,omitempty"`
-	ClientID    string   `json:"client_id,omitempty"`
-	SessionID   string   `json:"sid,omitempty"`
-	AuthTime    *int64   `json:"auth_time,omitempty"`
-	AMR         []string `json:"amr,omitempty"`
+	AccountID     string        `json:"account_id,omitempty"`
+	Username      string        `json:"username,omitempty"`
+	Email         string        `json:"email,omitempty"`
+	Roles         []string      `json:"roles,omitempty"`
+	Permissions   []string      `json:"permissions,omitempty"`
+	Scope         string        `json:"scope,omitempty"`
+	ClientID      string        `json:"client_id,omitempty"`
+	SessionID     string        `json:"sid,omitempty"`
+	AuthTime      *int64        `json:"auth_time,omitempty"`
+	AMR           []string      `json:"amr,omitempty"`
+	PrincipalType PrincipalType `json:"principal_type,omitempty"`
+}
+
+// EffectivePrincipalType returns the explicit principal type or infers the
+// legacy shape for rolling-deployment compatibility. Newly issued tokens always
+// carry PrincipalType.
+func (c *AccessTokenClaims) EffectivePrincipalType() PrincipalType {
+	if c == nil {
+		return ""
+	}
+	if c.PrincipalType != "" {
+		return c.PrincipalType
+	}
+	if c.AccountID != "" && c.ClientID != "" {
+		return PrincipalTypeDelegatedUser
+	}
+	if c.AccountID != "" {
+		return PrincipalTypeUserSession
+	}
+	if c.ClientID != "" {
+		return PrincipalTypeClient
+	}
+	return ""
+}
+
+// IsUserSessionPrincipal reports whether claims represent a first-party human
+// session rather than delegated OAuth authority or a machine identity.
+func (c *AccessTokenClaims) IsUserSessionPrincipal() bool {
+	return c != nil && c.EffectivePrincipalType() == PrincipalTypeUserSession && c.AccountID != "" && c.SessionID != ""
+}
+
+// IsDelegatedUserPrincipal reports whether claims represent a resource owner
+// acting through an OAuth client.
+func (c *AccessTokenClaims) IsDelegatedUserPrincipal() bool {
+	return c != nil && c.EffectivePrincipalType() == PrincipalTypeDelegatedUser && c.AccountID != "" && c.ClientID != ""
+}
+
+// IsClientPrincipal reports whether claims represent a client_credentials
+// machine principal.
+func (c *AccessTokenClaims) IsClientPrincipal() bool {
+	return c != nil && c.EffectivePrincipalType() == PrincipalTypeClient && c.ClientID != "" && c.AccountID == "" && c.SessionID == ""
+}
+
+// HasAudience performs an exact audience membership check.
+func (c *AccessTokenClaims) HasAudience(expected string) bool {
+	if c == nil || expected == "" {
+		return false
+	}
+	for _, audience := range c.Audience {
+		if audience == expected {
+			return true
+		}
+	}
+	return false
 }
 
 // RefreshToken refresh token

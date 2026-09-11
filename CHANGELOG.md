@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-09-11
+
+### Added
+- Add explicit access-token principal classes for first-party user sessions, delegated users, and `client_credentials` machine clients.
+- Add an active signing-key ring with retained public keys, `kid`-based verification/JWKS overlap, atomic activation/retirement, and documented staged rotation.
+- Add September 2026 security-baseline and token-principal migration guides.
+
+### Changed
+- `client_credentials` tokens now identify the client itself (`sub=client_id`), never inherit the registering account's roles/permissions/session authority, and require an explicitly registered RFC 8707 `resource`.
+- Authorization-code and refresh grants preserve a single selected resource rather than implicitly expanding `aud` to every allowed resource.
+- New access tokens use RFC 9068 `typ=at+jwt`; validation preserves a bounded rolling-upgrade compatibility path for historical `typ=JWT` access tokens while still enforcing principal/subject invariants.
+- Gosso account-security, client-management, passkey-management, and admin control-plane operations require a live first-party `user_session` principal.
+- OIDC UserInfo now rejects machine principals and access tokens issued for foreign RFC 8707 resource audiences.
+- OIDC Back-Channel Logout now permits public targets by default and requires an explicit IP/CIDR allowlist for private targets; loopback, link-local, metadata, unspecified, and multicast addresses remain hard-denied.
+
+### Fixed
+- Recognize the real `__Host-gosso-session` cookie when deciding whether Bearer authentication may bypass CSRF validation.
+- Align README and security documentation with the actual Argon2id password-hashing implementation.
+- Align client-credentials integration fixtures and introspection expectations with resource-bound machine-principal semantics.
+
 ## [1.5.11] - 2026-09-04
 
 ### Added

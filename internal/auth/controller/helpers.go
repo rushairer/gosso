@@ -14,7 +14,9 @@ import (
 const ssoSessionCookieName = "__Host-gosso-session"
 const cookieSessionHeader = "X-Gosso-Cookie-Session"
 
-// getClaimsFromContext extracts and validates JWT claims from gin.Context
+// getClaimsFromContext extracts a first-party user-session principal from
+// gin.Context. Account-security handlers must never accept delegated resource
+// tokens or client_credentials machine identities.
 func getClaimsFromContext(ctx *gin.Context) (*tokenDomain.AccessTokenClaims, bool) {
 	jwtClaims, exists := ctx.Get(middleware.ContextKeyClaims)
 	if !exists {
@@ -24,6 +26,10 @@ func getClaimsFromContext(ctx *gin.Context) (*tokenDomain.AccessTokenClaims, boo
 	tc, ok := jwtClaims.(*tokenDomain.AccessTokenClaims)
 	if !ok {
 		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "invalid claims type"))
+		return nil, false
+	}
+	if !tc.IsUserSessionPrincipal() {
+		ctx.JSON(http.StatusForbidden, gouno.NewErrorResponse(http.StatusForbidden, "user session required"))
 		return nil, false
 	}
 	return tc, true

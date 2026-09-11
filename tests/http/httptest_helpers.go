@@ -70,6 +70,7 @@ type SeedClientOptions struct {
 	PostLogoutRedirectURIs            []string
 	GrantTypes                        []string
 	Scopes                            []string
+	AllowedResources                  []string
 	FrontchannelLogoutURI             string
 	FrontchannelLogoutSessionRequired bool
 	BackchannelLogoutURI              string
@@ -282,6 +283,7 @@ func (e *HTTPTestEnv) SeedOAuth2Client(t *testing.T, ctx context.Context, accoun
 	client.RedirectURIs = opts.RedirectURIs
 	client.PostLogoutRedirectURIs = opts.PostLogoutRedirectURIs
 	client.Scopes = opts.Scopes
+	client.AllowedResources = opts.AllowedResources
 	client.IsConfidential = opts.Confidential
 	client.FrontchannelLogoutURI = opts.FrontchannelLogoutURI
 	client.FrontchannelLogoutSessionRequired = opts.FrontchannelLogoutSessionRequired
@@ -297,8 +299,8 @@ func (e *HTTPTestEnv) SeedOAuth2Client(t *testing.T, ctx context.Context, accoun
 	}
 
 	_, err = e.DB.ExecContext(ctx,
-		`INSERT INTO oauth2_clients (id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, frontchannel_logout_uri, frontchannel_logout_session_required, backchannel_logout_uri, backchannel_logout_session_required)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+		`INSERT INTO oauth2_clients (id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, frontchannel_logout_uri, frontchannel_logout_session_required, backchannel_logout_uri, backchannel_logout_session_required, allowed_resources)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
 		client.ID, client.AccountID, client.ClientID, client.ClientSecretHash,
 		client.Name, client.Description,
 		marshalJSON(client.RedirectURIs), marshalJSON(client.PostLogoutRedirectURIs),
@@ -306,6 +308,7 @@ func (e *HTTPTestEnv) SeedOAuth2Client(t *testing.T, ctx context.Context, accoun
 		client.IsConfidential, marshalJSON(client.Metadata),
 		client.FrontchannelLogoutURI, client.FrontchannelLogoutSessionRequired,
 		client.BackchannelLogoutURI, client.BackchannelLogoutSessionRequired,
+		marshalJSON(client.AllowedResources),
 	)
 	require.NoError(t, err)
 

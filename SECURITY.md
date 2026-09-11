@@ -26,25 +26,39 @@ You should receive a response within 48 hours. We will work with you to understa
 
 gosso is a production SSO server handling authentication credentials, OAuth2 tokens, and user sessions. Key security measures:
 
-- **Password hashing**: Argon2id with pepper, constant-time comparison
-- **Token signing**: RS256 with configurable RSA key size (minimum 2048 bits)
-- **Rate limiting**: Dual-layer (Nginx + application) with Redis-backed sliding window
-- **Session management**: Redis-backed with atomic Lua scripts, bounded in-memory cache
-- **Input validation**: Multi-layer (binding tags, service-level, domain-level)
-- **Security headers**: CSP with per-request nonces, HSTS, X-Frame-Options, COOP/COEP
-- **Audit logging**: Async batch writing with synchronous fallback for security-critical events
+- **Password hashing**: Argon2id with a per-password random salt; password verification uses the encoded Argon2id parameters stored with the hash. `VerifyHashPepper` protects verification-code hashes and is not a password pepper.
+- **Token signing**: RS256 with configurable RSA key size (minimum 2048 bits), `kid`-based verification, and active/retained public-key overlap for signing-key rotation.
+- **Token principals**: User sessions, delegated users, and `client_credentials` machine clients are distinct principals; machine tokens do not inherit the registering account's authority.
+- **Resource binding**: OAuth access tokens are bound to the selected RFC 8707 resource; resource servers must validate their expected audience.
+- **Rate limiting**: Redis-backed application rate limits protect authentication and protocol endpoints.
+- **Session management**: Redis-backed with atomic Lua scripts, bounded in-memory cache, server-side revocation checks, and opaque browser session cookies.
+- **Input validation**: Multi-layer (binding tags, service-level, domain-level).
+- **Security headers**: CSP with per-request nonces, HSTS, X-Frame-Options, COOP/CORP, and restrictive Permissions Policy.
+- **Audit logging**: Async batch writing with synchronous fallback for security-critical events.
+- **Back-channel egress**: OIDC Back-Channel Logout permits public IP targets by default; private targets require an explicit CIDR/IP allow policy, while loopback/link-local/metadata/multicast targets remain hard-denied.
+
+## Signing-Key Rotation
+
+Use a unique `auth.key_id` for each active signing key. During a rotation, retain only the **old public key** and configure:
+
+- `GOUNO_AUTH_PREVIOUS_PUBLIC_KEY_PATH=/path/to/old-public.pem`
+- `GOUNO_AUTH_PREVIOUS_KEY_ID=<old-kid>`
+
+Then deploy the new active private key with its new `auth.key_id`. Gosso publishes and verifies both active and retained public keys during the overlap. After all tokens/sign-out hints that can reference the old key are outside the accepted retention window, remove the two previous-key environment variables and redeploy. Do not reuse a `kid` for different key material.
 
 ## Deployment Security Checklist
 
-- [ ] Use HTTPS in production (`auth.issuer` must use `https://`)
-- [ ] Set strong `TOTPEncryptionKey` (32-byte hex, unique per environment)
-- [ ] Set strong `VerifyHashPepper` (32-byte hex, unique per environment)
-- [ ] Configure explicit CORS origins (no wildcards in production)
-- [ ] Set trusted proxies to your actual proxy IPs
-- [ ] Use environment variables for all secrets (not config files)
-- [ ] Enable Redis password authentication
-- [ ] Use PostgreSQL with `sslmode=require` in production
-- [ ] Review and rotate RSA signing keys periodically
+- [ ] Use HTTPS in production (`auth.issuer` must use `https://`).
+- [ ] Set strong `TOTPEncryptionKey` (32-byte hex, unique per environment).
+- [ ] Set strong `VerifyHashPepper` (32-byte hex, unique per environment) for verification-code hashing.
+- [ ] Configure explicit CORS origins (no wildcards in production).
+- [ ] Set trusted proxies to your actual proxy IPs.
+- [ ] Store private keys and application secrets outside source-controlled config.
+- [ ] Enable Redis password authentication.
+- [ ] Use PostgreSQL with `sslmode=require` in production.
+- [ ] Use a unique RSA signing `kid` per key and retain the old public key during rotation overlap.
+- [ ] Configure `backchannel_allowed_cidrs` only for explicitly trusted internal targets; leave it empty for public-only egress.
+- [ ] For `client_credentials`, register and request an explicit RFC 8707 `resource` and validate the matching audience at the resource server.
 
 ---
 
@@ -60,10 +74,13 @@ gosso is a production SSO server handling authentication credentials, OAuth2 tok
 
 ## 部署安全检查清单
 
-- [ ] 生产环境使用 HTTPS
-- [ ] 设置强 `TOTPEncryptionKey`（32 字节 hex）
-- [ ] 设置强 `VerifyHashPepper`（32 字节 hex）
-- [ ] 配置明确的 CORS 来源（生产环境不使用通配符）
-- [ ] 使用环境变量存储所有密钥
-- [ ] 启用 Redis 密码认证
-- [ ] PostgreSQL 使用 `sslmode=require`
+- [ ] 生产环境使用 HTTPS。
+- [ ] 设置强 `TOTPEncryptionKey`（32 字节 hex）。
+- [ ] 设置强 `VerifyHashPepper`（32 字节 hex，仅用于验证码/验证哈希，不是密码 pepper）。
+- [ ] 配置明确的 CORS 来源（生产环境不使用通配符）。
+- [ ] 私钥和应用密钥不得写入源码仓库。
+- [ ] 启用 Redis 密码认证。
+- [ ] PostgreSQL 使用 `sslmode=require`。
+- [ ] RSA 签名密钥轮换时必须使用新的 `kid`，并在重叠窗口仅保留旧公钥用于验证/JWKS。
+- [ ] Back-Channel Logout 默认只允许公网目标，私网目标必须显式加入 `backchannel_allowed_cidrs`。
+- [ ] `client_credentials` 必须请求已登记的 RFC 8707 `resource`，资源服务器必须校验 `aud`。

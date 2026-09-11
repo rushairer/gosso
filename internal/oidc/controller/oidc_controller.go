@@ -101,6 +101,14 @@ func (c *OIDCController) UserInfo(ctx *gin.Context) {
 		return
 	}
 
+	// UserInfo is itself a Gosso resource server. Tokens issued for another
+	// RFC 8707 resource must never be accepted here, and machine principals do
+	// not represent an end-user subject.
+	if !claims.HasAudience(tokenDomain.GossoAPIResourceAudience) || claims.AccountID == "" || claims.IsClientPrincipal() {
+		ctx.JSON(http.StatusUnauthorized, gouno.NewErrorResponse(http.StatusUnauthorized, "invalid token audience or principal"))
+		return
+	}
+
 	// Parse scope
 	scopes := strings.Split(claims.Scope, " ")
 

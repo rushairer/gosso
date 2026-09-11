@@ -161,6 +161,7 @@ var sessionCookieNames = []string{
 	"session_id",
 	"gosso_session",
 	"gosso_session_id",
+	"__host-gosso-session",
 }
 
 func hasOnlyAccessTokenCookie(ctx *gin.Context, bearerToken string) bool {

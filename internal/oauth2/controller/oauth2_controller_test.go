@@ -369,6 +369,7 @@ func newConfidentialTestClient() *oauth2Domain.OAuth2Client {
 		RedirectURIs:     []string{"https://app.example.com/callback"},
 		GrantTypes:       []string{"authorization_code", "client_credentials", "refresh_token"},
 		Scopes:           []string{"openid", "profile", "email"},
+		AllowedResources: []string{"https://api.example.com"},
 		IsConfidential:   true,
 		CreatedAt:        time.Now(),
 		UpdatedAt:        time.Now(),
@@ -558,7 +559,7 @@ func TestToken_ClientCredentials_Success(t *testing.T) {
 		&mockDeviceCodeMgr{},
 	)
 
-	body := "grant_type=client_credentials&client_id=cid-test&client_secret=test-secret&scope=openid profile"
+	body := "grant_type=client_credentials&client_id=cid-test&client_secret=test-secret&scope=openid+profile&resource=https%3A%2F%2Fapi.example.com"
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()

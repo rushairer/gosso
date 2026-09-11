@@ -131,10 +131,15 @@ func (s *IDTokenService) GenerateIDTokenWithSession(ctx context.Context, account
 		claims.ATHash = base64.RawURLEncoding.EncodeToString(hash[:len(hash)/2])
 	}
 
-	// Sign the ID Token using TokenService's RSA private key
+	// Sign from one active-key snapshot so kid and private key cannot diverge
+	// during an in-process signing-key activation.
+	privateKey, kid := s.tokenSvc.KeyService().SigningKey()
+	if privateKey == nil || kid == "" {
+		return "", fmt.Errorf("sign id token: active signing key is unavailable")
+	}
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	token.Header["kid"] = s.tokenSvc.KeyService().KeyID()
-	tokenString, err := token.SignedString(s.tokenSvc.KeyService().PrivateKey())
+	token.Header["kid"] = kid
+	tokenString, err := token.SignedString(privateKey)
 	if err != nil {
 		return "", fmt.Errorf("sign id token: %w", err)
 	}

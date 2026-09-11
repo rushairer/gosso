@@ -199,6 +199,9 @@ func setupUserInfoEngine(accountSvc *mockAccountService, credRepo *mockCredentia
 
 	engine.Use(func(ctx *gin.Context) {
 		if claims != nil {
+			if len(claims.Audience) == 0 {
+				claims.Audience = jwt.ClaimStrings{tokenDomain.GossoAPIResourceAudience}
+			}
 			ctx.Set(middleware.ContextKeyClaims, claims)
 		}
 		ctx.Next()
@@ -314,6 +317,44 @@ func TestUserInfo_EmailScope(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, "test@example.com", resp["email"])
 	assert.Equal(t, true, resp["email_verified"])
+}
+
+func TestUserInfo_RejectsForeignResourceAudience(t *testing.T) {
+	accountSvc := &mockAccountService{
+		findByIDFn: func() (*accountDomain.Account, error) {
+			return newTestAccount(), nil
+		},
+	}
+	engine := setupUserInfoEngine(accountSvc, &mockCredentialRepo{}, &tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{Audience: jwt.ClaimStrings{"https://blog.example.test/api"}},
+		AccountID:        "account-001",
+		ClientID:         "blog-bff",
+		PrincipalType:    tokenDomain.PrincipalTypeDelegatedUser,
+		Scope:            "openid profile",
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/userinfo", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid token audience or principal")
+}
+
+func TestUserInfo_RejectsClientPrincipal(t *testing.T) {
+	engine := setupUserInfoEngine(&mockAccountService{}, &mockCredentialRepo{}, &tokenDomain.AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{Audience: jwt.ClaimStrings{tokenDomain.GossoAPIResourceAudience}},
+		ClientID:         "machine-client",
+		PrincipalType:    tokenDomain.PrincipalTypeClient,
+		Scope:            "profile",
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/userinfo", nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid token audience or principal")
 }
 
 func TestUserInfo_NoClaims(t *testing.T) {

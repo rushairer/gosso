@@ -39,23 +39,30 @@ func TestIsPublicBackchannelIP(t *testing.T) {
 }
 
 func TestIsAllowedBackchannelIP(t *testing.T) {
-	var allowedIPs []net.IP
-	var allowedNets []*net.IPNet
+	// Public addresses are allowed without an operator exception.
+	assert.True(t, isAllowedBackchannelIP(net.ParseIP("8.8.8.8"), nil, nil))
 
-	// Public addresses are allowed
-	assert.True(t, isAllowedBackchannelIP(net.ParseIP("8.8.8.8"), allowedIPs, allowedNets))
+	// RFC1918 and RFC4193 addresses are denied by default.
+	assert.False(t, isAllowedBackchannelIP(net.ParseIP("10.1.2.3"), nil, nil))
+	assert.False(t, isAllowedBackchannelIP(net.ParseIP("172.21.0.80"), nil, nil))
+	assert.False(t, isAllowedBackchannelIP(net.ParseIP("192.168.1.1"), nil, nil))
+	assert.False(t, isAllowedBackchannelIP(net.ParseIP("fd00::1"), nil, nil))
 
-	// Standard RFC 1918 private subnets are allowed by default for self-hosted container networks
-	assert.True(t, isAllowedBackchannelIP(net.ParseIP("10.1.2.3"), allowedIPs, allowedNets))
-	assert.True(t, isAllowedBackchannelIP(net.ParseIP("172.21.0.80"), allowedIPs, allowedNets))
-	assert.True(t, isAllowedBackchannelIP(net.ParseIP("192.168.1.1"), allowedIPs, allowedNets))
+	// A private address is allowed only when explicitly listed.
+	_, private10, err := net.ParseCIDR("10.0.0.0/8")
+	require.NoError(t, err)
+	assert.True(t, isAllowedBackchannelIP(net.ParseIP("10.1.2.3"), nil, []*net.IPNet{private10}))
+	assert.False(t, isAllowedBackchannelIP(net.ParseIP("192.168.1.1"), nil, []*net.IPNet{private10}))
+	assert.True(t, isAllowedBackchannelIP(net.ParseIP("192.168.1.1"), []net.IP{net.ParseIP("192.168.1.1")}, nil))
 
-	// Dangerous targets are strictly blocked
-	assert.False(t, isAllowedBackchannelIP(net.ParseIP("127.0.0.1"), allowedIPs, allowedNets))
-	assert.False(t, isAllowedBackchannelIP(net.ParseIP("::1"), allowedIPs, allowedNets))
-	assert.False(t, isAllowedBackchannelIP(net.ParseIP("169.254.169.254"), allowedIPs, allowedNets))
-	assert.False(t, isAllowedBackchannelIP(net.ParseIP("169.254.1.1"), allowedIPs, allowedNets))
-	assert.False(t, isAllowedBackchannelIP(net.ParseIP("224.0.0.1"), allowedIPs, allowedNets))
+	// Dangerous targets are hard-blocked even under an intentionally broad allowlist.
+	_, allIPv4, err := net.ParseCIDR("0.0.0.0/0")
+	require.NoError(t, err)
+	assert.False(t, isAllowedBackchannelIP(net.ParseIP("127.0.0.1"), nil, []*net.IPNet{allIPv4}))
+	assert.False(t, isAllowedBackchannelIP(net.ParseIP("169.254.169.254"), nil, []*net.IPNet{allIPv4}))
+	assert.False(t, isAllowedBackchannelIP(net.ParseIP("169.254.1.1"), nil, []*net.IPNet{allIPv4}))
+	assert.False(t, isAllowedBackchannelIP(net.ParseIP("224.0.0.1"), nil, []*net.IPNet{allIPv4}))
+	assert.False(t, isAllowedBackchannelIP(net.ParseIP("::1"), nil, nil))
 }
 
 func setupTestLogoutService(t *testing.T) (*LogoutService, *tokenService.KeyService) {

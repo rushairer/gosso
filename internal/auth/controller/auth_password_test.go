@@ -189,7 +189,9 @@ func TestChangePassword_Success(t *testing.T) {
 	}
 	tokenMgr := &mockTokenManager{}
 	claims := &tokenDomain.AccessTokenClaims{
-		AccountID: "account-001",
+		AccountID:     "account-001",
+		SessionID:     "session-001",
+		PrincipalType: tokenDomain.PrincipalTypeUserSession,
 	}
 	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
 
@@ -212,7 +214,9 @@ func TestChangePassword_InvalidCurrentPassword(t *testing.T) {
 	}
 	tokenMgr := &mockTokenManager{}
 	claims := &tokenDomain.AccessTokenClaims{
-		AccountID: "account-001",
+		AccountID:     "account-001",
+		SessionID:     "session-001",
+		PrincipalType: tokenDomain.PrincipalTypeUserSession,
 	}
 	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
 
@@ -231,7 +235,9 @@ func TestChangePassword_InvalidBody(t *testing.T) {
 	authSvc := &mockAuthOrchestrator{}
 	tokenMgr := &mockTokenManager{}
 	claims := &tokenDomain.AccessTokenClaims{
-		AccountID: "account-001",
+		AccountID:     "account-001",
+		SessionID:     "session-001",
+		PrincipalType: tokenDomain.PrincipalTypeUserSession,
 	}
 	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
 
@@ -257,7 +263,9 @@ func TestChangePassword_ValidationError(t *testing.T) {
 	}
 	tokenMgr := &mockTokenManager{}
 	claims := &tokenDomain.AccessTokenClaims{
-		AccountID: "account-001",
+		AccountID:     "account-001",
+		SessionID:     "session-001",
+		PrincipalType: tokenDomain.PrincipalTypeUserSession,
 	}
 	engine := setupAuthControllerWithClaims(authSvc, tokenMgr, claims)
 
