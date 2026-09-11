@@ -16,6 +16,7 @@ concurrency:
 
 env:
   GO_VERSION: "1.26.x"
+  HELM_VERSION: "v4.2.3"
 
 jobs:
   release:
@@ -128,8 +129,18 @@ jobs:
 
       # --- Helm Chart OCI Publish ---
 
+      # v4.2.3 is the last version verified against this GHCR chart namespace.
+      # Keep this pinned until a newer Helm release is explicitly validated.
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Log in to GHCR with Helm
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
 
       - name: Update Helm chart version
         run: |
@@ -138,6 +149,13 @@ jobs:
           sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" deploy/helm/gosso/Chart.yaml
 
       - name: Package and push Helm chart to GHCR
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          helm package deploy/helm/gosso
-          helm push gosso-*.tgz oci://ghcr.io/${{ github.repository_owner }}/gosso/charts
+          set -euo pipefail
+          helm lint deploy/helm/gosso
+          helm package deploy/helm/gosso --destination /tmp
+          helm push "/tmp/gosso-${VERSION}.tgz" oci://ghcr.io/${{ github.repository_owner }}/gosso/charts
+          helm show chart "oci://ghcr.io/${{ github.repository_owner }}/gosso/charts/gosso" --version "$VERSION" > /tmp/published-chart.yaml
+          grep -Fxq "name: gosso" /tmp/published-chart.yaml
+          grep -Fxq "version: ${VERSION}" /tmp/published-chart.yaml
