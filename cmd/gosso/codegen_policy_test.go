@@ -26,6 +26,15 @@ func TestProjectCodegenIsAbsentWithoutManifest(t *testing.T) {
 	if attached {
 		t.Fatal("project Codegen command attached without manifest")
 	}
+	assertNoLegacyCodegenCommand(t, root)
+}
+
+func TestRootCommandDoesNotRegisterLegacyCodegenStatically(t *testing.T) {
+	assertNoLegacyCodegenCommand(t, rootCmd)
+}
+
+func assertNoLegacyCodegenCommand(t *testing.T, root *cobra.Command) {
+	t.Helper()
 	for _, cmd := range root.Commands() {
 		if cmd.Name() == "gen" || cmd.Name() == "generator" {
 			t.Fatalf("unexpected legacy Codegen command %q", cmd.Name())
