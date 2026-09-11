@@ -38,3 +38,20 @@ This document defines the **immutable architectural rules, security baselines, a
   - Follow Semantic Versioning (SemVer).
   - Code changes must pass `gofmt`, linter, and coverage threshold (`COVERAGE_MIN=70%`).
   - Update `CHANGELOG.md` for every release version tag.
+
+---
+
+## 4. Capability Module Architecture
+
+- Gosso is a complex application and uses **Capability Module** organization: capability/module first, implementation layer second.
+- Business ownership lives under `internal/<capability>/`. A capability may contain `domain`, `repository`, `service`, `controller`, `module.go`, or other internal pieces only when they are actually required. Do not create empty layers for symmetry.
+- `domain`, `repository`, `service`, and `controller` are responsibilities inside a capability; they are not global top-level ownership buckets for new business code.
+- `module.go` is an optional composition root for capabilities that require dependency-injection aggregation. It is not mandatory for every module.
+- Cross-capability dependencies must follow `doc/ARCHITECTURE_INVARIANTS.md`: use narrow interfaces, keep sentinel ownership canonical, and resolve cycles through interface extraction rather than new late-binding patterns.
+- Shared adapter utilities such as `internal/controllerutil` may exist when they are genuinely cross-capability infrastructure. Do not move business behavior into generic utility packages merely to avoid explicit module boundaries.
+- Gouno Core does not own Gosso's architecture. Gosso currently intentionally provides **no** `.gouno/codegen.yaml`; therefore its project CLI must not expose a `gen` command. This is a valid Gouno v1.3 state, not a missing feature.
+- The CLI must use Gouno's dynamic `AttachProjectCommand` integration so a future project-owned Codegen manifest can be introduced without restoring the legacy Core-owned generator catalog.
+- Do not add a Gosso `module` generator until at least one reusable generation shape is proven across real Gosso capabilities. In particular, do not assume every module needs all four layers or a `module.go`.
+- If project-owned Codegen is introduced later, update the manifest, templates, architecture docs, tests, and CI verification together; never silently redefine upstream/default `suite` semantics.
+
+The detailed layer, dependency, error, transaction, testing, logging, and security invariants remain authoritative in `doc/ARCHITECTURE_INVARIANTS.md`.
