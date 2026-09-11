@@ -1,0 +1,125 @@
+name: Finalize Capability Codegen Alignment Once
+
+on:
+  push:
+    branches:
+      - refactor/capability-codegen-v1-alignment
+    paths:
+      - .github/workflows/finalize-capability-codegen-once.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-capability-codegen-once
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refactor/capability-codegen-v1-alignment
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.26.6
+          cache-dependency-path: go.sum
+
+      - name: Finalize docs, lockfile and self-clean
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          architecture = Path('doc/ARCHITECTURE_INVARIANTS.md')
+          text = architecture.read_text()
+          toc_line = '- [E — Error Handling](#e--error-handling)'
+          if '- [M — Module Ownership](#m--module-ownership)' not in text:
+              text = text.replace(toc_line, '- [M — Module Ownership](#m--module-ownership)\n' + toc_line, 1)
+          marker = '---\n\n## E — Error Handling'
+          module_section = '''---
+
+## M — Module Ownership
+
+### M1: Capability/module is the primary ownership boundary
+
+Business code is owned first by `internal/<capability>/`. Layer packages such as `domain`, `repository`, `service`, and `controller` are implementation boundaries inside that capability, not global ownership buckets.
+
+### M2: Capabilities contain only the layers they need
+
+Do not create empty `domain`, `repository`, `service`, `controller`, or `module.go` files for symmetry. `module.go` is an optional composition root for capabilities that actually require dependency-injection aggregation.
+
+### M3: Project Codegen must reflect proven Gosso policy
+
+Gouno Core provides the project-aware Codegen protocol/runtime but does not define Gosso architecture. Gosso currently intentionally ships no `.gouno/codegen.yaml`, so the project CLI exposes no `gen` command. The CLI uses dynamic `AttachProjectCommand` integration so a future Gosso-owned manifest can be added only after a reusable generation shape is proven across real capabilities. Do not restore the legacy Core-owned flat generator catalog or silently redefine upstream/default `suite` semantics.
+
+---
+
+## E — Error Handling'''
+          if '## M — Module Ownership' not in text:
+              if marker not in text:
+                  raise SystemExit('architecture insertion marker not found')
+              text = text.replace(marker, module_section, 1)
+          architecture.write_text(text)
+
+          contributing = Path('CONTRIBUTING.md')
+          text = contributing.read_text()
+          old = '''- The project follows a 3-layer architecture: **domain -> repository -> service**
+- Each internal module (account, admin, audit, auth, cache, db, notification, oauth2, oidc, session, token, utility) owns its layers
+- The project is built on the [gouno](https://github.com/rushairer/gouno) scaffold -- `cmd/` entry point, `GoUnoConfig` structure, and `gouno` dependency are architectural foundations'''
+          new = '''- The project uses **Capability Module** organization: `internal/<capability>/` is the primary ownership boundary, with `domain`, `repository`, `service`, `controller`, and optional `module.go` inside the capability only when needed
+- Cross-capability dependencies use narrow interfaces and follow the dependency/error/transaction rules in the architecture invariants
+- The project uses [gouno](https://github.com/rushairer/gouno) for reusable runtime mechanisms and project-aware tooling; Gouno does not prescribe Gosso's module structure or generator catalog'''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif new not in text:
+              raise SystemExit('CONTRIBUTING architecture block not found')
+          contributing.write_text(text)
+
+          changelog = Path('CHANGELOG.md')
+          text = changelog.read_text()
+          if '## [Unreleased]' not in text:
+              marker = '## [1.6.1] - 2026-09-11'
+              unreleased = '''## [Unreleased]
+
+### Changed
+- Normalize Gosso's existing backend structure as Capability Module architecture: capability/module first, implementation layer second, with optional layers and composition roots only where required.
+- Upgrade `github.com/rushairer/gouno` to v1.3.0 and switch the Gosso CLI from the legacy Core-owned generator proxy to manifest-driven project command discovery.
+- Keep Gosso Codegen intentionally disabled until a Gosso-owned `.gouno/codegen.yaml` policy is proven across real capabilities; absence of the manifest now means no `gen` command is exposed.
+
+'''
+              if marker not in text:
+                  raise SystemExit('CHANGELOG insertion marker not found')
+              text = text.replace(marker, unreleased + marker, 1)
+          changelog.write_text(text)
+          PY
+
+          go mod tidy
+          test ! -f .gouno/codegen.yaml
+          go test ./cmd/gosso
+          bash script/check-architecture.sh
+
+          rm .github/workflows/finalize-capability-codegen-once.yml
+
+          git add \
+            AGENTS.md \
+            CHANGELOG.md \
+            CONTRIBUTING.md \
+            cmd/gosso/root.go \
+            cmd/gosso/codegen_policy_test.go \
+            doc/ARCHITECTURE_INVARIANTS.md \
+            go.mod \
+            go.sum \
+            .github/workflows/finalize-capability-codegen-once.yml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(architecture): finalize capability codegen alignment"
+          git push origin HEAD:refactor/capability-codegen-v1-alignment
