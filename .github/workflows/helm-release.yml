@@ -12,6 +12,9 @@ permissions:
   contents: read
   packages: write
 
+env:
+  HELM_VERSION: "v4.2.3"
+
 jobs:
   publish:
     name: Publish Helm Chart
@@ -19,8 +22,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # v4.2.3 is the last version verified against this GHCR chart namespace.
+      # Keep this pinned until a newer Helm release is explicitly validated.
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: ${{ env.HELM_VERSION }}
 
       - name: Validate version
         env:
@@ -31,10 +38,19 @@ jobs:
           grep -Fq "## [$VERSION]" CHANGELOG.md
 
       - name: Log in to GitHub Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
 
-      - name: Lint, package, and publish
+      - name: Lint, package, publish, and verify
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
+          set -euo pipefail
           helm lint deploy/helm/gosso
           helm package deploy/helm/gosso --destination /tmp
-          helm push "/tmp/gosso-${{ inputs.version }}.tgz" oci://ghcr.io/${{ github.repository_owner }}/gosso/charts
+          helm push "/tmp/gosso-${VERSION}.tgz" oci://ghcr.io/${{ github.repository_owner }}/gosso/charts
+          helm show chart "oci://ghcr.io/${{ github.repository_owner }}/gosso/charts/gosso" --version "$VERSION" > /tmp/published-chart.yaml
+          grep -Fxq "name: gosso" /tmp/published-chart.yaml
+          grep -Fxq "version: ${VERSION}" /tmp/published-chart.yaml
