@@ -1,7 +1,6 @@
 package gosso
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/rushairer/gouno/generator"
@@ -9,10 +8,7 @@ import (
 )
 
 func TestProjectCodegenIsAbsentWithoutManifest(t *testing.T) {
-	projectRoot, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatalf("resolve project root: %v", err)
-	}
+	projectRoot := t.TempDir()
 
 	projectCmd, err := generator.LoadProjectCommand(projectRoot)
 	if err != nil {
