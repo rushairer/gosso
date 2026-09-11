@@ -1,0 +1,140 @@
+name: RFC7009 Fixup
+
+on:
+  push:
+    branches: [fix/rfc7009-csrf]
+    paths:
+      - ".github/workflows/rfc7009-fixup.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fixup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: fix/rfc7009-csrf
+          fetch-depth: 0
+
+      - name: Apply deterministic RFC 7009 fixture and release metadata updates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          helper = Path('tests/http/httptest_helpers.go')
+          text = helper.read_text()
+          old = '\t\t\t"/oauth2/token",\n\t\t\t"/oauth2/introspect",'
+          new = '\t\t\t"/oauth2/token",\n\t\t\t"/oauth2/revoke",\n\t\t\t"/oauth2/introspect",'
+          if new not in text:
+              if old not in text:
+                  raise SystemExit('HTTP integration CSRF skip anchor not found')
+              text = text.replace(old, new, 1)
+              helper.write_text(text)
+
+          integration = Path('tests/http/oauth2_http_integration_test.go')
+          text = integration.read_text()
+          test_name = 'TestHTTP_TokenRevocationBasicAuthWithoutCSRF'
+          if test_name not in text:
+              text += r'''
+
+// TestHTTP_TokenRevocationBasicAuthWithoutCSRF verifies the production protocol
+// boundary: confidential OAuth clients authenticate revocation requests with
+// client_secret_basic and never need a browser CSRF cookie/header. Repeating a
+// revocation remains HTTP 200 so token validity is not disclosed (RFC 7009 §2.2).
+func TestHTTP_TokenRevocationBasicAuthWithoutCSRF(t *testing.T) {
+	e := setupTest(t)
+	ctx := context.Background()
+
+	accountID, err := e.SeedAccount(ctx, "revoke-basic-user", "revoke-basic@example.com", "password123")
+	require.NoError(t, err)
+	clientID, clientSecret := e.SeedOAuth2Client(t, ctx, accountID, SeedClientOptions{
+		Confidential:     true,
+		GrantTypes:       []string{"client_credentials"},
+		Scopes:           []string{"openid"},
+		AllowedResources: []string{testClientCredentialsResource},
+	})
+
+	tokenResp, tokenBody := e.DoFormRequest(t, http.MethodPost, "/oauth2/token", map[string]string{
+		"grant_type":    "client_credentials",
+		"client_id":     clientID,
+		"client_secret": clientSecret,
+		"scope":         "openid",
+		"resource":      testClientCredentialsResource,
+	}, nil)
+	require.Equal(t, http.StatusOK, tokenResp.StatusCode)
+
+	var tokenResult struct {
+		AccessToken string `json:"access_token"`
+	}
+	require.NoError(t, json.Unmarshal(tokenBody, &tokenResult))
+	require.NotEmpty(t, tokenResult.AccessToken)
+
+	revokeWithoutCSRF := func() *http.Response {
+		body := strings.NewReader("token=" + tokenResult.AccessToken + "&token_type_hint=access_token")
+		req, reqErr := http.NewRequest(http.MethodPost, e.Server.URL+"/oauth2/revoke", body)
+		require.NoError(t, reqErr)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.SetBasicAuth(clientID, clientSecret)
+		resp, doErr := e.Client.Do(req)
+		require.NoError(t, doErr)
+		return resp
+	}
+
+	resp := revokeWithoutCSRF()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	_ = resp.Body.Close()
+
+	introResp, introBody := e.DoFormRequest(t, http.MethodPost, "/oauth2/introspect", map[string]string{
+		"token":         tokenResult.AccessToken,
+		"client_id":     clientID,
+		"client_secret": clientSecret,
+	}, nil)
+	require.Equal(t, http.StatusOK, introResp.StatusCode)
+	var intro struct {
+		Active bool `json:"active"`
+	}
+	require.NoError(t, json.Unmarshal(introBody, &intro))
+	assert.False(t, intro.Active)
+
+	resp = revokeWithoutCSRF()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	_ = resp.Body.Close()
+}
+'''
+              integration.write_text(text)
+
+          changelog = Path('CHANGELOG.md')
+          text = changelog.read_text()
+          if '## [1.6.1] - 2026-09-11' not in text:
+              marker = '## [1.6.0] - 2026-09-11'
+              if marker not in text:
+                  raise SystemExit('CHANGELOG 1.6.0 marker not found')
+              release = '''## [1.6.1] - 2026-09-11\n\n### Fixed\n- Exempt the OAuth 2.0 revocation endpoint from browser double-submit CSRF so confidential clients can use RFC 6749 `client_secret_basic` as advertised by OIDC discovery.\n- Preserve RFC 7009 non-disclosure semantics by allowing repeated revocation requests for already-invalid tokens to reach the revocation controller and return HTTP 200 after successful client authentication.\n\n### Security\n- Keep browser/session logout endpoints under CSRF protection; only the non-browser OAuth protocol endpoint `/oauth2/revoke` joins the existing token, introspection, and device-authorization CSRF exclusions.\n\n'''
+              changelog.write_text(text.replace(marker, release + marker, 1))
+
+          chart = Path('deploy/helm/gosso/Chart.yaml')
+          text = chart.read_text()
+          text = text.replace('version: 1.6.0', 'version: 1.6.1', 1)
+          text = text.replace('appVersion: "1.6.0"', 'appVersion: "1.6.1"', 1)
+          chart.write_text(text)
+          PY
+
+          gofmt -w cmd/gosso/web_engine.go cmd/gosso/web_engine_csrf_test.go tests/http/oauth2_http_integration_test.go tests/http/httptest_helpers.go
+          git diff --check
+
+      - name: Commit fixup
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "Aben"
+          git config user.email "5195693+rushairer@users.noreply.github.com"
+          git add CHANGELOG.md deploy/helm/gosso/Chart.yaml cmd/gosso/web_engine.go cmd/gosso/web_engine_csrf_test.go tests/http/oauth2_http_integration_test.go tests/http/httptest_helpers.go
+          git commit -m "fix(oauth2): align RFC 7009 revocation boundary"
+          git push origin HEAD:fix/rfc7009-csrf
