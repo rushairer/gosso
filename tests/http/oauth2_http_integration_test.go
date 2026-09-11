@@ -806,3 +806,67 @@ func extractHiddenInput(body, name string) string {
 	}
 	return body[start : start+end]
 }
+
+// TestHTTP_TokenRevocationBasicAuthWithoutCSRF verifies the production protocol
+// boundary: confidential OAuth clients authenticate revocation requests with
+// client_secret_basic and never need a browser CSRF cookie/header. Repeating a
+// revocation remains HTTP 200 so token validity is not disclosed (RFC 7009 §2.2).
+func TestHTTP_TokenRevocationBasicAuthWithoutCSRF(t *testing.T) {
+	e := setupTest(t)
+	ctx := context.Background()
+
+	accountID, err := e.SeedAccount(ctx, "revoke-basic-user", "revoke-basic@example.com", "password123")
+	require.NoError(t, err)
+	clientID, clientSecret := e.SeedOAuth2Client(t, ctx, accountID, SeedClientOptions{
+		Confidential:     true,
+		GrantTypes:       []string{"client_credentials"},
+		Scopes:           []string{"openid"},
+		AllowedResources: []string{testClientCredentialsResource},
+	})
+
+	tokenResp, tokenBody := e.DoFormRequest(t, http.MethodPost, "/oauth2/token", map[string]string{
+		"grant_type":    "client_credentials",
+		"client_id":     clientID,
+		"client_secret": clientSecret,
+		"scope":         "openid",
+		"resource":      testClientCredentialsResource,
+	}, nil)
+	require.Equal(t, http.StatusOK, tokenResp.StatusCode)
+
+	var tokenResult struct {
+		AccessToken string `json:"access_token"`
+	}
+	require.NoError(t, json.Unmarshal(tokenBody, &tokenResult))
+	require.NotEmpty(t, tokenResult.AccessToken)
+
+	revokeWithoutCSRF := func() *http.Response {
+		body := strings.NewReader("token=" + tokenResult.AccessToken + "&token_type_hint=access_token")
+		req, reqErr := http.NewRequest(http.MethodPost, e.Server.URL+"/oauth2/revoke", body)
+		require.NoError(t, reqErr)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.SetBasicAuth(clientID, clientSecret)
+		resp, doErr := e.Client.Do(req)
+		require.NoError(t, doErr)
+		return resp
+	}
+
+	resp := revokeWithoutCSRF()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	_ = resp.Body.Close()
+
+	introResp, introBody := e.DoFormRequest(t, http.MethodPost, "/oauth2/introspect", map[string]string{
+		"token":         tokenResult.AccessToken,
+		"client_id":     clientID,
+		"client_secret": clientSecret,
+	}, nil)
+	require.Equal(t, http.StatusOK, introResp.StatusCode)
+	var intro struct {
+		Active bool `json:"active"`
+	}
+	require.NoError(t, json.Unmarshal(introBody, &intro))
+	assert.False(t, intro.Active)
+
+	resp = revokeWithoutCSRF()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	_ = resp.Body.Close()
+}

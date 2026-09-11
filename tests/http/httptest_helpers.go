@@ -206,6 +206,7 @@ func SetupHTTPTestEnv(t *testing.T) *HTTPTestEnv {
 		middleware.TimeoutMiddleware(30*time.Second),
 		middleware.CSRFMiddleware(false, logger, 3600,
 			"/oauth2/token",
+			"/oauth2/revoke",
 			"/oauth2/introspect",
 			"/oauth2/device/code",
 			"/.well-known",

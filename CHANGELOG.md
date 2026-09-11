@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.1] - 2026-09-11
+
+### Fixed
+- Exempt the OAuth 2.0 revocation endpoint from browser double-submit CSRF so confidential clients can use RFC 6749 `client_secret_basic` as advertised by OIDC discovery.
+- Preserve RFC 7009 non-disclosure semantics by allowing repeated revocation requests for already-invalid tokens to reach the revocation controller and return HTTP 200 after successful client authentication.
+
+### Security
+- Keep browser/session logout endpoints under CSRF protection; only the non-browser OAuth protocol endpoint `/oauth2/revoke` joins the existing token, introspection, and device-authorization CSRF exclusions.
+
 ## [1.6.0] - 2026-09-11
 
 ### Added
