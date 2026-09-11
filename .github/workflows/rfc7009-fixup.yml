@@ -18,111 +18,11 @@ jobs:
           ref: fix/rfc7009-csrf
           fetch-depth: 0
 
-      - name: Apply deterministic RFC 7009 fixture and release metadata updates
+      - name: Apply deterministic RFC 7009 updates
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          helper = Path('tests/http/httptest_helpers.go')
-          text = helper.read_text()
-          old = '\t\t\t"/oauth2/token",\n\t\t\t"/oauth2/introspect",'
-          new = '\t\t\t"/oauth2/token",\n\t\t\t"/oauth2/revoke",\n\t\t\t"/oauth2/introspect",'
-          if new not in text:
-              if old not in text:
-                  raise SystemExit('HTTP integration CSRF skip anchor not found')
-              text = text.replace(old, new, 1)
-              helper.write_text(text)
-
-          integration = Path('tests/http/oauth2_http_integration_test.go')
-          text = integration.read_text()
-          test_name = 'TestHTTP_TokenRevocationBasicAuthWithoutCSRF'
-          if test_name not in text:
-              text += r'''
-
-// TestHTTP_TokenRevocationBasicAuthWithoutCSRF verifies the production protocol
-// boundary: confidential OAuth clients authenticate revocation requests with
-// client_secret_basic and never need a browser CSRF cookie/header. Repeating a
-// revocation remains HTTP 200 so token validity is not disclosed (RFC 7009 §2.2).
-func TestHTTP_TokenRevocationBasicAuthWithoutCSRF(t *testing.T) {
-	e := setupTest(t)
-	ctx := context.Background()
-
-	accountID, err := e.SeedAccount(ctx, "revoke-basic-user", "revoke-basic@example.com", "password123")
-	require.NoError(t, err)
-	clientID, clientSecret := e.SeedOAuth2Client(t, ctx, accountID, SeedClientOptions{
-		Confidential:     true,
-		GrantTypes:       []string{"client_credentials"},
-		Scopes:           []string{"openid"},
-		AllowedResources: []string{testClientCredentialsResource},
-	})
-
-	tokenResp, tokenBody := e.DoFormRequest(t, http.MethodPost, "/oauth2/token", map[string]string{
-		"grant_type":    "client_credentials",
-		"client_id":     clientID,
-		"client_secret": clientSecret,
-		"scope":         "openid",
-		"resource":      testClientCredentialsResource,
-	}, nil)
-	require.Equal(t, http.StatusOK, tokenResp.StatusCode)
-
-	var tokenResult struct {
-		AccessToken string `json:"access_token"`
-	}
-	require.NoError(t, json.Unmarshal(tokenBody, &tokenResult))
-	require.NotEmpty(t, tokenResult.AccessToken)
-
-	revokeWithoutCSRF := func() *http.Response {
-		body := strings.NewReader("token=" + tokenResult.AccessToken + "&token_type_hint=access_token")
-		req, reqErr := http.NewRequest(http.MethodPost, e.Server.URL+"/oauth2/revoke", body)
-		require.NoError(t, reqErr)
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.SetBasicAuth(clientID, clientSecret)
-		resp, doErr := e.Client.Do(req)
-		require.NoError(t, doErr)
-		return resp
-	}
-
-	resp := revokeWithoutCSRF()
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	_ = resp.Body.Close()
-
-	introResp, introBody := e.DoFormRequest(t, http.MethodPost, "/oauth2/introspect", map[string]string{
-		"token":         tokenResult.AccessToken,
-		"client_id":     clientID,
-		"client_secret": clientSecret,
-	}, nil)
-	require.Equal(t, http.StatusOK, introResp.StatusCode)
-	var intro struct {
-		Active bool `json:"active"`
-	}
-	require.NoError(t, json.Unmarshal(introBody, &intro))
-	assert.False(t, intro.Active)
-
-	resp = revokeWithoutCSRF()
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	_ = resp.Body.Close()
-}
-'''
-              integration.write_text(text)
-
-          changelog = Path('CHANGELOG.md')
-          text = changelog.read_text()
-          if '## [1.6.1] - 2026-09-11' not in text:
-              marker = '## [1.6.0] - 2026-09-11'
-              if marker not in text:
-                  raise SystemExit('CHANGELOG 1.6.0 marker not found')
-              release = '''## [1.6.1] - 2026-09-11\n\n### Fixed\n- Exempt the OAuth 2.0 revocation endpoint from browser double-submit CSRF so confidential clients can use RFC 6749 `client_secret_basic` as advertised by OIDC discovery.\n- Preserve RFC 7009 non-disclosure semantics by allowing repeated revocation requests for already-invalid tokens to reach the revocation controller and return HTTP 200 after successful client authentication.\n\n### Security\n- Keep browser/session logout endpoints under CSRF protection; only the non-browser OAuth protocol endpoint `/oauth2/revoke` joins the existing token, introspection, and device-authorization CSRF exclusions.\n\n'''
-              changelog.write_text(text.replace(marker, release + marker, 1))
-
-          chart = Path('deploy/helm/gosso/Chart.yaml')
-          text = chart.read_text()
-          text = text.replace('version: 1.6.0', 'version: 1.6.1', 1)
-          text = text.replace('appVersion: "1.6.0"', 'appVersion: "1.6.1"', 1)
-          chart.write_text(text)
-          PY
-
+          printf '%s' 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpoZWxwZXIgPSBQYXRoKCJ0ZXN0cy9odHRwL2h0dHB0ZXN0X2hlbHBlcnMuZ28iKQp0ZXh0ID0gaGVscGVyLnJlYWRfdGV4dCgpCm9sZCA9ICdcXHRcXHRcXHQiL29hdXRoMi90b2tlbiIsXFxuXFx0XFx0XFx0Ii9vYXV0aDIvaW50cm9zcGVjdCIsJwpuZXcgPSAnXFx0XFx0XFx0Ii9vYXV0aDIvdG9rZW4iLFxcblxcdFxcdFxcdCIvb2F1dGgyL3Jldm9rZSIsXFxuXFx0XFx0XFx0Ii9vYXV0aDIvaW50cm9zcGVjdCIsJwppZiBuZXcgbm90IGluIHRleHQ6CiAgICBpZiBvbGQgbm90IGluIHRleHQ6CiAgICAgICAgcmFpc2UgU3lzdGVtRXhpdCgiSFRUUCBpbnRlZ3JhdGlvbiBDU1JGIHNraXAgYW5jaG9yIG5vdCBmb3VuZCIpCiAgICBoZWxwZXIud3JpdGVfdGV4dCh0ZXh0LnJlcGxhY2Uob2xkLCBuZXcsIDEpKQoKaW50ZWdyYXRpb24gPSBQYXRoKCJ0ZXN0cy9odHRwL29hdXRoMl9odHRwX2ludGVncmF0aW9uX3Rlc3QuZ28iKQp0ZXh0ID0gaW50ZWdyYXRpb24ucmVhZF90ZXh0KCkKdGVzdF9uYW1lID0gIlRlc3RIVFRQX1Rva2VuUmV2b2NhdGlvbkJhc2ljQXV0aFdpdGhvdXRDU1JGIgppZiB0ZXN0X25hbWUgbm90IGluIHRleHQ6CiAgICB0ZXh0ICs9ICdcblxuLy8gVGVzdEhUVFBfVG9rZW5SZXZvY2F0aW9uQmFzaWNBdXRoV2l0aG91dENTUkYgdmVyaWZpZXMgdGhlIHByb2R1Y3Rpb24gcHJvdG9jb2xcbi8vIGJvdW5kYXJ5OiBjb25maWRlbnRpYWwgT0F1dGggY2xpZW50cyBhdXRoZW50aWNhdGUgcmV2b2NhdGlvbiByZXF1ZXN0cyB3aXRoXG4vLyBjbGllbnRfc2VjcmV0X2Jhc2ljIGFuZCBuZXZlciBuZWVkIGEgYnJvd3NlciBDU1JGIGNvb2tpZS9oZWFkZXIuIFJlcGVhdGluZyBhXG4vLyByZXZvY2F0aW9uIHJlbWFpbnMgSFRUUCAyMDAgc28gdG9rZW4gdmFsaWRpdHkgaXMgbm90IGRpc2Nsb3NlZCAoUkZDIDcwMDkgwqcyLjIpLlxuZnVuYyBUZXN0SFRUUF9Ub2tlblJldm9jYXRpb25CYXNpY0F1dGhXaXRob3V0Q1NSRih0ICp0ZXN0aW5nLlQpIHtcblx0ZSA6PSBzZXR1cFRlc3QodClcblx0Y3R4IDo9IGNvbnRleHQuQmFja2dyb3VuZCgpXG5cblx0YWNjb3VudElELCBlcnIgOj0gZS5TZWVkQWNjb3VudChjdHgsICJyZXZva2UtYmFzaWMtdXNlciIsICJyZXZva2UtYmFzaWNAZXhhbXBsZS5jb20iLCAicGFzc3dvcmQxMjMiKVxuXHRyZXF1aXJlLk5vRXJyb3IodCwgZXJyKVxuXHRjbGllbnRJRCwgY2xpZW50U2VjcmV0IDo9IGUuU2VlZE9BdXRoMkNsaWVudCh0LCBjdHgsIGFjY291bnRJRCwgU2VlZENsaWVudE9wdGlvbnN7XG5cdFx0Q29uZmlkZW50aWFsOiAgICAgdHJ1ZSxcblx0XHRHcmFudFR5cGVzOiAgICAgICBbXXN0cmluZ3siY2xpZW50X2NyZWRlbnRpYWxzIn0sXG5cdFx0U2NvcGVzOiAgICAgICAgICAgW11zdHJpbmd7Im9wZW5pZCJ9LFxuXHRcdEFsbG93ZWRSZXNvdXJjZXM6IFtdc3RyaW5ne3Rlc3RDbGllbnRDcmVkZW50aWFsc1Jlc291cmNlfSxcblx0fSlcblxuXHR0b2tlblJlc3AsIHRva2VuQm9keSA6PSBlLkRvRm9ybVJlcXVlc3QodCwgaHR0cC5NZXRob2RQb3N0LCAiL29hdXRoMi90b2tlbiIsIG1hcFtzdHJpbmddc3RyaW5ne1xuXHRcdCJncmFudF90eXBlIjogICAgImNsaWVudF9jcmVkZW50aWFscyIsXG5cdFx0ImNsaWVudF9pZCI6ICAgICBjbGllbnRJRCxcblx0XHQiY2xpZW50X3NlY3JldCI6IGNsaWVudFNlY3JldCxcblx0XHQic2NvcGUiOiAgICAgICAgICJvcGVuaWQiLFxuXHRcdCJyZXNvdXJjZSI6ICAgICAgdGVzdENsaWVudENyZWRlbnRpYWxzUmVzb3VyY2UsXG5cdH0sIG5pbClcblx0cmVxdWlyZS5FcXVhbCh0LCBodHRwLlN0YXR1c09LLCB0b2tlblJlc3AuU3RhdHVzQ29kZSlcblxuXHR2YXIgdG9rZW5SZXN1bHQgc3RydWN0IHtcblx0XHRBY2Nlc3NUb2tlbiBzdHJpbmcgYGpzb246ImFjY2Vzc190b2tlbiJgXG5cdH1cblx0cmVxdWlyZS5Ob0Vycm9yKHQsIGpzb24uVW5tYXJzaGFsKHRva2VuQm9keSwgJnRva2VuUmVzdWx0KSlcblx0cmVxdWlyZS5Ob3RFbXB0eSh0LCB0b2tlblJlc3VsdC5BY2Nlc3NUb2tlbilcblxuXHRyZXZva2VXaXRob3V0Q1NSRiA6PSBmdW5jKCkgKmh0dHAuUmVzcG9uc2Uge1xuXHRcdGJvZHkgOj0gc3RyaW5ncy5OZXdSZWFkZXIoInRva2VuPSIgKyB0b2tlblJlc3VsdC5BY2Nlc3NUb2tlbiArICImdG9rZW5fdHlwZV9oaW50PWFjY2Vzc190b2tlbiIpXG5cdFx0cmVxLCByZXFFcnIgOj0gaHR0cC5OZXdSZXF1ZXN0KGh0dHAuTWV0aG9kUG9zdCwgZS5TZXJ2ZXIuVVJMKyIvb2F1dGgyL3Jldm9rZSIsIGJvZHkpXG5cdFx0cmVxdWlyZS5Ob0Vycm9yKHQsIHJlcUVycilcblx0XHRyZXEuSGVhZGVyLlNldCgiQ29udGVudC1UeXBlIiwgImFwcGxpY2F0aW9uL3gtd3d3LWZvcm0tdXJsZW5jb2RlZCIpXG5cdFx0cmVxLlNldEJhc2ljQXV0aChjbGllbnRJRCwgY2xpZW50U2VjcmV0KVxuXHRcdHJlc3AsIGRvRXJyIDo9IGUuQ2xpZW50LkRvKHJlcSlcblx0XHRyZXF1aXJlLk5vRXJyb3IodCwgZG9FcnIpXG5cdFx0cmV0dXJuIHJlc3Bcblx0fVxuXG5cdHJlc3AgOj0gcmV2b2tlV2l0aG91dENTUkYoKVxuXHRhc3NlcnQuRXF1YWwodCwgaHR0cC5TdGF0dXNPSywgcmVzcC5TdGF0dXNDb2RlKVxuXHRfID0gcmVzcC5Cb2R5LkNsb3NlKClcblxuXHRpbnRyb1Jlc3AsIGludHJvQm9keSA6PSBlLkRvRm9ybVJlcXVlc3QodCwgaHR0cC5NZXRob2RQb3N0LCAiL29hdXRoMi9pbnRyb3NwZWN0IiwgbWFwW3N0cmluZ11zdHJpbmd7XG5cdFx0InRva2VuIjogICAgICAgICB0b2tlblJlc3VsdC5BY2Nlc3NUb2tlbixcblx0XHQiY2xpZW50X2lkIjogICAgIGNsaWVudElELFxuXHRcdCJjbGllbnRfc2VjcmV0IjogY2xpZW50U2VjcmV0LFxuXHR9LCBuaWwpXG5cdHJlcXVpcmUuRXF1YWwodCwgaHR0cC5TdGF0dXNPSywgaW50cm9SZXNwLlN0YXR1c0NvZGUpXG5cdHZhciBpbnRybyBzdHJ1Y3Qge1xuXHRcdEFjdGl2ZSBib29sIGBqc29uOiJhY3RpdmUiYFxuXHR9XG5cdHJlcXVpcmUuTm9FcnJvcih0LCBqc29uLlVubWFyc2hhbChpbnRyb0JvZHksICZpbnRybykpXG5cdGFzc2VydC5GYWxzZSh0LCBpbnRyby5BY3RpdmUpXG5cblx0cmVzcCA9IHJldm9rZVdpdGhvdXRDU1JGKClcblx0YXNzZXJ0LkVxdWFsKHQsIGh0dHAuU3RhdHVzT0ssIHJlc3AuU3RhdHVzQ29kZSlcblx0XyA9IHJlc3AuQm9keS5DbG9zZSgpXG59XG4nCiAgICBpbnRlZ3JhdGlvbi53cml0ZV90ZXh0KHRleHQpCgpjaGFuZ2Vsb2cgPSBQYXRoKCJDSEFOR0VMT0cubWQiKQp0ZXh0ID0gY2hhbmdlbG9nLnJlYWRfdGV4dCgpCmlmICIjIyBbMS42LjFdIC0gMjAyNi0wOS0xMSIgbm90IGluIHRleHQ6CiAgICBtYXJrZXIgPSAiIyMgWzEuNi4wXSAtIDIwMjYtMDktMTEiCiAgICBpZiBtYXJrZXIgbm90IGluIHRleHQ6CiAgICAgICAgcmFpc2UgU3lzdGVtRXhpdCgiQ0hBTkdFTE9HIDEuNi4wIG1hcmtlciBub3QgZm91bmQiKQogICAgcmVsZWFzZSA9ICIiIiMjIFsxLjYuMV0gLSAyMDI2LTA5LTExCgojIyMgRml4ZWQKLSBFeGVtcHQgdGhlIE9BdXRoIDIuMCByZXZvY2F0aW9uIGVuZHBvaW50IGZyb20gYnJvd3NlciBkb3VibGUtc3VibWl0IENTUkYgc28gY29uZmlkZW50aWFsIGNsaWVudHMgY2FuIHVzZSBSRkMgNjc0OSBgY2xpZW50X3NlY3JldF9iYXNpY2AgYXMgYWR2ZXJ0aXNlZCBieSBPSURDIGRpc2NvdmVyeS4KLSBQcmVzZXJ2ZSBSRkMgNzAwOSBub24tZGlzY2xvc3VyZSBzZW1hbnRpY3MgYnkgYWxsb3dpbmcgcmVwZWF0ZWQgcmV2b2NhdGlvbiByZXF1ZXN0cyBmb3IgYWxyZWFkeS1pbnZhbGlkIHRva2VucyB0byByZWFjaCB0aGUgcmV2b2NhdGlvbiBjb250cm9sbGVyIGFuZCByZXR1cm4gSFRUUCAyMDAgYWZ0ZXIgc3VjY2Vzc2Z1bCBjbGllbnQgYXV0aGVudGljYXRpb24uCgojIyMgU2VjdXJpdHkKLSBLZWVwIGJyb3dzZXIvc2Vzc2lvbiBsb2dvdXQgZW5kcG9pbnRzIHVuZGVyIENTUkYgcHJvdGVjdGlvbjsgb25seSB0aGUgbm9uLWJyb3dzZXIgT0F1dGggcHJvdG9jb2wgZW5kcG9pbnQgYC9vYXV0aDIvcmV2b2tlYCBqb2lucyB0aGUgZXhpc3RpbmcgdG9rZW4sIGludHJvc3BlY3Rpb24sIGFuZCBkZXZpY2UtYXV0aG9yaXphdGlvbiBDU1JGIGV4Y2x1c2lvbnMuCgoiIiIKICAgIGNoYW5nZWxvZy53cml0ZV90ZXh0KHRleHQucmVwbGFjZShtYXJrZXIsIHJlbGVhc2UgKyBtYXJrZXIsIDEpKQoKY2hhcnQgPSBQYXRoKCJkZXBsb3kvaGVsbS9nb3Nzby9DaGFydC55YW1sIikKdGV4dCA9IGNoYXJ0LnJlYWRfdGV4dCgpCmlmICJ2ZXJzaW9uOiAxLjYuMSIgbm90IGluIHRleHQ6CiAgICB0ZXh0ID0gdGV4dC5yZXBsYWNlKCJ2ZXJzaW9uOiAxLjYuMCIsICJ2ZXJzaW9uOiAxLjYuMSIsIDEpCmlmICdhcHBWZXJzaW9uOiAiMS42LjEiJyBub3QgaW4gdGV4dDoKICAgIHRleHQgPSB0ZXh0LnJlcGxhY2UoJ2FwcFZlcnNpb246ICIxLjYuMCInLCAnYXBwVmVyc2lvbjogIjEuNi4xIicsIDEpCmNoYXJ0LndyaXRlX3RleHQodGV4dCkK' | base64 -d | python3
           gofmt -w cmd/gosso/web_engine.go cmd/gosso/web_engine_csrf_test.go tests/http/oauth2_http_integration_test.go tests/http/httptest_helpers.go
           git diff --check
 
