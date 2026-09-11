@@ -122,9 +122,9 @@ The project uses [golangci-lint v2](https://golangci-lint.run/) with these linte
 
 ### Architecture
 
-- The project follows a 3-layer architecture: **domain -> repository -> service**
-- Each internal module (account, admin, audit, auth, cache, db, notification, oauth2, oidc, session, token, utility) owns its layers
-- The project is built on the [gouno](https://github.com/rushairer/gouno) scaffold -- `cmd/` entry point, `GoUnoConfig` structure, and `gouno` dependency are architectural foundations
+- The project uses **Capability Module** organization: `internal/<capability>/` is the primary ownership boundary, with `domain`, `repository`, `service`, `controller`, and optional `module.go` inside the capability only when needed
+- Cross-capability dependencies use narrow interfaces and follow the dependency/error/transaction rules in the architecture invariants
+- The project uses [gouno](https://github.com/rushairer/gouno) for reusable runtime mechanisms and project-aware tooling; Gouno does not prescribe Gosso's module structure or generator catalog
 - **Must read**: [Architecture Invariants](doc/ARCHITECTURE_INVARIANTS.md) — non-negotiable rules for error handling, repository patterns, controller conventions, and more
 - Design decisions are documented as [Architecture Decision Records](doc/ADR/)
 

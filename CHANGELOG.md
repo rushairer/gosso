@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- Normalize Gosso's existing backend structure as Capability Module architecture: capability/module first, implementation layer second, with optional layers and composition roots only where required.
+- Upgrade `github.com/rushairer/gouno` to v1.3.0 and switch the Gosso CLI from the legacy Core-owned generator proxy to manifest-driven project command discovery.
+- Keep Gosso Codegen intentionally disabled until a Gosso-owned `.gouno/codegen.yaml` policy is proven across real capabilities; absence of the manifest now means no `gen` command is exposed.
+
 ## [1.6.1] - 2026-09-11
 
 ### Fixed

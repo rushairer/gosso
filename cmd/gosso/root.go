@@ -19,10 +19,14 @@ It provides OAuth2, OpenID Connect, WebAuthn/Passkey, and MFA support.`,
 }
 
 func init() {
-	rootCmd.AddCommand(generator.GeneratorCmd, webCmd, migrateCmd)
+	rootCmd.AddCommand(webCmd, migrateCmd)
 }
 
 func Execute() {
+	if _, err := generator.AttachProjectCommand(rootCmd, ""); err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading project commands: %v\n", err)
+		os.Exit(1)
+	}
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error executing root command: %v\n", err)
 		os.Exit(1)

@@ -10,6 +10,7 @@ Each invariant has an **ID** (e.g., `E1`) for easy reference in PR comments and 
 
 ## Table of Contents
 
+- [M — Module Ownership](#m--module-ownership)
 - [E — Error Handling](#e--error-handling)
 - [R — Repository Layer](#r--repository-layer)
 - [S — Service Layer](#s--service-layer)
@@ -18,6 +19,22 @@ Each invariant has an **ID** (e.g., `E1`) for easy reference in PR comments and 
 - [T — Testing](#t--testing)
 - [L — Logging](#l--logging)
 - [X — Cross-Cutting Concerns](#x--cross-cutting-concerns)
+
+---
+
+## M — Module Ownership
+
+### M1: Capability/module is the primary ownership boundary
+
+Business code is owned first by `internal/<capability>/`. Layer packages such as `domain`, `repository`, `service`, and `controller` are implementation boundaries inside that capability, not global ownership buckets.
+
+### M2: Capabilities contain only the layers they need
+
+Do not create empty `domain`, `repository`, `service`, `controller`, or `module.go` files for symmetry. `module.go` is an optional composition root for capabilities that actually require dependency-injection aggregation.
+
+### M3: Project Codegen must reflect proven Gosso policy
+
+Gouno Core provides the project-aware Codegen protocol/runtime but does not define Gosso architecture. Gosso currently intentionally ships no `.gouno/codegen.yaml`, so the project CLI exposes no `gen` command. The CLI uses dynamic `AttachProjectCommand` integration so a future Gosso-owned manifest can be added only after a reusable generation shape is proven across real capabilities. Do not restore the legacy Core-owned flat generator catalog or silently redefine upstream/default `suite` semantics.
 
 ---
 
