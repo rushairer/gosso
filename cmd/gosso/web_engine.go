@@ -31,22 +31,7 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		return nil, fmt.Errorf("invalid CORS configuration: %w", err)
 	}
 
-	csrfSkipPaths := []string{
-		"/api/v1/auth/login",
-		"/api/v1/auth/mfa/verify",
-		"/api/v1/auth/password/forgot",
-		"/api/v1/auth/password/reset",
-		"/api/v1/passkey/login/begin",
-		"/api/v1/passkey/login/complete",
-		"/api/v1/passkey/mfa/begin",
-		"/api/v1/passkey/mfa/complete",
-		"/oauth2/token",
-		"/oauth2/revoke",
-		"/oauth2/introspect",
-		"/oauth2/device/code",
-		"/.well-known",
-		"/swagger",
-	}
+	csrfSkipPaths := defaultCSRFSkipPaths()
 	csrfSkipPaths = append(csrfSkipPaths, cfg.WebServerConfig.CSRFSkipPaths...)
 
 	engine.Use(
@@ -88,6 +73,30 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 	}
 
 	return engine, nil
+}
+
+// defaultCSRFSkipPaths returns protocol and bootstrap endpoints that do not use
+// browser cookie authentication. OAuth token, revocation, introspection, and
+// device-authorization requests authenticate clients at the protocol layer;
+// applying browser double-submit CSRF to them breaks RFC client authentication
+// such as client_secret_basic.
+func defaultCSRFSkipPaths() []string {
+	return []string{
+		"/api/v1/auth/login",
+		"/api/v1/auth/mfa/verify",
+		"/api/v1/auth/password/forgot",
+		"/api/v1/auth/password/reset",
+		"/api/v1/passkey/login/begin",
+		"/api/v1/passkey/login/complete",
+		"/api/v1/passkey/mfa/begin",
+		"/api/v1/passkey/mfa/complete",
+		"/oauth2/token",
+		"/oauth2/revoke",
+		"/oauth2/introspect",
+		"/oauth2/device/code",
+		"/.well-known",
+		"/swagger",
+	}
 }
 
 // buildCORSConfig builds CORS configuration from config.
