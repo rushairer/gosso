@@ -30,6 +30,7 @@ type mockOAuth2ClientService struct {
 	registerFn        func() (*oauth2Domain.OAuth2Client, string, error)
 	findByIDFn        func() (*oauth2Domain.OAuth2Client, error)
 	findByAcctFn      func() ([]*oauth2Domain.OAuth2Client, error)
+	findAllFn         func() ([]*oauth2Domain.OAuth2Client, error)
 	updateFn          func() error
 	updateByAccountFn func() (*oauth2Domain.OAuth2Client, error)
 	deleteFn          func() error
@@ -60,6 +61,13 @@ func (m *mockOAuth2ClientService) FindByAccountID(_ context.Context, _ string) (
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *mockOAuth2ClientService) FindAll(_ context.Context) ([]*oauth2Domain.OAuth2Client, error) {
+	if m.findAllFn != nil {
+		return m.findAllFn()
+	}
+	return nil, fmt.Errorf("not implemented")
+}
+
 func (m *mockOAuth2ClientService) UpdateClient(_ context.Context, _ *oauth2Domain.OAuth2Client) error {
 	if m.updateFn != nil {
 		return m.updateFn()
@@ -75,6 +83,14 @@ func (m *mockOAuth2ClientService) UpdateClientByAccountID(_ context.Context, _, 
 	return nil, nil
 }
 
+func (m *mockOAuth2ClientService) UpdateClientAsAdmin(_ context.Context, _, _ string, req *oauth2Service.UpdateClientRequest) (*oauth2Domain.OAuth2Client, error) {
+	m.lastUpdateReq = req
+	if m.updateByAccountFn != nil {
+		return m.updateByAccountFn()
+	}
+	return nil, nil
+}
+
 func (m *mockOAuth2ClientService) DeleteClient(_ context.Context, _, _ string) error {
 	if m.deleteFn != nil {
 		return m.deleteFn()
@@ -82,11 +98,19 @@ func (m *mockOAuth2ClientService) DeleteClient(_ context.Context, _, _ string) e
 	return nil
 }
 
+func (m *mockOAuth2ClientService) DeleteClientAsAdmin(_ context.Context, _, _ string) error {
+	return m.DeleteClient(context.Background(), "", "")
+}
+
 func (m *mockOAuth2ClientService) RotateClientSecret(_ context.Context, _, _ string) (string, error) {
 	if m.rotateSecretFn != nil {
 		return m.rotateSecretFn()
 	}
 	return "", fmt.Errorf("not implemented")
+}
+
+func (m *mockOAuth2ClientService) RotateClientSecretAsAdmin(_ context.Context, _, _ string) (string, error) {
+	return m.RotateClientSecret(context.Background(), "", "")
 }
 
 // ──────────────────────────────────────────────
@@ -126,6 +150,7 @@ func setupAdminClientController(clientSvc *mockOAuth2ClientService) *gin.Engine 
 		ctx.Next()
 	})
 	ctrl.RegisterRoutes(api, func(ctx *gin.Context) { ctx.Next() })
+	ctrl.RegisterAdminRoutes(api.Group("/admin"))
 
 	return engine
 }
@@ -256,6 +281,42 @@ func TestListClients_Empty(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].([]any)
 	assert.Len(t, data, 0)
+}
+
+func TestListAllClients_AdminSeesOtherOwners(t *testing.T) {
+	clients := []*oauth2Domain.OAuth2Client{
+		newTestClient("account-001"),
+		{ID: "client-2", AccountID: "account-002", ClientID: "cid-2", Name: "Other Owner App"},
+	}
+	clientSvc := &mockOAuth2ClientService{findAllFn: func() ([]*oauth2Domain.OAuth2Client, error) {
+		return clients, nil
+	}}
+	engine := setupAdminClientController(clientSvc)
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/oauth2/clients", nil)
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "Other Owner App")
+	assert.Contains(t, w.Body.String(), "account-002")
+}
+
+func TestUpdateClientAsAdmin_CanUpdateOtherOwner(t *testing.T) {
+	client := newTestClient("account-002")
+	clientSvc := &mockOAuth2ClientService{updateByAccountFn: func() (*oauth2Domain.OAuth2Client, error) {
+		return client, nil
+	}}
+	engine := setupAdminClientController(clientSvc)
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/oauth2/clients/"+client.ClientID, bytes.NewBufferString(`{"name":"Updated"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	engine.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, clientSvc.lastUpdateReq)
+	assert.True(t, clientSvc.lastUpdateReq.AllowReservedScopes)
 }
 
 func TestGetClient_Success(t *testing.T) {

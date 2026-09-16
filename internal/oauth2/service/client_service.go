@@ -47,15 +47,27 @@ type OAuth2ClientService interface {
 	RegisterClient(ctx context.Context, req *RegisterClientRequest) (*domain.OAuth2Client, string, error)
 	FindByClientID(ctx context.Context, clientID string) (*domain.OAuth2Client, error)
 	FindByAccountID(ctx context.Context, accountID string) ([]*domain.OAuth2Client, error)
+	FindAll(ctx context.Context) ([]*domain.OAuth2Client, error)
 	UpdateClient(ctx context.Context, client *domain.OAuth2Client) error
 	UpdateClientByAccountID(ctx context.Context, accountID, clientID string, req *UpdateClientRequest) (*domain.OAuth2Client, error)
+	UpdateClientAsAdmin(ctx context.Context, actorAccountID, clientID string, req *UpdateClientRequest) (*domain.OAuth2Client, error)
 	RotateClientSecret(ctx context.Context, accountID, clientID string) (string, error)
+	RotateClientSecretAsAdmin(ctx context.Context, actorAccountID, clientID string) (string, error)
 	DeleteClient(ctx context.Context, accountID, clientID string) error
+	DeleteClientAsAdmin(ctx context.Context, actorAccountID, clientID string) error
 }
 
 // RotateClientSecret replaces a confidential client's secret atomically.
 // The plaintext is returned exactly once and only the bcrypt hash is stored.
 func (s *oauth2ClientServiceImpl) RotateClientSecret(ctx context.Context, accountID, clientID string) (string, error) {
+	return s.rotateClientSecret(ctx, accountID, clientID, true)
+}
+
+func (s *oauth2ClientServiceImpl) RotateClientSecretAsAdmin(ctx context.Context, actorAccountID, clientID string) (string, error) {
+	return s.rotateClientSecret(ctx, actorAccountID, clientID, false)
+}
+
+func (s *oauth2ClientServiceImpl) rotateClientSecret(ctx context.Context, actorAccountID, clientID string, enforceOwnership bool) (string, error) {
 	secret, err := generateClientSecret()
 	if err != nil {
 		return "", fmt.Errorf("generate client secret: %w", err)
@@ -70,7 +82,7 @@ func (s *oauth2ClientServiceImpl) RotateClientSecret(ctx context.Context, accoun
 		if findErr != nil {
 			return fmt.Errorf("%w: %s", domain.ErrClientNotFound, clientID)
 		}
-		if client.AccountID != accountID {
+		if enforceOwnership && client.AccountID != actorAccountID {
 			return ErrClientAccessDenied
 		}
 		if !client.IsConfidential {
@@ -85,7 +97,7 @@ func (s *oauth2ClientServiceImpl) RotateClientSecret(ctx context.Context, accoun
 		return "", err
 	}
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
-		auditDomain.ActionOAuth2ClientUpdate, audit.IPFromContext(ctx), &accountID,
+		auditDomain.ActionOAuth2ClientUpdate, audit.IPFromContext(ctx), &actorAccountID,
 		utility.MarshalJSONOrEmpty(map[string]any{"client_id": clientID, "secret_rotated": true}), nil,
 	))
 	return secret, nil
@@ -228,6 +240,10 @@ func (s *oauth2ClientServiceImpl) FindByAccountID(ctx context.Context, accountID
 	return s.clientRepo.FindByAccountID(ctx, accountID)
 }
 
+func (s *oauth2ClientServiceImpl) FindAll(ctx context.Context) ([]*domain.OAuth2Client, error) {
+	return s.clientRepo.FindAll(ctx)
+}
+
 func (s *oauth2ClientServiceImpl) UpdateClient(ctx context.Context, client *domain.OAuth2Client) error {
 	return dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		current, err := s.clientRepo.FindByClientIDTx(ctx, tx, client.ClientID)
@@ -259,6 +275,14 @@ type UpdateClientRequest struct {
 // UpdateClientByAccountID loads a client by ID, verifies ownership, applies partial updates with
 // validation, and persists the result in a single transaction with optimistic locking.
 func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, accountID, clientID string, req *UpdateClientRequest) (*domain.OAuth2Client, error) {
+	return s.updateClient(ctx, accountID, clientID, req, true)
+}
+
+func (s *oauth2ClientServiceImpl) UpdateClientAsAdmin(ctx context.Context, actorAccountID, clientID string, req *UpdateClientRequest) (*domain.OAuth2Client, error) {
+	return s.updateClient(ctx, actorAccountID, clientID, req, false)
+}
+
+func (s *oauth2ClientServiceImpl) updateClient(ctx context.Context, actorAccountID, clientID string, req *UpdateClientRequest, enforceOwnership bool) (*domain.OAuth2Client, error) {
 	// Validate request fields before starting the transaction
 	if req.Name != nil {
 		if err := validateClientName(*req.Name, false); err != nil {
@@ -311,7 +335,7 @@ func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, a
 		if err != nil {
 			return fmt.Errorf("%w: %s", domain.ErrClientNotFound, clientID)
 		}
-		if c.AccountID != accountID {
+		if enforceOwnership && c.AccountID != actorAccountID {
 			return ErrClientAccessDenied
 		}
 
@@ -374,7 +398,7 @@ func (s *oauth2ClientServiceImpl) UpdateClientByAccountID(ctx context.Context, a
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionOAuth2ClientUpdate,
 		audit.IPFromContext(ctx),
-		&accountID,
+		&actorAccountID,
 		utility.MarshalJSONOrEmpty(map[string]any{"client_id": client.ClientID, "name": client.Name}),
 		nil,
 	))
@@ -543,12 +567,20 @@ func validateLogoutURI(uri string) error {
 }
 
 func (s *oauth2ClientServiceImpl) DeleteClient(ctx context.Context, accountID, clientID string) error {
+	return s.deleteClient(ctx, accountID, clientID, true)
+}
+
+func (s *oauth2ClientServiceImpl) DeleteClientAsAdmin(ctx context.Context, actorAccountID, clientID string) error {
+	return s.deleteClient(ctx, actorAccountID, clientID, false)
+}
+
+func (s *oauth2ClientServiceImpl) deleteClient(ctx context.Context, actorAccountID, clientID string, enforceOwnership bool) error {
 	err := dbutil.RunInTransaction(ctx, s.db, func(tx *sql.Tx) error {
 		client, err := s.clientRepo.FindByClientIDTx(ctx, tx, clientID)
 		if err != nil {
 			return err
 		}
-		if client.AccountID != accountID {
+		if enforceOwnership && client.AccountID != actorAccountID {
 			return ErrClientAccessDenied
 		}
 		return s.clientRepo.SoftDelete(ctx, tx, client.ID, time.Now())
@@ -560,7 +592,7 @@ func (s *oauth2ClientServiceImpl) DeleteClient(ctx context.Context, accountID, c
 	auditService.AuditLog(ctx, s.auditor, s.logger, auditDomain.NewRecord(
 		auditDomain.ActionOAuth2ClientDelete,
 		audit.IPFromContext(ctx),
-		&accountID,
+		&actorAccountID,
 		utility.MarshalJSONOrEmpty(map[string]any{"client_id": clientID}),
 		nil,
 	))

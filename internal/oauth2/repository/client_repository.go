@@ -14,6 +14,7 @@ type OAuth2ClientRepository interface {
 	FindByClientID(ctx context.Context, clientID string) (*domain.OAuth2Client, error)
 	FindByClientIDTx(ctx context.Context, tx *sql.Tx, clientID string) (*domain.OAuth2Client, error)
 	FindByAccountID(ctx context.Context, accountID string) ([]*domain.OAuth2Client, error)
+	FindAll(ctx context.Context) ([]*domain.OAuth2Client, error)
 	// Update persists changes to an OAuth2 client with optimistic locking.
 	// expectedUpdatedAt must match the current row value; returns domain.ErrClientConcurrentModification on mismatch.
 	Update(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client, expectedUpdatedAt time.Time) error

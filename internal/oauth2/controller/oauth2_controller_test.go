@@ -60,6 +60,9 @@ func (m *mockOAuth2ClientSvcForOAuth2) FindByClientID(_ context.Context, _ strin
 func (m *mockOAuth2ClientSvcForOAuth2) FindByAccountID(_ context.Context, _ string) ([]*oauth2Domain.OAuth2Client, error) {
 	return nil, fmt.Errorf("not implemented")
 }
+func (m *mockOAuth2ClientSvcForOAuth2) FindAll(_ context.Context) ([]*oauth2Domain.OAuth2Client, error) {
+	return nil, fmt.Errorf("not implemented")
+}
 
 func (m *mockOAuth2ClientSvcForOAuth2) UpdateClient(_ context.Context, _ *oauth2Domain.OAuth2Client) error {
 	return nil
@@ -68,12 +71,21 @@ func (m *mockOAuth2ClientSvcForOAuth2) UpdateClient(_ context.Context, _ *oauth2
 func (m *mockOAuth2ClientSvcForOAuth2) UpdateClientByAccountID(_ context.Context, _, _ string, _ *oauth2Service.UpdateClientRequest) (*oauth2Domain.OAuth2Client, error) {
 	return nil, nil
 }
+func (m *mockOAuth2ClientSvcForOAuth2) UpdateClientAsAdmin(_ context.Context, _, _ string, _ *oauth2Service.UpdateClientRequest) (*oauth2Domain.OAuth2Client, error) {
+	return nil, nil
+}
 
 func (m *mockOAuth2ClientSvcForOAuth2) DeleteClient(_ context.Context, _, _ string) error {
 	return nil
 }
+func (m *mockOAuth2ClientSvcForOAuth2) DeleteClientAsAdmin(_ context.Context, _, _ string) error {
+	return nil
+}
 
 func (m *mockOAuth2ClientSvcForOAuth2) RotateClientSecret(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+func (m *mockOAuth2ClientSvcForOAuth2) RotateClientSecretAsAdmin(_ context.Context, _, _ string) (string, error) {
 	return "", nil
 }
 

@@ -144,6 +144,7 @@ func RegisterWebRouter(deps RouterDeps) error {
 		admin := api.Group("/admin")
 		adminLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "admin", middleware.IPKeyFunc, deps.RateLimits.Admin, time.Minute, false, deps.Logger)
 		admin.Use(adminLimit, jwtAuth, authMiddleware.AdminRequiredMiddleware())
+		deps.ClientCtrl.RegisterAdminRoutes(admin)
 		deps.AdminCtrl.RegisterRoutes(admin)
 
 		// Passkey routes (MFA endpoints have their own rate limiting inside RegisterRoutes)

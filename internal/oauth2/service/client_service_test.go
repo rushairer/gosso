@@ -90,6 +90,26 @@ func TestFindByAccountID_Empty(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestFindAll(t *testing.T) {
+	db, mock, svc := setupTestClientService(t)
+	defer db.Close()
+
+	now := time.Now()
+	rows := sqlmock.NewRows(clientTestColumns()).AddRow(
+		"uuid-001", "account-002", "abc123", "$2a$10$hash",
+		"Other Owner App", "desc", []byte(`["http://localhost/callback"]`), []byte("[]"),
+		[]byte(`["authorization_code"]`), []byte(`["openid"]`), true, nil,
+		"", false, "", false, []byte("[]"), now, now, nil,
+	)
+	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").WillReturnRows(rows)
+
+	clients, err := svc.FindAll(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, clients, 1)
+	assert.Equal(t, "account-002", clients[0].AccountID)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 // TestUpdateClient tests updating an OAuth2 client
 func TestUpdateClient(t *testing.T) {
 	db, mock, svc := setupTestClientService(t)
@@ -246,6 +266,29 @@ func TestDeleteClient_AccessDenied(t *testing.T) {
 	err := svc.DeleteClient(ctx, "other-account", "abc123")
 	assert.ErrorIs(t, err, ErrClientAccessDenied)
 
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDeleteClientAsAdmin_AllowsDifferentOwner(t *testing.T) {
+	db, mock, svc := setupTestClientService(t)
+	defer db.Close()
+
+	now := time.Now()
+	rows := sqlmock.NewRows(clientTestColumns()).AddRow(
+		"uuid-001", "owner-account", "abc123", "$2a$10$hash",
+		"Test App", "desc", []byte(`["http://localhost/callback"]`), []byte("[]"),
+		[]byte(`["authorization_code"]`), []byte(`["openid"]`), true, nil,
+		"", false, "", false, []byte("[]"), now, now, nil,
+	)
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT (.+) FROM oauth2_clients").WithArgs("abc123").WillReturnRows(rows)
+	mock.ExpectExec("UPDATE oauth2_clients SET deleted_at").
+		WithArgs(sqlmock.AnyArg(), "uuid-001").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	err := svc.DeleteClientAsAdmin(context.Background(), "admin-account", "abc123")
+	require.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 

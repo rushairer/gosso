@@ -780,6 +780,145 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/admin/oauth2/clients:
+    get:
+      tags: [Admin, OAuth2 Clients]
+      summary: List all OAuth2 clients
+      description: Returns every active OAuth2 client across all owners. Requires an administrator token.
+      operationId: adminListClients
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Global OAuth2 client registry
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: integer, example: 200 }
+                  message: { type: string, example: success }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/OAuth2Client"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Admin, OAuth2 Clients]
+      summary: Register an OAuth2 client as an administrator
+      operationId: adminRegisterClient
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterClientRequest"
+      responses:
+        "201":
+          description: Client created; a confidential client secret is returned once
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: integer, example: 201 }
+                  message: { type: string, example: success }
+                  data:
+                    $ref: "#/components/schemas/RegisterClientResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/admin/oauth2/clients/{client_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientID"
+    put:
+      tags: [Admin, OAuth2 Clients]
+      summary: Update any OAuth2 client
+      operationId: adminUpdateClient
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateClientRequest"
+      responses:
+        "200":
+          description: Client updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: integer, example: 200 }
+                  message: { type: string, example: success }
+                  data:
+                    $ref: "#/components/schemas/OAuth2Client"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Admin, OAuth2 Clients]
+      summary: Delete any OAuth2 client
+      operationId: adminDeleteClient
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Client deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/oauth2/clients/{client_id}/rotate-secret:
+    parameters:
+      - $ref: "#/components/parameters/ClientID"
+    post:
+      tags: [Admin, OAuth2 Clients]
+      summary: Rotate any confidential OAuth2 client secret
+      description: Invalidates the previous secret and returns the replacement plaintext exactly once.
+      operationId: adminRotateClientSecret
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Replacement secret issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: integer, example: 200 }
+                  message: { type: string, example: success }
+                  data:
+                    $ref: "#/components/schemas/RegisterClientResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   # ──────────────────────────────────────────────
   # OAuth2 Protocol
   # ──────────────────────────────────────────────

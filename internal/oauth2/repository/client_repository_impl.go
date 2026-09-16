@@ -175,6 +175,23 @@ func (r *oauth2ClientRepositoryImpl) FindByAccountID(ctx context.Context, accoun
 	return scanOAuth2Clients(rows)
 }
 
+// FindAll returns every active OAuth2 client for administrative governance.
+func (r *oauth2ClientRepositoryImpl) FindAll(ctx context.Context) ([]*domain.OAuth2Client, error) {
+	query := `
+		SELECT id, account_id, client_id, client_secret_hash, name, description, redirect_uris, post_logout_redirect_uris, grant_types, scopes, is_confidential, metadata, frontchannel_logout_uri, frontchannel_logout_session_required, backchannel_logout_uri, backchannel_logout_session_required, allowed_resources, created_at, updated_at, deleted_at
+		FROM oauth2_clients
+		WHERE deleted_at IS NULL
+		ORDER BY created_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("find all oauth2_clients: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanOAuth2Clients(rows)
+}
+
 func (r *oauth2ClientRepositoryImpl) Update(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client, expectedUpdatedAt time.Time) error {
 	f, err := marshalClientJSONFields(client)
 	if err != nil {

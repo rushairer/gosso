@@ -48,6 +48,19 @@ func (c *ClientController) RegisterRoutes(rg *gin.RouterGroup, authMiddleware gi
 	}
 }
 
+// RegisterAdminRoutes registers global OAuth2 client governance routes.
+// The caller must attach JWT and administrator middleware to rg.
+func (c *ClientController) RegisterAdminRoutes(rg *gin.RouterGroup) {
+	clients := rg.Group("/oauth2/clients")
+	{
+		clients.GET("", c.ListAllClients)
+		clients.POST("", c.RegisterClient)
+		clients.PUT("/:client_id", c.UpdateClientAsAdmin)
+		clients.POST("/:client_id/rotate-secret", c.RotateClientSecretAsAdmin)
+		clients.DELETE("/:client_id", c.DeleteClientAsAdmin)
+	}
+}
+
 // RegisterClientRequest is the request body for registering a client
 type RegisterClientRequest struct {
 	Name                              string   `json:"name" binding:"required,max=255"`
@@ -135,6 +148,20 @@ func (c *ClientController) ListClients(ctx *gin.Context) {
 		clients = []*oauth2Domain.OAuth2Client{}
 	}
 
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(clients))
+}
+
+// ListAllClients GET /api/v1/admin/oauth2/clients
+func (c *ClientController) ListAllClients(ctx *gin.Context) {
+	clients, err := c.clientSvc.FindAll(ctx)
+	if err != nil {
+		c.logger.Error("Failed to list all clients", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, gouno.NewErrorResponse(http.StatusInternalServerError, "failed to list clients"))
+		return
+	}
+	if clients == nil {
+		clients = []*oauth2Domain.OAuth2Client{}
+	}
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(clients))
 }
 
@@ -227,6 +254,36 @@ func (c *ClientController) UpdateClient(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(client))
 }
 
+// UpdateClientAsAdmin PUT /api/v1/admin/oauth2/clients/:client_id
+func (c *ClientController) UpdateClientAsAdmin(ctx *gin.Context) {
+	clientID, ok := validateOpaqueClientID(ctx)
+	if !ok {
+		return
+	}
+	actorAccountID, ok := middleware.RequireAccountID(ctx)
+	if !ok {
+		return
+	}
+
+	var req UpdateClientRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+	svcReq := newUpdateClientServiceRequest(&req, true)
+	client, err := c.clientSvc.UpdateClientAsAdmin(ctx, actorAccountID, clientID, svcReq)
+	if err != nil {
+		if isValidationError(err) {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+			return
+		}
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, clientErrorMap,
+			http.StatusBadRequest, "failed to update client")
+		return
+	}
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(client))
+}
+
 // RotateClientSecret POST /api/oauth2/clients/:client_id/rotate-secret.
 // The returned secret is the only plaintext copy and is never persisted.
 func (c *ClientController) RotateClientSecret(ctx *gin.Context) {
@@ -240,6 +297,29 @@ func (c *ClientController) RotateClientSecret(ctx *gin.Context) {
 	}
 
 	secret, err := c.clientSvc.RotateClientSecret(ctx, accountID, clientID)
+	if err != nil {
+		if isValidationError(err) {
+			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
+			return
+		}
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, clientErrorMap,
+			http.StatusBadRequest, "failed to rotate client secret")
+		return
+	}
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse(RegisterClientResponse{ClientID: clientID, ClientSecret: secret}))
+}
+
+// RotateClientSecretAsAdmin POST /api/v1/admin/oauth2/clients/:client_id/rotate-secret.
+func (c *ClientController) RotateClientSecretAsAdmin(ctx *gin.Context) {
+	clientID, ok := validateOpaqueClientID(ctx)
+	if !ok {
+		return
+	}
+	actorAccountID, ok := middleware.RequireAccountID(ctx)
+	if !ok {
+		return
+	}
+	secret, err := c.clientSvc.RotateClientSecretAsAdmin(ctx, actorAccountID, clientID)
 	if err != nil {
 		if isValidationError(err) {
 			ctx.JSON(http.StatusBadRequest, gouno.NewErrorResponse(http.StatusBadRequest, err.Error()))
@@ -271,6 +351,41 @@ func (c *ClientController) DeleteClient(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("client deleted"))
+}
+
+// DeleteClientAsAdmin DELETE /api/v1/admin/oauth2/clients/:client_id
+func (c *ClientController) DeleteClientAsAdmin(ctx *gin.Context) {
+	clientID, ok := validateOpaqueClientID(ctx)
+	if !ok {
+		return
+	}
+	actorAccountID, ok := middleware.RequireAccountID(ctx)
+	if !ok {
+		return
+	}
+	if err := c.clientSvc.DeleteClientAsAdmin(ctx, actorAccountID, clientID); err != nil {
+		controllerutil.AbortWithServiceError(ctx, c.logger, err, clientErrorMap,
+			http.StatusInternalServerError, "failed to delete client")
+		return
+	}
+	ctx.JSON(http.StatusOK, gouno.NewSuccessResponse("client deleted"))
+}
+
+func newUpdateClientServiceRequest(req *UpdateClientRequest, allowReservedScopes bool) *oauth2Service.UpdateClientRequest {
+	return &oauth2Service.UpdateClientRequest{
+		Name:                              req.Name,
+		Description:                       req.Description,
+		RedirectURIs:                      req.RedirectURIs,
+		PostLogoutRedirectURIs:            req.PostLogoutRedirectURIs,
+		GrantTypes:                        req.GrantTypes,
+		Scopes:                            req.Scopes,
+		AllowedResources:                  req.AllowedResources,
+		FrontchannelLogoutURI:             req.FrontchannelLogoutURI,
+		FrontchannelLogoutSessionRequired: req.FrontchannelLogoutSessionRequired,
+		BackchannelLogoutURI:              req.BackchannelLogoutURI,
+		BackchannelLogoutSessionRequired:  req.BackchannelLogoutSessionRequired,
+		AllowReservedScopes:               allowReservedScopes,
+	}
 }
 
 func validateOpaqueClientID(ctx *gin.Context) (string, bool) {

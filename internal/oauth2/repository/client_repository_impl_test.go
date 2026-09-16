@@ -135,6 +135,29 @@ func TestFindByAccountID_Empty(t *testing.T) {
 	assert.Len(t, results, 0)
 }
 
+func TestFindAll_Success(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	c1 := newTestOAuth2Client()
+	c2 := newTestOAuth2Client()
+	c2.ID = "client-2"
+	c2.AccountID = "account-002"
+	c2.ClientID = "cid-2"
+	rows := sqlmock.NewRows(clientColumns()).
+		AddRow(clientRowValues(c1)...).
+		AddRow(clientRowValues(c2)...)
+	mock.ExpectQuery("SELECT .+ FROM oauth2_clients WHERE deleted_at IS NULL").WillReturnRows(rows)
+
+	repo := NewOAuth2ClientRepository(db)
+	results, err := repo.FindAll(context.Background())
+
+	require.NoError(t, err)
+	assert.Len(t, results, 2)
+	assert.Equal(t, "account-002", results[1].AccountID)
+}
+
 // ──────────────────────────────────────────────
 // Create
 // ──────────────────────────────────────────────
