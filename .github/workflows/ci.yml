@@ -136,6 +136,12 @@ jobs:
       - name: Verify go mod tidy
         run: |
           go mod tidy
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for path in ('go.mod', 'go.sum'):
+              print('GOSSO_TIDY_JSON:' + json.dumps({'path': path, 'content': Path(path).read_text()}))
+          PY
           git diff --exit-code go.mod go.sum || (echo "go.mod/go.sum not tidy. Run 'go mod tidy' and commit." && exit 1)
 
       - name: Run unit tests
