@@ -1,6 +1,6 @@
 module github.com/rushairer/gosso
 
-go 1.26.6
+go 1.26.10
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
@@ -31,7 +31,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.45.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.57.0
-	golang.org/x/sync v0.22.0
+	golang.org/x/sync v0.23.0
 )
 
 require (
