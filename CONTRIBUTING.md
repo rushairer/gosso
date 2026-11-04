@@ -132,7 +132,7 @@ The project uses [golangci-lint v2](https://golangci-lint.run/) with these linte
 
 All pull requests run through GitHub Actions (`.github/workflows/ci.yml`):
 
-1. **Lint** -- `golangci-lint` v2.12.2
+1. **Lint** -- `golangci-lint` v2.15.0
 2. **Architecture Invariants** -- automated checks from [doc/ARCHITECTURE_INVARIANTS.md](doc/ARCHITECTURE_INVARIANTS.md)
 3. **Unit Tests** -- `go test -race -coverprofile=coverage.out ./...` with a **75% coverage threshold** and per-module coverage report
 4. **Vulnerability Check** -- `govulncheck ./...`
