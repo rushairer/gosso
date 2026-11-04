@@ -55,3 +55,7 @@ This document defines the **immutable architectural rules, security baselines, a
 - If project-owned Codegen is introduced later, update the manifest, templates, architecture docs, tests, and CI verification together; never silently redefine upstream/default `suite` semantics.
 
 The detailed layer, dependency, error, transaction, testing, logging, and security invariants remain authoritative in `doc/ARCHITECTURE_INVARIANTS.md`.
+
+## Tooling baseline
+
+- Use golangci-lint v2.15.0 or newer in CI, release validation, and the Makefile. The Makefile must verify the installed version and replace older binaries instead of silently reusing an incompatible linter.
