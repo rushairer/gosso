@@ -34,22 +34,18 @@ GO_TEST_ENV := GOCACHE=$(LOCAL_GOCACHE)
 COVERAGE_MIN ?= 70
 
 lint:
-	@if ! command -v golangci-lint >/dev/null 2>&1 && ! [ -f "$(GOPATH_BIN)/golangci-lint" ]; then \
-		echo "Installing golangci-lint..."; \
-		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2; \
+	@if [ ! -x "$(GOPATH_BIN)/golangci-lint" ] || ! "$(GOPATH_BIN)/golangci-lint" version | grep -q '2.15.0'; then \
+		echo "Installing golangci-lint v2.15.0..."; \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0; \
 	fi
-	@GOLANGCI_LINT=$$(command -v golangci-lint || true); \
-	if [ -z "$$GOLANGCI_LINT" ]; then GOLANGCI_LINT="$(GOPATH_BIN)/golangci-lint"; fi; \
-	GOCACHE=$(LOCAL_GOCACHE) GOLANGCI_LINT_CACHE=$(LOCAL_GOLANGCI_CACHE) "$$GOLANGCI_LINT" run ./...
+	@GOCACHE=$(LOCAL_GOCACHE) GOLANGCI_LINT_CACHE=$(LOCAL_GOLANGCI_CACHE) "$(GOPATH_BIN)/golangci-lint" run ./...
 
 lint-fix:
-	@if ! command -v golangci-lint >/dev/null 2>&1 && ! [ -f "$(GOPATH_BIN)/golangci-lint" ]; then \
-		echo "Installing golangci-lint..."; \
-		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2; \
+	@if [ ! -x "$(GOPATH_BIN)/golangci-lint" ] || ! "$(GOPATH_BIN)/golangci-lint" version | grep -q '2.15.0'; then \
+		echo "Installing golangci-lint v2.15.0..."; \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0; \
 	fi
-	@GOLANGCI_LINT=$$(command -v golangci-lint || true); \
-	if [ -z "$$GOLANGCI_LINT" ]; then GOLANGCI_LINT="$(GOPATH_BIN)/golangci-lint"; fi; \
-	GOCACHE=$(LOCAL_GOCACHE) GOLANGCI_LINT_CACHE=$(LOCAL_GOLANGCI_CACHE) "$$GOLANGCI_LINT" run --fix ./...
+	@GOCACHE=$(LOCAL_GOCACHE) GOLANGCI_LINT_CACHE=$(LOCAL_GOLANGCI_CACHE) "$(GOPATH_BIN)/golangci-lint" run --fix ./...
 test:
 	$(GO_TEST_ENV) go test -race -v -count=1 ./...
 

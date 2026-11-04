@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- Upgrade CI, release validation, and the pinned local Makefile linter to golangci-lint v2.15.0 for Go 1.27 compatibility.
 - Normalize Gosso's existing backend structure as Capability Module architecture: capability/module first, implementation layer second, with optional layers and composition roots only where required.
 - Upgrade `github.com/rushairer/gouno` to v1.3.0 and switch the Gosso CLI from the legacy Core-owned generator proxy to manifest-driven project command discovery.
 - Keep Gosso Codegen intentionally disabled until a Gosso-owned `.gouno/codegen.yaml` policy is proven across real capabilities; absence of the manifest now means no `gen` command is exposed.
