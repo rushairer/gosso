@@ -59,3 +59,9 @@ The detailed layer, dependency, error, transaction, testing, logging, and securi
 ## Tooling baseline
 
 - Use golangci-lint v2.15.0 or newer in CI, release validation, and the Makefile. The Makefile must verify the installed version and replace older binaries instead of silently reusing an incompatible linter.
+
+## Gouno Core release dependency
+
+- Pin the Gouno Core dependency to a published immutable release tag. Verify the exact tag target and module checksums before upgrading. After a Core upgrade, run the repository's full tests, race, vet, lint, govulncheck, and all product-specific integration/security gates; do not treat a version bump as complete based only on `go mod tidy`.
+
+- Workflows using `GO_VERSION` ranges such as `1.26.x` must set `actions/setup-go` `check-latest: true`; never allow the hosted runner cache to choose an older standard-library patch.
