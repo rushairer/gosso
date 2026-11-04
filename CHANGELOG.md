@@ -9,8 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - Upgrade the Gouno Core runtime dependency to the published v1.4.0 release; retain the repository's existing architecture and product contracts.
-
-### Changed
 - Upgrade CI, release validation, and the pinned local Makefile linter to golangci-lint v2.15.0 for Go 1.27 compatibility.
 - Normalize Gosso's existing backend structure as Capability Module architecture: capability/module first, implementation layer second, with optional layers and composition roots only where required.
 - Upgrade `github.com/rushairer/gouno` to v1.3.0 and switch the Gosso CLI from the legacy Core-owned generator proxy to manifest-driven project command discovery.
