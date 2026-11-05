@@ -23,6 +23,7 @@ func NewCredentialRepository(db *sql.DB) CredentialRepository {
 
 // credentialsByAccountAndTypeQuery is the base SELECT for querying credentials by account and type.
 // Note: deleted_at is excluded because the WHERE clause guarantees only non-deleted rows are returned.
+// #nosec G101 -- parameterized SQL projection; contains column names, never credential values.
 const credentialsByAccountAndTypeQuery = `
 	SELECT id, account_id, credential_type, identifier, credential_value, verified, primary_credential,
 	       metadata, created_at, updated_at, verified_at, last_used_at

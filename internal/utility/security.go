@@ -38,7 +38,7 @@ func SetDummyWorkDuration(d time.Duration) error {
 // duration elapses, the function returns immediately.
 func DummyWorkWithContext(ctx context.Context) {
 	base := time.Duration(dummyWorkDuration.Load())
-	jitter := time.Duration(rand.Int64N(int64(base))) //nolint:gosec // G404: jitter only, not security-critical
+	jitter := time.Duration(rand.Int64N(int64(base))) // #nosec G404 -- timing-padding jitter only; this value is never a credential, nonce, or key.
 	duration := base + jitter
 	timer := time.NewTimer(duration)
 	defer timer.Stop()

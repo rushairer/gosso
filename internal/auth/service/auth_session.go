@@ -17,6 +17,7 @@ import (
 )
 
 const (
+	// #nosec G101 -- Redis lock-key namespace, not a token or credential.
 	refreshTokenLockPrefix      = "auth_refresh_lock:"
 	refreshTokenLockTTL         = 30 * time.Second
 	refreshTokenLockWaitTimeout = 5 * time.Second

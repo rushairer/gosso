@@ -212,6 +212,7 @@ func TestPasswordReset_EmailNotFound(t *testing.T) {
 
 func TestPasswordReset_TokenSecurity(t *testing.T) {
 	// Verify SHA256 hash is irreversible and has correct length
+	// #nosec G101 -- deterministic password-reset token fixture, not a live credential.
 	originalToken := "a]b1c2d3e4f5"
 	hashedToken := tokenDomain.HashToken(originalToken)
 

@@ -128,6 +128,7 @@ func TestSocialCallback_MismatchedState(t *testing.T) {
 	engine := setupAuthControllerWithSocial(socialSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google/callback?state=state-a:192.0.2.1&code=test-code", nil)
+	// #nosec G124 -- incoming request-cookie fixture; response attributes are not transmitted by clients.
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "state-b"})
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -143,6 +144,7 @@ func TestSocialCallback_MissingCode(t *testing.T) {
 	engine := setupAuthControllerWithSocial(socialSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google/callback?state=test-state:192.0.2.1", nil)
+	// #nosec G124 -- incoming request-cookie fixture; response attributes are not transmitted by clients.
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "test-state"})
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -167,6 +169,7 @@ func TestSocialCallback_ExchangeFails(t *testing.T) {
 	engine := setupAuthControllerWithSocial(socialSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google/callback?state=test-state:192.0.2.1&code=bad-code", nil)
+	// #nosec G124 -- incoming request-cookie fixture; response attributes are not transmitted by clients.
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "test-state"})
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -223,6 +226,7 @@ func TestSocialCallback_Success(t *testing.T) {
 	engine := setupAuthControllerWithSocial(socialSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/social/google/callback?state=test-state:192.0.2.1&code=good-code", nil)
+	// #nosec G124 -- incoming request-cookie fixture; response attributes are not transmitted by clients.
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "test-state"})
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)

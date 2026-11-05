@@ -66,6 +66,7 @@ func isSecureRequest(ctx *gin.Context) bool {
 // This replaces the previous approach of putting access/refresh tokens
 // directly into browser cookies.
 func setSSOSessionCookie(ctx *gin.Context, sessionID string, maxAgeSeconds int, secure bool) {
+	// #nosec G124 -- Secure follows validated !Debug; production rejects Debug. HttpOnly and SameSite=Lax are explicit.
 	http.SetCookie(ctx.Writer, &http.Cookie{
 		Name:     ssoSessionCookieName,
 		Value:    sessionID,
@@ -79,6 +80,7 @@ func setSSOSessionCookie(ctx *gin.Context, sessionID string, maxAgeSeconds int, 
 
 // clearSSOSessionCookie expires the opaque SSO session cookie.
 func clearSSOSessionCookie(ctx *gin.Context, secure bool) {
+	// #nosec G124 -- Secure follows validated !Debug; production rejects Debug. HttpOnly and SameSite=Lax are explicit.
 	http.SetCookie(ctx.Writer, &http.Cookie{
 		Name:     ssoSessionCookieName,
 		Value:    "",

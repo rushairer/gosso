@@ -356,7 +356,7 @@ func savePrivateKeyToPEM(path string, key *rsa.PrivateKey) error {
 }
 
 func loadPrivateKeyFromPEM(path string) (*rsa.PrivateKey, error) {
-	// #nosec G703 -- signing-key paths are operator-controlled deployment configuration, never request-derived input.
+	// #nosec G304 G703 -- signing-key paths are operator-controlled deployment configuration, never request-derived input.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read file: %w", err)
@@ -391,7 +391,7 @@ func loadPrivateKeyFromPEM(path string) (*rsa.PrivateKey, error) {
 }
 
 func loadPublicKeyFromPEM(path string) (*rsa.PublicKey, error) {
-	// #nosec G703 -- signing-key paths are operator-controlled deployment configuration, never request-derived input.
+	// #nosec G304 G703 -- signing-key paths are operator-controlled deployment configuration, never request-derived input.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read public key file: %w", err)

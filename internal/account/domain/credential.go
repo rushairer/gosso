@@ -282,6 +282,7 @@ func verifyArgon2id(password, encodedHash string) bool {
 		return false
 	}
 
+	// #nosec G115 -- parseArgon2idHash rejects decoded hash lengths outside 16..64 before this conversion.
 	computedHash := argon2.IDKey([]byte(password), salt, p.time, p.memory, p.threads, uint32(len(hash)))
 	return subtle.ConstantTimeCompare(computedHash, hash) == 1
 }

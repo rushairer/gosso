@@ -122,6 +122,7 @@ func TestCSRF_Match_200(t *testing.T) {
 		c.String(http.StatusOK, "ok")
 	})
 
+	// #nosec G101 -- deterministic CSRF/token fixture; never a live credential.
 	token := "valid-csrf-token-1234567890123456"
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/test", nil)
@@ -175,6 +176,7 @@ func TestCSRF_SecureMode_Match_200(t *testing.T) {
 		c.String(http.StatusOK, "ok")
 	})
 
+	// #nosec G101 -- deterministic CSRF/token fixture; never a live credential.
 	token := "valid-csrf-token-1234567890123456"
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/test", nil)
@@ -251,6 +253,7 @@ func TestCSRF_BearerAuth_WithMatchingAccessTokenCookie_Bypassed(t *testing.T) {
 		c.String(http.StatusOK, "ok")
 	})
 
+	// #nosec G101 -- deterministic CSRF/token fixture; never a live credential.
 	token := "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature"
 	for _, cookieName := range []string{"access_token", "__secure-access_token", "__host-access_token"} {
 		t.Run(cookieName, func(t *testing.T) {

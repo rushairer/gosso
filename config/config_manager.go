@@ -13,6 +13,7 @@ import (
 
 // defaultPostgresDSN is the default development DSN.
 // Validate() rejects this value to prevent production from accidentally using dev credentials.
+// #nosec G101 -- local development placeholder; production validation rejects this exact DSN.
 const defaultPostgresDSN = "postgres://postgres:postgres@localhost:5432/gosso?sslmode=disable"
 
 // ConfigManager loads, validates, and exposes the application configuration.
@@ -100,7 +101,7 @@ func loadEnvironmentSecretFile(valueName, fileName string) error {
 	if path == "" {
 		return nil
 	}
-	data, err := os.ReadFile(path) // #nosec G703 -- deployment-controlled Docker Secret path, never request input.
+	data, err := os.ReadFile(path) // #nosec G304 G703 -- deployment-controlled Docker Secret path, never request input.
 	if err != nil {
 		return fmt.Errorf("read %s: %w", fileName, err)
 	}

@@ -23,6 +23,7 @@ func writeRotationPrivateKey(t *testing.T) string {
 	der, err := x509.MarshalPKCS8PrivateKey(key)
 	require.NoError(t, err)
 	path := filepath.Join(t.TempDir(), "private.pem")
+	// #nosec G304 -- test-generated path under t.TempDir, never request input.
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	require.NoError(t, err)
 	require.NoError(t, pem.Encode(file, &pem.Block{Type: "PRIVATE KEY", Bytes: der}))

@@ -56,6 +56,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// #nosec G115 -- NewConfigManager validates log levels in [-1,5] before returning.
 	loggerLevel := zap.NewAtomicLevelAt(zapcore.Level(globalConfig.LogConfig.Level))
 	logger := utility.NewLogger(loggerLevel, globalConfig.LogConfig.Format)
 	dbutil.SetLogger(logger)

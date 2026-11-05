@@ -33,14 +33,20 @@ const (
 	ActionMFADisable  = "account.mfa.disable"
 
 	// Passkey actions
+	// #nosec G101 -- public audit event identifier, never credential material.
 	ActionPasskeyRegister = "auth.passkey.register"
-	ActionPasskeyLogin    = "auth.passkey.login"
-	ActionPasskeyDelete   = "auth.passkey.delete"
+	// #nosec G101 -- public audit event identifier, never credential material.
+	ActionPasskeyLogin = "auth.passkey.login"
+	// #nosec G101 -- public audit event identifier, never credential material.
+	ActionPasskeyDelete = "auth.passkey.delete"
 
 	// Token lifecycle audit actions
+	// #nosec G101 -- public audit event identifier, never credential material.
 	ActionTokenRefresh = "auth.token.refresh"
-	ActionTokenRotate  = "auth.token.rotate"
-	ActionTokenRevoke  = "auth.token.revoke"
+	// #nosec G101 -- public audit event identifier, never credential material.
+	ActionTokenRotate = "auth.token.rotate"
+	// #nosec G101 -- public audit event identifier, never credential material.
+	ActionTokenRevoke = "auth.token.revoke"
 
 	// OAuth2 client management audit actions
 	ActionOAuth2ClientRegister = "oauth2.client.register"

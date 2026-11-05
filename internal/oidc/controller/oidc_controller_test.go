@@ -1365,6 +1365,7 @@ func TestLogoutConfirm_ShowConfirmation_WithCSRF(t *testing.T) {
 	engine, _ := setupLogoutEngine(t, clientRepo)
 
 	req := httptest.NewRequest(http.MethodGet, "/oidc/logout?client_id=unregistered", nil)
+	// #nosec G124 -- incoming request-cookie fixture; response-cookie security attributes do not apply.
 	req.AddCookie(&http.Cookie{Name: "__Host-csrf_token", Value: "test-csrf-token-123"})
 	w := httptest.NewRecorder()
 
@@ -1520,6 +1521,7 @@ func TestLogoutCSRFTokenFromCookie_Branches(t *testing.T) {
 	w2 := httptest.NewRecorder()
 	c2, _ := gin.CreateTestContext(w2)
 	c2.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	// #nosec G124 -- incoming request-cookie fixture; response-cookie security attributes do not apply.
 	c2.Request.AddCookie(&http.Cookie{Name: "csrf_token", Value: "legacy-cookie-token"})
 	assert.Equal(t, "legacy-cookie-token", logoutCSRFTokenFromCookie(c2))
 

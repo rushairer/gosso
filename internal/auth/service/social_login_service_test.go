@@ -149,6 +149,7 @@ func (c *configurableMFAChecker) CheckMFA(_ context.Context, _ *accountDomain.Ac
 func newTestSocialLoginService() *SocialLoginService {
 	return &SocialLoginService{
 		providers: map[string]*OAuthProviderConfig{
+			// #nosec G101 -- synthetic provider configuration for validation tests, never live credentials.
 			"google": {
 				ClientID:     "google-client-id",
 				ClientSecret: "google-secret",
@@ -158,6 +159,7 @@ func newTestSocialLoginService() *SocialLoginService {
 				TokenURL:     "https://oauth2.googleapis.com/token",
 				UserInfoURL:  "https://www.googleapis.com/oauth2/v2/userinfo",
 			},
+			// #nosec G101 -- synthetic provider configuration for validation tests, never live credentials.
 			"github": {
 				ClientID:     "github-client-id",
 				ClientSecret: "github-secret",
@@ -248,6 +250,7 @@ func TestNewSocialLoginService_DefaultHTTPClient(t *testing.T) {
 
 func TestNewSocialLoginService_RejectsHTTProvider(t *testing.T) {
 	providers := map[string]*OAuthProviderConfig{
+		// #nosec G101 -- synthetic provider configuration for validation tests, never live credentials.
 		"google": {
 			ClientID: "id",
 			AuthURL:  "http://accounts.google.com/auth",
@@ -261,6 +264,7 @@ func TestNewSocialLoginService_RejectsHTTProvider(t *testing.T) {
 
 func TestNewSocialLoginService_AllowsLocalhost(t *testing.T) {
 	providers := map[string]*OAuthProviderConfig{
+		// #nosec G101 -- synthetic provider configuration for validation tests, never live credentials.
 		"dev": {
 			ClientID: "id",
 			AuthURL:  "http://localhost:8080/auth",
@@ -274,6 +278,7 @@ func TestNewSocialLoginService_AllowsLocalhost(t *testing.T) {
 
 func TestNewSocialLoginService_AllowsHTTPS(t *testing.T) {
 	providers := map[string]*OAuthProviderConfig{
+		// #nosec G101 -- synthetic provider configuration for validation tests, never live credentials.
 		"google": {
 			ClientID: "id",
 			AuthURL:  "https://accounts.google.com/auth",
@@ -524,6 +529,7 @@ func TestExchangeCode_MalformedJSON(t *testing.T) {
 
 func TestExchangeCode_ConnectionError(t *testing.T) {
 	svc := newTestSocialLoginService()
+	// #nosec G101 -- synthetic provider fixture, no real provider credential.
 	p := &OAuthProviderConfig{
 		ClientID:     "id",
 		ClientSecret: "secret",
@@ -548,6 +554,7 @@ func TestFetchUserInfo_Google_Float64ID(t *testing.T) {
 	defer ts.Close()
 
 	svc := newTestSocialLoginService()
+	// #nosec G101 -- synthetic provider fixture, no real provider credential.
 	p := &OAuthProviderConfig{UserInfoURL: ts.URL}
 
 	id, email, name, verified, err := svc.fetchUserInfo(context.Background(), "google", p, "tok")
@@ -566,6 +573,7 @@ func TestFetchUserInfo_GitHub_StringID(t *testing.T) {
 	defer ts.Close()
 
 	svc := newTestSocialLoginService()
+	// #nosec G101 -- synthetic provider fixture, no real provider credential.
 	p := &OAuthProviderConfig{UserInfoURL: ts.URL}
 
 	id, email, name, _, err := svc.fetchUserInfo(context.Background(), "github", p, "tok")
@@ -583,6 +591,7 @@ func TestFetchUserInfo_WeChat_OpenID(t *testing.T) {
 	defer ts.Close()
 
 	svc := newTestSocialLoginService()
+	// #nosec G101 -- synthetic provider fixture, no real provider credential.
 	p := &OAuthProviderConfig{UserInfoURL: ts.URL}
 
 	id, email, name, verified, err := svc.fetchUserInfo(context.Background(), "wechat", p, "tok")
@@ -601,6 +610,7 @@ func TestFetchUserInfo_WeChat_MissingOpenID(t *testing.T) {
 	defer ts.Close()
 
 	svc := newTestSocialLoginService()
+	// #nosec G101 -- synthetic provider fixture, no real provider credential.
 	p := &OAuthProviderConfig{UserInfoURL: ts.URL}
 
 	_, _, _, _, err := svc.fetchUserInfo(context.Background(), "wechat", p, "tok")
@@ -616,6 +626,7 @@ func TestFetchUserInfo_MissingID(t *testing.T) {
 	defer ts.Close()
 
 	svc := newTestSocialLoginService()
+	// #nosec G101 -- synthetic provider fixture, no real provider credential.
 	p := &OAuthProviderConfig{UserInfoURL: ts.URL}
 
 	_, _, _, _, err := svc.fetchUserInfo(context.Background(), "google", p, "tok")
@@ -630,6 +641,7 @@ func TestFetchUserInfo_ErrorStatus(t *testing.T) {
 	defer ts.Close()
 
 	svc := newTestSocialLoginService()
+	// #nosec G101 -- synthetic provider fixture, no real provider credential.
 	p := &OAuthProviderConfig{UserInfoURL: ts.URL}
 
 	_, _, _, _, err := svc.fetchUserInfo(context.Background(), "google", p, "bad-token")
@@ -645,6 +657,7 @@ func TestFetchUserInfo_UnsupportedProvider(t *testing.T) {
 	defer ts.Close()
 
 	svc := newTestSocialLoginService()
+	// #nosec G101 -- synthetic provider fixture, no real provider credential.
 	p := &OAuthProviderConfig{UserInfoURL: ts.URL}
 
 	_, _, _, _, err := svc.fetchUserInfo(context.Background(), "twitter", p, "tok")

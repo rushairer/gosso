@@ -75,30 +75,6 @@ linters:
         linters:
           - gocritic
         text: "deferInLoop"
-      # Known development/test placeholders and protocol action names, not secrets.
-      - linters:
-          - gosec
-        text: "G101:"
-      # Cookie attributes are set intentionally; CSRF cookies are JS-readable by design.
-      - linters:
-          - gosec
-        text: "G124:"
-      # Integer overflow conversions: reviewed — values are bounded (e.g., port numbers, config ints).
-      - linters:
-          - gosec
-        text: "G115:"
-      # http.ListenAndServe error: handled in a goroutine that calls stop() on error.
-      - linters:
-          - gosec
-        text: "G118:"
-      # File inclusion via variable: migration paths and config paths are from trusted sources.
-      - linters:
-          - gosec
-        text: "G304:"
-      # G706 (defer in loop): handled per-case above and in test code.
-      - linters:
-          - gosec
-        text: "G706:"
       # IntrospectToken returns {"active": false} per RFC 7662, not an error
       - path: internal/token/service/token_service\.go
         linters:

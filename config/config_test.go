@@ -43,6 +43,7 @@ func validConfig() GoUnoConfig {
 		DatabaseConfig: DatabaseConfig{
 			Default: "postgres",
 			Drivers: map[DatabaseConfigDriverName]DatabaseConfigDriver{
+				// #nosec G101 -- synthetic configuration fixture with no live credentials.
 				"postgres": {
 					Name:   "postgres",
 					Driver: "pgx",

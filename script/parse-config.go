@@ -144,7 +144,7 @@ func splitHostPortFallback(host string, fallbackPort int) (string, int) {
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatalf("❌ Usage: %s <environment>", os.Args[0])
+		log.Fatal("❌ Usage: parse-config <environment>")
 	}
 
 	env := os.Args[1]
@@ -165,7 +165,7 @@ func main() {
 	// Get environment configuration
 	envConfig, exists := deploy.GetEnvironment(env)
 	if !exists {
-		log.Fatalf("❌ Environment configuration not found: %s", env)
+		log.Fatal("❌ Environment configuration not found")
 	}
 
 	// Parse PostgreSQL configuration

@@ -436,6 +436,7 @@ func TestCSRFTokenFromCookie_HostPrefix(t *testing.T) {
 	w := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(w)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	// #nosec G124 -- incoming request-cookie fixture; response-cookie security attributes do not apply.
 	ctx.Request.AddCookie(&http.Cookie{Name: "__Host-csrf_token", Value: "host-token-123"})
 
 	assert.Equal(t, "host-token-123", csrfTokenFromCookie(ctx))
@@ -446,6 +447,7 @@ func TestCSRFTokenFromCookie_Fallback(t *testing.T) {
 	w := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(w)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	// #nosec G124 -- incoming request-cookie fixture; response-cookie security attributes do not apply.
 	ctx.Request.AddCookie(&http.Cookie{Name: "csrf_token", Value: "fallback-token-456"})
 
 	assert.Equal(t, "fallback-token-456", csrfTokenFromCookie(ctx))
@@ -1870,6 +1872,7 @@ func TestDeviceUserSubmit_MissingDeviceCode(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/device", strings.NewReader("user_code=XXXX&csrf_token=test-csrf"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	// #nosec G124 -- incoming request-cookie fixture; response-cookie security attributes do not apply.
 	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: "test-csrf"})
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -1901,6 +1904,7 @@ func TestDeviceUserSubmit_Approved(t *testing.T) {
 		strings.NewReader("device_code=dc-123&approved=true&csrf_token=test-csrf"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature")
+	// #nosec G124 -- incoming request-cookie fixture; response-cookie security attributes do not apply.
 	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: "test-csrf"})
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -1932,6 +1936,7 @@ func TestDeviceUserSubmit_Denied(t *testing.T) {
 		strings.NewReader("device_code=dc-123&approved=false&csrf_token=test-csrf"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature")
+	// #nosec G124 -- incoming request-cookie fixture; response-cookie security attributes do not apply.
 	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: "test-csrf"})
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)

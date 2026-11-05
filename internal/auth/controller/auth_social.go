@@ -45,6 +45,7 @@ func (c *AuthController) SocialAuthURL(ctx *gin.Context) {
 	}
 	clientIP := ctx.ClientIP()
 	state := nonce + ":" + clientIP
+	// #nosec G124 -- Secure follows validated !Debug; production rejects Debug. HttpOnly and SameSite=Lax are explicit.
 	http.SetCookie(ctx.Writer, &http.Cookie{
 		Name:     "oauth_state",
 		Value:    nonce,
@@ -79,6 +80,7 @@ func (c *AuthController) SocialCallback(ctx *gin.Context) {
 	// The state format is "nonce:clientIP"; only the nonce is stored in the cookie.
 	state := ctx.Query("state")
 	savedNonce, _ := ctx.Cookie("oauth_state")
+	// #nosec G124 -- Secure follows validated !Debug; production rejects Debug. HttpOnly and SameSite=Lax are explicit.
 	http.SetCookie(ctx.Writer, &http.Cookie{
 		Name:     "oauth_state",
 		Value:    "",
