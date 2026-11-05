@@ -7,13 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-05
+
+### Added
+- Add administrator OAuth2 client governance under `/api/v1/admin/oauth2/clients`: list all owners' clients, register, update, rotate secrets, and delete. Preserve ordinary clients' owner-scoped routes; global governance requires a live first-party user-session principal with the administrator role.
+
 ### Changed
 - Upgrade the Gouno Core runtime dependency to the published v1.4.0 release; retain the repository's existing architecture and product contracts. Align the inherited `go-pipeline` and YAML indirect dependency floors with Core v1.4.0.
 - Require latest-patch selection in Gosso CI and release validation to prevent stale Go runner caches.
 - Upgrade CI, release validation, and the pinned local Makefile linter to golangci-lint v2.15.0 for Go 1.27 compatibility.
 - Normalize Gosso's existing backend structure as Capability Module architecture: capability/module first, implementation layer second, with optional layers and composition roots only where required.
-- Upgrade `github.com/rushairer/gouno` to v1.3.0 and switch the Gosso CLI from the legacy Core-owned generator proxy to manifest-driven project command discovery.
+- Switch the Gosso CLI from the legacy Core-owned generator proxy to manifest-driven project command discovery.
 - Keep Gosso Codegen intentionally disabled until a Gosso-owned `.gouno/codegen.yaml` policy is proven across real capabilities; absence of the manifest now means no `gen` command is exposed.
+
+### Security
+- Make gosec findings fail CI, run explicit vet, and verify each release image signature against its immutable digest and exact release-workflow identity after signing.
 
 ## [1.6.1] - 2026-09-11
 
