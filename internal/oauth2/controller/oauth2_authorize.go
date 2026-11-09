@@ -321,6 +321,9 @@ type ConsentRequest struct {
 
 // SubmitConsent POST /oauth2/authorize
 func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
+	// Database/cache work must not retain a pooled Gin context after the response.
+	// The request context already carries trusted audit metadata and cancellation.
+	requestCtx := ctx.Request.Context()
 	// Defense-in-depth: reject oversized form bodies early.
 	if ctx.Request.ContentLength > oauth2MaxFormBodySize {
 		ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{
@@ -366,7 +369,7 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 
 	if !req.Approved {
 		// Validate redirect_uri against client registration before redirecting
-		client, clientErr := c.clientSvc.FindByClientID(ctx, req.ClientID)
+		client, clientErr := c.clientSvc.FindByClientID(requestCtx, req.ClientID)
 		if clientErr != nil || !client.ValidateRedirectURI(req.RedirectURI) {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client", "error_description": "invalid client or redirect_uri"})
 			return
@@ -397,7 +400,7 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		return
 	}
 	stateKey := consentStateKeyPrefix + req.ConsentID
-	stateData, err := c.redis.GetDel(ctx, stateKey)
+	stateData, err := c.redis.GetDel(requestCtx, stateKey)
 	if err != nil {
 		if errors.Is(err, cache.ErrKeyNotFound) {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid or expired consent session"})
@@ -430,7 +433,7 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 	}
 
 	// Validate client exists
-	client, err := c.clientSvc.FindByClientID(ctx, req.ClientID)
+	client, err := c.clientSvc.FindByClientID(requestCtx, req.ClientID)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
 		return
@@ -453,7 +456,7 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 
 	// Verify account is still active before generating authorization code.
 	// The account may have been suspended between the GET (consent page) and POST (approval).
-	if !c.accountValidator.IsAccountActive(ctx, accountIDStr) {
+	if !c.accountValidator.IsAccountActive(requestCtx, accountIDStr) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "account is not active"})
 		return
 	}
@@ -463,14 +466,14 @@ func (c *OAuth2Controller) SubmitConsent(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
 		return
 	}
-	if saveErr := c.consentSvc.SaveConsent(ctx, consent); saveErr != nil {
+	if saveErr := c.consentSvc.SaveConsent(requestCtx, consent); saveErr != nil {
 		c.logger.Error("Failed to save consent", zap.Error(saveErr))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
 	}
 
 	sessionID := sessionIDFromContext(ctx)
-	code, err := c.authCodeSvc.GenerateCode(ctx, req.ClientID, accountIDStr, req.RedirectURI, scopes, req.CodeChallenge, req.CodeChallengeMethod, req.Nonce, sessionID, stored.Resource)
+	code, err := c.authCodeSvc.GenerateCode(requestCtx, req.ClientID, accountIDStr, req.RedirectURI, scopes, req.CodeChallenge, req.CodeChallengeMethod, req.Nonce, sessionID, stored.Resource)
 	if err != nil {
 		c.logger.Error("Failed to generate authorization code after consent approval", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})

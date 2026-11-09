@@ -635,10 +635,13 @@ func TestHTTP_BackChannelLogout(t *testing.T) {
 	ctx := context.Background()
 
 	// Set up a local HTTP server to receive the back-channel logout token
-	var receivedLogoutToken string
+	receivedLogoutTokens := make(chan string, 1)
 	receiverServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err == nil {
-			receivedLogoutToken = r.FormValue("logout_token")
+			select {
+			case receivedLogoutTokens <- r.FormValue("logout_token"):
+			default:
+			}
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -683,8 +686,13 @@ func TestHTTP_BackChannelLogout(t *testing.T) {
 	})
 	assert.Equal(t, http.StatusOK, logoutResp.StatusCode)
 
-	// Wait for async back-channel logout to complete
-	time.Sleep(500 * time.Millisecond)
+	// Synchronize the async receiver without weakening the existing 500ms bound.
+	var receivedLogoutToken string
+	select {
+	case receivedLogoutToken = <-receivedLogoutTokens:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("back-channel logout token was not received within 500ms")
+	}
 
 	// Verify the logout token was received
 	assert.NotEmpty(t, receivedLogoutToken, "back-channel logout token should have been received")

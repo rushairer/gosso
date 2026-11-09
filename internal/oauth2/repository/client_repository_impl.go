@@ -227,6 +227,23 @@ func (r *oauth2ClientRepositoryImpl) Update(ctx context.Context, tx *sql.Tx, cli
 	return nil
 }
 
+func (r *oauth2ClientRepositoryImpl) UpdateSecret(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client, expectedUpdatedAt time.Time) error {
+	err := tx.QueryRowContext(ctx, `
+		UPDATE oauth2_clients SET client_secret_hash = $1, updated_at = $2
+		WHERE id = $3 AND deleted_at IS NULL AND updated_at = $4
+		RETURNING updated_at`, client.ClientSecretHash, time.Now(), client.ID, expectedUpdatedAt).Scan(&client.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		if _, findErr := findByClientID(ctx, tx.QueryRowContext, client.ClientID); findErr != nil {
+			return findErr
+		}
+		return fmt.Errorf("%w: %s", domain.ErrClientConcurrentModification, client.ID)
+	}
+	if err != nil {
+		return fmt.Errorf("update oauth2_client secret: %w", err)
+	}
+	return nil
+}
+
 func (r *oauth2ClientRepositoryImpl) SoftDelete(ctx context.Context, tx *sql.Tx, id string, deletedAt time.Time) error {
 	query := `UPDATE oauth2_clients SET deleted_at = $1, updated_at = $1, client_secret_hash = '' WHERE id = $2 AND deleted_at IS NULL`
 	result, err := tx.ExecContext(ctx, query, deletedAt, id)
