@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-11-09
+
 ### Security
 - Patch golang.org/x/net to v0.62.0 with verified module checksums for GO-2026-6860 / CVE-2026-78661; retain Core v1.4.0 and existing API contracts.
 - Persist confidential OAuth2 Client secret rotations with optimistic concurrency protection so replacement credentials authenticate and retired credentials are rejected. Keep ordinary metadata updates unable to restore an older secret hash.
