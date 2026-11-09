@@ -18,6 +18,9 @@ type OAuth2ClientRepository interface {
 	// Update persists changes to an OAuth2 client with optimistic locking.
 	// expectedUpdatedAt must match the current row value; returns domain.ErrClientConcurrentModification on mismatch.
 	Update(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client, expectedUpdatedAt time.Time) error
+	// UpdateSecret persists only the credential hash and timestamp with the same
+	// optimistic lock. Metadata updates must never restore a caller's stale hash.
+	UpdateSecret(ctx context.Context, tx *sql.Tx, client *domain.OAuth2Client, expectedUpdatedAt time.Time) error
 	SoftDelete(ctx context.Context, tx *sql.Tx, id string, deletedAt time.Time) error
 	SoftDeleteByAccountID(ctx context.Context, tx *sql.Tx, accountID string, deletedAt time.Time) error
 	// FindFrontchannelLogoutClientsByAccountID returns clients that have a

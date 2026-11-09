@@ -177,6 +177,9 @@ func (m *mockClientRepo) FindAll(_ context.Context) ([]*oauth2Domain.OAuth2Clien
 func (m *mockClientRepo) Update(_ context.Context, _ *sql.Tx, _ *oauth2Domain.OAuth2Client, _ time.Time) error {
 	return nil
 }
+func (m *mockClientRepo) UpdateSecret(_ context.Context, _ *sql.Tx, _ *oauth2Domain.OAuth2Client, _ time.Time) error {
+	return nil
+}
 func (m *mockClientRepo) SoftDelete(_ context.Context, _ *sql.Tx, _ string, _ time.Time) error {
 	return nil
 }

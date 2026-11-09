@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-11-09
+
+### Security
+- Patch golang.org/x/net to v0.62.0 with verified module checksums for GO-2026-6860 / CVE-2026-78661; retain Core v1.4.0 and existing API contracts.
+- Persist confidential OAuth2 Client secret rotations with optimistic concurrency protection so replacement credentials authenticate and retired credentials are rejected. Keep ordinary metadata updates unable to restore an older secret hash.
+
+### Fixed
+- Pass the stable request context through authorization-consent persistence instead of retaining a pooled Gin context beyond the response lifetime.
+- Synchronize the back-channel logout receiver in HTTP integration tests while preserving the existing 500ms delivery bound; run integration CI with the race detector.
+
 ## [1.7.0] - 2026-11-05
 
 ### Added

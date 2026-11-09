@@ -91,7 +91,7 @@ func (s *oauth2ClientServiceImpl) rotateClientSecret(ctx context.Context, actorA
 		expectedUpdatedAt := client.UpdatedAt
 		client.ClientSecretHash = string(hash)
 		client.UpdatedAt = time.Now()
-		return s.clientRepo.Update(ctx, tx, client, expectedUpdatedAt)
+		return s.clientRepo.UpdateSecret(ctx, tx, client, expectedUpdatedAt)
 	})
 	if err != nil {
 		return "", err
