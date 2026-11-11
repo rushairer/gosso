@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-11-11
+
+### Security
+
+- Rebuild the identity server with immutable Go 1.27.4 builders and require Go 1.26.11 or newer, fixing the HTTP/1 MaxBytesReader header race and possible server crash ([GO-2026-6859](https://pkg.go.dev/vuln/GO-2026-6859), CVE-2026-97054). Keep OAuth2/OIDC behavior, Core v1.4.0 and the persisted Client Secret rotation repair unchanged.
+
+### Changed
+
+- Align Helm chart and application versions at 1.7.2 for the security rebuild.
+
+
 ## [1.7.1] - 2026-11-09
 
 ### Security
