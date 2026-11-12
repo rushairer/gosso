@@ -17,7 +17,7 @@
 
 ## Checklist — Architecture Invariants (required)
 
-<!-- Reference: doc/ARCHITECTURE_INVARIANTS.md -->
+<!-- Reference: docs/ARCHITECTURE_INVARIANTS.md -->
 <!-- Check all that apply; leave unchecked items that are not relevant to this PR -->
 
 **Error handling (E)**

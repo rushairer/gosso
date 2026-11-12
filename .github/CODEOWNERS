@@ -23,5 +23,5 @@ middleware/ @rushairer
 config/ @rushairer
 
 # Architecture documentation
-doc/ARCHITECTURE_INVARIANTS.md @rushairer
-doc/ADR/ @rushairer
+docs/ARCHITECTURE_INVARIANTS.md @rushairer
+docs/ADR/ @rushairer

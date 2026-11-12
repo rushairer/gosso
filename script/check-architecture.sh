@@ -1,5 +1,5 @@
 #!/bin/bash
-# check-architecture.sh — Enforce architecture invariants from doc/ARCHITECTURE_INVARIANTS.md
+# check-architecture.sh — Enforce architecture invariants from docs/ARCHITECTURE_INVARIANTS.md
 #
 # Exit codes:
 #   0 — all checks passed

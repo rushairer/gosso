@@ -311,8 +311,7 @@ internal/
   testutil/                 # 共享测试辅助工具
   utility/                  # JSON、日志、脱敏、密码、手机号工具
 db/                         # 数据库迁移文件
-docs/                       # OpenAPI 规范和 Swagger UI
-doc/                        # 设计决策文档
+docs/                       # OpenAPI/Swagger、架构 ADR 和运维/集成指南
 examples/                   # 使用示例
 deploy/                     # 部署配置
 script/                     # 工具脚本

@@ -17,4 +17,4 @@
 docs/swagger.go linguist-generated
 *.html linguist-generated
 deploy/ linguist-documentation
-doc/ linguist-documentation
+docs/ linguist-documentation

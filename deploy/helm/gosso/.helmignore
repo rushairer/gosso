@@ -16,5 +16,4 @@ ssl/
 script/
 examples/
 docs/
-doc/
 db/migrations/README.md

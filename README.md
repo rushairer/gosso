@@ -50,7 +50,7 @@ gosso provides a complete SSO server with OAuth 2.0 authorization, OIDC discover
 - OpenAPI spec and Swagger UI (debug mode)
 - Docker and docker-compose for dev, test, and production
 - [Helm chart](deploy/helm/gosso/) for Kubernetes deployment
-- [Operator Guide](doc/OPERATOR_GUIDE.md) with deployment, monitoring, and troubleshooting docs
+- [Operator Guide](docs/OPERATOR_GUIDE.md) with deployment, monitoring, and troubleshooting docs
 - GitHub Actions CI (lint, unit tests with 70% coverage threshold, govulncheck, integration tests, Trivy security scan, cosign image signing, SBOM generation)
 
 ## Prerequisites
@@ -320,8 +320,7 @@ internal/
   testutil/                 # Shared test helpers
   utility/                  # JSON, logging, masking, password, phone utilities
 db/                         # Database migration files
-docs/                       # OpenAPI spec and Swagger UI
-doc/                        # Design decision documents
+docs/                       # OpenAPI/Swagger, architecture ADRs and operator guides
 examples/                   # Usage examples
 deploy/                     # Deployment configuration
 script/                     # Utility scripts
@@ -334,12 +333,12 @@ Each internal module follows a three-layer architecture: **domain** (models), **
 
 | Document | Description |
 |----------|-------------|
-| [Operator Guide](doc/OPERATOR_GUIDE.md) | Deployment, monitoring, and troubleshooting |
-| [Architecture Invariants](doc/ARCHITECTURE_INVARIANTS.md) | Non-negotiable code rules (CI-enforced) |
-| [Architecture Decision Records](doc/ADR/) | Design decisions (observability, API versioning, etc.) |
-| [API Versioning](doc/API_VERSIONING.md) | API version policy and deprecation rules |
-| [API Stability](doc/api-stability.md) | Stability tiers for all endpoints (Stable vs Experimental) |
-| [Backup & Restore](doc/BACKUP_RESTORE.md) | PostgreSQL backup and recovery |
+| [Operator Guide](docs/OPERATOR_GUIDE.md) | Deployment, monitoring, and troubleshooting |
+| [Architecture Invariants](docs/ARCHITECTURE_INVARIANTS.md) | Non-negotiable code rules (CI-enforced) |
+| [Architecture Decision Records](docs/ADR/) | Design decisions (observability, API versioning, etc.) |
+| [API Versioning](docs/API_VERSIONING.md) | API version policy and deprecation rules |
+| [API Stability](docs/api-stability.md) | Stability tiers for all endpoints (Stable vs Experimental) |
+| [Backup & Restore](docs/BACKUP_RESTORE.md) | PostgreSQL backup and recovery |
 | [OpenAPI Spec](docs/openapi.yaml) | Machine-readable API specification |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting and deployment checklist |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup and PR workflow |
@@ -463,7 +462,7 @@ gosso 提供完整的 SSO 服务器，包含 OAuth 2.0 授权、OIDC 发现、JW
 - OpenAPI 规范和 Swagger UI（调试模式）
 - Docker + docker-compose 支持开发、测试和生产环境
 - [Helm Chart](deploy/helm/gosso/) 支持 Kubernetes 部署
-- [运维指南](doc/OPERATOR_GUIDE.zh-CN.md) 覆盖部署、监控和故障排查
+- [运维指南](docs/OPERATOR_GUIDE.zh-CN.md) 覆盖部署、监控和故障排查
 - GitHub Actions CI（lint、覆盖率门禁、govulncheck、集成测试、Trivy 安全扫描、cosign 镜像签名、SBOM 生成）
 
 ## 前置条件
@@ -560,11 +559,11 @@ make docker-prod-up
 
 | 文档 | 说明 |
 |------|------|
-| [运维指南](doc/OPERATOR_GUIDE.zh-CN.md) | 部署、监控和故障排查 |
-| [架构不变量](doc/ARCHITECTURE_INVARIANTS.md) | 不可违反的代码规则（CI 强制执行） |
-| [架构决策记录](doc/ADR/) | 设计决策（可观测性、API 版本控制等） |
-| [API 版本控制](doc/API_VERSIONING.md) | API 版本策略和弃用规则 |
-| [备份与恢复](doc/BACKUP_RESTORE.md) | PostgreSQL 备份恢复流程 |
+| [运维指南](docs/OPERATOR_GUIDE.zh-CN.md) | 部署、监控和故障排查 |
+| [架构不变量](docs/ARCHITECTURE_INVARIANTS.md) | 不可违反的代码规则（CI 强制执行） |
+| [架构决策记录](docs/ADR/) | 设计决策（可观测性、API 版本控制等） |
+| [API 版本控制](docs/API_VERSIONING.md) | API 版本策略和弃用规则 |
+| [备份与恢复](docs/BACKUP_RESTORE.md) | PostgreSQL 备份恢复流程 |
 | [OpenAPI 规范](docs/openapi.yaml) | 机器可读的 API 规范 |
 | [安全策略](SECURITY.md) | 漏洞报告和部署检查清单 |
 | [贡献指南](CONTRIBUTING.md) | 开发环境搭建和 PR 流程 |

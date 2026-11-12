@@ -44,7 +44,6 @@ area/ci:
 area/docs:
   - changed-files:
       - any-glob-to-any-file:
-          - "doc/**"
           - "docs/**"
           - "*.md"
 

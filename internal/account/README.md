@@ -306,10 +306,10 @@ func (r *accountRepositoryImpl) CreateAccount(ctx context.Context, tx *sql.Tx, a
 
 ## 📚 相关文档
 
-- [数据库设计文档](../../doc/database-design.md)
-- [API 文档](../../doc/api-docs.md)
-- [开发指南](../../doc/development-guide.md)
-- [事务处理指南](../../doc/transaction-guide.md)
+- [数据库设计文档](../../docs/DATABASE_DESIGN_DECISIONS.md)
+- [API 文档](../../docs/openapi.yaml)
+- [开发指南](../../CONTRIBUTING.md)
+- [事务处理指南](../../docs/ARCHITECTURE_INVARIANTS.md)
 
 ## 🤝 贡献指南
 
