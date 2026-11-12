@@ -10,7 +10,7 @@ GOSSO documentation has one canonical directory: **`docs/`**. The former `doc/` 
 | API versioning | [API_VERSIONING](API_VERSIONING.md) and [API stability](api-stability.md) |
 | Deployment and incident operations | [Operator Guide](OPERATOR_GUIDE.md) / [运维指南](OPERATOR_GUIDE.zh-CN.md) |
 | Backup and restore | [Backup / Restore](BACKUP_RESTORE.md) |
-| Consumer OAuth/OIDC integration | [Integrator Guide](INTEGRATOR_GUIDE.md) — historical code sketches are explicitly **not production-ready** |
+| Consumer OAuth/OIDC integration | [Integrator Guide](INTEGRATOR_GUIDE.md) — current code-backed flow and security responsibilities; obsolete runnable examples were retired to Git history |
 | Environment and database conventions | [Environment configuration](environment-config.md) / [Database design decisions](DATABASE_DESIGN_DECISIONS.md) |
 | Signing-key operations | [Security key rotation](security-key-rotation.md) |
 | Machine-readable API | [OpenAPI](openapi.yaml) with generated [Swagger bindings](swagger.go) |

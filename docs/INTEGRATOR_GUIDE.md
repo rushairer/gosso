@@ -1,367 +1,77 @@
-# Integrator Guide
+# GOSSO OIDC / OAuth 2.0 Integrator Guide
 
-How to connect your application to gosso as an OpenID Connect (OIDC) identity provider.
+**Current implementation reference — 2026-11-12.** This guide replaces older copy-and-paste examples that lacked PKCE/state/nonce checks, confused OAuth resource audiences with client IDs, used an obsolete `openid-client` API, or printed provider tokens. The earlier examples remain available in Git history, not as active integration instructions.
 
-> **Integration example caveat (2026-11-12):** The language examples below are historical sketches, **not a production-ready or tested OAuth client implementation**. For an actual browser-facing Blog, follow the [current confidential BFF implementation and diagram](https://github.com/rushairer/gouno-blog/blob/main/docs/architecture/README.md): Go backend generates and checks state/nonce/PKCE, exchanges codes server-to-server, verifies ID tokens and stores provider tokens in encrypted server-side sessions; the browser receives only an opaque host-only session Cookie. Do **not** copy examples that print raw tokens, skip PKCE/state validation, use an outdated library API, parse JWT with unchecked type assertions, or use a client ID where the token audience/resource is required. An external integrator must consult current SDK/library documentation and run its own protocol/security tests.
+> [中文概览](../README.zh-CN.md) · [OpenAPI](openapi.yaml) · [GOSSO source routes](../router/web.go) · [Gouno Blog confidential BFF reference](https://github.com/rushairer/gouno-blog/blob/main/docs/architecture/README.md)
 
+## Which architecture should I choose?
 
-> 中文入门请参见 [README.zh-CN.md](../README.zh-CN.md)；当前尚无独立的完整中文版集成指南。
+For a browser-facing application with a trusted backend, **prefer a confidential Backend for Frontend (BFF)**. The browser performs top-level navigation to the application's same-origin BFF login endpoint; all authorization-code exchange, ID Token verification, refresh/revoke and OAuth token storage occur on the server. Only an opaque, host-only, Secure/HttpOnly application session Cookie reaches browser JavaScript's origin.
 
----
+The Gouno Blog implementation is an audited **source example**, not an independent product-standard mandate:
 
-## Quick Start
+- [OAuth client, PKCE, callback and ID Token verification](https://github.com/rushairer/gouno-blog/blob/main/blog-backend/internal/authbff/client.go)
+- [Session endpoints and Cookie projection](https://github.com/rushairer/gouno-blog/blob/main/blog-backend/internal/authbff/http.go)
+- [Encrypted Redis session storage](https://github.com/rushairer/gouno-blog/blob/main/blog-backend/internal/authbff/store.go)
+- [Browser SDK in BFF mode](https://github.com/rushairer/gouno-blog/blob/main/blog-frontend/src/auth.ts)
 
-gosso is a standards-compliant OIDC Provider. Any library that supports OpenID Connect can connect to it — no SDK required.
+For standalone public SPAs or mobile applications, use an up-to-date, standards-conforming OAuth/OIDC client library, enforce Authorization Code + PKCE S256, and implement explicit token/storage/origin/XSS security controls. **Do not use the Blog's confidential client secret from browser code.**
 
-### 1. Discover the OIDC Configuration
+## Discover and register a client
 
-```
-GET https://sso.example.com/.well-known/openid-configuration
-```
+1. Read the provider's discovery document at `GET https://sso.example.com/.well-known/openid-configuration`; use the returned endpoints and supported capabilities rather than hard-coded URLs.
+2. Register a client through the authenticated GOSSO user API **`POST /api/v1/oauth2/clients`** or administrator API **`POST /api/v1/admin/oauth2/clients`** using the identity administrator UI or authorized API. These routes are confirmed in `router/web.go` and `internal/oauth2/controller/client_controller.go`. They require the appropriate logged-in GOSSO session/roles and CSRF controls; they are **not public bootstrap endpoints**.
+3. Configure exact HTTPS `redirect_uris`, `post_logout_redirect_uris` and `allowed_resources` where applicable; choose `grant_types`, `scopes` and `is_confidential` consistent with your client type. Store confidential credentials in the backend's secret management system, never a Vite/browser build variable.
 
-This returns the discovery document with all endpoint URLs, supported scopes, and signing algorithms.
-
-### 2. Register an OAuth2 Client
-
-```bash
-curl -X POST https://sso.example.com/api/oauth2/clients \
-  -H "Authorization: Bearer <your-jwt>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "My App",
-    "redirect_uris": ["https://app.example.com/callback"],
-    "grant_types": ["authorization_code", "refresh_token"],
-    "scopes": ["openid", "profile", "email"],
-    "is_confidential": true
-  }'
-```
-
-Save the returned `client_id` and `client_secret`.
-
-### 3. Implement the Authorization Code Flow
-
-See the language-specific examples below.
-
----
-
-## Go
-
-Using the standard `golang.org/x/oauth2` package:
-
-```go
-package main
-
-import (
-	"context"
-	"encoding/json"
-	"fmt"
-
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/clientcredentials"
-)
-
-// OIDC endpoints (from discovery document)
-var (
-	issuer       = "https://sso.example.com"
-	clientID     = "your-client-id"
-	clientSecret = "your-client-secret"
-	redirectURI  = "https://app.example.com/callback"
-)
-
-var oauth2Config = &oauth2.Config{
-	ClientID:     clientID,
-	ClientSecret: clientSecret,
-	RedirectURL:  redirectURI,
-	Scopes:       []string{"openid", "profile", "email"},
-	Endpoint: oauth2.Endpoint{
-		AuthURL:  issuer + "/oauth2/authorize",
-		TokenURL: issuer + "/oauth2/token",
-	},
-}
-
-// Step 1: Generate authorization URL
-func authURL(state string) string {
-	return oauth2Config.AuthCodeURL(state, oauth2.AccessTypeOffline)
-}
-
-// Step 2: Exchange authorization code for tokens
-func exchange(ctx context.Context, code string) (*oauth2.Token, error) {
-	return oauth2Config.Exchange(ctx, code)
-}
-
-// Step 3: Get user info
-func userInfo(ctx context.Context, token *oauth2.Token) (map[string]interface{}, error) {
-	client := oauth2Config.Client(ctx, token)
-	resp, err := client.Get(issuer + "/oidc/userinfo")
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var info map[string]interface{}
-	return info, json.NewDecoder(resp.Body).Decode(&info)
-}
-```
-
-### Token Validation (Go)
-
-```go
-import (
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/MicahParks/keyfunc/v3"
-)
-
-// Fetch JWKS and create a keyfunc
-jwks, err := keyfunc.NewDefaultCtx(ctx, []string{issuer + "/.well-known/jwks.json"))
-if err != nil {
-	log.Fatal(err)
-}
-
-// Parse and validate the token
-token, err := jwt.Parse(accessToken, jwks.Keyfunc,
-	jwt.WithAudience(clientID),
-	jwt.WithIssuer(issuer),
-)
-if err != nil {
-	log.Printf("Token invalid: %v", err)
-}
-
-claims := token.Claims.(jwt.MapClaims)
-sub := claims["sub"].(string) // account ID
-```
-
-### Client Credentials (Go)
-
-For machine-to-machine authentication:
-
-```go
-creds := &clientcredentials.Config{
-	ClientID:     clientID,
-	ClientSecret: clientSecret,
-	TokenURL:     issuer + "/oauth2/token",
-	Scopes:       []string{"openid"},
-}
-
-token, err := creds.Token(ctx)
-```
-
----
-
-## JavaScript / Node.js
-
-Using the `openid-client` library:
-
-```bash
-npm install openid-client
-```
-
-```javascript
-import { Issuer, generators } from 'openid-client';
-
-// Step 1: Discover the issuer
-const gosso = await Issuer.discover('https://sso.example.com');
-console.log('Discovered:', gosso.issuer);
-
-// Step 2: Create client
-const client = new gosso.Client({
-  client_id: 'your-client-id',
-  client_secret: 'your-client-secret',
-  redirect_uris: ['https://app.example.com/callback'],
-  response_types: ['code'],
-});
-
-// Step 3: Generate authorization URL
-const codeVerifier = generators.codeVerifier();
-const codeChallenge = generators.codeChallenge(codeVerifier);
-const state = generators.state();
-
-const authUrl = client.authorizationUrl({
-  scope: 'openid profile email',
-  state,
-  code_challenge: codeChallenge,
-  code_challenge_method: 'S256',
-});
-
-// Step 4: Handle callback
-const params = client.callbackParams(req);
-const tokenSet = await client.callback(
-  'https://app.example.com/callback',
-  params,
-  { state, code_verifier: codeVerifier }
-);
-
-console.log('Access Token:', tokenSet.access_token);
-console.log('ID Token claims:', tokenSet.claims());
-
-// Step 5: Get user info
-const userinfo = await client.userinfo(tokenSet.access_token);
-console.log('User:', userinfo);
-```
-
----
-
-## Python
-
-Using the `authlib` library:
-
-```bash
-pip install authlib requests
-```
-
-```python
-from authlib.integrations.requests_client import OAuth2Session
-
-issuer = "https://sso.example.com"
-client_id = "your-client-id"
-client_secret = "your-client-secret"
-redirect_uri = "https://app.example.com/callback"
-
-# Step 1: Create OAuth2 session
-oauth = OAuth2Session(
-    client_id=client_id,
-    client_secret=client_secret,
-    redirect_uri=redirect_uri,
-    scope="openid profile email",
-)
-
-# Step 2: Generate authorization URL
-authorization_url, state = oauth.create_authorization_url(
-    f"{issuer}/oauth2/authorize"
-)
-print(f"Visit: {authorization_url}")
-
-# Step 3: Exchange code for tokens
-token = oauth.fetch_token(
-    f"{issuer}/oauth2/token",
-    authorization_response=callback_url,
-)
-
-# Step 4: Get user info
-userinfo = oauth.get(f"{issuer}/oidc/userinfo").json()
-print(f"User: {userinfo['sub']}, Email: {userinfo.get('email')}")
-```
-
-### Token Validation (Python)
-
-```python
-import jwt
-import requests
-
-jwks = requests.get(f"{issuer}/.well-known/jwks.json").json()
-
-# Decode and validate
-claims = jwt.decode(
-    access_token,
-    jwks,
-    algorithms=["RS256"],
-    audience=client_id,
-    issuer=issuer,
-)
-print(f"Account ID: {claims['sub']}")
-```
-
----
-
-## Token Refresh
-
-All clients should handle token expiry gracefully. The refresh token grant is:
-
-```
-POST /oauth2/token
-Content-Type: application/x-www-form-urlencoded
-
-grant_type=refresh_token&refresh_token=<token>&client_id=<id>&client_secret=<secret>
-```
-
-Response:
+Example **registration request shape** (send only through an already authenticated authorized API client):
 
 ```json
 {
-  "access_token": "eyJ...",
-  "refresh_token": "eyJ...",
-  "token_type": "Bearer",
-  "expires_in": 900
+  "name": "Example Confidential Web BFF",
+  "redirect_uris": ["https://app.example.com/api/auth/callback"],
+  "post_logout_redirect_uris": ["https://app.example.com/api/auth/logout/callback"],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "scopes": ["openid", "profile", "email"],
+  "allowed_resources": ["https://app.example.com/api"],
+  "is_confidential": true
 }
 ```
 
-> **Note**: Refresh tokens are rotated on each use. Store the new refresh token.
+## Browser authorization-code flow — BFF example
 
----
+1. BFF generates cryptographically random one-time `state`, `nonce` and `code_verifier` in a bounded, server-side login transaction; derives an S256 `code_challenge`.
+2. BFF redirects the browser to the discovered authorization endpoint (`/oauth2/authorize`), sending `response_type=code`, registered `client_id`/`redirect_uri`, `scope`, `state`, `nonce`, `code_challenge_method=S256` and the exact RFC 8707 `resource` selected for this API.
+3. GOSSO manages credentials, identity sessions, consent and any required MFA on the issuer origin. Application login forms must not impersonate the IdP.
+4. Browser is redirected to the **registered application backend callback**. Backend atomically consumes the flow, checks `state` and authorization response issuer (`iss`, RFC 9207), and exchanges `code` with `code_verifier` **server-to-server** using confidential-client authentication.
+5. Verify the ID Token cryptographically using discovery/JWKS, including signature and approved algorithm, exact issuer, client audience, expiration and one-time `nonce`. Do not accept decoded but unverified claims.
+6. Store provider tokens only in encrypted, access-controlled server session storage, rotate/revoke them on refresh/logout, enforce an absolute session lifetime, and set a host-only Secure/HttpOnly application Cookie.
+7. Application APIs must authorize against their **own permission model** and intended resource audience. Never grant a Blog permission solely from a GOSSO global administrative role or OIDC `scope`.
 
-## PKCE (Public Clients)
+For browser unsafe HTTP methods, enforce same-origin CSRF protection; neither `SameSite` alone nor a JavaScript-visible OAuth token is a replacement for a well-defined session CSRF policy. Back-channel logout needs cryptographically verified logout tokens and replay protection.
 
-For mobile apps and SPAs that cannot keep a client secret:
+## Token validation, resource indicators and UserInfo
 
-1. Generate a `code_verifier` (43–128 character random string)
-2. Compute `code_challenge = BASE64URL(SHA256(code_verifier))`
-3. Add `code_challenge` and `code_challenge_method=S256` to the authorization URL
-4. Send `code_verifier` in the token exchange
+- `/.well-known/jwks.json` exposes signing public keys; honor response cache metadata and re-fetch on unknown `kid`/rotation. Do **not** use an arbitrary hard-coded 24-hour cache validity. Validate the JWT type, allowed algorithm, issuer, expiration, audience/resource, token principal class and any client binding required by your API.
+- An **ID Token** is validated for the OAuth/OIDC client and conveys the authenticated subject; it is **not** a generic authorization token for a foreign resource server.
+- An **access token** is intended for the selected RFC 8707 `resource`/audience, which is not necessarily the OAuth client ID. Machine `client_credentials` tokens are not user-session principals and must not inherit an account's admin roles.
+- `/oidc/userinfo` is an identity-provider resource endpoint; its current controller requires an appropriate GOSSO API audience and user principal. Do not assume a Blog-audience access token can be used to call GOSSO UserInfo.
+- For cache keys and user identity, use the verified `(issuer, subject)` pair and explicit migration/alias approval where issuers change; a plain `sub` string is insufficient across issuers.
 
-gosso enforces S256 for public clients (no `plain`).
+## Other supported protocol families
 
----
+- `/oauth2/token` handles registered grants and confidential client authentication; refresh-token rotation is security-sensitive and must be stored atomically. Use discovery and a supported library rather than assembling untested HTTP forms.
+- `/oauth2/revoke` provides RFC 7009 token revocation; treat idempotent successful revocation correctly, without disclosing whether a token previously existed.
+- `/oauth2/introspect` implements token introspection for authorized clients.
+- `/oauth2/device/code` and `/oauth2/device` support a device-authorization workflow for constrained devices. Implement polling/backoff and expiration from the actual response and RFC 8628 rather than a fixed sample code or interval.
+- `/oidc/logout` provides RP-initiated logout, subject to registered redirect URI and CSRF/session requirements. GOSSO supports front-channel and back-channel logout contracts; validate your chosen integration in a representative environment.
 
-## Device Code Flow (RFC 8628)
+## Operational verification checklist
 
-For devices without a browser (smart TVs, CLI tools):
+- Exact issuer and registered URLs; no open redirects or unregistered post-logout destinations.
+- Browser never receives confidential secrets or server-held provider tokens.
+- PKCE/state/nonce, signed token verification, resource/audience separation, consent, MFA and permissions.
+- CSRF, Cookie attributes, refresh/logout races, revocation, replay protection and incident key rotation.
+- Strict CORS origin allowlists only when actually necessary; avoid cross-domain bearer-token handoff.
+- TLS, clock skew, request limits, rate limits, structured logs without secrets, operational runbooks and recovery tests.
 
-```
-POST /oauth2/device/code
-Content-Type: application/x-www-form-urlencoded
-
-client_id=<id>&scope=openid+profile
-```
-
-Response:
-
-```json
-{
-  "device_code": "abc...",
-  "user_code": "ABCD-EFGH",
-  "verification_uri": "https://sso.example.com/oauth2/device",
-  "verification_uri_complete": "https://sso.example.com/oauth2/device?user_code=ABCD-EFGH",
-  "expires_in": 600,
-  "interval": 5
-}
-```
-
-Poll `POST /oauth2/token` with `grant_type=urn:ietf:params:oauth:grant-type:device_code&device_code=<code>` until the user approves.
-
----
-
-## Error Handling
-
-gosso returns standard OAuth2 errors:
-
-| Error | HTTP | Description |
-|-------|------|-------------|
-| `invalid_request` | 400 | Missing or invalid parameters |
-| `invalid_client` | 401 | Invalid client credentials |
-| `invalid_grant` | 400 | Invalid or expired code/token |
-| `unauthorized_client` | 403 | Client not authorized for this grant type |
-| `unsupported_grant_type` | 400 | Grant type not supported |
-| `invalid_scope` | 400 | Requested scope not allowed |
-
-Rate limiting returns `429` with `Retry-After` header.
-
----
-
-## Scopes
-
-| Scope | Claims Returned |
-|-------|----------------|
-| `openid` | `sub` (account ID) |
-| `profile` | `name`, `preferred_username`, `locale`, `zoneinfo`, `updated_at` |
-| `email` | `email`, `email_verified` |
-
----
-
-## JWKS Rotation
-
-gosso rotates signing keys periodically. Always fetch the JWKS from `/.well-known/jwks.json` and cache it. Use the `kid` (key ID) header in JWTs to select the correct key.
-
-Recommended caching strategy:
-- Fetch JWKS on first token validation
-- Cache for 24 hours
-- On `kid` miss, re-fetch JWKS (key may have rotated)
-- If still missing, reject the token
+For present behavior, always compare this guide against the current Gosso controller/service code, [OpenAPI](openapi.yaml) and the exact deployed release. The reference implementation is not a certification of your application's environment.
