@@ -2,6 +2,9 @@
 
 How to connect your application to gosso as an OpenID Connect (OIDC) identity provider.
 
+> **Integration example caveat (2026-11-12):** The language examples below are historical sketches, **not a production-ready or tested OAuth client implementation**. For an actual browser-facing Blog, follow the [current confidential BFF implementation and diagram](https://github.com/rushairer/gouno-blog/blob/main/docs/architecture/README.md): Go backend generates and checks state/nonce/PKCE, exchanges codes server-to-server, verifies ID tokens and stores provider tokens in encrypted server-side sessions; the browser receives only an opaque host-only session Cookie. Do **not** copy examples that print raw tokens, skip PKCE/state validation, use an outdated library API, parse JWT with unchecked type assertions, or use a client ID where the token audience/resource is required. An external integrator must consult current SDK/library documentation and run its own protocol/security tests.
+
+
 > [中文版本](INTEGRATOR_GUIDE.zh-CN.md)
 
 ---
