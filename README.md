@@ -8,6 +8,8 @@
 
 A self-hosted OpenID Connect and OAuth 2.0 identity provider built with Go, Gin, PostgreSQL, and Redis.
 
+For the integrated Gouno Blog deployment, see [the source-verified Blog/BFF/GOSSO architecture and SVG](https://github.com/rushairer/gouno-blog/blob/main/docs/architecture/README.md). GOSSO is a **separate identity provider**: the Blog Confidential BFF lives inside the **Blog Go backend**, and Blog authorization uses Blog-local permissions rather than GOSSO admin roles. The integrated Compose template shares PostgreSQL/Redis infrastructure but has separate logical `blog` and `gosso` databases.
+
 gosso provides a complete SSO server with OAuth 2.0 authorization, OIDC discovery, JWT-based authentication, WebAuthn/Passkeys, MFA, social login, and an admin API -- all backed by a clean-architecture Go codebase built on the [gouno](https://github.com/rushairer/gouno) scaffold.
 
 ## Features
