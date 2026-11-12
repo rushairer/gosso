@@ -8,6 +8,8 @@
 
 一个基于 Go、Gin、PostgreSQL 和 Redis 构建的自托管 OpenID Connect / OAuth 2.0 身份提供商。
 
+与 Gouno Blog 的实际组合架构见 [Blog/BFF/GOSSO 代码架构及 SVG](https://github.com/rushairer/gouno-blog/blob/main/docs/architecture/README.md)。GOSSO 是**独立身份提供商**；Blog Confidential BFF 位于 **Blog Go 后端进程内**，Blog 业务权限由本地成员与权限系统控制，不直接继承 GOSSO Admin 权限。集成生产 Compose 复用 PostgreSQL/Redis 实例，但 `blog` 与 `gosso` 是独立逻辑数据库。
+
 gosso 提供完整的 SSO 服务器，包含 OAuth 2.0 授权、OIDC 发现、JWT 认证、WebAuthn/Passkeys、MFA、社交登录和管理 API，所有功能基于 [gouno](https://github.com/rushairer/gouno) 脚手架的整洁架构代码库。
 
 ## 功能特性
