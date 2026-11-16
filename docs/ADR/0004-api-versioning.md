@@ -5,7 +5,7 @@
 
 ## Context
 
-gosso's management API (`/api/auth/*`, `/api/oauth2/clients`, `/api/admin/*`) currently uses unversioned paths. As the API matures, breaking changes will be inevitable. We need a versioning strategy that:
+At the time of this 2026-06-21 decision, gosso's management API (`/api/auth/*`, `/api/oauth2/clients`, `/api/admin/*`) used unversioned paths. As the API matures, breaking changes will be inevitable. We need a versioning strategy that:
 
 1. Allows non-breaking evolution without version bumps
 2. Supports breaking changes with clear migration paths
@@ -17,7 +17,7 @@ gosso's management API (`/api/auth/*`, `/api/oauth2/clients`, `/api/admin/*`) cu
 We adopt **URI path versioning** for management endpoints:
 
 - Current version: `/api/v1/`
-- Old `/api/*` paths receive HTTP 308 redirects to `/api/v1/*`
+- Historical unversioned application route families receive HTTP 308 redirects to `/api/v1/*` (see the current [API Versioning Strategy](../API_VERSIONING.md)); unknown paths and later explicit versions never downgrade to v1.
 
 ### What gets versioned
 
@@ -44,3 +44,7 @@ We adopt **URI path versioning** for management endpoints:
 - **Positive**: 308 redirects maintain backward compatibility during migration
 - **Negative**: URL changes require client updates (mitigated by redirects)
 - **Negative**: Longer URLs (mitigated by being a management API, not a high-volume endpoint)
+
+## Implementation clarification (2026-11-16)
+
+The original group-scoped redirect middleware did not handle requests for unregistered legacy paths. Compatibility now runs in the global Gin chain before CSRF, limited to known unversioned application route families. Canonical endpoints still enforce authentication, CSRF, authorization and rate limiting. The current operational behavior is documented in [English](../API_VERSIONING.md) and [简体中文](../API_VERSIONING.zh-CN.md). This ADR preserves the original decision history instead of overwriting it.
