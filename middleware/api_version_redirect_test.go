@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func TestLegacyAPIRedirectMiddleware_RoutingAndCSRFOrder(t *testing.T) {
@@ -34,15 +35,8 @@ func TestLegacyAPIRedirectMiddleware_RoutingAndCSRFOrder(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := gin.New()
 			r.Use(LegacyAPIRedirectMiddleware())
-			// Simulate a subsequent CSRF gate. A legacy unsafe request must
-			// redirect before this gate runs, without reaching the handler.
-			r.Use(func(c *gin.Context) {
-				if c.Request.URL.Path == "/api/v1/auth/login" && c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
-					c.AbortWithStatus(http.StatusForbidden)
-					return
-				}
-				c.Next()
-			})
+			// Exercise the actual CSRF middleware after legacy redirect.
+			r.Use(CSRFMiddleware(false, zap.NewNop(), 0))
 			r.POST("/api/v1/auth/login", func(c *gin.Context) {
 				c.Status(http.StatusNoContent)
 			})
