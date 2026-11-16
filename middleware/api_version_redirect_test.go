@@ -24,7 +24,7 @@ func TestLegacyAPIRedirectMiddleware_RoutingAndCSRFOrder(t *testing.T) {
 		{"client collection", http.MethodGet, "/api/oauth2/clients", "/api/v1/oauth2/clients", http.StatusPermanentRedirect},
 		{"client member", http.MethodPut, "/api/oauth2/clients/123", "/api/v1/oauth2/clients/123", http.StatusPermanentRedirect},
 		{"encoded query and path", http.MethodGet, "/api/admin/accounts/a%2Fb?value=%2B", "/api/v1/admin/accounts/a%2Fb?value=%2B", http.StatusPermanentRedirect},
-		{"canonical route unaffected", http.MethodPost, "/api/v1/auth/login", "", http.StatusNoContent},
+		{"canonical route protected", http.MethodPost, "/api/v1/auth/login", "", http.StatusForbidden},
 		{"future version not downgraded", http.MethodPost, "/api/v2/auth/login", "", http.StatusNotFound},
 		{"unknown API path", http.MethodGet, "/api/other/path", "", http.StatusNotFound},
 		{"prefix collision", http.MethodGet, "/api/authentication/login", "", http.StatusNotFound},
@@ -37,7 +37,7 @@ func TestLegacyAPIRedirectMiddleware_RoutingAndCSRFOrder(t *testing.T) {
 			// Simulate a subsequent CSRF gate. A legacy unsafe request must
 			// redirect before this gate runs, without reaching the handler.
 			r.Use(func(c *gin.Context) {
-				if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+				if c.Request.URL.Path == "/api/v1/auth/login" && c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
 					c.AbortWithStatus(http.StatusForbidden)
 					return
 				}
@@ -49,7 +49,7 @@ func TestLegacyAPIRedirectMiddleware_RoutingAndCSRFOrder(t *testing.T) {
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(tt.method, tt.path, nil)
 			r.ServeHTTP(w, req)
-			if tt.name == "canonical route unaffected" {
+			if tt.name == "canonical route protected" {
 				// The simulated CSRF gate intentionally protects this path.
 				if w.Code != http.StatusForbidden {
 					t.Fatalf("canonical request must be protected by CSRF: got %d", w.Code)
