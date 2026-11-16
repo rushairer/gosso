@@ -22,11 +22,10 @@ schemas, status codes, and error formats will not change incompatibly.
 | POST | `/oauth2/introspect` | Token introspection ([RFC 7662](https://datatracker.ietf.org/doc/html/rfc7662)) |
 | POST | `/oauth2/device/code` | Device authorization ([RFC 8628](https://datatracker.ietf.org/doc/html/rfc8628)) |
 | GET, POST | `/oidc/userinfo` | UserInfo endpoint |
-| GET | `/oidc/logout` | RP-Initiated Logout |
+| GET, POST | `/oidc/logout` | RP-Initiated Logout |
 | POST | `/api/v1/auth/login` | Username/password login |
 | POST | `/api/v1/auth/logout` | Session logout |
 | POST | `/api/v1/auth/refresh` | Token refresh |
-| POST | `/api/v1/auth/register` | Account registration |
 | POST | `/api/v1/auth/mfa/verify` | MFA verification |
 | POST | `/api/v1/auth/password/forgot` | Password reset request |
 | POST | `/api/v1/auth/password/reset` | Password reset confirmation |
@@ -42,12 +41,14 @@ production automation.
 | Method | Path | Description |
 |--------|------|-------------|
 | Various | `/api/v1/admin/*` | Admin management APIs |
-| Various | `/api/v1/clients/*` | OAuth2 client management |
+| Various | `/api/v1/oauth2/clients*` | OAuth2 client management |
 | GET, POST | `/api/v1/passkey/*` | WebAuthn/Passkey registration and auth |
 | GET, POST | `/api/v1/auth/social/*` | Social login callbacks |
 | GET, POST | `/api/v1/auth/verify/*` | Email/phone verification |
 | GET | `/metrics` | Prometheus metrics |
 | GET | `/swagger/*` | Swagger UI (debug mode only) |
+
+Application API path versions and server SemVer are separate contracts; see [API Versioning](API_VERSIONING.md) ([中文](API_VERSIONING.zh-CN.md)). Legacy unversioned paths are 308 redirect aliases rather than additional stable API implementations. A future /api/v2 path must not be silently redirected to v1.
 
 ## Versioning Policy
 
@@ -65,10 +66,8 @@ gosso uses [Semantic Versioning 2.0.0](https://semver.org/):
    notes.
 2. **Sunset header**: Deprecated endpoints include a `Sunset` HTTP header with
    the removal date ([RFC 8594](https://datatracker.ietf.org/doc/html/rfc8594)).
-3. **Grace period**: Deprecated endpoints remain functional for at least
-   **6 months** after the deprecation announcement.
-4. **Removal**: After the grace period, the endpoint may be removed in the next
-   major version.
+3. **Grace period**: A supported version remains available for at least **6 months** after deprecation is announced.
+4. **Removal**: After the stated sunset and an explicit release, an expired endpoint can be removed or return 410; this is a policy, not a claim that current endpoints automatically return 410.
 
 ## Error Format Stability
 
