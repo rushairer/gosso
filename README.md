@@ -55,7 +55,7 @@ gosso provides a complete SSO server with OAuth 2.0 authorization, OIDC discover
 
 ## Prerequisites
 
-- Go 1.26.6+
+- Go 1.26.11+
 - PostgreSQL 15+
 - Redis 7+
 
@@ -176,6 +176,8 @@ Stop with the corresponding `make docker-*-down` commands.
 
 ## API Endpoints
 
+The canonical application API is `/api/v1/*`; legacy unversioned `/api/auth/*`, `/api/admin/*`, `/api/passkey/*`, `/api/passkeys` and `/api/oauth2/clients*` receive a method-preserving HTTP 308 redirect. Clients should call `/api/v1/*` directly rather than rely on redirects, especially for credential-bearing requests. OAuth2/OIDC protocol endpoints remain unversioned. See [API Versioning](docs/API_VERSIONING.md).
+
 ### OIDC Discovery and JWKS
 
 | Method | Path | Description |
@@ -219,13 +221,13 @@ Stop with the corresponding `make docker-*-down` commands.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/admin/accounts` | List accounts (admin) |
-| POST | `/api/admin/accounts` | Create a user account (admin) |
-| POST | `/api/admin/accounts/:account_id/password` | Reset a user's password (admin, not self) |
-| POST | `/api/admin/accounts/:account_id/disable` | Disable an account (admin, not self) |
-| POST | `/api/admin/accounts/:account_id/enable` | Enable an account (admin, not self) |
-| POST | `/api/admin/accounts/:account_id/roles` | Assign a role (admin, not self) |
-| DELETE | `/api/admin/accounts/:account_id/roles/:role_id` | Remove a role (admin, not self) |
+| GET | `/api/v1/admin/accounts` | List accounts (admin) |
+| POST | `/api/v1/admin/accounts` | Create a user account (admin) |
+| POST | `/api/v1/admin/accounts/:account_id/password` | Reset a user's password (admin, not self) |
+| POST | `/api/v1/admin/accounts/:account_id/disable` | Disable an account (admin, not self) |
+| POST | `/api/v1/admin/accounts/:account_id/enable` | Enable an account (admin, not self) |
+| POST | `/api/v1/admin/accounts/:account_id/roles` | Assign a role (admin, not self) |
+| DELETE | `/api/v1/admin/accounts/:account_id/roles/:role_id` | Remove a role (admin, not self) |
 
 ### MFA
 
@@ -236,19 +238,19 @@ Stop with the corresponding `make docker-*-down` commands.
 | POST | `/api/v1/auth/mfa/activate` | Activate TOTP (authenticated) |
 | DELETE | `/api/v1/auth/mfa` | Disable MFA (authenticated) |
 | POST | `/api/v1/auth/mfa/backup-codes` | Generate backup codes (authenticated) |
-| POST | `/api/passkey/mfa/begin` | Begin MFA passkey challenge |
-| POST | `/api/passkey/mfa/complete` | Complete MFA passkey challenge |
+| POST | `/api/v1/passkey/mfa/begin` | Begin MFA passkey challenge |
+| POST | `/api/v1/passkey/mfa/complete` | Complete MFA passkey challenge |
 
 ### Passkeys
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/passkey/register/begin` | Begin passkey registration (authenticated) |
-| POST | `/api/passkey/register/complete` | Complete passkey registration (authenticated) |
-| POST | `/api/passkey/login/begin` | Begin passkey login |
-| POST | `/api/passkey/login/complete` | Complete passkey login |
-| GET | `/api/passkeys` | List passkeys (authenticated) |
-| DELETE | `/api/passkeys/:id` | Delete a passkey (authenticated) |
+| POST | `/api/v1/passkey/register/begin` | Begin passkey registration (authenticated) |
+| POST | `/api/v1/passkey/register/complete` | Complete passkey registration (authenticated) |
+| POST | `/api/v1/passkey/login/begin` | Begin passkey login |
+| POST | `/api/v1/passkey/login/complete` | Complete passkey login |
+| GET | `/api/v1/passkeys` | List passkeys (authenticated) |
+| DELETE | `/api/v1/passkeys/:id` | Delete a passkey (authenticated) |
 
 ### Social Login
 
@@ -270,24 +272,24 @@ Stop with the corresponding `make docker-*-down` commands.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/oauth2/clients` | List OAuth clients (authenticated) |
-| POST | `/api/oauth2/clients` | Register OAuth client (authenticated) |
-| GET | `/api/oauth2/clients/:client_id` | Get client details (authenticated) |
-| PUT | `/api/oauth2/clients/:client_id` | Update client (authenticated) |
-| DELETE | `/api/oauth2/clients/:client_id` | Delete client (authenticated) |
+| GET | `/api/v1/oauth2/clients` | List OAuth clients (authenticated) |
+| POST | `/api/v1/oauth2/clients` | Register OAuth client (authenticated) |
+| GET | `/api/v1/oauth2/clients/:client_id` | Get client details (authenticated) |
+| PUT | `/api/v1/oauth2/clients/:client_id` | Update client (authenticated) |
+| DELETE | `/api/v1/oauth2/clients/:client_id` | Delete client (authenticated) |
 
 ### Admin
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/admin/accounts` | List accounts |
-| GET | `/api/admin/accounts/:account_id` | Get account |
-| DELETE | `/api/admin/accounts/:account_id` | Delete account |
-| POST | `/api/admin/accounts/:account_id/disable` | Disable account |
-| POST | `/api/admin/accounts/:account_id/enable` | Enable account |
-| GET | `/api/admin/accounts/:account_id/roles` | Get account roles |
-| POST | `/api/admin/accounts/:account_id/roles` | Add role to account |
-| DELETE | `/api/admin/accounts/:account_id/roles/:role_id` | Remove role |
+| GET | `/api/v1/admin/accounts` | List accounts |
+| GET | `/api/v1/admin/accounts/:account_id` | Get account |
+| DELETE | `/api/v1/admin/accounts/:account_id` | Delete account |
+| POST | `/api/v1/admin/accounts/:account_id/disable` | Disable account |
+| POST | `/api/v1/admin/accounts/:account_id/enable` | Enable account |
+| GET | `/api/v1/admin/accounts/:account_id/roles` | Get account roles |
+| POST | `/api/v1/admin/accounts/:account_id/roles` | Add role to account |
+| DELETE | `/api/v1/admin/accounts/:account_id/roles/:role_id` | Remove role |
 
 ### Health
 
@@ -327,7 +329,7 @@ script/                     # Utility scripts
 ssl/                        # TLS certificates
 ```
 
-Each internal module follows a three-layer architecture: **domain** (models), **repository** (data access), and **service** (business logic).
+Capabilities live under `internal/<capability>/`; domain, repository, service, controller and composition files are optional implementation layers rather than mandatory scaffolding (see `AGENTS.md`).
 
 ## Documentation
 
@@ -336,7 +338,7 @@ Each internal module follows a three-layer architecture: **domain** (models), **
 | [Operator Guide](docs/OPERATOR_GUIDE.md) | Deployment, monitoring, and troubleshooting |
 | [Architecture Invariants](docs/ARCHITECTURE_INVARIANTS.md) | Non-negotiable code rules (CI-enforced) |
 | [Architecture Decision Records](docs/ADR/) | Design decisions (observability, API versioning, etc.) |
-| [API Versioning](docs/API_VERSIONING.md) | API version policy and deprecation rules |
+| [API Versioning](docs/API_VERSIONING.md) | API version policy, route compatibility and deprecation rules |
 | [API Stability](docs/api-stability.md) | Stability tiers for all endpoints (Stable vs Experimental) |
 | [Backup & Restore](docs/BACKUP_RESTORE.md) | PostgreSQL backup and recovery |
 | [OpenAPI Spec](docs/openapi.yaml) | Machine-readable API specification |
@@ -416,175 +418,3 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deve
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
----
-
-# gosso
-
-一个基于 Go、Gin、PostgreSQL 和 Redis 构建的自托管 OpenID Connect / OAuth 2.0 身份提供商。
-
-gosso 提供完整的 SSO 服务器，包含 OAuth 2.0 授权、OIDC 发现、JWT 认证、WebAuthn/Passkeys、MFA、社交登录和管理 API，所有功能基于 [gouno](https://github.com/rushairer/gouno) 脚手架的整洁架构代码库。
-
-## 功能特性
-
-**OAuth 2.0**
-- 授权码模式 + PKCE（公共客户端强制 S256）
-- 刷新令牌
-- 客户端凭证模式
-- 设备码模式（RFC 8628）
-- 令牌撤销和内省（RFC 7009 / RFC 7662）
-
-**OpenID Connect**
-- 发现端点（`.well-known/openid-configuration`）
-- JWKS 端点（RS256）
-- ID Token 签发
-- UserInfo 端点
-- RP 发起的登出
-
-**认证**
-- 用户名/邮箱 + 密码登录（bcrypt）
-- WebAuthn / Passkeys（注册和认证）
-- 基于 TOTP 的 MFA，支持备份码
-- 社交登录（Google、GitHub、微信）
-- 邮件密码重置
-- 邮箱验证码（手机短信网关暂未接入）
-
-**安全**
-- 按端点限流（安全敏感端点 fail-closed，非关键端点 fail-open）
-- CSRF 防护中间件
-- JWT 认证中间件，带会话验证
-- 令牌黑名单
-- 结构化审计日志
-
-**运维**
-- 健康检查和就绪探针（`/health`、`/readiness`）
-- Prometheus 指标（`/metrics`），附预置 [Grafana Dashboard](deploy/grafana/gosso-dashboard.json)
-- OpenTelemetry 分布式追踪（OTLP，可配置端点）
-- OpenAPI 规范和 Swagger UI（调试模式）
-- Docker + docker-compose 支持开发、测试和生产环境
-- [Helm Chart](deploy/helm/gosso/) 支持 Kubernetes 部署
-- [运维指南](docs/OPERATOR_GUIDE.zh-CN.md) 覆盖部署、监控和故障排查
-- GitHub Actions CI（lint、覆盖率门禁、govulncheck、集成测试、Trivy 安全扫描、cosign 镜像签名、SBOM 生成）
-
-## 前置条件
-
-- Go 1.26.6+
-- PostgreSQL 15+
-- Redis 7+
-
-## 快速开始
-
-### 构建
-
-```bash
-make build
-```
-
-生成 `./bin/gosso`。
-
-### 配置
-
-复制环境模板并填入实际值：
-
-```bash
-cp .env.development.example .env.development
-```
-
-创建或更新 `config/development.yaml`、`config/production.yaml` 等环境配置文件，结构参考上方英文配置示例。
-
-配置由 Viper 加载。环境变量使用 `GOUNO_` 前缀，`.` 替换为 `_`（如 `GOUNO_AUTH_ISSUER`）。完整参考见 `.env.production.example`。
-
-### 运行
-
-```bash
-./bin/gosso web --config ./config --env development --address 0.0.0.0 --port 8080
-```
-
-CLI 参数：
-- `--config` / `-c`：配置目录路径（默认 `./config`）
-- `--env` / `-e`：配置环境名称，例如 `development`、`test` 或 `production`（默认 `production`）
-- `--address` / `-a`：监听地址（默认 `0.0.0.0`）
-- `--port` / `-p`：监听端口（默认 `8080`）
-- `--debug` / `-d`：开启调试模式（默认 `false`）
-
-### 开发模式
-
-```bash
-make dev
-```
-
-需要 [air](https://github.com/air-verse/air) 实现热重载（缺失时自动安装）。
-
-## Docker
-
-```bash
-# 开发环境
-make docker-dev-up
-
-# 测试环境
-make docker-test-up
-
-# 生产环境
-make docker-prod-up
-```
-
-生产环境启动前，先复制 `.env.production.example` 到 `.env.production`，填写真实值，
-并将 RSA 私钥放到 `./keys/private.pem`，容器内挂载路径为 `/app/keys/private.pem`。
-生产环境变量文件由 Docker Compose 读取，请保持 `KEY=value` 格式。内置 Postgres
-服务默认使用 `sslmode=disable`；只有连接已配置 TLS 的数据库时才切换为
-`sslmode=require`。
-
-使用对应的 `make docker-*-down` 停止。
-
-## API 端点
-
-端点分组同上方英文版，此处仅列出主要分类：
-
-- **OIDC**：`/.well-known/openid-configuration`、`/.well-known/jwks.json`
-- **OAuth 2.0**：`/oauth2/authorize`、`/oauth2/token`、`/oauth2/revoke`、`/oauth2/introspect`、`/oauth2/device/code`
-- **OIDC 用户**：`/oidc/userinfo`、`/oidc/logout`
-- **认证**：`/api/v1/auth/login`、`/api/v1/auth/refresh`、`/api/v1/auth/logout`、`/api/v1/auth/session`、`/api/v1/auth/sessions`
-- **MFA**：`/api/v1/auth/mfa/verify`、`/api/v1/auth/mfa/enroll`、`/api/v1/auth/mfa/activate`、`/api/v1/auth/mfa/backup-codes`
-- **Passkeys**：`/api/passkey/register/*`、`/api/passkey/login/*`、`/api/passkey/mfa/*`、`/api/passkeys`
-- **社交登录**：`/api/v1/auth/social/:provider`、`/api/v1/auth/social/:provider/callback`
-- **验证和密码重置**：`/api/v1/auth/verify/send`（当前发送邮箱验证码，手机号验证码在接入 SMS 后启用）、`/api/v1/auth/verify/confirm`、`/api/v1/auth/password/forgot`、`/api/v1/auth/password/reset`
-- **客户端管理**：`/api/oauth2/clients/*`
-- **管理后台**：`/api/admin/accounts/*`
-- **健康检查**：`/health`、`/readiness`
-
-## 项目结构
-
-同上方英文版。每个内部模块遵循三层架构：**domain**（领域模型）、**repository**（数据访问）、**service**（业务逻辑）。
-
-## 文档
-
-| 文档 | 说明 |
-|------|------|
-| [运维指南](docs/OPERATOR_GUIDE.zh-CN.md) | 部署、监控和故障排查 |
-| [架构不变量](docs/ARCHITECTURE_INVARIANTS.md) | 不可违反的代码规则（CI 强制执行） |
-| [架构决策记录](docs/ADR/) | 设计决策（可观测性、API 版本控制等） |
-| [API 版本控制](docs/API_VERSIONING.md) | API 版本策略和弃用规则 |
-| [备份与恢复](docs/BACKUP_RESTORE.md) | PostgreSQL 备份恢复流程 |
-| [OpenAPI 规范](docs/openapi.yaml) | 机器可读的 API 规范 |
-| [安全策略](SECURITY.md) | 漏洞报告和部署检查清单 |
-| [贡献指南](CONTRIBUTING.md) | 开发环境搭建和 PR 流程 |
-
-## 测试
-
-```bash
-# 单元测试
-make test
-
-# 集成测试（需要先启动 docker-test-up）
-make docker-test-up
-make test-integration
-```
-
-单元测试使用 `testify/assert`、`go-sqlmock` 和 `miniredis`。CI 管线对覆盖率门禁包集合要求最低 70% 测试覆盖率，并对 auth、OAuth2、OIDC、token、session 等关键服务包设置单包覆盖率门禁。
-
-## 贡献
-
-欢迎贡献！请参阅 [CONTRIBUTING.md](CONTRIBUTING.md) 了解开发环境搭建、代码规范和 PR 流程。
-
-## 许可证
-
-本项目采用 MIT 许可证。详情见 [LICENSE](LICENSE) 文件。
