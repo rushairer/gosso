@@ -51,7 +51,7 @@ gosso 提供完整的 SSO 服务器，包含 OAuth 2.0 授权、OIDC 发现、JW
 
 ## 前置条件
 
-- Go 1.26.0+
+- Go 1.26.11+
 - PostgreSQL 15+
 - Redis 7+
 
@@ -167,6 +167,8 @@ make docker-prod-up
 
 ## API 端点
 
+应用 API 的正式路径是 `/api/v1/*`。旧版 `/api/auth/*`、`/api/admin/*`、`/api/passkey/*`、`/api/passkeys`、`/api/oauth2/clients*` 仅提供保留请求方法的 HTTP 308 迁移跳转。客户端应直接调用 `/api/v1/*`，特别是携带凭据的请求。OAuth2/OIDC 协议端点不加版本前缀。详见 [API 版本规范](docs/API_VERSIONING.zh-CN.md)。
+
 ### OIDC 发现和 JWKS
 
 | 方法 | 路径 | 描述 |
@@ -198,87 +200,87 @@ make docker-prod-up
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| POST | `/api/auth/login` | 用户名/密码登录 |
-| POST | `/api/auth/refresh` | 刷新访问令牌 |
-| POST | `/api/auth/logout` | 登出（已认证） |
-| GET | `/api/auth/session` | 当前会话信息（已认证） |
-| GET | `/api/auth/sessions` | 会话列表（已认证） |
-| DELETE | `/api/auth/sessions/:id` | 撤销会话（已认证） |
-| POST | `/api/auth/password/change` | 修改自己的密码（已认证） |
+| POST | `/api/v1/auth/login` | 用户名/密码登录 |
+| POST | `/api/v1/auth/refresh` | 刷新访问令牌 |
+| POST | `/api/v1/auth/logout` | 登出（已认证） |
+| GET | `/api/v1/auth/session` | 当前会话信息（已认证） |
+| GET | `/api/v1/auth/sessions` | 会话列表（已认证） |
+| DELETE | `/api/v1/auth/sessions/:id` | 撤销会话（已认证） |
+| POST | `/api/v1/auth/password/change` | 修改自己的密码（已认证） |
 
 ### 管理 API
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/admin/accounts` | 账号列表（管理员） |
-| POST | `/api/admin/accounts` | 创建用户账号（管理员） |
-| POST | `/api/admin/accounts/:account_id/password` | 重置用户密码（管理员，不能用于自己） |
-| POST | `/api/admin/accounts/:account_id/disable` | 禁用用户账号（管理员，不能用于自己） |
-| POST | `/api/admin/accounts/:account_id/enable` | 启用用户账号（管理员，不能用于自己） |
-| POST | `/api/admin/accounts/:account_id/roles` | 分配角色（管理员，不能用于自己） |
-| DELETE | `/api/admin/accounts/:account_id/roles/:role_id` | 移除角色（管理员，不能用于自己） |
+| GET | `/api/v1/admin/accounts` | 账号列表（管理员） |
+| POST | `/api/v1/admin/accounts` | 创建用户账号（管理员） |
+| POST | `/api/v1/admin/accounts/:account_id/password` | 重置用户密码（管理员，不能用于自己） |
+| POST | `/api/v1/admin/accounts/:account_id/disable` | 禁用用户账号（管理员，不能用于自己） |
+| POST | `/api/v1/admin/accounts/:account_id/enable` | 启用用户账号（管理员，不能用于自己） |
+| POST | `/api/v1/admin/accounts/:account_id/roles` | 分配角色（管理员，不能用于自己） |
+| DELETE | `/api/v1/admin/accounts/:account_id/roles/:role_id` | 移除角色（管理员，不能用于自己） |
 
 ### MFA
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| POST | `/api/auth/mfa/verify` | 验证 MFA 挑战 |
-| POST | `/api/auth/mfa/enroll` | 注册 TOTP（已认证） |
-| POST | `/api/auth/mfa/activate` | 激活 TOTP（已认证） |
-| DELETE | `/api/auth/mfa` | 禁用 MFA（已认证） |
-| POST | `/api/auth/mfa/backup-codes` | 生成备份码（已认证） |
-| POST | `/api/passkey/mfa/begin` | 开始 MFA Passkey 挑战 |
-| POST | `/api/passkey/mfa/complete` | 完成 MFA Passkey 挑战 |
+| POST | `/api/v1/auth/mfa/verify` | 验证 MFA 挑战 |
+| POST | `/api/v1/auth/mfa/enroll` | 注册 TOTP（已认证） |
+| POST | `/api/v1/auth/mfa/activate` | 激活 TOTP（已认证） |
+| DELETE | `/api/v1/auth/mfa` | 禁用 MFA（已认证） |
+| POST | `/api/v1/auth/mfa/backup-codes` | 生成备份码（已认证） |
+| POST | `/api/v1/passkey/mfa/begin` | 开始 MFA Passkey 挑战 |
+| POST | `/api/v1/passkey/mfa/complete` | 完成 MFA Passkey 挑战 |
 
 ### Passkeys
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| POST | `/api/passkey/register/begin` | 开始 Passkey 注册（已认证） |
-| POST | `/api/passkey/register/complete` | 完成 Passkey 注册（已认证） |
-| POST | `/api/passkey/login/begin` | 开始 Passkey 登录 |
-| POST | `/api/passkey/login/complete` | 完成 Passkey 登录 |
-| GET | `/api/passkeys` | Passkey 列表（已认证） |
-| DELETE | `/api/passkeys/:id` | 删除 Passkey（已认证） |
+| POST | `/api/v1/passkey/register/begin` | 开始 Passkey 注册（已认证） |
+| POST | `/api/v1/passkey/register/complete` | 完成 Passkey 注册（已认证） |
+| POST | `/api/v1/passkey/login/begin` | 开始 Passkey 登录 |
+| POST | `/api/v1/passkey/login/complete` | 完成 Passkey 登录 |
+| GET | `/api/v1/passkeys` | Passkey 列表（已认证） |
+| DELETE | `/api/v1/passkeys/:id` | 删除 Passkey（已认证） |
 
 ### 社交登录
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/auth/social/:provider` | 重定向到社交登录提供商 |
-| GET | `/api/auth/social/:provider/callback` | 社交登录提供商回调 |
+| GET | `/api/v1/auth/social/:provider` | 重定向到社交登录提供商 |
+| GET | `/api/v1/auth/social/:provider/callback` | 社交登录提供商回调 |
 
 ### 验证和密码重置
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| POST | `/api/auth/verify/send` | 发送邮箱验证码（手机号在 SMS 配置完成前返回 501） |
-| POST | `/api/auth/verify/confirm` | 确认验证码 |
-| POST | `/api/auth/password/forgot` | 请求密码重置 |
-| POST | `/api/auth/password/reset` | 完成密码重置 |
+| POST | `/api/v1/auth/verify/send` | 发送邮箱验证码（手机号在 SMS 配置完成前返回 501） |
+| POST | `/api/v1/auth/verify/confirm` | 确认验证码 |
+| POST | `/api/v1/auth/password/forgot` | 请求密码重置 |
+| POST | `/api/v1/auth/password/reset` | 完成密码重置 |
 
 ### 客户端管理
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/oauth2/clients` | OAuth 客户端列表（已认证） |
-| POST | `/api/oauth2/clients` | 注册 OAuth 客户端（已认证） |
-| GET | `/api/oauth2/clients/:client_id` | 获取客户端详情（已认证） |
-| PUT | `/api/oauth2/clients/:client_id` | 更新客户端（已认证） |
-| DELETE | `/api/oauth2/clients/:client_id` | 删除客户端（已认证） |
+| GET | `/api/v1/oauth2/clients` | OAuth 客户端列表（已认证） |
+| POST | `/api/v1/oauth2/clients` | 注册 OAuth 客户端（已认证） |
+| GET | `/api/v1/oauth2/clients/:client_id` | 获取客户端详情（已认证） |
+| PUT | `/api/v1/oauth2/clients/:client_id` | 更新客户端（已认证） |
+| DELETE | `/api/v1/oauth2/clients/:client_id` | 删除客户端（已认证） |
 
 ### 管理后台
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/admin/accounts` | 账户列表 |
-| GET | `/api/admin/accounts/:account_id` | 获取账户 |
-| DELETE | `/api/admin/accounts/:account_id` | 删除账户 |
-| POST | `/api/admin/accounts/:account_id/disable` | 禁用账户 |
-| POST | `/api/admin/accounts/:account_id/enable` | 启用账户 |
-| GET | `/api/admin/accounts/:account_id/roles` | 获取账户角色 |
-| POST | `/api/admin/accounts/:account_id/roles` | 为账户添加角色 |
-| DELETE | `/api/admin/accounts/:account_id/roles/:role_id` | 移除角色 |
+| GET | `/api/v1/admin/accounts` | 账户列表 |
+| GET | `/api/v1/admin/accounts/:account_id` | 获取账户 |
+| DELETE | `/api/v1/admin/accounts/:account_id` | 删除账户 |
+| POST | `/api/v1/admin/accounts/:account_id/disable` | 禁用账户 |
+| POST | `/api/v1/admin/accounts/:account_id/enable` | 启用账户 |
+| GET | `/api/v1/admin/accounts/:account_id/roles` | 获取账户角色 |
+| POST | `/api/v1/admin/accounts/:account_id/roles` | 为账户添加角色 |
+| DELETE | `/api/v1/admin/accounts/:account_id/roles/:role_id` | 移除角色 |
 
 ### 健康检查
 
@@ -318,7 +320,7 @@ script/                     # 工具脚本
 ssl/                        # TLS 证书
 ```
 
-每个内部模块遵循三层架构：**domain**（领域模型）、**repository**（数据访问）、**service**（业务逻辑）。
+模块按业务能力组织在 `internal/<capability>/`，domain、repository、service、controller 等实现层按实际需要存在，不强制凑齐三层（参见 `AGENTS.md`）。
 
 ## 测试
 

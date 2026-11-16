@@ -41,6 +41,8 @@ func setupEngine(ctx context.Context, cfg config.GoUnoConfig, logger *zap.Logger
 		middleware.ZapLoggerMiddleware(logger),
 		middleware.SecurityHeadersMiddleware(cfg.WebServerConfig.Production),
 		middleware.MaxBodySizeMiddleware(cfg.WebServerConfig.MaxBodySize),
+		// Preserve old /api route families before CSRF evaluates the request path.
+		middleware.LegacyAPIRedirectMiddleware(),
 		middleware.TimeoutMiddleware(cfg.WebServerConfig.RequestTimeout),
 		middleware.CSRFMiddleware(cfg.WebServerConfig.Production || cfg.WebServerConfig.CSRFCookieSecure, logger, cfg.AuthConfig.CSRFCookieMaxAge, csrfSkipPaths...),
 	)

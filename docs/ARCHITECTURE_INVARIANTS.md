@@ -215,11 +215,15 @@ Every new route registered in `router/*.go` must have a corresponding rate limit
 
 ```go
 // CORRECT: rate limit declared alongside route
-router.POST("/api/auth/login", rateLimiter.Limit("auth:login"), authController.Login)
+router.POST("/api/v1/auth/login", rateLimiter.Limit("auth:login"), authController.Login)
 
 // INCORRECT: no rate limit
-router.POST("/api/auth/login", authController.Login)
+router.POST("/api/v1/auth/login", authController.Login)
 ```
+
+### C1a: Canonical API route versioning
+
+New application endpoints must be registered under `/api/v1/`; OAuth2/OIDC protocol routes remain unversioned. Legacy compatibility is handled centrally by the pre-CSRF redirect middleware. Do not add new unversioned route handlers or auto-downgrade future API versions. See [API versioning](API_VERSIONING.md) and [中文](API_VERSIONING.zh-CN.md).
 
 ### C2: Error response format follows conventions
 

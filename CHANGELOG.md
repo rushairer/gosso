@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Restore HTTP 308 redirects for known historical unversioned application API paths before CSRF enforcement; prevent unknown and future-version API paths from being downgraded.
+- Replace the misleading isolated redirect test with route-level regression coverage and synchronize English/Chinese API documentation and obsolete architecture examples.
+
 ## [1.7.2] - 2026-11-11
 
 ### Security

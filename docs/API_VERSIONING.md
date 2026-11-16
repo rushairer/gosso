@@ -1,49 +1,39 @@
 # API Versioning Strategy
 
-本文档定义 gosso API 的版本化策略。
+[简体中文](API_VERSIONING.zh-CN.md)
 
-## Endpoint Categories
+## API contract boundaries
 
-gosso exposes two categories of endpoints that follow different versioning rules:
+The application API path version is independent of the server release version. Gosso v1.7.x still serves application API v1; /api/v2/ must only be introduced deliberately for incompatible contract changes.
 
-### 1. Protocol Endpoints (no versioning)
+| Surface | Canonical prefix | Policy |
+|---|---|---|
+| Authentication and MFA | /api/v1/auth/* | Versioned application API |
+| Passkeys | /api/v1/passkey/*, /api/v1/passkeys | Versioned application API |
+| OAuth client management | /api/v1/oauth2/clients | Versioned application API |
+| Administration | /api/v1/admin/* | Versioned application API |
+| OAuth2 / OIDC | /oauth2/*, /oidc/*, /.well-known/* | Standard protocol and discovery routes; not application-versioned |
+| Infrastructure | /health, /readiness, /metrics | Not application-versioned |
 
-OAuth 2.0 and OpenID Connect protocol endpoints follow their respective RFC specifications and are **not** versioned under `/api/v1/`. Breaking changes to these endpoints would only occur if the underlying RFC is updated.
+Protocol endpoints evolve according to implemented specifications and interoperability constraints, not automatically with application API versions or server SemVer.
 
-| Prefix | Specification | Examples |
-|--------|--------------|----------|
-| `/oauth2/*` | [RFC 6749](https://tools.ietf.org/html/rfc6749) | `/oauth2/token`, `/oauth2/authorize`, `/oauth2/revoke` |
-| `/.well-known/*` | [RFC 8414](https://tools.ietf.org/html/rfc8414) | `/.well-known/openid-configuration`, `/.well-known/jwks.json` |
-| `/oidc/*` | [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html) | `/oidc/userinfo`, `/oidc/logout` |
-| `/health`, `/readiness` | Infrastructure | Health check endpoints |
+## Legacy unversioned route compatibility
 
-### 2. Management API (versioned)
+The following historical API route families return HTTP 308 Permanent Redirect to their /api/v1 equivalents: /api/auth/*, /api/admin/*, /api/passkey/*, /api/passkeys and /api/passkeys/*, /api/oauth2/clients and /api/oauth2/clients/*. The redirect preserves the HTTP method and raw query string. It runs before CSRF, while the canonical destination continues to enforce CSRF, authentication, authorization and rate limiting. The redirect does not execute an operation.
 
-Management and authentication endpoints are versioned using URI path prefix:
+Unknown /api/* paths, future /api/v2/* paths and protocol paths are not redirected. API consumers should use canonical URLs directly; request bodies or Authorization headers may not be forwarded consistently by every client across redirects.
 
-| Prefix | Description |
-|--------|-------------|
-| `/api/v1/auth/*` | Authentication flows (login, MFA, passkey, social login) |
-| `/api/v1/oauth2/clients` | OAuth2 client registration and management |
-| `/api/v1/admin/*` | Account administration |
+## Evolution and deprecation
 
-## Versioning Rules
+- Non-breaking additions can extend application API v1.
+- Incompatible contracts require a deliberate new prefix (such as /api/v2/) and migration guidance; do not automatically redirect v1 to v2.
+- Deprecating a supported API version requires a published announcement, a minimum six-month migration window, and applicable Sunset headers. An expired endpoint may return 410 Gone only after it is explicitly implemented and released.
+- The historical *unversioned* redirects are transitional compatibility. No removal date has been announced.
 
-- **Breaking changes** require a new version prefix (e.g., `/api/v2/`)
-- **Non-breaking additions** (new fields, new endpoints) are added to the current version
-- **Backward-compatible redirects** from `/api/*` to `/api/v1/*` are provided during the transition period (HTTP 308)
+## Sources of truth
 
-## Deprecation Policy
+- [ADR-0004](ADR/0004-api-versioning.md) records the original architecture decision.
+- router/web.go registers the canonical API; middleware/api_version_redirect.go handles legacy redirects before CSRF.
+- docs/openapi.yaml documents the canonical contracts; [API Stability](api-stability.md) defines support tiers.
 
-When a new API version is introduced:
-
-1. The old version continues to function for **6 months** minimum
-2. Deprecation notices are included in response headers (`Sunset: <date>`)
-3. The CHANGELOG documents the deprecation timeline
-4. After the sunset date, the old version returns `410 Gone`
-
-## Current Status
-
-| Version | Status | Introduced |
-|---------|--------|------------|
-| `/api/v1/` | **Current** | v1.1.0 |
+Current application API path version: **v1**.

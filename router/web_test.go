@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -139,94 +138,6 @@ func TestIndexAndTestRoutes(t *testing.T) {
 		assert.Equal(t, float64(200), response["code"])
 		assert.Equal(t, "success", response["message"])
 		assert.Equal(t, "pong", response["data"])
-	})
-}
-
-// TestAPIRedirectMiddleware tests the backward-compatible redirect from /api/* to /api/v1/*.
-//
-// In the actual RegisterWebRouter, the redirect middleware is registered on
-// server.Group("/api").Use(...). The /api/v1 group is registered as a sibling.
-// In Gin's routing model, the /api group middleware only fires for paths that match
-// a handler under that group. Old /api/* paths that don't match any handler hit NoRoute.
-//
-// This test verifies the redirect middleware logic directly as a gin.HandlerFunc.
-func TestAPIRedirectMiddleware(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	// Extract the redirect middleware logic from RegisterWebRouter for direct testing.
-	// Uses strings.HasPrefix matching the real implementation in web.go.
-	redirectMiddleware := func(ctx *gin.Context) {
-		if !strings.HasPrefix(ctx.Request.URL.Path, "/api/v1") {
-			newPath := "/api/v1" + strings.TrimPrefix(ctx.Request.URL.Path, "/api")
-			if ctx.Request.URL.RawQuery != "" {
-				newPath += "?" + ctx.Request.URL.RawQuery
-			}
-			ctx.Redirect(http.StatusPermanentRedirect, newPath)
-			ctx.Abort()
-			return
-		}
-		ctx.Next()
-	}
-
-	t.Run("old login path redirects to v1", func(t *testing.T) {
-		server := gin.New()
-		server.Use(redirectMiddleware)
-		server.POST("/api/v1/auth/login", func(ctx *gin.Context) {
-			ctx.JSON(http.StatusOK, gin.H{"ok": true})
-		})
-
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest(http.MethodPost, "/api/auth/login", nil)
-		server.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusPermanentRedirect, w.Code)
-		assert.Equal(t, "/api/v1/auth/login", w.Header().Get("Location"))
-	})
-
-	t.Run("old path with query preserves query string", func(t *testing.T) {
-		server := gin.New()
-		server.Use(redirectMiddleware)
-		server.POST("/api/v1/auth/login", func(ctx *gin.Context) {
-			ctx.JSON(http.StatusOK, gin.H{"ok": true})
-		})
-
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest(http.MethodPost, "/api/auth/login?foo=bar", nil)
-		server.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusPermanentRedirect, w.Code)
-		assert.Equal(t, "/api/v1/auth/login?foo=bar", w.Header().Get("Location"))
-	})
-
-	t.Run("v1 path passes through middleware", func(t *testing.T) {
-		server := gin.New()
-		server.Use(redirectMiddleware)
-		server.POST("/api/v1/auth/login", func(ctx *gin.Context) {
-			ctx.JSON(http.StatusOK, gin.H{"ok": true})
-		})
-
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/login", nil)
-		server.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusOK, w.Code)
-	})
-
-	t.Run("non-api path not affected by group-scoped middleware", func(t *testing.T) {
-		// In the real code, the redirect middleware is scoped to the /api group,
-		// so non-/api paths never enter it. We verify the middleware itself
-		// only has effect on paths starting with /api.
-		server := gin.New()
-		server.GET("/", func(ctx *gin.Context) {
-			ctx.String(http.StatusOK, "home")
-		})
-
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest(http.MethodGet, "/", nil)
-		server.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Equal(t, "home", w.Body.String())
 	})
 }
 

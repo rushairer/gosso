@@ -101,21 +101,6 @@ func RegisterWebRouter(deps RouterDeps) error {
 	// Non-security endpoints fail-open (allow if Redis is unavailable)
 	sessionLimit := middleware.RedisRateLimitMiddleware(deps.Redis, "session", middleware.IPKeyFunc, deps.RateLimits.API, time.Minute, true, deps.Logger)
 
-	// /api/* routes — versioned under /api/v1/
-	// Backward-compatible redirect from /api/* to /api/v1/* (308 Permanent Redirect)
-	deps.Server.Group("/api").Use(func(ctx *gin.Context) {
-		if !strings.HasPrefix(ctx.Request.URL.Path, "/api/v1") {
-			newPath := "/api/v1" + strings.TrimPrefix(ctx.Request.URL.Path, "/api")
-			if ctx.Request.URL.RawQuery != "" {
-				newPath += "?" + ctx.Request.URL.RawQuery
-			}
-			ctx.Redirect(http.StatusPermanentRedirect, newPath)
-			ctx.Abort()
-			return
-		}
-		ctx.Next()
-	})
-
 	api := deps.Server.Group("/api/v1")
 	{
 		api.GET("/public/site-branding", deps.AdminCtrl.GetPublicSiteBranding)
